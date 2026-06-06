@@ -1,0 +1,85 @@
+@import 'tailwindcss';
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: #0b0e14;
+  color: #e6e8ee;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+/* Barre de défilement discrète */
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #2a3142;
+  border-radius: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@keyframes prismShift {
+  0% { filter: hue-rotate(0deg); }
+  100% { filter: hue-rotate(360deg); }
+}
+.prism {
+  background: linear-gradient(90deg, #ff5ed2, #7af0ff, #ffbf3f, #51cf66, #ff5ed2);
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: prismShift 6s linear infinite, prismMove 6s linear infinite;
+}
+@keyframes prismMove {
+  0% { background-position: 0% 0; }
+  100% { background-position: 300% 0; }
+}
+
+/* --- Coffre de donjon --- */
+@keyframes chestShake {
+  0%, 92%, 100% { transform: rotate(0deg) scale(1); }
+  94% { transform: rotate(-6deg) scale(1.04); }
+  96% { transform: rotate(6deg) scale(1.06); }
+  98% { transform: rotate(-3deg) scale(1.04); }
+}
+.chest-shake {
+  animation: chestShake 2.2s ease-in-out infinite;
+}
+@keyframes chestGlow {
+  0%, 100% { filter: drop-shadow(0 0 8px #f0a02088); }
+  50% { filter: drop-shadow(0 0 26px #ffd966dd); }
+}
+.chest-glow {
+  animation: chestGlow 1.8s ease-in-out infinite;
+}
+@keyframes popIn {
+  0% { opacity: 0; transform: translateY(10px) scale(0.9); }
+  60% { transform: translateY(-2px) scale(1.03); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+.pop-in {
+  opacity: 0;
+  animation: popIn 0.4s ease-out forwards;
+}
+@keyframes burst {
+  0% { opacity: 0; transform: scale(0.3); }
+  40% { opacity: 1; }
+  100% { opacity: 0; transform: scale(2.4); }
+}
+.burst {
+  animation: burst 0.7s ease-out forwards;
+}
