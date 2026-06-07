@@ -314,12 +314,30 @@ function sanitize(save: SaveData): SaveData {
       const it = c.equipment[slot as EquipSlotId]
       if (it) sanitizeItem(it)
     }
-    // L'arbre de talents a changé : on réinitialise et on rembourse les points.
-    c.talents = { co_start: 1 }
-    c.talentPoints = Math.max(0, c.level - 1)
-    c.unlockedPowers = computeUnlockedPowers(c.talents)
-    const basics = c.unlockedPowers.slice(0, 5)
-    c.powers = [basics[0] ?? null, null, null, null, null]
+    // Talents : on CONSERVE l'allocation du joueur. On purge seulement les nœuds
+    // inconnus (vieilles sauvegardes), on garantit la racine, et on recalcule les dérivés.
+    const rawTalents = c.talents && typeof c.talents === 'object' ? c.talents : {}
+    const talents: Record<string, number> = { co_start: 1 }
+    let spent = 0
+    for (const id in rawTalents) {
+      if (id === 'co_start') continue
+      const node = getTalent(id)
+      const rank = rawTalents[id]
+      if (!node || rank <= 0) continue
+      const r = Math.min(rank, node.maxRank)
+      talents[id] = r
+      spent += r
+    }
+    c.talents = talents
+    // Points restants = gagnés (niveau − 1) − dépensés (hors racine gratuite).
+    c.talentPoints = Math.max(0, c.level - 1 - spent)
+    c.unlockedPowers = computeUnlockedPowers(talents)
+    // On garde les capacités équipées encore débloquées (sinon créneau vidé).
+    const equipped = Array.isArray(c.powers) ? c.powers : []
+    c.powers = [0, 1, 2, 3, 4].map((i) => {
+      const p = equipped[i]
+      return p && c.unlockedPowers.includes(p) ? p : null
+    })
     const mh = charMaxHp(c)
     c.hp = c.hp > 0 ? Math.min(c.hp, mh) : mh
   }
