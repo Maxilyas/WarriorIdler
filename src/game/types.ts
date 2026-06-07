@@ -105,10 +105,12 @@ export interface UniqueEffect {
   description: string
   /** Rôle principal de l'effet (catalogue couvrant tous les rôles). */
   role: UniqueRole
-  /** Bonus de stats de base (rang 1), montés par le rang. */
+  /** Bonus de stats de base (rang 1), montés par le rang ET par la rareté/iLvl de l'objet. */
   mods?: StatBlock
   /** Bonus de résistances de base (rang 1), montés par le rang. */
   resistMods?: Partial<Record<DamageType, number>>
+  /** Capacité active (proc/sort) débloquée au rang actif — texte d'accroche. */
+  active?: string
 }
 
 /** Instance d'un effet unique posée sur un objet : référence + rang. */

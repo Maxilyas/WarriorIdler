@@ -64,9 +64,9 @@ function addItemStats(acc: StatBlock, equipment: Equipment) {
     for (const aff of item.affixes) {
       if (aff.kind === 'stat' && aff.stat) acc[aff.stat] = (acc[aff.stat] ?? 0) + aff.value
     }
-    // Bonus de stats des effets uniques équipés (selon leur rang).
+    // Bonus de stats des effets uniques équipés (selon leur rang ET la rareté/iLvl de la pièce).
     if (item.unique) {
-      const mods = instanceMods(item.unique)
+      const mods = instanceMods(item.unique, item)
       for (const k in mods) {
         const key = k as StatKey
         acc[key] = (acc[key] ?? 0) + (mods[key] ?? 0)

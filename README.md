@@ -21,7 +21,32 @@ npm run preview  # prévisualiser le build
 - **vite-plugin-pwa** (installable, jouable hors-ligne)
 - Sauvegarde automatique dans `localStorage`
 
-## Ce qui est en place (v0.12)
+## Ce qui est en place (v0.13)
+
+Refonte « uniques & raids » (retours de test) :
+
+- **Effets uniques qui scalent enfin** : leurs bonus montent désormais avec le **rang ET la rareté +
+  l'iLvl** de la pièce porteuse (cf. `instanceMods`), au lieu de devenir négligeables sur du haut
+  stuff. Un unique sur une pièce Transcendante pèse autant qu'une grosse ligne d'affixe.
+- **+100 effets uniques** (132 au total) couvrant tous les rôles (dps/heal/tank/résistance/utilitaire),
+  chacun avec une capacité active (rang 5).
+- **📖 Grimoire** (onglet dédié) : codex de **tous** les uniques, regroupés par rôle, avec compteur de
+  collection (X/132 découverts), bases au rang 1, résistances et capacité active. Les découvertes
+  s'enregistrent au loot, à l'achat, au craft, aux coffres et aux raids.
+- **Refonte complète des raids** — fini le raid générique « résistance X » :
+  - **5 raids distincts** avec identité, lore et **butin ciblé par catégorie** : ⚒️ **Forge des Titans**
+    (armes), 💍 **Reliquaire Englouti** (anneaux/bijoux/colliers), 🏰 **Citadelle Éternelle** (armures),
+    🌈 **Nexus Prismatique** (accessoires de résistance), 🕳️ **Abîme Primordial** (tout — le défi ultime).
+  - **Tiers montés indépendamment** par raid (battre le tier T débloque T+1 de CE raid), débloqués par
+    paliers (50 → 300) et par une **chaîne de prérequis**.
+  - **Extrêmement difficiles** : chaque raid est un **check de stuff** via des mécaniques signature —
+    Enrage mortel (timer de DPS), Nova cataclysmique (EHP), Forteresse (pénétration), Sangsue (burst),
+    Déferlante (EHP de groupe), Prisme instable (résistances larges), Acharnement. Le panneau affiche
+    le **DPS et les PV recommandés** vs ton équipe (✓/✗).
+  - **Ressource ultra-rare** : l'**Éclat cosmique 💫** (exclusif aux raids) sert à **invoquer un effet
+    unique au choix** sur un objet (atelier) — un puissant levier de theorycraft.
+
+### Précédemment (v0.12)
 
 Itération suite aux retours de test :
 

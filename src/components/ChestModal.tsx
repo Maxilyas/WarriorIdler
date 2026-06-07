@@ -70,6 +70,7 @@ export function ChestModal() {
               {chest.sceaux > 0 && <span className="text-amber-300">🔑 {chest.sceaux} sceau</span>}
               {(chest.orbes ?? 0) > 0 && <span className="text-rose-300">🔮 {chest.orbes} orbe</span>}
               {(chest.fragments ?? 0) > 0 && <span className="text-sky-300">✨ {chest.fragments} fragments</span>}
+              {(chest.cosmic ?? 0) > 0 && <span className="font-semibold text-violet-300">💫 {chest.cosmic} Éclat cosmique</span>}
             </div>
 
             <button

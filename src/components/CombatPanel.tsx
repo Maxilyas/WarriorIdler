@@ -4,6 +4,7 @@ import { charDerived, charMaxHp, charDamageProfile } from '../game/character'
 import { theoreticalDps } from '../game/combat'
 import { isBossStage } from '../game/enemies'
 import { DAMAGE_TYPES } from '../game/damage'
+import { RAID_MECHANIC_META } from '../game/raids'
 import type { DamageType } from '../game/types'
 
 const LOG_COLORS: Record<LogKind, string> = {
@@ -99,23 +100,26 @@ export function CombatPanel() {
       {raid && (
         <div className="rounded-xl border border-rose-700/50 bg-rose-950/20 p-3">
           <div className="flex items-center justify-between">
-            <span className="text-sm font-semibold text-rose-300">⚔️ {raid.name}</span>
+            <span className="text-sm font-semibold text-rose-300">☠️ {raid.name}</span>
             <button onClick={abandonRaid} className="rounded bg-red-900/50 px-2 py-0.5 text-[10px] text-red-300 hover:bg-red-900/70">
               Abandonner
             </button>
           </div>
-          <div className="mt-1 text-[11px] text-slate-400">
-            Boss <span className="text-slate-200">{raid.current + 1}/{raid.totalBosses}</span>
+          <div className="mt-1 flex items-center justify-between text-[11px] text-slate-400">
+            <span>Boss <span className="text-slate-200">{raid.current + 1}/{raid.totalBosses}</span></span>
+            {raid.mechanics.includes('berserk') && (
+              <span className={raid.fightTime >= raid.berserkAt ? 'font-semibold text-rose-400' : 'text-amber-300'}>
+                ⏱️ {raid.fightTime >= raid.berserkAt ? 'ENRAGE MORTEL !' : `${Math.max(0, Math.ceil(raid.berserkAt - raid.fightTime))}s avant enrage`}
+              </span>
+            )}
           </div>
-          {raid.mechanics.length > 0 && (
-            <div className="mt-1.5 flex flex-wrap gap-1">
-              {raid.mechanics.map((m, i) => (
-                <span key={i} title={m.description} className="rounded bg-rose-900/40 px-1.5 py-0.5 text-[10px] text-rose-200">
-                  {m.name}
-                </span>
-              ))}
-            </div>
-          )}
+          <div className="mt-1.5 flex flex-wrap gap-1">
+            {raid.mechanics.map((m) => (
+              <span key={m} title={RAID_MECHANIC_META[m].desc} className="rounded bg-rose-900/40 px-1.5 py-0.5 text-[10px] text-rose-200">
+                {RAID_MECHANIC_META[m].icon} {RAID_MECHANIC_META[m].name}
+              </span>
+            ))}
+          </div>
         </div>
       )}
 
@@ -143,7 +147,7 @@ export function CombatPanel() {
       <div className="rounded-xl border border-slate-800 bg-gradient-to-br from-[#1a1420] to-[#11151f] p-4">
         <div className="flex items-center justify-between text-xs text-slate-400">
           {raid ? (
-            <span className="text-rose-300">Raid niv. {raid.level}</span>
+            <span className="text-rose-300">Raid · Tier {raid.tier}</span>
           ) : dungeon ? (
             <span className="text-amber-300">Donjon niv. {dungeon.level}</span>
           ) : (

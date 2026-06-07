@@ -11,9 +11,10 @@ import { ITEM_TYPES, equipSlotsForType } from '../game/slots'
 import { DAMAGE_TYPES } from '../game/damage'
 import {
   getUnique, uniqueActiveText, isUniqueActive, instanceMods, instanceResist, upgradeCost, insertCost,
-  UNIQUE_EFFECTS, UNIQUE_MAX_RANK, UNIQUE_ACTIVE_RANK,
+  UNIQUE_EFFECTS, UNIQUE_ROLES, UNIQUE_MAX_RANK, UNIQUE_ACTIVE_RANK,
 } from '../game/uniques'
-import { useGame, FRAGMENT_INFUSE_COST } from '../game/store'
+import type { UniqueRole } from '../game/types'
+import { useGame, FRAGMENT_INFUSE_COST, CHOOSE_UNIQUE_COST } from '../game/store'
 import { rarityTextStyle, rarityCardStyle, isPrism } from './rarityStyle'
 
 /** Libellé/couleur d'affichage d'une ligne d'objet (stat / dégâts / résistance). */
@@ -299,6 +300,8 @@ function CraftSection({ item }: { item: Item }) {
 
           <InsertEffectSection item={item} />
 
+          <ChooseUniqueSection item={item} />
+
           {/* Craft sommital : infuser un Fragment d'éternité */}
           <button
             disabled={fragments < FRAGMENT_INFUSE_COST}
@@ -342,6 +345,56 @@ function InsertEffectSection({ item }: { item: Item }) {
   )
 }
 
+/** Invocation d'un effet unique AU CHOIX via un Éclat cosmique 💫 (sink des raids). */
+function ChooseUniqueSection({ item }: { item: Item }) {
+  const cosmic = useGame((s) => s.cosmic)
+  const fragments = useGame((s) => s.fragments)
+  const chooseUnique = useGame((s) => s.chooseUnique)
+  const [open, setOpen] = useState(false)
+  const [role, setRole] = useState<UniqueRole | 'all'>('all')
+  const affordable = cosmic >= CHOOSE_UNIQUE_COST.cosmic && fragments >= CHOOSE_UNIQUE_COST.fragments
+  const list = UNIQUE_EFFECTS.filter((e) => role === 'all' || e.role === role)
+  return (
+    <div className="rounded border border-violet-800/40 bg-violet-950/10 p-2">
+      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center justify-between text-[11px] font-semibold text-violet-300">
+        <span>💫 Invoquer un effet au choix</span>
+        <span className="text-[9.5px] font-normal text-slate-400">{CHOOSE_UNIQUE_COST.cosmic} 💫 + {CHOOSE_UNIQUE_COST.fragments} ✨ · {open ? '▾' : '▸'}</span>
+      </button>
+      {open && (
+        <div className="mt-1.5">
+          {!affordable && <div className="mb-1 text-[9.5px] text-rose-300/70">Pas assez de ressources — les Éclats cosmiques 💫 viennent des raids.</div>}
+          <div className="mb-1 flex flex-wrap gap-1 text-[9px]">
+            <RoleChip active={role === 'all'} onClick={() => setRole('all')} label="Tous" />
+            {UNIQUE_ROLES.map((r) => <RoleChip key={r} active={role === r} onClick={() => setRole(r)} label={r} />)}
+          </div>
+          <div className="max-h-40 space-y-0.5 overflow-y-auto pr-1">
+            {list.map((e) => (
+              <button
+                key={e.id}
+                disabled={!affordable}
+                onClick={() => chooseUnique(item.id, e.id)}
+                title={e.description}
+                className="flex w-full items-center justify-between rounded border border-violet-800/40 px-1.5 py-0.5 text-left text-[10px] text-violet-100 hover:bg-violet-900/30 disabled:opacity-40"
+              >
+                <span className="truncate">{item.unique?.id === e.id ? '✦ ' : ''}{e.name}</span>
+                <span className="ml-1 shrink-0 text-[8.5px] text-slate-500">{e.role}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function RoleChip({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
+  return (
+    <button onClick={onClick} className={'rounded px-1.5 py-0.5 ' + (active ? 'bg-violet-600 text-slate-50' : 'bg-slate-800 text-slate-400')}>
+      {label}
+    </button>
+  )
+}
+
 /** Bloc d'effet unique : rang, mods, capacité active, amélioration via essences. */
 function UniqueBlock({ item }: { item: Item }) {
   const inst = item.unique!
@@ -351,7 +404,7 @@ function UniqueBlock({ item }: { item: Item }) {
   const upgradeUnique = useGame((s) => s.upgradeUnique)
   if (!def) return null
 
-  const mods = instanceMods(inst)
+  const mods = instanceMods(inst, item)
   const active = isUniqueActive(inst.rank)
   const cost = upgradeCost(inst.rank)
   const have = essences[inst.id] ?? 0
@@ -365,6 +418,7 @@ function UniqueBlock({ item }: { item: Item }) {
         <span className="text-[10px] text-fuchsia-200/70">Rang {inst.rank}/{UNIQUE_MAX_RANK}</span>
       </div>
       <div className="mt-0.5 text-[10.5px] leading-snug text-fuchsia-200/80">{def.description}</div>
+      <div className="mt-0.5 text-[9.5px] italic text-fuchsia-300/50">Monte avec le rang, la rareté et l'iLvl de la pièce.</div>
       <div className="mt-1 flex flex-wrap gap-x-2 text-[10.5px]">
         {Object.entries(mods).map(([k, v]) => {
           const m = ALL_STAT_META[k as StatKey]

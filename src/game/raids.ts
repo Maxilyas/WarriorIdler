@@ -1,135 +1,313 @@
-import type { DamageType, Enemy } from './types'
-import { DAMAGE_TYPE_LIST, DAMAGE_TYPES } from './damage'
+import type { DamageType, Enemy, ItemType } from './types'
+import { DAMAGE_TYPE_LIST } from './damage'
 
-// ---- Mécaniques de boss (checks auto-résolus) ----
+/**
+ * RAIDS — refonte « endgame ».
+ *
+ * Plus un seul raid générique « résistance X », mais **5 raids distincts**, chacun avec :
+ *  - une IDENTITÉ (lore, couleur, mécaniques signature imposées),
+ *  - un BUTIN CIBLÉ par catégorie d'équipement (Armes / Anneaux & Bijoux / Armures / Résistances /
+ *    Tout) → farmer un raid fait progresser un emplacement précis,
+ *  - des TIERS de difficulté montés **indépendamment** (battre le tier T débloque T+1 de CE raid),
+ *  - des CHECKS DE STUFF brutaux (DPS / EHP / résistances / pénétration / burst) : il faut un
+ *    équipement extrêmement optimisé pour les battre,
+ *  - des RESSOURCES TRÈS RARES (Fragments d'éternité + **Éclat cosmique 💫**, exclusif aux raids).
+ *
+ * Le combat reste idle : la « difficulté » s'exprime via des seuils de stats (timer d'enrage dur,
+ * novas qui one-shot le stuff faible, armure/résistances qui exigent de la pénétration, etc.).
+ */
 
-export type RaidMechanicKind = 'carapace' | 'nova' | 'enrage' | 'drain' | 'adds'
+// ---- Mécaniques de boss (checks de stuff) ----
 
-export interface RaidMechanic {
-  kind: RaidMechanicKind
-  name: string
-  description: string
-  value: number
-  cooldown?: number
-  type?: DamageType // pour Carapace
+export type RaidMechanicKind =
+  | 'berserk'   // ENRAGE DUR : timer de kill ; passé le délai, les dégâts explosent → check de DPS
+  | 'nova'      // AoE périodique massive (typée) → check d'EHP / mitigation
+  | 'fortress'  // armure + résistance colossales → check de PÉNÉTRATION
+  | 'leech'     // le boss se régénère vite → check de BURST
+  | 'swarm'     // vagues d'adds qui frappent l'équipe → check d'EHP de groupe
+  | 'rotate'    // le boss change de type d'attaque à chaque phase → check de RÉSISTANCES larges
+  | 'execute'   // le boss frappe plus fort à mesure qu'il perd ses PV → course contre la montre
+
+export const RAID_MECHANIC_META: Record<RaidMechanicKind, { name: string; icon: string; desc: string }> = {
+  berserk: { name: 'Enrage mortel', icon: '⏱️', desc: 'Timer de kill : passé le délai, les dégâts deviennent fatals. Il faut du DPS.' },
+  nova: { name: 'Nova cataclysmique', icon: '☄️', desc: 'Explosion périodique qui pulvérise l\'équipe sous-équipée. Il faut des PV et de la mitigation.' },
+  fortress: { name: 'Forteresse', icon: '🛡️', desc: 'Armure et résistances colossales. Sans Pénétration, ton DPS s\'effondre.' },
+  leech: { name: 'Sangsue', icon: '🩸', desc: 'Le boss régénère sa vie en continu. Sans burst, tu ne le tueras jamais.' },
+  swarm: { name: 'Déferlante', icon: '🐛', desc: 'Des vagues de renforts frappent toute l\'équipe. Survie de groupe exigée.' },
+  rotate: { name: 'Prisme instable', icon: '🌈', desc: 'Le boss change de type d\'attaque à chaque phase. Il faut résister à TOUT.' },
+  execute: { name: 'Acharnement', icon: '💀', desc: 'Plus le boss perd de vie, plus il frappe fort. Achève-le vite.' },
 }
 
-/** Palier requis pour débloquer les raids. */
+// ---- Registre des raids ----
+
+export type RaidId = 'forge' | 'reliquaire' | 'citadelle' | 'nexus' | 'abysse'
+
+export interface RaidDef {
+  id: RaidId
+  name: string
+  icon: string
+  color: string
+  lore: string
+  /** Catégorie d'équipement ciblée par le butin. */
+  lootTypes: ItemType[]
+  lootLabel: string
+  /** Record de palier (bestStage) requis pour débloquer ce raid. */
+  unlockStage: number
+  /** Raid prérequis : doit avoir été clear (tier ≥ 1) au moins une fois. */
+  requires?: RaidId
+  /** Difficulté de base : multiplie PV et dégâts (≥1, monte d'un raid à l'autre). */
+  baseDifficulty: number
+  /** Mécaniques signature imposées (identité). */
+  signature: RaidMechanicKind[]
+  /** Élément principal, ou 'rotating' (le boss cycle les types d'attaque). */
+  element: DamageType | 'rotating'
+  /** Nombre de boss de base (croît un peu avec le tier). */
+  bosses: number
+  /** Coût en Orbes de raid pour tenter. */
+  orbeCost: number
+}
+
+/** Palier (bestStage) qui débloque le PREMIER raid. */
 export const RAID_UNLOCK_STAGE = 50
 
-// Constantes d'équilibrage (à ajuster facilement).
-const RAID_HP_PREMIUM = 1.8
-const RAID_BOSS_MULT = 3.5
-const RAID_DMG_PREMIUM = 1.5
-const EFF_STAGE_BASE = 40
-const EFF_STAGE_PER_LEVEL = 14
-
-const ELEMENTS: DamageType[] = DAMAGE_TYPE_LIST.filter((t) => t !== 'physique')
-
-const BOSS_NAMES = [
-  'Vorathul, l\'Effroi', 'La Dévoreuse d\'Étoiles', 'Kruul le Cataclysme', 'L\'Augure du Néant',
-  'Xanthys aux Mille Yeux', 'Le Colosse Primordial', 'Néroth, Roi Déchu', 'L\'Hydre des Abysses',
-]
-
-export interface ActiveRaid {
-  level: number
-  name: string
-  theme: DamageType
-  vuln: DamageType
-  totalBosses: number
-  current: number
-  enemy: Enemy
-  mechanics: RaidMechanic[]
-  fightTime: number
-  novaCd: number
-  addsCd: number
+export const RAIDS: Record<RaidId, RaidDef> = {
+  forge: {
+    id: 'forge', name: 'La Forge des Titans', icon: '⚒️', color: '#ff6b35',
+    lore: 'Des enclumes grandes comme des collines, des gardiens de fonte en fusion. Seul un DPS perçant fend leur carapace.',
+    lootTypes: ['armePrincipale', 'armeSecondaire'], lootLabel: 'Armes & Boucliers',
+    unlockStage: 50, baseDifficulty: 1.0, signature: ['fortress', 'berserk'], element: 'physique', bosses: 3, orbeCost: 1,
+  },
+  reliquaire: {
+    id: 'reliquaire', name: 'Le Reliquaire Englouti', icon: '💍', color: '#4dd0e1',
+    lore: 'Une crypte noyée où dorment les joyaux des rois morts. Leurs gardiens se ressoudent sans cesse — frappe vite et fort.',
+    lootTypes: ['anneau', 'bijou', 'cou'], lootLabel: 'Anneaux, Bijoux & Colliers',
+    unlockStage: 90, requires: 'forge', baseDifficulty: 1.3, signature: ['leech', 'swarm'], element: 'froid', bosses: 3, orbeCost: 1,
+  },
+  citadelle: {
+    id: 'citadelle', name: 'La Citadelle Éternelle', icon: '🏰', color: '#ffd43b',
+    lore: 'Une forteresse battue par des orages sans fin. Ses sentinelles déchaînent des novas — seule une muraille de PV tient debout.',
+    lootTypes: ['tete', 'epaules', 'torse', 'jambes', 'mains', 'taille', 'pieds', 'poignets', 'cape'], lootLabel: 'Pièces d\'armure',
+    unlockStage: 140, requires: 'reliquaire', baseDifficulty: 1.6, signature: ['nova', 'execute'], element: 'foudre', bosses: 4, orbeCost: 1,
+  },
+  nexus: {
+    id: 'nexus', name: 'Le Nexus Prismatique', icon: '🌈', color: '#c084fc',
+    lore: 'Un cœur de magie pure où la réalité se fracture en sept couleurs. Le boss change d\'élément sans prévenir : résiste à tout, ou meurs.',
+    lootTypes: ['cou', 'cape', 'bijou', 'anneau'], lootLabel: 'Accessoires de résistance',
+    unlockStage: 200, requires: 'citadelle', baseDifficulty: 1.9, signature: ['rotate', 'nova'], element: 'rotating', bosses: 4, orbeCost: 2,
+  },
+  abysse: {
+    id: 'abysse', name: 'L\'Abîme Primordial', icon: '🕳️', color: '#8a2be2',
+    lore: 'Le gouffre d\'où tout est né et où tout retourne. Le défi ultime : aucune faiblesse de stuff n\'est pardonnée. Le butin et les Éclats cosmiques y sont les plus riches.',
+    lootTypes: ['tete', 'epaules', 'torse', 'jambes', 'mains', 'taille', 'pieds', 'poignets', 'cape', 'cou', 'anneau', 'bijou', 'armePrincipale', 'armeSecondaire'], lootLabel: 'Tout l\'équipement',
+    unlockStage: 300, requires: 'nexus', baseDifficulty: 2.4, signature: ['berserk', 'nova', 'fortress', 'leech'], element: 'rotating', bosses: 5, orbeCost: 3,
+  },
 }
+
+export const RAID_LIST: RaidDef[] = [RAIDS.forge, RAIDS.reliquaire, RAIDS.citadelle, RAIDS.nexus, RAIDS.abysse]
+
+export function getRaidDef(id: RaidId): RaidDef {
+  return RAIDS[id]
+}
+
+/** Un raid est-il accessible (palier requis + raid prérequis clear) ? */
+export function raidUnlocked(def: RaidDef, bestStage: number, progress: Record<RaidId, number>): boolean {
+  if (bestStage < def.unlockStage) return false
+  if (def.requires && (progress[def.requires] ?? 0) < 1) return false
+  return true
+}
+
+// ---- Constantes d'équilibrage (TRÈS DUR — à nudger ici) ----
+const RAID_HP_PREMIUM = 3.0       // PV bruts vs un ennemi de farm de palier équivalent
+const RAID_DMG_PREMIUM = 2.2      // dégâts bruts vs farm équivalent
+const FINAL_BOSS_MULT = 2.6       // le dernier boss du raid est un mur
+const TIER_STAGE_STEP = 22        // un tier de raid ≈ +22 paliers de farm (saut violent)
+const BOSS_STAGE_STEP = 9         // chaque boss suivant est plus dur
+const FORTRESS_ARMOR_MULT = 3.2   // 'fortress' : armure colossale
+const FORTRESS_RESIST_BONUS = 0.2 // 'fortress' : +résistance au thème
+
+const ELEMENTS: DamageType[] = DAMAGE_TYPE_LIST
 
 function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)]
 }
 
-export function raidBosses(level: number): number {
-  return 2 + Math.floor(level / 2)
+/** Vulnérabilité thématique d'un élément (laisse une porte de sortie : varier ses dégâts). */
+const VULN: Record<DamageType, DamageType> = {
+  physique: 'arcane', feu: 'froid', froid: 'feu', foudre: 'nature',
+  nature: 'foudre', arcane: 'ombre', ombre: 'arcane',
 }
 
-export function raidIlvl(level: number): number {
-  return Math.round(120 + level * 14)
+export interface ActiveRaid {
+  raidId: RaidId
+  tier: number
+  name: string
+  /** Index du boss en cours (0-based). */
+  current: number
+  totalBosses: number
+  enemy: Enemy
+  /** Mécaniques signature (depuis la def). */
+  mechanics: RaidMechanicKind[]
+  /** Type d'attaque courant (pour 'rotate'/'rotating'). */
+  element: DamageType
+  /** Cycle d'éléments pour 'rotate'. */
+  rotateList: DamageType[]
+  rotateIdx: number
+  fightTime: number
+  novaCd: number
+  swarmCd: number
+  rotateCd: number
+  /** Délai (s) avant l'enrage mortel sur ce boss. */
+  berserkAt: number
 }
 
-export function raidLuckTier(level: number): number {
-  return 4 + Math.floor(level / 2)
+/** Nombre de boss d'un raid à un tier donné. */
+export function raidBossCount(def: RaidDef, tier: number): number {
+  return def.bosses + Math.floor((tier - 1) / 3)
 }
 
-export function raidTheme(level: number): { theme: DamageType; vuln: DamageType } {
-  return {
-    theme: ELEMENTS[(level + 1) % ELEMENTS.length],
-    vuln: ELEMENTS[(level + 4) % ELEMENTS.length],
-  }
+/** Palier de farm « effectif » d'un boss (sert à toutes les courbes). */
+function effStage(def: RaidDef, tier: number, bossIndex: number): number {
+  return def.unlockStage + (tier - 1) * TIER_STAGE_STEP + bossIndex * BOSS_STAGE_STEP
 }
 
-/** Génère 1 à 2 mécaniques pour un boss (rerollées à chaque boss du raid). */
-export function rollRaidMechanics(level: number): RaidMechanic[] {
-  const pool: RaidMechanic[] = [
-    { kind: 'nova', name: 'Nova élémentaire', description: 'Inflige périodiquement de gros dégâts à toute l\'équipe (soigne / encaisse).', value: 4, cooldown: 6 },
-    { kind: 'enrage', name: 'Enrage', description: 'Frappe de plus en plus fort avec le temps (course au DPS).', value: 0.05 },
-    { kind: 'drain', name: 'Drain de vie', description: 'Se régénère continuellement (besoin de burst).', value: 0.035 },
-    { kind: 'adds', name: 'Invocation d\'adds', description: 'Des renforts frappent l\'équipe par vagues.', value: 3, cooldown: 5 },
-    { kind: 'carapace', name: 'Carapace élémentaire', description: 'Très résistant à un type : varie tes dégâts !', value: 0.8, type: pick(ELEMENTS) },
-  ]
-  const count = level >= 3 ? 2 : 1
-  const chosen: RaidMechanic[] = []
-  for (let i = 0; i < count && pool.length; i++) {
-    chosen.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0])
-  }
-  return chosen
+/** Délai d'enrage dur (s) — rétrécit avec le tier → exige toujours plus de DPS. */
+export function raidBerserkTime(def: RaidDef, tier: number): number {
+  return Math.max(14, 34 - tier * 1.5 - def.baseDifficulty * 2)
 }
 
-export function makeRaidBoss(
-  level: number,
-  index: number,
-  theme: DamageType,
-  vuln: DamageType,
-  mechanics: RaidMechanic[],
-): Enemy {
-  const effStage = EFF_STAGE_BASE + level * EFF_STAGE_PER_LEVEL + index * 6
-  const hpBase = 40 * Math.pow(1.18, effStage - 1) * RAID_HP_PREMIUM
-  const maxHp = Math.round(hpBase * RAID_BOSS_MULT)
+/** iLvl du butin (les raids sont la meilleure source de stuff du jeu). */
+export function raidIlvl(def: RaidDef, tier: number): number {
+  return Math.round(140 + def.unlockStage * 0.9 + tier * 32)
+}
 
+/** Décalage de chance de rareté du butin (généreux, monte avec le tier). */
+export function raidLuckTier(def: RaidDef, tier: number): number {
+  return 6 + tier + Math.floor(def.unlockStage / 45)
+}
+
+/** Rareté minimale garantie du butin (plancher qui monte avec le tier). */
+export function raidMinTier(def: RaidDef, tier: number): number {
+  return Math.min(13, 5 + tier + Math.floor(def.baseDifficulty))
+}
+
+/** Nombre d'objets dans le coffre. */
+export function raidLootCount(def: RaidDef, tier: number): number {
+  return 3 + Math.floor(tier / 2) + (def.id === 'abysse' ? 2 : 0)
+}
+
+/** Fragments d'éternité gagnés. */
+export function raidFragments(def: RaidDef, tier: number): number {
+  return 1 + tier + (def.id === 'abysse' ? tier : 0)
+}
+
+/** Chance d'Éclat cosmique 💫 (ressource ultra-rare, exclusive aux raids). */
+export function raidCosmicChance(def: RaidDef, tier: number): number {
+  const base = 0.04 + tier * 0.05
+  return Math.min(0.95, base * (def.id === 'abysse' ? 2.2 : 1))
+}
+
+/** Quantité d'Éclats cosmiques quand le tirage réussit (plus aux hauts tiers / Abîme). */
+export function raidCosmicQty(def: RaidDef, tier: number): number {
+  return 1 + Math.floor(tier / 4) + (def.id === 'abysse' ? 1 : 0)
+}
+
+/** Type d'objet aléatoire dans la catégorie ciblée du raid. */
+export function pickRaidLootType(def: RaidDef): ItemType {
+  return pick(def.lootTypes)
+}
+
+/** DPS recommandé (sur le dernier boss, contre son timer d'enrage). */
+export function recommendedDps(def: RaidDef, tier: number): number {
+  const bosses = raidBossCount(def, tier)
+  const hp = bossHp(def, tier, bosses - 1, bosses)
+  return Math.round(hp / raidBerserkTime(def, tier))
+}
+
+/** PV effectifs recommandés (encaisser ~8 s du dernier boss + une nova). */
+export function recommendedEhp(def: RaidDef, tier: number): number {
+  const bosses = raidBossCount(def, tier)
+  const dmg = bossDamage(def, tier, bosses - 1)
+  const novaSpike = def.signature.includes('nova') ? dmg * 5 : 0
+  return Math.round(dmg * 8 + novaSpike)
+}
+
+function bossHp(def: RaidDef, tier: number, bossIndex: number, totalBosses: number): number {
+  const eff = effStage(def, tier, bossIndex)
+  const isFinal = bossIndex === totalBosses - 1
+  return Math.round(40 * Math.pow(1.18, eff - 1) * RAID_HP_PREMIUM * def.baseDifficulty * (isFinal ? FINAL_BOSS_MULT : 1))
+}
+
+function bossDamage(def: RaidDef, tier: number, bossIndex: number): number {
+  const eff = effStage(def, tier, bossIndex)
+  return Math.round(2.5 * Math.pow(1.12, eff - 1) * RAID_DMG_PREMIUM * def.baseDifficulty)
+}
+
+const BOSS_NAMES: Record<RaidId, string[]> = {
+  forge: ['Hagen, l\'Enclume Vivante', 'Pyrax le Fondeur', 'Le Marteau Primordial', 'Vulcanar, Maître-Forge'],
+  reliquaire: ['La Gardienne Noyée', 'Ossric aux Mille Bagues', 'Le Conservateur Éternel', 'Néréa des Profondeurs'],
+  citadelle: ['Le Sénéchal de Foudre', 'Tour-Vivante Aldric', 'Le Rempart Hurlant', 'Castellan Vorn', 'L\'Orage Couronné'],
+  nexus: ['Le Prisme Brisé', 'Iris, Cœur du Spectre', 'L\'ÉchO Polychrome', 'Chromax l\'Instable', 'Le Kaléidoscope'],
+  abysse: ['Le Premier Silence', 'Nul, le Dévoreur', 'L\'Œil du Gouffre', 'Abyssa la Primordiale', 'Ce-Qui-Reste', 'Le Néant Couronné'],
+}
+
+/** Construit un boss de raid. `element` = type d'attaque courant (pour les raids 'rotating'). */
+export function makeRaidBoss(def: RaidDef, tier: number, bossIndex: number, element: DamageType): Enemy {
+  const totalBosses = raidBossCount(def, tier)
+  const eff = effStage(def, tier, bossIndex)
+  const maxHp = bossHp(def, tier, bossIndex, totalBosses)
+  const isFinal = bossIndex === totalBosses - 1
+
+  // Le boss RÉSISTE à son thème (élément maison), avec une vulnérabilité = porte de sortie.
+  const home: DamageType = def.element === 'rotating' ? 'arcane' : def.element
   const resist: Partial<Record<DamageType, number>> = {}
-  resist[theme] = 0.55
-  resist[vuln] = -0.35
-  for (const m of mechanics) if (m.kind === 'carapace' && m.type) resist[m.type] = Math.max(resist[m.type] ?? 0, m.value)
+  resist[home] = 0.55 + (def.signature.includes('fortress') ? FORTRESS_RESIST_BONUS : 0)
+  resist[VULN[home]] = -0.3
+
+  const armorMult = def.signature.includes('fortress') ? FORTRESS_ARMOR_MULT : 1.4
+  const names = BOSS_NAMES[def.id]
+  const name = `${def.icon} ${names[bossIndex % names.length]}`
 
   return {
-    name: `★ ${pick(BOSS_NAMES)}`,
+    name: isFinal ? `★ ${name}` : name,
     maxHp,
     hp: maxHp,
-    armor: Math.round((20 + effStage * 2)),
-    damage: Math.round(2.5 * Math.pow(1.12, effStage - 1) * RAID_DMG_PREMIUM),
-    xp: Math.round(8 * Math.pow(1.12, effStage - 1) * 5),
+    armor: Math.round((20 + eff * 2.2) * armorMult),
+    damage: bossDamage(def, tier, bossIndex),
+    xp: Math.round(8 * Math.pow(1.12, eff - 1) * 6),
     resist,
-    damageType: theme, // le boss frappe avec le thème du raid
+    damageType: element,
+    elite: true,
   }
 }
 
-const RAID_NAMES = ['Sanctuaire', 'Caveau maudit', 'Trône brisé', 'Antre primordial', 'Cœur du Néant']
+/** Crée le cycle d'éléments d'attaque (raids 'rotating'/mécanique 'rotate'). */
+function rotateListFor(def: RaidDef): DamageType[] {
+  if (def.element === 'rotating') return [...ELEMENTS]
+  // Raid à élément fixe : pas de rotation (un seul élément).
+  return [def.element]
+}
 
-export function generateRaid(level: number): ActiveRaid {
-  const { theme, vuln } = raidTheme(level)
-  const totalBosses = raidBosses(level)
-  const mechanics = rollRaidMechanics(level)
+/** Génère un raid prêt à jouer. */
+export function generateRaid(raidId: RaidId, tier: number): ActiveRaid {
+  const def = RAIDS[raidId]
+  const totalBosses = raidBossCount(def, tier)
+  const rotateList = rotateListFor(def)
+  const startEl = rotateList[0]
   return {
-    level,
-    name: `${RAID_NAMES[level % RAID_NAMES.length]} de ${DAMAGE_TYPES[theme].name} · Raid ${level}`,
-    theme,
-    vuln,
-    totalBosses,
+    raidId,
+    tier,
+    name: `${def.name} · Tier ${tier}`,
     current: 0,
-    enemy: makeRaidBoss(level, 0, theme, vuln, mechanics),
-    mechanics,
+    totalBosses,
+    enemy: makeRaidBoss(def, tier, 0, startEl),
+    mechanics: def.signature,
+    element: startEl,
+    rotateList,
+    rotateIdx: 0,
     fightTime: 0,
     novaCd: 6,
-    addsCd: 5,
+    swarmCd: 5,
+    rotateCd: 8,
+    berserkAt: raidBerserkTime(def, tier),
   }
 }

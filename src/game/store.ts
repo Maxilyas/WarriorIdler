@@ -18,14 +18,17 @@ import {
 import { makeEnemy, isBossStage, stageIlvl, stageLuckTier } from './enemies'
 import { RARITIES } from './rarities'
 import { SECONDARY_STATS } from './stats'
-import { DAMAGE_TYPE_LIST } from './damage'
+import { DAMAGE_TYPE_LIST, DAMAGE_TYPES } from './damage'
 import { equipSlotsForType, slotAccepts } from './slots'
 import { essenceGain, upgradeCost, insertCost, getUnique, UNIQUE_MAX_RANK, randomUniqueInstance } from './uniques'
 import {
   generateDungeon, makeDungeonEnemy, dungeonIlvl, dungeonLuckTier, type ActiveDungeon,
 } from './dungeons'
 import {
-  generateRaid, makeRaidBoss, raidIlvl, raidLuckTier, rollRaidMechanics, RAID_UNLOCK_STAGE, type ActiveRaid,
+  generateRaid, makeRaidBoss, getRaidDef, raidUnlocked, raidBerserkTime,
+  raidIlvl, raidLuckTier, raidMinTier, raidLootCount, raidFragments,
+  raidCosmicChance, raidCosmicQty, pickRaidLootType,
+  RAIDS, type ActiveRaid, type RaidId,
 } from './raids'
 import { simulateOffline, type OfflineReport } from './offline'
 
@@ -70,16 +73,28 @@ export interface ChestReward {
   orbes?: number
   fragments?: number
   poussiere?: number
+  /** Éclat cosmique 💫 — ressource ultra-rare exclusive aux raids. */
+  cosmic?: number
 }
 
 export const SCEAU_COST = { noyau: 3, eclats: 600 }
 export const FRAGMENT_INFUSE_COST = 2 // Fragments d'éternité pour infuser un effet unique
+/** Invocation d'un effet unique au CHOIX (Éclat cosmique + Fragments). */
+export const CHOOSE_UNIQUE_COST = { cosmic: 1, fragments: 3 }
 
 /** Progression de donjon par type de dégâts (un donjon par type). */
 export type DungeonProgress = Record<DamageType, number>
 function emptyDungeonProgress(): DungeonProgress {
   const out = {} as DungeonProgress
   for (const t of DAMAGE_TYPE_LIST) out[t] = 0
+  return out
+}
+
+/** Progression par raid (chaque raid monte indépendamment). */
+export type RaidProgress = Record<RaidId, number>
+function emptyRaidProgress(): RaidProgress {
+  const out = {} as RaidProgress
+  for (const id of Object.keys(RAIDS) as RaidId[]) out[id] = 0
   return out
 }
 
@@ -102,8 +117,12 @@ interface SaveData {
   pendingChest: ChestReward | null
   orbes: number
   fragments: number
-  raidProgress: number
+  /** Éclat cosmique 💫 — ressource ultra-rare des raids. */
+  cosmic: number
+  raidProgress: RaidProgress
   raid: ActiveRaid | null
+  /** Grimoire : ids des effets uniques déjà découverts. */
+  codex: string[]
   /** Améliorations permanentes : id → niveau. */
   upgrades: Record<string, number>
   /** Stock de l'échoppe du marchand. */
@@ -138,9 +157,10 @@ interface GameState extends SaveData {
   createItem: (opts: CreateOptions) => void
   enterDungeon: (element: DamageType, level: number) => void
   abandonDungeon: () => void
-  enterRaid: (level: number) => void
+  enterRaid: (raidId: RaidId, tier: number) => void
   abandonRaid: () => void
   infuseUnique: (itemId: string) => void
+  chooseUnique: (itemId: string, effectId: string) => void
   claimChest: () => void
   craftSceau: () => void
   setActiveChar: (index: number) => void
@@ -188,13 +208,25 @@ function freshSave(): SaveData {
     pendingChest: null,
     orbes: 0,
     fragments: 0,
-    raidProgress: 0,
+    cosmic: 0,
+    raidProgress: emptyRaidProgress(),
     raid: null,
+    codex: [],
     upgrades: {},
     shopStock: [],
     inventory: [],
     lastSeen: Date.now(),
   }
+}
+
+/** Ajoute les uniques portés par des objets au grimoire (sans doublon). */
+function discoverFromItems(codex: string[], items: (Item | undefined)[]): string[] {
+  let out = codex
+  for (const it of items) {
+    const id = it?.unique?.id
+    if (id && !out.includes(id)) out = [...out, id]
+  }
+  return out
 }
 
 let migrateId = 1
@@ -243,8 +275,21 @@ function sanitize(save: SaveData): SaveData {
 
   // Ressources / champs ajoutés.
   if (typeof save.poussiere !== 'number') save.poussiere = 0
+  if (typeof save.cosmic !== 'number') save.cosmic = 0
   if (typeof save.farmLock !== 'boolean') save.farmLock = false
   if (typeof save.lastSeen !== 'number') save.lastSeen = Date.now()
+
+  // raidProgress : ancien `number` (raids génériques) → record par raid (refonte). On repart à 0.
+  const rp = save.raidProgress as unknown
+  if (!rp || typeof rp === 'number') {
+    save.raidProgress = emptyRaidProgress()
+  } else {
+    const rec = emptyRaidProgress()
+    for (const id of Object.keys(RAIDS) as RaidId[]) rec[id] = (rp as RaidProgress)[id] ?? 0
+    save.raidProgress = rec
+  }
+  // Raid en cours au format obsolète (pas de `raidId`) → abandonné par la migration.
+  if (save.raid && !(save.raid as { raidId?: string }).raidId) save.raid = null
 
   // dungeonProgress : ancien `number` → record par type.
   const dp = save.dungeonProgress as unknown
@@ -264,8 +309,6 @@ function sanitize(save: SaveData): SaveData {
     if (!save.dungeon.element) save.dungeon.element = save.dungeon.theme
     if (save.dungeon.enemy && !save.dungeon.enemy.damageType) save.dungeon.enemy.damageType = save.dungeon.theme
   }
-  if (save.raid?.enemy && !save.raid.enemy.damageType) save.raid.enemy.damageType = save.raid.theme
-
   for (const c of save.characters) {
     for (const slot in c.equipment) {
       const it = c.equipment[slot as EquipSlotId]
@@ -280,6 +323,13 @@ function sanitize(save: SaveData): SaveData {
     const mh = charMaxHp(c)
     c.hp = c.hp > 0 ? Math.min(c.hp, mh) : mh
   }
+
+  // Grimoire : amorce les découvertes depuis l'inventaire + l'équipement de l'équipe.
+  let codex = Array.isArray(save.codex) ? save.codex : []
+  codex = discoverFromItems(codex, save.inventory)
+  for (const c of save.characters) codex = discoverFromItems(codex, Object.values(c.equipment))
+  save.codex = codex
+
   return save
 }
 
@@ -351,8 +401,10 @@ function persist(s: GameState) {
     pendingChest: s.pendingChest,
     orbes: s.orbes,
     fragments: s.fragments,
+    cosmic: s.cosmic,
     raidProgress: s.raidProgress,
     raid: s.raid,
+    codex: s.codex,
     upgrades: s.upgrades,
     shopStock: s.shopStock,
     inventory: s.inventory,
@@ -511,6 +563,8 @@ interface CombatMods {
   reflect?: number
   regen?: number
   fightTime?: number
+  /** Multiplicateur plat des dégâts ennemis (enrage dur / acharnement de raid). */
+  dmgMult?: number
 }
 
 function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, chars: Character[], enemy: Enemy, hotBonus: number) {
@@ -624,7 +678,7 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
     }
     const t = chars[targetI]
     const td = info[targetI]!
-    const effDmg = enemy.damage * (1 + (mods?.enrage ?? 0) * (mods?.fightTime ?? 0))
+    const effDmg = enemy.damage * (1 + (mods?.enrage ?? 0) * (mods?.fightTime ?? 0)) * (mods?.dmgMult ?? 1)
     let incoming = incomingDps(effDmg, enemy.damageType, td.derived, td.resist)
       * (1 - td.passives.damageReduction) * (1 - td.derived.masteryDr) * (1 - td.cmods.flatDr) * dt
     if (mods?.reflect) incoming += totalDealt * mods.reflect
@@ -746,36 +800,55 @@ function applyAoe(chars: Character[], baseDmg: number, type: DamageType): Charac
 
 function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
   const r = s.raid!
+  const def = getRaidDef(r.raidId)
+  const mech = r.mechanics
   const fightTime = r.fightTime + dt
-  let enrage = 0
-  let drain = 0
-  for (const m of r.mechanics) {
-    if (m.kind === 'enrage') enrage += m.value
-    if (m.kind === 'drain') drain += m.value
-  }
-  const nova = r.mechanics.find((m) => m.kind === 'nova')
-  const adds = r.mechanics.find((m) => m.kind === 'adds')
 
-  const res = partyCombatStep(s.characters, r.enemy, dt, { enrage, regen: drain, fightTime })
+  // --- Mécaniques de pression continue ---
+  const drain = mech.includes('leech') ? 0.028 : 0 // Sangsue : le boss se régénère (check de burst)
+  const enrage = 0.012 // léger durcissement pour éviter les combats interminables
+  // Enrage DUR : passé le délai, les dégâts explosent (check de DPS).
+  const overtime = Math.max(0, fightTime - r.berserkAt)
+  let dmgMult = 1
+  if (mech.includes('berserk') && overtime > 0) dmgMult *= 1 + overtime * 0.6
+  // Acharnement : le boss frappe plus fort à mesure qu'il agonise.
+  if (mech.includes('execute')) dmgMult *= 1 + (1 - r.enemy.hp / Math.max(1, r.enemy.maxHp)) * 0.7
+
+  const res = partyCombatStep(s.characters, r.enemy, dt, { enrage, regen: drain, fightTime, dmgMult })
   let chars = res.chars
   const enemy = res.enemy
   let log = s.log
   let novaCd = r.novaCd - dt
-  let addsCd = r.addsCd - dt
+  let swarmCd = r.swarmCd - dt
+  let rotateCd = r.rotateCd - dt
+  let element = r.element
+  let rotateIdx = r.rotateIdx
 
-  if (nova && novaCd <= 0) {
-    novaCd = nova.cooldown ?? 6
-    chars = applyAoe(chars, nova.value * enemy.damage, enemy.damageType)
-    log = pushLog(log, `☄️ ${r.enemy.name} déclenche une Nova élémentaire !`, 'death')
+  // Prisme : le boss change de type d'attaque (check de résistances larges).
+  if (mech.includes('rotate') && rotateCd <= 0 && r.rotateList.length > 1) {
+    rotateCd = 7
+    rotateIdx = (rotateIdx + 1) % r.rotateList.length
+    element = r.rotateList[rotateIdx]
+    enemy.damageType = element
+    log = pushLog(log, `🌈 ${r.enemy.name} bascule en ${DAMAGE_TYPES[element].name} !`, 'info')
   }
-  if (adds && addsCd <= 0) {
-    addsCd = adds.cooldown ?? 5
-    chars = applyAoe(chars, adds.value * enemy.damage * 0.7, enemy.damageType)
+  // Nova cataclysmique : grosse AoE typée (check d'EHP/mitigation).
+  if (mech.includes('nova') && novaCd <= 0) {
+    novaCd = 6
+    chars = applyAoe(chars, enemy.damage * 4 * def.baseDifficulty, element)
+    log = pushLog(log, `☄️ ${r.enemy.name} déchaîne une Nova ${DAMAGE_TYPES[element].name} !`, 'death')
+  }
+  // Déferlante : vagues d'adds sur tout le groupe.
+  if (mech.includes('swarm') && swarmCd <= 0) {
+    swarmCd = 5
+    chars = applyAoe(chars, enemy.damage * 2.2 * def.baseDifficulty, element)
+    log = pushLog(log, '🐛 Des renforts assaillent l\'équipe !', 'death')
   }
 
   if (!chars.some((c) => c.hp > 0)) {
     const healed = chars.map((c) => ({ ...c, hp: charMaxHp(c) }))
-    log = pushLog(log, `💀 Raid échoué : ${r.name}. L'équipe est anéantie.`, 'death')
+    const why = mech.includes('berserk') && overtime > 0 ? ' (enrage mortel — il fallait plus de DPS)' : ''
+    log = pushLog(log, `💀 Raid échoué : ${r.name}${why}. L'équipe est anéantie.`, 'death')
     const next = { ...s, characters: healed, raid: null, log }
     persist(next)
     set(next)
@@ -785,47 +858,62 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
   if (enemy.hp <= 0) {
     const nextIndex = r.current + 1
     if (nextIndex >= r.totalBosses) {
-      const ilvl = raidIlvl(r.level)
-      const luck = raidLuckTier(r.level)
-      const count = 3 + r.level
+      const tier = r.tier
+      const ilvl = raidIlvl(def, tier)
+      const luck = raidLuckTier(def, tier)
+      const minTier = raidMinTier(def, tier)
+      const count = raidLootCount(def, tier)
       const bias = pickBias(s.characters)
       const items: Item[] = []
-      for (let i = 0; i < count; i++) items.push(generateItem({ ilvl, luckTier: luck, primaryBias: bias }))
+      for (let i = 0; i < count; i++) {
+        const lootType = pickRaidLootType(def)
+        items.push(generateItem({
+          ilvl, luckTier: luck, minTier, type: lootType, primaryBias: bias,
+          ...(def.id === 'nexus' ? { biasResist: DAMAGE_TYPE_LIST[Math.floor(Math.random() * DAMAGE_TYPE_LIST.length)] } : {}),
+        }))
+      }
+      const cosmic = Math.random() < raidCosmicChance(def, tier) ? raidCosmicQty(def, tier) : 0
       const chest: ChestReward = {
-        dungeonName: r.name,
-        level: r.level,
+        dungeonName: `${def.icon} ${def.name} · Tier ${tier}`,
+        level: tier,
         items,
-        eclats: Math.round(150 * r.level),
-        noyau: 2 + r.level,
-        gold: Math.round(300 * r.level),
+        eclats: Math.round(200 * tier * def.baseDifficulty),
+        noyau: 3 + tier,
+        gold: Math.round(400 * tier * def.baseDifficulty),
         sceaux: 1,
-        fragments: 1 + Math.floor(r.level / 2),
+        fragments: raidFragments(def, tier),
+        poussiere: Math.floor(tier / 2),
+        cosmic,
       }
       const healed = chars.map((c) => ({ ...c, hp: charMaxHp(c) }))
-      log = pushLog(log, `🏆 RAID VAINCU : ${r.name} ! Un trésor t'attend.`, 'kill')
-      const next = { ...s, characters: healed, raid: null, raidProgress: Math.max(s.raidProgress, r.level), pendingChest: chest, log }
+      const raidProgress = { ...s.raidProgress, [r.raidId]: Math.max(s.raidProgress[r.raidId] ?? 0, tier) }
+      log = pushLog(log, `🏆 RAID VAINCU : ${def.name} (Tier ${tier}) !${cosmic ? ` 💫 Éclat cosmique ×${cosmic} !` : ''} Un trésor t'attend.`, 'kill')
+      const next = { ...s, characters: healed, raid: null, raidProgress, pendingChest: chest, log }
       persist(next)
       set(next)
       return
     }
-    const mechanics = rollRaidMechanics(r.level)
+    const startEl = r.rotateList[0]
     const nr: ActiveRaid = {
       ...r,
       current: nextIndex,
-      mechanics,
-      enemy: makeRaidBoss(r.level, nextIndex, r.theme, r.vuln, mechanics),
+      enemy: makeRaidBoss(def, r.tier, nextIndex, startEl),
+      element: startEl,
+      rotateIdx: 0,
       fightTime: 0,
       novaCd: 6,
-      addsCd: 5,
+      swarmCd: 5,
+      rotateCd: 8,
+      berserkAt: raidBerserkTime(def, r.tier),
     }
-    log = pushLog(log, `${r.name} — boss ${nextIndex + 1}/${r.totalBosses} !`, 'info')
+    log = pushLog(log, `${def.name} — boss ${nextIndex + 1}/${r.totalBosses} !`, 'info')
     const next = { ...s, characters: chars, raid: nr, log }
     persist(next)
     set(next)
     return
   }
 
-  set({ ...s, characters: chars, raid: { ...r, enemy, fightTime, novaCd, addsCd }, log })
+  set({ ...s, characters: chars, raid: { ...r, enemy, fightTime, novaCd, swarmCd, rotateCd, element, rotateIdx }, log })
 }
 
 export const useGame = create<GameState>((set, get) => {
@@ -917,9 +1005,11 @@ export const useGame = create<GameState>((set, get) => {
         const drops = (boss ? 3 : Math.random() < 0.55 + eco.lootChance ? 1 : 0) + (elite ? 2 : 0)
         const bias = pickBias(chars)
         const luck = stageLuckTier(stage) + (boss ? 1 : 0) + (elite ? 3 : 0) + Math.floor(eco.rarityLuck)
+        let codex = s.codex
         for (let dd = 0; dd < drops; dd++) {
           const it = generateItem({ ilvl: stageIlvl(stage), luckTier: luck, primaryBias: bias })
           inventory = [it, ...inventory].slice(0, invMax)
+          if (it.unique) codex = discoverFromItems(codex, [it])
           log = pushLog(log, `Butin : ${it.name}`, 'loot')
         }
 
@@ -949,7 +1039,7 @@ export const useGame = create<GameState>((set, get) => {
         const enemyNext = makeEnemy(stage)
         if (isBossStage(stage)) log = pushLog(log, `⚔ Un boss vous barre la route : ${enemyNext.name} !`, 'info')
 
-        const next = { ...s, characters, stage, bestStage, gold, noyau, sceaux, orbes, poussiere, shopStock, inventory, enemy: enemyNext, log, killCount: s.killCount + 1 }
+        const next = { ...s, characters, stage, bestStage, gold, noyau, sceaux, orbes, poussiere, codex, shopStock, inventory, enemy: enemyNext, log, killCount: s.killCount + 1 }
         persist(next)
         set(next)
         return
@@ -1203,6 +1293,7 @@ export const useGame = create<GameState>((set, get) => {
         fragments: s.fragments - (cost.fragments ?? 0),
         poussiere: s.poussiere - (cost.poussiere ?? 0),
         inventory,
+        codex: discoverFromItems(s.codex, [item]),
         log: pushLog(s.log, `Forgé : ${item.name} (${RARITIES[opts.rarity].name}).`, 'craft'),
       }
       persist(next)
@@ -1227,14 +1318,16 @@ export const useGame = create<GameState>((set, get) => {
       set(next)
     },
 
-    enterRaid: (level) => {
+    enterRaid: (raidId, tier) => {
       const s = get()
       if (s.raid || s.dungeon) return
-      if (s.bestStage < RAID_UNLOCK_STAGE) return
-      if (s.orbes < 1) return
-      if (level < 1 || level > s.raidProgress + 1) return
-      const raid = generateRaid(level)
-      const next = { ...s, orbes: s.orbes - 1, raid, log: pushLog(s.log, `⚔️ Raid lancé : ${raid.name} (${raid.totalBosses} boss).`, 'info') }
+      const def = getRaidDef(raidId)
+      if (!def || !raidUnlocked(def, s.bestStage, s.raidProgress)) return
+      const maxTier = (s.raidProgress[raidId] ?? 0) + 1
+      if (tier < 1 || tier > maxTier) return
+      if (s.orbes < def.orbeCost) return
+      const raid = generateRaid(raidId, tier)
+      const next = { ...s, orbes: s.orbes - def.orbeCost, raid, log: pushLog(s.log, `⚔️ Raid lancé : ${def.name} · Tier ${tier} (${raid.totalBosses} boss).`, 'info') }
       persist(next)
       set(next)
     },
@@ -1259,7 +1352,33 @@ export const useGame = create<GameState>((set, get) => {
       const upd = applyItemPatch(s, itemId, { unique: newUnique })
       if (!upd) return
       const label = item.unique ? `rang ${newUnique.rank}` : `effet ${getUnique(newUnique.id)?.name ?? ''}`
-      const next = { ...s, ...upd, fragments: s.fragments - FRAGMENT_INFUSE_COST, log: pushLog(s.log, `✨ Fragment infusé : ${item.name} (${label}).`, 'craft') }
+      const codex = s.codex.includes(newUnique.id) ? s.codex : [...s.codex, newUnique.id]
+      const next = { ...s, ...upd, codex, fragments: s.fragments - FRAGMENT_INFUSE_COST, log: pushLog(s.log, `✨ Fragment infusé : ${item.name} (${label}).`, 'craft') }
+      persist(next)
+      set(next)
+    },
+
+    /** Invoque un effet unique AU CHOIX sur un objet (sink d'Éclat cosmique des raids). */
+    chooseUnique: (itemId, effectId) => {
+      const s = get()
+      const def = getUnique(effectId)
+      if (!def) return
+      const item = findItemById(s, itemId)
+      if (!item) return
+      if (s.cosmic < CHOOSE_UNIQUE_COST.cosmic || s.fragments < CHOOSE_UNIQUE_COST.fragments) return
+      // Même effet déjà présent → monte son rang ; sinon le pose au rang 1.
+      const rank = item.unique?.id === effectId ? Math.min(UNIQUE_MAX_RANK, item.unique.rank + 1) : 1
+      const upd = applyItemPatch(s, itemId, { unique: { id: effectId, rank } })
+      if (!upd) return
+      const codex = s.codex.includes(effectId) ? s.codex : [...s.codex, effectId]
+      const next = {
+        ...s,
+        ...upd,
+        codex,
+        cosmic: s.cosmic - CHOOSE_UNIQUE_COST.cosmic,
+        fragments: s.fragments - CHOOSE_UNIQUE_COST.fragments,
+        log: pushLog(s.log, `💫 Effet invoqué : ${def.name} sur ${item.name} (rang ${rank}).`, 'craft'),
+      }
       persist(next)
       set(next)
     },
@@ -1277,11 +1396,13 @@ export const useGame = create<GameState>((set, get) => {
       const upd = applyItemPatch(s, itemId, { unique: { id: effectId, rank } })
       if (!upd) return
       const essences = { ...s.essences, [effectId]: have - cost.essences }
+      const codex = s.codex.includes(effectId) ? s.codex : [...s.codex, effectId]
       const next = {
         ...s,
         ...upd,
         essence: s.essence - cost.eclats,
         essences,
+        codex,
         log: pushLog(s.log, `🧬 Effet inséré : ${def.name} sur ${item.name} (-${cost.essences} essences).`, 'craft'),
       }
       persist(next)
@@ -1297,20 +1418,23 @@ export const useGame = create<GameState>((set, get) => {
       const orbeG = c.orbes ?? 0
       const fragG = c.fragments ?? 0
       const pousG = c.poussiere ?? 0
+      const cosmG = c.cosmic ?? 0
       const next = {
         ...s,
         pendingChest: null,
         inventory,
+        codex: discoverFromItems(s.codex, c.items),
         essence: s.essence + c.eclats,
         noyau: s.noyau + c.noyau,
         poussiere: s.poussiere + pousG,
+        cosmic: s.cosmic + cosmG,
         gold: s.gold + c.gold,
         sceaux: s.sceaux + c.sceaux,
         orbes: s.orbes + orbeG,
         fragments: s.fragments + fragG,
         log: pushLog(
           s.log,
-          `Coffre ouvert : ${c.items.length} objets${c.eclats ? `, +${c.eclats} éclats` : ''}${c.noyau ? `, +${c.noyau} noyaux` : ''}${pousG ? `, +${pousG} poussière` : ''}${c.gold ? `, +${c.gold} or` : ''}${c.sceaux ? `, +${c.sceaux} sceau` : ''}${orbeG ? `, +${orbeG} orbe` : ''}${fragG ? `, +${fragG} fragment` : ''}.`,
+          `Coffre ouvert : ${c.items.length} objets${c.eclats ? `, +${c.eclats} éclats` : ''}${c.noyau ? `, +${c.noyau} noyaux` : ''}${pousG ? `, +${pousG} poussière` : ''}${cosmG ? `, +${cosmG} 💫` : ''}${c.gold ? `, +${c.gold} or` : ''}${c.sceaux ? `, +${c.sceaux} sceau` : ''}${orbeG ? `, +${orbeG} orbe` : ''}${fragG ? `, +${fragG} fragment` : ''}.`,
           'craft',
         ),
       }
@@ -1439,6 +1563,7 @@ export const useGame = create<GameState>((set, get) => {
         gold: s.gold - price,
         shopStock: s.shopStock.filter((i) => i.id !== itemId),
         inventory: [item, ...s.inventory].slice(0, invMax),
+        codex: discoverFromItems(s.codex, [item]),
         log: pushLog(s.log, `Acheté : ${item.name} (-${price} or).`, 'gold'),
       }
       persist(next)

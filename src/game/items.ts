@@ -214,7 +214,7 @@ export function itemStatBlock(item: Item): Record<string, number> {
   if (item.endurance) block.endurance = (block.endurance ?? 0) + item.endurance
   for (const a of item.affixes) if (a.kind === 'stat' && a.stat) block[a.stat] = (block[a.stat] ?? 0) + a.value
   if (item.unique) {
-    const mods = instanceMods(item.unique)
+    const mods = instanceMods(item.unique, item)
     for (const k in mods) block[k] = (block[k] ?? 0) + (mods[k as keyof typeof mods] ?? 0)
   }
   return block

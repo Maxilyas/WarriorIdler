@@ -8,12 +8,13 @@ import { StuffScreen } from './components/StuffScreen'
 import { DungeonPanel } from './components/DungeonPanel'
 import { RaidPanel } from './components/RaidPanel'
 import { MerchantPanel } from './components/MerchantPanel'
+import { GrimoirePanel } from './components/GrimoirePanel'
 import { ChestModal } from './components/ChestModal'
 import { WelcomeBackModal } from './components/WelcomeBackModal'
 
 const TICK_MS = 200
 
-type Tab = 'combat' | 'perso' | 'talents' | 'stuff' | 'donjons' | 'raids' | 'marchand'
+type Tab = 'combat' | 'perso' | 'talents' | 'stuff' | 'donjons' | 'raids' | 'marchand' | 'grimoire'
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'combat', label: 'Combat', icon: '⚔' },
@@ -23,6 +24,7 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'donjons', label: 'Donjons', icon: '🏰' },
   { id: 'raids', label: 'Raids', icon: '☠️' },
   { id: 'marchand', label: 'Marché', icon: '🏪' },
+  { id: 'grimoire', label: 'Codex', icon: '📖' },
 ]
 
 export default function App() {
@@ -34,12 +36,13 @@ export default function App() {
   const poussiere = useGame((s) => s.poussiere)
   const orbes = useGame((s) => s.orbes)
   const fragments = useGame((s) => s.fragments)
+  const cosmic = useGame((s) => s.cosmic)
   const isDesktop = useMediaQuery('(min-width: 1024px)')
   const sceaux = useGame((s) => s.sceaux)
   const inDungeon = useGame((s) => s.dungeon !== null)
   const inRaid = useGame((s) => s.raid !== null)
   const [tab, setTab] = useState<Tab>('combat')
-  const [deskTab, setDeskTab] = useState<'perso' | 'talents' | 'stuff' | 'donjons' | 'raids' | 'marchand'>('stuff')
+  const [deskTab, setDeskTab] = useState<'perso' | 'talents' | 'stuff' | 'donjons' | 'raids' | 'marchand' | 'grimoire'>('stuff')
 
   useEffect(() => {
     const id = setInterval(() => tick(TICK_MS / 1000), TICK_MS)
@@ -59,6 +62,7 @@ export default function App() {
           {poussiere > 0 && <span className="text-indigo-300" title="Poussière d'étoile (craft sommital)">🌌 {poussiere.toLocaleString('fr-FR')}</span>}
           {orbes > 0 && <span className="text-rose-300" title="Orbe de raid">🔮 {orbes.toLocaleString('fr-FR')}</span>}
           {fragments > 0 && <span className="text-sky-300" title="Fragment d'éternité">✨ {fragments.toLocaleString('fr-FR')}</span>}
+          {cosmic > 0 && <span className="text-violet-300" title="Éclat cosmique (raids)">💫 {cosmic.toLocaleString('fr-FR')}</span>}
         </div>
       </header>
 
@@ -71,7 +75,7 @@ export default function App() {
             </div>
             <div className="flex min-h-0 min-w-0 flex-col">
               <div className="mb-3 flex gap-1.5">
-                {(['stuff', 'perso', 'talents', 'donjons', 'raids', 'marchand'] as const).map((t) => (
+                {(['stuff', 'perso', 'talents', 'donjons', 'raids', 'marchand', 'grimoire'] as const).map((t) => (
                   <button
                     key={t}
                     onClick={() => setDeskTab(t)}
@@ -80,7 +84,7 @@ export default function App() {
                       (deskTab === t ? 'bg-slate-700 text-slate-100' : 'bg-slate-800/50 text-slate-400 hover:text-slate-200')
                     }
                   >
-                    {t === 'stuff' ? '🎒 Équipement' : t === 'perso' ? '🛡 Personnage' : t === 'talents' ? '🌌 Talents' : t === 'donjons' ? '🏰 Donjons' : t === 'raids' ? '☠️ Raids' : '🏪 Marché'}
+                    {t === 'stuff' ? '🎒 Équipement' : t === 'perso' ? '🛡 Personnage' : t === 'talents' ? '🌌 Talents' : t === 'donjons' ? '🏰 Donjons' : t === 'raids' ? '☠️ Raids' : t === 'marchand' ? '🏪 Marché' : '📖 Grimoire'}
                     {t === 'donjons' && (sceaux > 0 || inDungeon) && (
                       <span className="ml-1.5 rounded-full bg-amber-500 px-1.5 text-[10px] text-slate-950">
                         {inDungeon ? '!' : sceaux}
@@ -107,6 +111,8 @@ export default function App() {
                   <RaidPanel />
                 ) : deskTab === 'marchand' ? (
                   <MerchantPanel />
+                ) : deskTab === 'grimoire' ? (
+                  <GrimoirePanel />
                 ) : (
                   <StuffScreen />
                 )}
@@ -127,13 +133,14 @@ export default function App() {
             {tab === 'donjons' && <DungeonPanel />}
             {tab === 'raids' && <RaidPanel />}
             {tab === 'marchand' && <MerchantPanel />}
+            {tab === 'grimoire' && <GrimoirePanel />}
           </div>
         )}
       </main>
 
       {/* Barre d'onglets (mobile uniquement) */}
       {!isDesktop && (
-        <nav className="grid grid-cols-7 border-t border-slate-800">
+        <nav className="grid grid-cols-8 border-t border-slate-800">
           {TABS.map((t) => (
             <button
               key={t.id}
