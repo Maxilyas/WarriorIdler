@@ -195,10 +195,12 @@ export function generateItem(opts: GenerateOptions): Item {
 /**
  * Tire une rareté pour un coffre : distribution pondérée (favorise le bas de la fourchette)
  * entre minTier et maxTier, avec une petite chance de JACKPOT au-dessus de maxTier.
+ * `decay` (0→1) règle l'inclinaison : proche de 1, la distribution s'aplatit et remonte
+ * vers les hautes raretés (utilisé par les raids pour scaler avec le tier).
  */
-export function rollBoxRarity(minTier: number, maxTier: number, jackpot: number): RarityId {
+export function rollBoxRarity(minTier: number, maxTier: number, jackpot: number, decay = 0.62): RarityId {
   const weights: number[] = []
-  for (let t = minTier; t <= maxTier; t++) weights.push(Math.pow(0.62, t - minTier))
+  for (let t = minTier; t <= maxTier; t++) weights.push(Math.pow(decay, t - minTier))
   const total = weights.reduce((a, b) => a + b, 0)
   let r = Math.random() * total
   let tier = minTier

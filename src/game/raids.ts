@@ -51,8 +51,14 @@ export interface RaidDef {
   /** Catégorie d'équipement ciblée par le butin. */
   lootTypes: ItemType[]
   lootLabel: string
-  /** Record de palier (bestStage) requis pour débloquer ce raid. */
+  /** Record de palier (bestStage) requis pour DÉBLOQUER l'accès à ce raid. */
   unlockStage: number
+  /**
+   * Palier de référence pour la DIFFICULTÉ et les RÉCOMPENSES (PV, dégâts, iLvl, rareté).
+   * Indépendant de `unlockStage` : on peut accéder tôt à un raid « haut de gamme »,
+   * mais il reste aussi dur (et aussi généreux) qu'avant.
+   */
+  scaleStage: number
   /** Raid prérequis : doit avoir été clear (tier ≥ 1) au moins une fois. */
   requires?: RaidId
   /** Difficulté de base : multiplie PV et dégâts (≥1, monte d'un raid à l'autre). */
@@ -75,31 +81,31 @@ export const RAIDS: Record<RaidId, RaidDef> = {
     id: 'forge', name: 'La Forge des Titans', icon: '⚒️', color: '#ff6b35',
     lore: 'Des enclumes grandes comme des collines, des gardiens de fonte en fusion. Seul un DPS perçant fend leur carapace.',
     lootTypes: ['armePrincipale', 'armeSecondaire'], lootLabel: 'Armes & Boucliers',
-    unlockStage: 50, baseDifficulty: 1.0, signature: ['fortress', 'berserk'], element: 'physique', bosses: 3, orbeCost: 1,
+    unlockStage: 50, scaleStage: 50, baseDifficulty: 1.0, signature: ['fortress', 'berserk'], element: 'physique', bosses: 3, orbeCost: 1,
   },
   reliquaire: {
     id: 'reliquaire', name: 'Le Reliquaire Englouti', icon: '💍', color: '#4dd0e1',
     lore: 'Une crypte noyée où dorment les joyaux des rois morts. Leurs gardiens se ressoudent sans cesse — frappe vite et fort.',
     lootTypes: ['anneau', 'bijou', 'cou'], lootLabel: 'Anneaux, Bijoux & Colliers',
-    unlockStage: 90, requires: 'forge', baseDifficulty: 1.3, signature: ['leech', 'swarm'], element: 'froid', bosses: 3, orbeCost: 1,
+    unlockStage: 50, scaleStage: 90, baseDifficulty: 1.3, signature: ['leech', 'swarm'], element: 'froid', bosses: 3, orbeCost: 1,
   },
   citadelle: {
     id: 'citadelle', name: 'La Citadelle Éternelle', icon: '🏰', color: '#ffd43b',
     lore: 'Une forteresse battue par des orages sans fin. Ses sentinelles déchaînent des novas — seule une muraille de PV tient debout.',
     lootTypes: ['tete', 'epaules', 'torse', 'jambes', 'mains', 'taille', 'pieds', 'poignets', 'cape'], lootLabel: 'Pièces d\'armure',
-    unlockStage: 140, requires: 'reliquaire', baseDifficulty: 1.6, signature: ['nova', 'execute'], element: 'foudre', bosses: 4, orbeCost: 1,
+    unlockStage: 50, scaleStage: 140, baseDifficulty: 1.6, signature: ['nova', 'execute'], element: 'foudre', bosses: 4, orbeCost: 1,
   },
   nexus: {
     id: 'nexus', name: 'Le Nexus Prismatique', icon: '🌈', color: '#c084fc',
     lore: 'Un cœur de magie pure où la réalité se fracture en sept couleurs. Le boss change d\'élément sans prévenir : résiste à tout, ou meurs.',
     lootTypes: ['cou', 'cape', 'bijou', 'anneau'], lootLabel: 'Accessoires de résistance',
-    unlockStage: 200, requires: 'citadelle', baseDifficulty: 1.9, signature: ['rotate', 'nova'], element: 'rotating', bosses: 4, orbeCost: 2,
+    unlockStage: 50, scaleStage: 200, baseDifficulty: 1.9, signature: ['rotate', 'nova'], element: 'rotating', bosses: 4, orbeCost: 2,
   },
   abysse: {
     id: 'abysse', name: 'L\'Abîme Primordial', icon: '🕳️', color: '#8a2be2',
     lore: 'Le gouffre d\'où tout est né et où tout retourne. Le défi ultime : aucune faiblesse de stuff n\'est pardonnée. Le butin et les Éclats cosmiques y sont les plus riches.',
     lootTypes: ['tete', 'epaules', 'torse', 'jambes', 'mains', 'taille', 'pieds', 'poignets', 'cape', 'cou', 'anneau', 'bijou', 'armePrincipale', 'armeSecondaire'], lootLabel: 'Tout l\'équipement',
-    unlockStage: 300, requires: 'nexus', baseDifficulty: 2.4, signature: ['berserk', 'nova', 'fortress', 'leech'], element: 'rotating', bosses: 5, orbeCost: 3,
+    unlockStage: 150, scaleStage: 300, requires: 'nexus', baseDifficulty: 2.4, signature: ['berserk', 'nova', 'fortress', 'leech'], element: 'rotating', bosses: 5, orbeCost: 3,
   },
 }
 
@@ -167,7 +173,7 @@ export function raidBossCount(def: RaidDef, tier: number): number {
 
 /** Palier de farm « effectif » d'un boss (sert à toutes les courbes). */
 function effStage(def: RaidDef, tier: number, bossIndex: number): number {
-  return def.unlockStage + (tier - 1) * TIER_STAGE_STEP + bossIndex * BOSS_STAGE_STEP
+  return def.scaleStage + (tier - 1) * TIER_STAGE_STEP + bossIndex * BOSS_STAGE_STEP
 }
 
 /** Délai d'enrage dur (s) — rétrécit avec le tier → exige toujours plus de DPS. */
@@ -177,17 +183,37 @@ export function raidBerserkTime(def: RaidDef, tier: number): number {
 
 /** iLvl du butin (les raids sont la meilleure source de stuff du jeu). */
 export function raidIlvl(def: RaidDef, tier: number): number {
-  return Math.round(140 + def.unlockStage * 0.9 + tier * 32)
+  return Math.round(140 + def.scaleStage * 0.9 + tier * 32)
 }
 
-/** Décalage de chance de rareté du butin (généreux, monte avec le tier). */
-export function raidLuckTier(def: RaidDef, tier: number): number {
-  return 6 + tier + Math.floor(def.unlockStage / 45)
-}
+/**
+ * Rareté du butin de raid — distribution en ÉVENTAIL (et non plus un plancher fixe qui
+ * « écrasait » tout sur une seule rareté). On tire entre un plancher garanti `raidMinTier`
+ * et un plafond `raidMaxTier` ; plus le tier monte, plus la distribution se décale vers le
+ * haut (`raidRarityDecay`) et plus le « jackpot » est probable (`raidRarityJackpot`).
+ */
 
-/** Rareté minimale garantie du butin (plancher qui monte avec le tier). */
+/** Rareté plancher GARANTIE du butin (monte doucement avec le tier et la difficulté). */
 export function raidMinTier(def: RaidDef, tier: number): number {
-  return Math.min(13, 5 + tier + Math.floor(def.baseDifficulty))
+  return Math.min(12, 5 + Math.round((tier - 1) * 0.6) + Math.floor(def.baseDifficulty))
+}
+
+/** Rareté plafond ATTEIGNABLE : la fenêtre s'élargit vite (Transcendant aux hauts tiers). */
+export function raidMaxTier(def: RaidDef, tier: number): number {
+  return Math.min(16, raidMinTier(def, tier) + 4 + tier)
+}
+
+/**
+ * Aplatissement de la distribution (0→1) : plus c'est proche de 1, plus le tirage « remonte »
+ * vers le haut de la fenêtre. Croît avec le tier et la difficulté du raid.
+ */
+export function raidRarityDecay(def: RaidDef, tier: number): number {
+  return Math.min(0.92, 0.5 + tier * 0.03 + def.baseDifficulty * 0.04)
+}
+
+/** Chance de « jackpot » (cran de rareté bonus au-delà du plafond), croissante avec le tier. */
+export function raidRarityJackpot(def: RaidDef, tier: number): number {
+  return Math.min(0.6, 0.05 + tier * 0.03 + def.baseDifficulty * 0.04)
 }
 
 /** Nombre d'objets dans le coffre. */

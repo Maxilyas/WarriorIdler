@@ -26,8 +26,8 @@ import {
 } from './dungeons'
 import {
   generateRaid, makeRaidBoss, getRaidDef, raidUnlocked, raidBerserkTime,
-  raidIlvl, raidLuckTier, raidMinTier, raidLootCount, raidFragments,
-  raidCosmicChance, raidCosmicQty, pickRaidLootType,
+  raidIlvl, raidMinTier, raidMaxTier, raidRarityDecay, raidRarityJackpot,
+  raidLootCount, raidFragments, raidCosmicChance, raidCosmicQty, pickRaidLootType,
   RAIDS, type ActiveRaid, type RaidId,
 } from './raids'
 import { simulateOffline, type OfflineReport } from './offline'
@@ -878,15 +878,19 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
     if (nextIndex >= r.totalBosses) {
       const tier = r.tier
       const ilvl = raidIlvl(def, tier)
-      const luck = raidLuckTier(def, tier)
       const minTier = raidMinTier(def, tier)
+      const maxTier = raidMaxTier(def, tier)
+      const decay = raidRarityDecay(def, tier)
+      const jackpot = raidRarityJackpot(def, tier)
       const count = raidLootCount(def, tier)
       const bias = pickBias(s.characters)
       const items: Item[] = []
       for (let i = 0; i < count; i++) {
         const lootType = pickRaidLootType(def)
+        // Rareté en éventail : plancher garanti → plafond, décalée vers le haut avec le tier.
+        const rarity = rollBoxRarity(minTier, maxTier, jackpot, decay)
         items.push(generateItem({
-          ilvl, luckTier: luck, minTier, type: lootType, primaryBias: bias,
+          ilvl, rarity, type: lootType, primaryBias: bias,
           ...(def.id === 'nexus' ? { biasResist: DAMAGE_TYPE_LIST[Math.floor(Math.random() * DAMAGE_TYPE_LIST.length)] } : {}),
         }))
       }

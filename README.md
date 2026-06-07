@@ -37,12 +37,18 @@ Refonte « uniques & raids » (retours de test) :
   - **5 raids distincts** avec identité, lore et **butin ciblé par catégorie** : ⚒️ **Forge des Titans**
     (armes), 💍 **Reliquaire Englouti** (anneaux/bijoux/colliers), 🏰 **Citadelle Éternelle** (armures),
     🌈 **Nexus Prismatique** (accessoires de résistance), 🕳️ **Abîme Primordial** (tout — le défi ultime).
-  - **Tiers montés indépendamment** par raid (battre le tier T débloque T+1 de CE raid), débloqués par
-    paliers (50 → 300) et par une **chaîne de prérequis**.
+  - **Tiers montés indépendamment** par raid (battre le tier T débloque T+1 de CE raid). Les **quatre
+    premiers raids sont accessibles dès le palier 50** : tu choisis librement la catégorie de butin à
+    farmer. Seul l'**Abîme Primordial** reste un capstone (palier 150 + avoir vaincu le Nexus). La
+    difficulté et les récompenses restent **escaladées par raid** (un raid « haut de gamme » est tout
+    aussi dur et généreux qu'avant, même pris tôt).
   - **Extrêmement difficiles** : chaque raid est un **check de stuff** via des mécaniques signature —
     Enrage mortel (timer de DPS), Nova cataclysmique (EHP), Forteresse (pénétration), Sangsue (burst),
     Déferlante (EHP de groupe), Prisme instable (résistances larges), Acharnement. Le panneau affiche
     le **DPS et les PV recommandés** vs ton équipe (✓/✗).
+  - **Rareté du butin en éventail** : plus un plancher fixe « écrasé » sur une seule rareté, mais un
+    tirage **du plancher garanti au plafond atteignable** ; plus le **tier monte**, plus les **très
+    hautes raretés** (jusqu'à Transcendant) deviennent probables. La fourchette est affichée sur la carte.
   - **Ressource ultra-rare** : l'**Éclat cosmique 💫** (exclusif aux raids) sert à **invoquer un effet
     unique au choix** sur un objet (atelier) — un puissant levier de theorycraft.
 

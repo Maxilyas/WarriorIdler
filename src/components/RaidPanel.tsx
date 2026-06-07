@@ -3,11 +3,12 @@ import { useGame } from '../game/store'
 import {
   RAID_LIST, RAID_UNLOCK_STAGE, RAID_MECHANIC_META, getRaidDef, raidUnlocked,
   raidBossCount, raidIlvl, raidBerserkTime, raidFragments, raidCosmicChance,
-  recommendedDps, recommendedEhp, type RaidDef,
+  raidMinTier, raidMaxTier, recommendedDps, recommendedEhp, type RaidDef,
 } from '../game/raids'
 import { charDerived, charDamageProfile, charMaxHp } from '../game/character'
 import { theoreticalDps } from '../game/combat'
 import { DAMAGE_TYPES } from '../game/damage'
+import { RARITY_LIST } from '../game/rarities'
 
 function fmt(n: number): string {
   if (n >= 1e9) return (n / 1e9).toFixed(1) + 'Md'
@@ -167,6 +168,8 @@ function RaidCard({ def, unlocked, cleared, bestStage, orbes, busy, partyDps, pa
         {def.element === 'rotating' && <> · 🌈 éléments tournants</>}
       </div>
 
+      <RarityRange def={def} tier={t} />
+
       {/* Sélecteur de tier + lancement */}
       <div className="mt-2 flex items-center gap-1.5">
         <div className="flex items-center rounded-lg border border-slate-700">
@@ -183,6 +186,22 @@ function RaidCard({ def, unlocked, cleared, bestStage, orbes, busy, partyDps, pa
           {busy ? 'Indisponible' : orbes < def.orbeCost ? `Besoin de ${def.orbeCost} 🔮` : `Lancer le tier ${t} (${def.orbeCost} 🔮)`}
         </button>
       </div>
+    </div>
+  )
+}
+
+/** Affiche l'éventail de raretés possibles du butin (plancher garanti → plafond atteignable). */
+function RarityRange({ def, tier }: { def: RaidDef; tier: number }) {
+  const minR = RARITY_LIST.find((r) => r.tier === raidMinTier(def, tier))
+  const maxR = RARITY_LIST.find((r) => r.tier === raidMaxTier(def, tier))
+  if (!minR || !maxR) return null
+  return (
+    <div className="mt-1 text-[9.5px] text-slate-500">
+      Rareté du butin :{' '}
+      <span style={{ color: minR.color }}>{minR.name}</span>
+      <span className="text-slate-600"> → </span>
+      <span style={{ color: maxR.color }}>{maxR.name}</span>
+      {minR.tier !== maxR.tier && <span className="text-slate-600"> (chances ↑ avec le tier)</span>}
     </div>
   )
 }
