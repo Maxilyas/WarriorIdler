@@ -40,8 +40,9 @@ Refonte « uniques & raids » (retours de test) :
   - **Tiers montés indépendamment** par raid (battre le tier T débloque T+1 de CE raid). Les **quatre
     premiers raids sont accessibles dès le palier 50** : tu choisis librement la catégorie de butin à
     farmer. Seul l'**Abîme Primordial** reste un capstone (palier 150 + avoir vaincu le Nexus). La
-    difficulté et les récompenses restent **escaladées par raid** (un raid « haut de gamme » est tout
-    aussi dur et généreux qu'avant, même pris tôt).
+    **difficulté et l'iLvl du Tier 1 sont calés sur le palier d'accès** ; la différence entre raids
+    vient de leur **difficulté de base** (Forge < Reliquaire < Citadelle < Nexus), pas d'un palier
+    artificiellement gonflé.
   - **Extrêmement difficiles** : chaque raid est un **check de stuff** via des mécaniques signature —
     Enrage mortel (timer de DPS), Nova cataclysmique (EHP), Forteresse (pénétration), Sangsue (burst),
     Déferlante (EHP de groupe), Prisme instable (résistances larges), Acharnement. Le panneau affiche

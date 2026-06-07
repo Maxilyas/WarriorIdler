@@ -1,5 +1,6 @@
 import type { DamageType, Enemy, ItemType } from './types'
 import { DAMAGE_TYPE_LIST } from './damage'
+import { stageIlvl } from './enemies'
 
 /**
  * RAIDS — refonte « endgame ».
@@ -51,14 +52,12 @@ export interface RaidDef {
   /** Catégorie d'équipement ciblée par le butin. */
   lootTypes: ItemType[]
   lootLabel: string
-  /** Record de palier (bestStage) requis pour DÉBLOQUER l'accès à ce raid. */
-  unlockStage: number
   /**
-   * Palier de référence pour la DIFFICULTÉ et les RÉCOMPENSES (PV, dégâts, iLvl, rareté).
-   * Indépendant de `unlockStage` : on peut accéder tôt à un raid « haut de gamme »,
-   * mais il reste aussi dur (et aussi généreux) qu'avant.
+   * Palier de déblocage (bestStage requis). Sert AUSSI de palier de référence pour la
+   * difficulté et l'iLvl du Tier 1 : un raid débloqué au palier 50 est calé sur le palier 50.
+   * La différence de difficulté entre raids vient de `baseDifficulty` (pas du palier d'accès).
    */
-  scaleStage: number
+  unlockStage: number
   /** Raid prérequis : doit avoir été clear (tier ≥ 1) au moins une fois. */
   requires?: RaidId
   /** Difficulté de base : multiplie PV et dégâts (≥1, monte d'un raid à l'autre). */
@@ -81,31 +80,31 @@ export const RAIDS: Record<RaidId, RaidDef> = {
     id: 'forge', name: 'La Forge des Titans', icon: '⚒️', color: '#ff6b35',
     lore: 'Des enclumes grandes comme des collines, des gardiens de fonte en fusion. Seul un DPS perçant fend leur carapace.',
     lootTypes: ['armePrincipale', 'armeSecondaire'], lootLabel: 'Armes & Boucliers',
-    unlockStage: 50, scaleStage: 50, baseDifficulty: 1.0, signature: ['fortress', 'berserk'], element: 'physique', bosses: 3, orbeCost: 1,
+    unlockStage: 50, baseDifficulty: 1.0, signature: ['fortress', 'berserk'], element: 'physique', bosses: 3, orbeCost: 1,
   },
   reliquaire: {
     id: 'reliquaire', name: 'Le Reliquaire Englouti', icon: '💍', color: '#4dd0e1',
     lore: 'Une crypte noyée où dorment les joyaux des rois morts. Leurs gardiens se ressoudent sans cesse — frappe vite et fort.',
     lootTypes: ['anneau', 'bijou', 'cou'], lootLabel: 'Anneaux, Bijoux & Colliers',
-    unlockStage: 50, scaleStage: 90, baseDifficulty: 1.3, signature: ['leech', 'swarm'], element: 'froid', bosses: 3, orbeCost: 1,
+    unlockStage: 50, baseDifficulty: 1.3, signature: ['leech', 'swarm'], element: 'froid', bosses: 3, orbeCost: 1,
   },
   citadelle: {
     id: 'citadelle', name: 'La Citadelle Éternelle', icon: '🏰', color: '#ffd43b',
     lore: 'Une forteresse battue par des orages sans fin. Ses sentinelles déchaînent des novas — seule une muraille de PV tient debout.',
     lootTypes: ['tete', 'epaules', 'torse', 'jambes', 'mains', 'taille', 'pieds', 'poignets', 'cape'], lootLabel: 'Pièces d\'armure',
-    unlockStage: 50, scaleStage: 140, baseDifficulty: 1.6, signature: ['nova', 'execute'], element: 'foudre', bosses: 4, orbeCost: 1,
+    unlockStage: 50, baseDifficulty: 1.6, signature: ['nova', 'execute'], element: 'foudre', bosses: 4, orbeCost: 1,
   },
   nexus: {
     id: 'nexus', name: 'Le Nexus Prismatique', icon: '🌈', color: '#c084fc',
     lore: 'Un cœur de magie pure où la réalité se fracture en sept couleurs. Le boss change d\'élément sans prévenir : résiste à tout, ou meurs.',
     lootTypes: ['cou', 'cape', 'bijou', 'anneau'], lootLabel: 'Accessoires de résistance',
-    unlockStage: 50, scaleStage: 200, baseDifficulty: 1.9, signature: ['rotate', 'nova'], element: 'rotating', bosses: 4, orbeCost: 2,
+    unlockStage: 50, baseDifficulty: 1.9, signature: ['rotate', 'nova'], element: 'rotating', bosses: 4, orbeCost: 2,
   },
   abysse: {
     id: 'abysse', name: 'L\'Abîme Primordial', icon: '🕳️', color: '#8a2be2',
     lore: 'Le gouffre d\'où tout est né et où tout retourne. Le défi ultime : aucune faiblesse de stuff n\'est pardonnée. Le butin et les Éclats cosmiques y sont les plus riches.',
     lootTypes: ['tete', 'epaules', 'torse', 'jambes', 'mains', 'taille', 'pieds', 'poignets', 'cape', 'cou', 'anneau', 'bijou', 'armePrincipale', 'armeSecondaire'], lootLabel: 'Tout l\'équipement',
-    unlockStage: 150, scaleStage: 300, requires: 'nexus', baseDifficulty: 2.4, signature: ['berserk', 'nova', 'fortress', 'leech'], element: 'rotating', bosses: 5, orbeCost: 3,
+    unlockStage: 150, requires: 'nexus', baseDifficulty: 2.4, signature: ['berserk', 'nova', 'fortress', 'leech'], element: 'rotating', bosses: 5, orbeCost: 3,
   },
 }
 
@@ -127,7 +126,8 @@ const RAID_HP_PREMIUM = 3.0       // PV bruts vs un ennemi de farm de palier éq
 const RAID_DMG_PREMIUM = 2.2      // dégâts bruts vs farm équivalent
 const FINAL_BOSS_MULT = 2.6       // le dernier boss du raid est un mur
 const TIER_STAGE_STEP = 22        // un tier de raid ≈ +22 paliers de farm (saut violent)
-const BOSS_STAGE_STEP = 9         // chaque boss suivant est plus dur
+const BOSS_STAGE_STEP = 6         // chaque boss suivant est plus dur (modéré : un raid à 4 boss
+                                  // n'écrase plus un raid à 3 boss au même palier d'accès)
 const FORTRESS_ARMOR_MULT = 3.2   // 'fortress' : armure colossale
 const FORTRESS_RESIST_BONUS = 0.2 // 'fortress' : +résistance au thème
 
@@ -173,7 +173,7 @@ export function raidBossCount(def: RaidDef, tier: number): number {
 
 /** Palier de farm « effectif » d'un boss (sert à toutes les courbes). */
 function effStage(def: RaidDef, tier: number, bossIndex: number): number {
-  return def.scaleStage + (tier - 1) * TIER_STAGE_STEP + bossIndex * BOSS_STAGE_STEP
+  return def.unlockStage + (tier - 1) * TIER_STAGE_STEP + bossIndex * BOSS_STAGE_STEP
 }
 
 /** Délai d'enrage dur (s) — rétrécit avec le tier → exige toujours plus de DPS. */
@@ -181,9 +181,13 @@ export function raidBerserkTime(def: RaidDef, tier: number): number {
   return Math.max(14, 34 - tier * 1.5 - def.baseDifficulty * 2)
 }
 
-/** iLvl du butin (les raids sont la meilleure source de stuff du jeu). */
+/**
+ * iLvl du butin (les raids sont la meilleure source de stuff du jeu).
+ * Calé sur le palier d'accès (`stageIlvl(unlockStage)`) avec une prime de raid (~×1.7 au Tier 1),
+ * un léger bonus pour les raids difficiles, et +~30 iLvl par tier supplémentaire.
+ */
 export function raidIlvl(def: RaidDef, tier: number): number {
-  return Math.round(140 + def.scaleStage * 0.9 + tier * 32)
+  return Math.round(stageIlvl(def.unlockStage) * 1.5 + def.baseDifficulty * 16 + (tier - 1) * 30)
 }
 
 /**
