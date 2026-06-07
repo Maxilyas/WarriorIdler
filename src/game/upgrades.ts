@@ -12,6 +12,8 @@ export interface UpgradeDef {
   perLevel: number
   unit: 'pct' | 'flat'
   maxLevel?: number
+  /** Coût en Poussière d'étoile par niveau (amélioration sommitale). */
+  poussierePerLevel?: number
 }
 
 export const UPGRADE_CATEGORIES: Record<UpgradeCategory, { name: string; color: string }> = {
@@ -24,23 +26,24 @@ export const UPGRADE_CATEGORIES: Record<UpgradeCategory, { name: string; color: 
 /** Améliorations permanentes de compte (puits d'or à coûts croissants). Data-driven. */
 export const UPGRADES: UpgradeDef[] = [
   // Économie
-  { id: 'goldGain', name: 'Cupidité', description: "Augmente l'or gagné en combat.", category: 'economie', icon: '💰', baseCost: 200, growth: 1.5, perLevel: 0.1, unit: 'pct' },
-  { id: 'lootQty', name: 'Pilleur', description: 'Augmente la chance de butin supplémentaire.', category: 'economie', icon: '🎁', baseCost: 400, growth: 1.55, perLevel: 0.08, unit: 'pct', maxLevel: 10 },
-  { id: 'rarityLuck', name: 'Chance', description: 'Améliore la rareté du butin trouvé.', category: 'economie', icon: '🍀', baseCost: 600, growth: 1.7, perLevel: 0.3, unit: 'flat', maxLevel: 12 },
-  { id: 'eclatGain', name: 'Récupérateur', description: 'Augmente les Éclats obtenus au recyclage.', category: 'economie', icon: '♦', baseCost: 300, growth: 1.5, perLevel: 0.12, unit: 'pct' },
+  { id: 'goldGain', name: 'Cupidité', description: "Augmente l'or gagné en combat.", category: 'economie', icon: '💰', baseCost: 500, growth: 1.6, perLevel: 0.1, unit: 'pct' },
+  { id: 'lootQty', name: 'Pilleur', description: 'Augmente la chance de butin supplémentaire.', category: 'economie', icon: '🎁', baseCost: 800, growth: 1.6, perLevel: 0.08, unit: 'pct', maxLevel: 10 },
+  { id: 'rarityLuck', name: 'Chance', description: 'Améliore la rareté du butin trouvé.', category: 'economie', icon: '🍀', baseCost: 1200, growth: 1.8, perLevel: 0.3, unit: 'flat', maxLevel: 16 },
+  { id: 'eclatGain', name: 'Récupérateur', description: 'Augmente les Éclats obtenus au recyclage.', category: 'economie', icon: '♦', baseCost: 600, growth: 1.6, perLevel: 0.12, unit: 'pct' },
 
   // Progression
-  { id: 'xpGain', name: 'Érudition', description: "Augmente l'XP gagnée.", category: 'progression', icon: '⬆', baseCost: 300, growth: 1.5, perLevel: 0.1, unit: 'pct' },
-  { id: 'talentBonus', name: 'Sagesse innée', description: 'Points de talent supplémentaires par personnage (immédiat).', category: 'progression', icon: '🌟', baseCost: 5000, growth: 2.2, perLevel: 1, unit: 'flat', maxLevel: 10 },
+  { id: 'xpGain', name: 'Érudition', description: "Augmente l'XP gagnée.", category: 'progression', icon: '⬆', baseCost: 600, growth: 1.6, perLevel: 0.1, unit: 'pct' },
+  { id: 'talentBonus', name: 'Sagesse innée', description: 'Points de talent supplémentaires par personnage (immédiat).', category: 'progression', icon: '🌟', baseCost: 8000, growth: 2.4, perLevel: 1, unit: 'flat', maxLevel: 12 },
 
   // Combat
-  { id: 'power', name: 'Puissance', description: "Augmente la puissance de toute l'équipe.", category: 'combat', icon: '⚔', baseCost: 500, growth: 1.55, perLevel: 0.05, unit: 'pct' },
-  { id: 'attackSpeed', name: 'Vivacité', description: "Augmente la vitesse d'attaque de l'équipe.", category: 'combat', icon: '⚡', baseCost: 800, growth: 1.6, perLevel: 0.04, unit: 'pct', maxLevel: 15 },
-  { id: 'vitality', name: 'Vitalité', description: "Augmente les PV de toute l'équipe.", category: 'combat', icon: '❤', baseCost: 500, growth: 1.55, perLevel: 0.08, unit: 'pct' },
-  { id: 'regen', name: 'Régénération', description: "Augmente la régénération de l'équipe.", category: 'combat', icon: '✚', baseCost: 600, growth: 1.55, perLevel: 0.1, unit: 'pct' },
+  { id: 'power', name: 'Puissance', description: "Augmente la puissance de toute l'équipe.", category: 'combat', icon: '⚔', baseCost: 1200, growth: 1.6, perLevel: 0.05, unit: 'pct' },
+  { id: 'attackSpeed', name: 'Vivacité', description: "Augmente la vitesse d'attaque de l'équipe.", category: 'combat', icon: '⚡', baseCost: 1500, growth: 1.62, perLevel: 0.04, unit: 'pct', maxLevel: 25 },
+  { id: 'vitality', name: 'Vitalité', description: "Augmente les PV de toute l'équipe.", category: 'combat', icon: '❤', baseCost: 1200, growth: 1.6, perLevel: 0.08, unit: 'pct' },
+  { id: 'regen', name: 'Régénération', description: "Augmente la régénération de l'équipe.", category: 'combat', icon: '✚', baseCost: 1000, growth: 1.6, perLevel: 0.1, unit: 'pct' },
+  { id: 'forgeStellaire', name: 'Forge stellaire', description: 'Puits sommital infini : +4% de puissance/niveau (or + Poussière d\'étoile).', category: 'combat', icon: '🌌', baseCost: 50000, growth: 1.7, perLevel: 0.04, unit: 'pct', poussierePerLevel: 2 },
 
   // Confort
-  { id: 'inventory', name: 'Sacoches', description: "Augmente la taille de l'inventaire (+10/niveau).", category: 'confort', icon: '🎒', baseCost: 400, growth: 1.6, perLevel: 10, unit: 'flat', maxLevel: 12 },
+  { id: 'inventory', name: 'Sacoches', description: "Augmente la taille de l'inventaire (+10/niveau).", category: 'confort', icon: '🎒', baseCost: 600, growth: 1.6, perLevel: 10, unit: 'flat', maxLevel: 20 },
 ]
 
 const BY_ID = new Map(UPGRADES.map((u) => [u.id, u]))
@@ -55,6 +58,12 @@ export function upgradeLevel(upgrades: Record<string, number>, id: string): numb
 /** Coût du prochain niveau d'une amélioration. */
 export function upgradeCost(def: UpgradeDef, level: number): number {
   return Math.round(def.baseCost * Math.pow(def.growth, level))
+}
+
+/** Coût en Poussière d'étoile du prochain niveau (amélioration sommitale). */
+export function upgradePoussiere(def: UpgradeDef, level: number): number {
+  if (!def.poussierePerLevel) return 0
+  return def.poussierePerLevel * (level + 1)
 }
 
 export function isMaxed(def: UpgradeDef, level: number): boolean {
@@ -79,7 +88,7 @@ export interface GlobalMods {
 export function computeGlobalMods(upgrades: Record<string, number>): GlobalMods {
   const lv = (id: string) => upgrades[id] ?? 0
   return {
-    power: 1 + lv('power') * 0.05,
+    power: 1 + lv('power') * 0.05 + lv('forgeStellaire') * 0.04,
     attackSpeed: 1 + lv('attackSpeed') * 0.04,
     vitality: 1 + lv('vitality') * 0.08,
     regen: 1 + lv('regen') * 0.1,

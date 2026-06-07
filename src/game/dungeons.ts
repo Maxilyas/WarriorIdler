@@ -42,6 +42,8 @@ const POLARISE_RESIST = 0.65
 export interface ActiveDungeon {
   level: number
   name: string
+  /** Type de dégâts du donjon (un donjon par type). */
+  element: DamageType
   theme: DamageType
   vuln: DamageType
   modifiers: DungeonModifier[]
@@ -52,6 +54,19 @@ export interface ActiveDungeon {
 }
 
 const ELEMENTS: DamageType[] = DAMAGE_TYPE_LIST.filter((t) => t !== 'physique')
+
+/** Les 7 donjons (un par type de dégâts), montés indépendamment. */
+export const DUNGEON_ELEMENTS: DamageType[] = [...DAMAGE_TYPE_LIST]
+
+/** Type vulnérable d'un donjon (opposition thématique déterministe). */
+const VULN: Record<DamageType, DamageType> = {
+  physique: 'arcane', feu: 'froid', froid: 'feu', foudre: 'nature',
+  nature: 'foudre', arcane: 'ombre', ombre: 'arcane',
+}
+
+export function dungeonVuln(element: DamageType): DamageType {
+  return VULN[element]
+}
 
 const DUNGEON_NAMES: Record<DamageType, string> = {
   physique: 'Arène de pierre',
@@ -135,20 +150,14 @@ export function makeDungeonEnemy(
     damage: Math.round(2.5 * Math.pow(1.12, effStage - 1) * DUNGEON_DMG_PREMIUM * (isBoss ? 1.8 : 1)),
     xp: Math.round(8 * Math.pow(1.12, effStage - 1) * (isBoss ? 5 : 1) * xpMult),
     resist,
+    damageType: theme, // l'ennemi frappe avec l'élément du donjon
   }
 }
 
-/** Thème élémentaire (déterministe) d'un niveau de donjon. */
-export function dungeonTheme(level: number): { theme: DamageType; vuln: DamageType } {
-  return {
-    theme: ELEMENTS[level % ELEMENTS.length],
-    vuln: ELEMENTS[(level + 2) % ELEMENTS.length],
-  }
-}
-
-/** Génère un donjon prêt à jouer pour un niveau donné. */
-export function generateDungeon(level: number): ActiveDungeon {
-  const { theme, vuln } = dungeonTheme(level)
+/** Génère un donjon prêt à jouer pour un type de dégâts + niveau donnés. */
+export function generateDungeon(element: DamageType, level: number): ActiveDungeon {
+  const theme = element
+  const vuln = VULN[element]
   const totalFights = dungeonFights(level)
 
   // 1 modificateur, +1 à partir du niveau 3.
@@ -164,6 +173,7 @@ export function generateDungeon(level: number): ActiveDungeon {
   return {
     level,
     name: `${DUNGEON_NAMES[theme]} · Niv. ${level}`,
+    element,
     theme,
     vuln,
     modifiers,

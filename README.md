@@ -21,7 +21,58 @@ npm run preview  # prévisualiser le build
 - **vite-plugin-pwa** (installable, jouable hors-ligne)
 - Sauvegarde automatique dans `localStorage`
 
-## Ce qui est en place (v0.10)
+## Ce qui est en place (v0.12)
+
+Itération suite aux retours de test :
+
+- **Mana retiré** (jugé trop « boîte noire ») : les capacités se lancent au cooldown, l'INT reste
+  la stat des sorts ; la **Récupération** (stat rare) réduit les cooldowns.
+- **Stats RARES** : le **Vol de vie** est désormais ~2 % d'apparition, et 3 nouvelles stats très
+  rares et puissantes — **Surpuissance** (+dégâts), **Multifrappe** (frappe ×2), **Récupération**
+  (−cooldown). Un **indice 💎** signale les objets portant une stat rare.
+- **Combat classique linéarisé** : plus de résistances par type aléatoires (qui rendaient la
+  difficulté non-monotone) → **résistance globale croissante** (contrée par la Pénétration) +
+  **traits déterministes** (Blindé, Féroce, Massif…) et **élites** (◆) au butin supérieur.
+- **Grand arbre étendu** : ~30 nœuds par spécialisation + **5 archétypes-classes** qui changent le
+  gameplay (Templier, Élémentaliste, Faucheur, Duelliste, Colosse), atteignables par des passerelles
+  depuis les specs → vrais **builds hybrides**. Nouveaux keystones (conversion Endurance→stat,
+  épines, multifrappe, bonus haut-PV…).
+- **10 coffres mystères** avec **distribution de rareté** (plus de raretés fixes) + **jackpot**
+  (petite chance de bien mieux) + ciblage (armes, défense), de 500 or au **Coffre du Néant (10M)**.
+- **Raids dès le palier 50** (au lieu de 100).
+- **Inventaire filtrable par affinité** (FOR / AGI / INT).
+- **Économie end-game** : 2ᵉ/3ᵉ perso très tardifs et **très chers** (10M / 100M or + Poussière),
+  prix d'échoppe fortement relevés.
+
+### Précédemment (v0.11)
+
+Refonte « choix & synergies » — chaque système devient une suite de décisions :
+
+- **Itémisation tranchée** : nombre d'affixes **fixe** par objet (2→6 selon la rareté, plus 0→10),
+  pool **élargi** groupé par rôle (offensif : crit, dégâts crit, hâte, maîtrise, pénétration ;
+  défensif : réduction, esquive, bouclier, **résistances par type** ; soutien : régén, mana,
+  polyvalence) et **Vol de vie rare**. La rareté donne plus de lignes + des valeurs plus hautes ;
+  c'est le **craft** qui choisit *quelles* stats — vrai arbitrage offense ↔ survie.
+- **Résistances de héros** : des affixes/talents/uniques de **résistance par type** réduisent les
+  dégâts subis ; chaque ennemi **frappe avec un type** (les résistances comptent enfin).
+- **Mana & stats primaires différenciées** : INT → **mana** + sorts, FOR → mêlée, AGI → vitesse/
+  furtivité. Les capacités **coûtent du mana** et **scalent sur leur stat**.
+- **Grand arbre de talents en constellations** (Cœur · Berserker · Rôdeur · Arcaniste · Bastion ·
+  Oracle · Métamorphe) : un seul arbre connecté par **passerelles**, **mix de rôles** libre, nœuds
+  passifs + **keystones** (conversion de stat « Force compte comme Agi », conversion de type, DoT,
+  HoT, exécution, berserker). **Les capacités se débloquent UNIQUEMENT via l'arbre.**
+- **Verrou de palier** : choisis un palier débloqué et **farme-le** (cadenas) sans avancer.
+- **Donjons par type** (7, un par élément) montés **indépendamment**, au butin **ciblé**
+  (dégâts ET résistance de leur élément).
+- **Économie retendue** : recyclage/vente **plus rémunérateurs** sur le rare, forge/ascension
+  haut de gamme exigeant **Fragments d'éternité** et **Poussière d'étoile** (matériau rare),
+  coffres **plus chers + rareté plancher garantie**, recrutement **bien plus cher**, amélioration
+  marché **sommitale infinie** (Forge stellaire, or + Poussière).
+- **Effets uniques** dès l'**Épique**, **grand catalogue** par rôle (dps/heal/tank/résistance/
+  utilitaire) avec résistances, et **insertion ciblée** d'un effet via les essences.
+- **Progression hors-ligne** : gains accumulés pendant l'absence + écran « Bon retour ».
+
+### Précédemment (v0.10)
 
 - **Marchand** (onglet dédié) — donne enfin un sens à l'or :
   - **🎁 Coffres mystères** (3 paliers) : pari → objets aléatoires, révélés via l'animation de coffre.

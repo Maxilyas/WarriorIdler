@@ -3,19 +3,22 @@ import { useGame } from './game/store'
 import { useMediaQuery } from './useMediaQuery'
 import { CombatPanel } from './components/CombatPanel'
 import { CharacterPanel } from './components/CharacterPanel'
+import { TalentTree } from './components/TalentTree'
 import { StuffScreen } from './components/StuffScreen'
 import { DungeonPanel } from './components/DungeonPanel'
 import { RaidPanel } from './components/RaidPanel'
 import { MerchantPanel } from './components/MerchantPanel'
 import { ChestModal } from './components/ChestModal'
+import { WelcomeBackModal } from './components/WelcomeBackModal'
 
 const TICK_MS = 200
 
-type Tab = 'combat' | 'perso' | 'stuff' | 'donjons' | 'raids' | 'marchand'
+type Tab = 'combat' | 'perso' | 'talents' | 'stuff' | 'donjons' | 'raids' | 'marchand'
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'combat', label: 'Combat', icon: '⚔' },
   { id: 'perso', label: 'Perso', icon: '🛡' },
+  { id: 'talents', label: 'Talents', icon: '🌌' },
   { id: 'stuff', label: 'Stuff', icon: '🎒' },
   { id: 'donjons', label: 'Donjons', icon: '🏰' },
   { id: 'raids', label: 'Raids', icon: '☠️' },
@@ -28,6 +31,7 @@ export default function App() {
   const gold = useGame((s) => s.gold)
   const essence = useGame((s) => s.essence)
   const noyau = useGame((s) => s.noyau)
+  const poussiere = useGame((s) => s.poussiere)
   const orbes = useGame((s) => s.orbes)
   const fragments = useGame((s) => s.fragments)
   const isDesktop = useMediaQuery('(min-width: 1024px)')
@@ -35,7 +39,7 @@ export default function App() {
   const inDungeon = useGame((s) => s.dungeon !== null)
   const inRaid = useGame((s) => s.raid !== null)
   const [tab, setTab] = useState<Tab>('combat')
-  const [deskTab, setDeskTab] = useState<'perso' | 'stuff' | 'donjons' | 'raids' | 'marchand'>('stuff')
+  const [deskTab, setDeskTab] = useState<'perso' | 'talents' | 'stuff' | 'donjons' | 'raids' | 'marchand'>('stuff')
 
   useEffect(() => {
     const id = setInterval(() => tick(TICK_MS / 1000), TICK_MS)
@@ -52,6 +56,7 @@ export default function App() {
           <span className="text-yellow-400">💰 {gold.toLocaleString('fr-FR')}</span>
           <span className="text-cyan-300" title="Éclats d'arcane">♦ {essence.toLocaleString('fr-FR')}</span>
           <span className="text-fuchsia-300" title="Noyau primordial (boss)">💠 {noyau.toLocaleString('fr-FR')}</span>
+          {poussiere > 0 && <span className="text-indigo-300" title="Poussière d'étoile (craft sommital)">🌌 {poussiere.toLocaleString('fr-FR')}</span>}
           {orbes > 0 && <span className="text-rose-300" title="Orbe de raid">🔮 {orbes.toLocaleString('fr-FR')}</span>}
           {fragments > 0 && <span className="text-sky-300" title="Fragment d'éternité">✨ {fragments.toLocaleString('fr-FR')}</span>}
         </div>
@@ -66,7 +71,7 @@ export default function App() {
             </div>
             <div className="flex min-h-0 min-w-0 flex-col">
               <div className="mb-3 flex gap-1.5">
-                {(['stuff', 'perso', 'donjons', 'raids', 'marchand'] as const).map((t) => (
+                {(['stuff', 'perso', 'talents', 'donjons', 'raids', 'marchand'] as const).map((t) => (
                   <button
                     key={t}
                     onClick={() => setDeskTab(t)}
@@ -75,7 +80,7 @@ export default function App() {
                       (deskTab === t ? 'bg-slate-700 text-slate-100' : 'bg-slate-800/50 text-slate-400 hover:text-slate-200')
                     }
                   >
-                    {t === 'stuff' ? '🎒 Équipement' : t === 'perso' ? '🛡 Personnage' : t === 'donjons' ? '🏰 Donjons' : t === 'raids' ? '☠️ Raids' : '🏪 Marché'}
+                    {t === 'stuff' ? '🎒 Équipement' : t === 'perso' ? '🛡 Personnage' : t === 'talents' ? '🌌 Talents' : t === 'donjons' ? '🏰 Donjons' : t === 'raids' ? '☠️ Raids' : '🏪 Marché'}
                     {t === 'donjons' && (sceaux > 0 || inDungeon) && (
                       <span className="ml-1.5 rounded-full bg-amber-500 px-1.5 text-[10px] text-slate-950">
                         {inDungeon ? '!' : sceaux}
@@ -94,6 +99,8 @@ export default function App() {
                   <div className="h-full overflow-y-auto pr-1">
                     <CharacterPanel />
                   </div>
+                ) : deskTab === 'talents' ? (
+                  <TalentTree />
                 ) : deskTab === 'donjons' ? (
                   <DungeonPanel />
                 ) : deskTab === 'raids' ? (
@@ -115,6 +122,7 @@ export default function App() {
                 <CharacterPanel />
               </div>
             )}
+            {tab === 'talents' && <TalentTree />}
             {tab === 'stuff' && <StuffScreen />}
             {tab === 'donjons' && <DungeonPanel />}
             {tab === 'raids' && <RaidPanel />}
@@ -125,7 +133,7 @@ export default function App() {
 
       {/* Barre d'onglets (mobile uniquement) */}
       {!isDesktop && (
-        <nav className="grid grid-cols-6 border-t border-slate-800">
+        <nav className="grid grid-cols-7 border-t border-slate-800">
           {TABS.map((t) => (
             <button
               key={t.id}
@@ -158,6 +166,7 @@ export default function App() {
       )}
 
       <ChestModal />
+      <WelcomeBackModal />
     </div>
   )
 }

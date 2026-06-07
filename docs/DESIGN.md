@@ -114,6 +114,22 @@ tank/heal/dps **obligatoires**. Récompense : **Fragments d'éternité**.
 - **Moteur de combat déterministe** à formaliser tôt (types + résistances + party + mécaniques).
 - **Prestige** — couche long-terme.
 
+## Implémenté en v0.11 (refonte « choix & synergies »)
+
+- **Itémisation** : nombre d'affixes **fixe** par rareté (2→6) ; lignes unifiées
+  `stat | dmgType | resist` (arbitrage offense ↔ survie sur un budget limité) ; **Vol de vie rare**.
+- **Résistances de héros** (équipement/talents/uniques) ; chaque ennemi a un **type d'attaque**.
+- **Mana** (INT) ; capacités à **coût de mana** + **scaling par stat** (FOR/AGI/INT).
+- **Arbre de talents** réécrit en **constellations navigables** (un seul arbre connecté par
+  passerelles, mix de rôles) ; **keystones** (conversion de stat/type, DoT, HoT, exécution,
+  berserker) ; **les capacités viennent de l'arbre** (plus du niveau).
+- **Donjons par type** (7, niveaux indépendants, butin ciblé) ; **verrou de palier** (farm).
+- **Économie** retendue (recyclage/forge/coffres/recrue) + matériaux **Poussière d'étoile** /
+  **Fragment d'éternité** ; **uniques dès Épique** + catalogue par rôle + **insertion via essences**.
+- **Progression hors-ligne** (récap « Bon retour »).
+
+> Décisions de design détaillées : `C:\Users\antoi\.claude\plans\ethereal-chasing-gem.md`.
+
 ## Roadmap (par dépendances)
 
 1. **Types de dégâts** (fondation) — combat + résistances ennemies + affixes de type.

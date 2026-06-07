@@ -1,20 +1,28 @@
 import { useState } from 'react'
-import type { Item, EquipSlotId, StatKey } from '../game/types'
+import type { Item, EquipSlotId, StatKey, Affix } from '../game/types'
 import { RARITIES } from '../game/rarities'
 import { ALL_STAT_META } from '../game/stats'
 import {
-  sellValue, recycleValue, itemStatBlock, itemScore,
+  sellValue, recycleValue, itemStatBlock, itemScore, itemHasRareStat,
   reforgeCost, surillvlCost, ascendCost, nextRarity, SURILLVL_STEP, transmuteCost,
 } from '../game/items'
 import type { OffensiveStat } from '../game/types'
 import { ITEM_TYPES, equipSlotsForType } from '../game/slots'
 import { DAMAGE_TYPES } from '../game/damage'
 import {
-  getUnique, uniqueActiveText, isUniqueActive, instanceMods, upgradeCost,
-  UNIQUE_MAX_RANK, UNIQUE_ACTIVE_RANK,
+  getUnique, uniqueActiveText, isUniqueActive, instanceMods, instanceResist, upgradeCost, insertCost,
+  UNIQUE_EFFECTS, UNIQUE_MAX_RANK, UNIQUE_ACTIVE_RANK,
 } from '../game/uniques'
 import { useGame, FRAGMENT_INFUSE_COST } from '../game/store'
 import { rarityTextStyle, rarityCardStyle, isPrism } from './rarityStyle'
+
+/** Libellé/couleur d'affichage d'une ligne d'objet (stat / dégâts / résistance). */
+function affixLabel(a: Affix): { name: string; color: string; pct: boolean } {
+  if (a.kind === 'stat' && a.stat) { const m = ALL_STAT_META[a.stat]; return { name: m.name, color: m.color, pct: false } }
+  if (a.kind === 'dmgType' && a.type) { const m = DAMAGE_TYPES[a.type]; return { name: `Dégâts ${m.name}`, color: m.color, pct: true } }
+  if (a.kind === 'resist' && a.type) { const m = DAMAGE_TYPES[a.type]; return { name: `Résist. ${m.name}`, color: m.color, pct: true } }
+  return { name: '?', color: '#94a3b8', pct: false }
+}
 
 interface Props {
   item: Item
@@ -56,6 +64,7 @@ export function ComparePanel({ item, equipped, occupied, onEquip, onSell, onRecy
             >
               {item.name}
             </span>
+            {itemHasRareStat(item) && <span title="Stat RARE">💎</span>}
           </div>
           <div className="text-[10px] text-slate-400">
             <span style={{ color: rarity.color }}>{rarity.name}</span> · {type.name} · iLvl {item.ilvl}
@@ -86,7 +95,7 @@ export function ComparePanel({ item, equipped, occupied, onEquip, onSell, onRecy
           const d = a - b
           return (
             <div key={k} className="grid grid-cols-[1fr_auto_auto] items-center gap-x-3 px-2.5 py-0.5">
-              <span style={{ color: meta.color }} className="truncate">{meta.name}</span>
+              <span style={{ color: meta.color }} className="truncate">{meta.rare ? '💎 ' : ''}{meta.name}</span>
               <span className="text-right tabular-nums text-slate-200">
                 {a ? a.toLocaleString('fr-FR') : '—'}
                 {cmp && d !== 0 && (
@@ -109,8 +118,8 @@ export function ComparePanel({ item, equipped, occupied, onEquip, onSell, onRecy
       )}
       {isEquipped && <div className="mt-1.5 text-center text-[11px] text-amber-300">Actuellement équipé</div>}
 
-      {/* Type de dégâts (arme) + affixes élémentaires */}
-      {(item.damageType || (item.typeAffixes && item.typeAffixes.length > 0)) && (
+      {/* Type d'arme + lignes de dégâts/résistances de type */}
+      {(item.damageType || item.affixes.some((a) => a.kind !== 'stat')) && (
         <div className="mt-2 space-y-0.5 rounded-lg bg-black/20 p-2 text-[11.5px]">
           {item.damageType && (
             <div>
@@ -120,11 +129,11 @@ export function ComparePanel({ item, equipped, occupied, onEquip, onSell, onRecy
               </span>
             </div>
           )}
-          {item.typeAffixes?.map((ta, i) => {
-            const m = DAMAGE_TYPES[ta.type]
+          {item.affixes.filter((a) => a.kind !== 'stat').map((a, i) => {
+            const m = a.type ? DAMAGE_TYPES[a.type] : null
             return (
-              <div key={i} style={{ color: m.color }}>
-                +{ta.value}% dégâts {m.icon} {m.name}
+              <div key={i} style={{ color: m?.color }}>
+                {a.kind === 'resist' ? '🛡 ' : m?.icon + ' '}+{a.value}% {a.kind === 'resist' ? 'résistance' : 'dégâts'} {m?.name}
               </div>
             )
           })}
@@ -188,6 +197,7 @@ function CraftSection({ item }: { item: Item }) {
   const essence = useGame((s) => s.essence)
   const noyau = useGame((s) => s.noyau)
   const fragments = useGame((s) => s.fragments)
+  const poussiere = useGame((s) => s.poussiere)
   const reforge = useGame((s) => s.reforge)
   const surillvl = useGame((s) => s.surillvl)
   const ascend = useGame((s) => s.ascend)
@@ -220,15 +230,16 @@ function CraftSection({ item }: { item: Item }) {
               <div className="mb-1 text-[10px] text-slate-500">Verrouille les affixes à conserver, puis reforge le reste :</div>
               <div className="flex flex-wrap gap-1">
                 {item.affixes.map((a, i) => {
-                  const m = ALL_STAT_META[a.stat]
+                  const lbl = affixLabel(a)
                   const isL = locked.includes(i)
                   return (
                     <button
                       key={i}
                       onClick={() => toggle(i)}
                       className={'rounded border px-1.5 py-0.5 text-[10px] ' + (isL ? 'border-amber-400 bg-amber-900/40 text-amber-200' : 'border-slate-700 text-slate-400')}
+                      style={{ color: isL ? undefined : lbl.color }}
                     >
-                      {isL ? '🔒 ' : ''}{m.short} +{a.value}
+                      {isL ? '🔒 ' : ''}{lbl.name} +{a.value}{lbl.pct ? '%' : ''}
                     </button>
                   )
                 })}
@@ -275,15 +286,18 @@ function CraftSection({ item }: { item: Item }) {
 
           {nr ? (
             <button
-              disabled={essence < aCost.eclats || noyau < aCost.noyau}
+              disabled={essence < aCost.eclats || noyau < aCost.noyau || fragments < (aCost.fragments ?? 0) || poussiere < (aCost.poussiere ?? 0)}
               onClick={() => { ascend(item.id); reset() }}
               className="w-full rounded bg-fuchsia-900/50 py-1.5 text-[11px] font-medium hover:bg-fuchsia-800/60 disabled:opacity-40"
             >
               Ascension → {RARITIES[nr].name} · 💠 {aCost.noyau} + ♦ {aCost.eclats}
+              {aCost.poussiere ? ` + 🌌 ${aCost.poussiere}` : ''}{aCost.fragments ? ` + ✨ ${aCost.fragments}` : ''}
             </button>
           ) : (
             <div className="text-center text-[10px] italic text-slate-600">Rareté maximale atteinte.</div>
           )}
+
+          <InsertEffectSection item={item} />
 
           {/* Craft sommital : infuser un Fragment d'éternité */}
           <button
@@ -296,6 +310,34 @@ function CraftSection({ item }: { item: Item }) {
           </button>
         </div>
       )}
+    </div>
+  )
+}
+
+/** Insertion ciblée d'un effet unique via les essences (recyclage d'uniques). */
+function InsertEffectSection({ item }: { item: Item }) {
+  const essences = useGame((s) => s.essences)
+  const essence = useGame((s) => s.essence)
+  const insertEffect = useGame((s) => s.insertEffect)
+  const cost = insertCost()
+  const owned = UNIQUE_EFFECTS.filter((e) => (essences[e.id] ?? 0) >= cost.essences)
+  if (owned.length === 0) return null
+  return (
+    <div className="rounded border border-fuchsia-800/40 bg-fuchsia-950/10 p-2">
+      <div className="mb-1 text-[10px] text-fuchsia-300/80">🧬 Insérer un fragment d'effet · {cost.essences} essences + ♦ {cost.eclats} :</div>
+      <div className="flex flex-wrap gap-1">
+        {owned.map((e) => (
+          <button
+            key={e.id}
+            disabled={essence < cost.eclats}
+            onClick={() => insertEffect(item.id, e.id)}
+            title={e.description}
+            className="rounded border border-fuchsia-700/50 bg-fuchsia-900/30 px-1.5 py-0.5 text-[10px] text-fuchsia-200 hover:bg-fuchsia-800/40 disabled:opacity-40"
+          >
+            {e.name} ({essences[e.id]})
+          </button>
+        ))}
+      </div>
     </div>
   )
 }
@@ -330,6 +372,12 @@ function UniqueBlock({ item }: { item: Item }) {
             <span key={k} style={{ color: m.color }}>+{v} {m.name}</span>
           )
         })}
+        {Object.entries(instanceResist(inst)).map(([k, v]) => {
+          const m = DAMAGE_TYPES[k as keyof typeof DAMAGE_TYPES]
+          return (
+            <span key={k} style={{ color: m.color }}>+{Math.round((v as number) * 100)}% résist. {m.name}</span>
+          )
+        })}
       </div>
       <div className={'mt-1 text-[10px] leading-snug ' + (active ? 'text-emerald-300' : 'text-slate-500')}>
         {active ? '✓ Actif : ' : `🔒 Rang ${UNIQUE_ACTIVE_RANK} : `}
@@ -353,7 +401,13 @@ function UniqueBlock({ item }: { item: Item }) {
 
 /** Ordonne les stats : primaire(s) d'abord, puis secondaires, dans un ordre stable. */
 function orderedKeys(a: Record<string, number>, b: Record<string, number>): StatKey[] {
-  const order: StatKey[] = ['force', 'agilite', 'intelligence', 'endurance', 'critique', 'hate', 'maitrise', 'polyvalence', 'volDeVie']
+  const order: StatKey[] = [
+    'force', 'agilite', 'intelligence', 'endurance',
+    'critique', 'degatsCrit', 'hate', 'maitrise', 'penetration',
+    'reductionDegats', 'esquive', 'bouclier',
+    'polyvalence', 'regen',
+    'volDeVie', 'surpuissance', 'multifrappe', 'recuperation',
+  ]
   const present = new Set([...Object.keys(a), ...Object.keys(b)])
   return order.filter((k) => present.has(k))
 }

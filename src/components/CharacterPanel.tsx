@@ -4,9 +4,8 @@ import { describeStats, PRIMARY_META } from '../game/stats'
 import type { StatEffect } from '../game/stats'
 import type { PrimaryStat, DamageType, Character } from '../game/types'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from '../game/damage'
-import { charTotalStats, charDerived, charMaxHp, charDamageProfile } from '../game/character'
+import { charTotalStats, charDerived, charMaxHp, charDamageProfile, charResist } from '../game/character'
 import { getPower } from '../game/powers'
-import { TALENT_BRANCHES, talentsByBranch, canAllocate, type TalentBranch } from '../game/talents'
 
 const SPEC_INFO: Record<PrimaryStat, string> = {
   force: 'Guerrier de mêlée : la Force devient votre stat de combat.',
@@ -31,6 +30,8 @@ export function CharacterPanel() {
   const totalStats = charTotalStats(char)
   const derived = charDerived(char)
   const maxHp = charMaxHp(char)
+  const resist = charResist(char)
+  const resistTypes = DAMAGE_TYPE_LIST.filter((t) => (resist[t] ?? 0) !== 0)
   const { primary, secondary } = describeStats(totalStats)
   const xpNeed = xpForLevel(char.level)
   const buildName = PRIMARY_META[derived.mainStat].name
@@ -78,11 +79,8 @@ export function CharacterPanel() {
         <Bar label="Expérience" value={char.xp} max={xpNeed} color="from-violet-600 to-violet-400" />
       </div>
 
-      {/* Capacités équipables */}
+      {/* Capacités équipables (débloquées via l'arbre de talents) */}
       <PowersSection char={char} />
-
-      {/* Arbre de talents */}
-      <TalentsSection char={char} />
 
       {/* Spécialisation */}
       <div className="rounded-xl border border-slate-800 bg-[#11151f] p-4">
@@ -148,6 +146,29 @@ export function CharacterPanel() {
             )
           })}
         </div>
+      </div>
+
+      {/* Résistances */}
+      <div className="rounded-xl border border-slate-800 bg-[#11151f] p-4">
+        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Résistances</div>
+        {resistTypes.length === 0 ? (
+          <p className="text-[11px] italic text-slate-500">
+            Aucune résistance. Équipe des affixes/talents de résistance pour encaisser le type d'attaque de l'ennemi.
+          </p>
+        ) : (
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+            {resistTypes.map((t) => {
+              const m = DAMAGE_TYPES[t]
+              const v = resist[t] ?? 0
+              return (
+                <span key={t} title={`-${Math.round(v * 100)}% de dégâts ${m.name} subis`}>
+                  <span style={{ color: m.color }}>{m.icon} {m.name}</span>{' '}
+                  <span className="font-semibold text-emerald-300">{Math.round(v * 100)}%</span>
+                </span>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       {/* Combat */}
@@ -221,68 +242,6 @@ function PowersSection({ char }: { char: Character }) {
             })}
           </div>
         </div>
-      )}
-    </div>
-  )
-}
-
-function TalentsSection({ char }: { char: Character }) {
-  const allocateTalent = useGame((s) => s.allocateTalent)
-  const respecTalents = useGame((s) => s.respecTalents)
-  const gold = useGame((s) => s.gold)
-  const respecCost = 200 * char.level
-  const spent = Object.values(char.talents).reduce((a, b) => a + b, 0)
-
-  return (
-    <div className="rounded-xl border border-indigo-800/40 bg-indigo-950/10 p-4">
-      <div className="mb-2 flex items-center justify-between">
-        <span className="text-xs font-semibold uppercase tracking-wide text-indigo-300">Arbre de talents</span>
-        <span className="text-xs text-amber-300">{char.talentPoints} point{char.talentPoints > 1 ? 's' : ''}</span>
-      </div>
-
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-        {(Object.keys(TALENT_BRANCHES) as TalentBranch[]).map((b) => {
-          const meta = TALENT_BRANCHES[b]
-          return (
-            <div key={b} className="rounded-lg bg-black/20 p-2">
-              <div className="mb-1.5 text-[11px] font-bold" style={{ color: meta.color }}>
-                {meta.icon} {meta.name} <span className="text-slate-500">· {meta.role}</span>
-              </div>
-              <div className="space-y-1">
-                {talentsByBranch(b).map((node) => {
-                  const rank = char.talents[node.id] ?? 0
-                  const can = canAllocate(node, char.talents, char.talentPoints)
-                  const locked = node.requires && (char.talents[node.requires] ?? 0) <= 0
-                  return (
-                    <button
-                      key={node.id}
-                      disabled={!can}
-                      onClick={() => allocateTalent(node.id)}
-                      title={node.description + (locked ? ' (prérequis manquant)' : '')}
-                      className={
-                        'flex w-full items-center justify-between rounded border px-1.5 py-1 text-left text-[10px] transition-colors ' +
-                        (rank > 0 ? 'border-indigo-500/60 bg-indigo-900/30 text-indigo-100' : locked ? 'border-slate-800 text-slate-600' : 'border-slate-700 text-slate-300 enabled:hover:bg-white/5')
-                      }
-                    >
-                      <span className="min-w-0 flex-1 truncate">{node.unlockPower ? '✦ ' : ''}{node.name}</span>
-                      <span className="ml-1 tabular-nums text-slate-400">{rank}/{node.maxRank}</span>
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          )
-        })}
-      </div>
-
-      {spent > 0 && (
-        <button
-          onClick={respecTalents}
-          disabled={gold < respecCost}
-          className="mt-2 w-full rounded-lg bg-slate-800 py-1.5 text-[11px] text-slate-300 hover:bg-slate-700 disabled:opacity-40"
-        >
-          Réinitialiser les talents · 💰 {respecCost}
-        </button>
       )}
     </div>
   )

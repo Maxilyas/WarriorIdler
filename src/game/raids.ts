@@ -15,14 +15,14 @@ export interface RaidMechanic {
 }
 
 /** Palier requis pour débloquer les raids. */
-export const RAID_UNLOCK_STAGE = 100
+export const RAID_UNLOCK_STAGE = 50
 
 // Constantes d'équilibrage (à ajuster facilement).
-const RAID_HP_PREMIUM = 2
-const RAID_BOSS_MULT = 4
-const RAID_DMG_PREMIUM = 1.6
-const EFF_STAGE_BASE = 90
-const EFF_STAGE_PER_LEVEL = 15
+const RAID_HP_PREMIUM = 1.8
+const RAID_BOSS_MULT = 3.5
+const RAID_DMG_PREMIUM = 1.5
+const EFF_STAGE_BASE = 40
+const EFF_STAGE_PER_LEVEL = 14
 
 const ELEMENTS: DamageType[] = DAMAGE_TYPE_LIST.filter((t) => t !== 'physique')
 
@@ -109,6 +109,7 @@ export function makeRaidBoss(
     damage: Math.round(2.5 * Math.pow(1.12, effStage - 1) * RAID_DMG_PREMIUM),
     xp: Math.round(8 * Math.pow(1.12, effStage - 1) * 5),
     resist,
+    damageType: theme, // le boss frappe avec le thème du raid
   }
 }
 

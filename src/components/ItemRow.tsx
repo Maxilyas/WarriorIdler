@@ -3,6 +3,7 @@ import { RARITIES } from '../game/rarities'
 import { ITEM_TYPES } from '../game/slots'
 import { DAMAGE_TYPES } from '../game/damage'
 import { getUnique } from '../game/uniques'
+import { itemHasRareStat } from '../game/items'
 import { rarityTextStyle, isPrism } from './rarityStyle'
 
 interface Props {
@@ -42,6 +43,9 @@ export function ItemRow({ item, isUpgrade, selected, onClick }: Props) {
         </span>
       </span>
       <span className="flex shrink-0 items-center gap-1.5">
+        {itemHasRareStat(item) && (
+          <span className="text-[11px]" title="Possède une stat RARE">💎</span>
+        )}
         {item.unique && (
           <span className="text-[11px] text-fuchsia-400" title={getUnique(item.unique.id)?.name}>✦</span>
         )}

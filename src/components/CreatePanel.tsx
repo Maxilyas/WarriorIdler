@@ -22,6 +22,8 @@ export function CreatePanel({ onClose }: { onClose: () => void }) {
   const bestStage = useGame((s) => s.bestStage)
   const essence = useGame((s) => s.essence)
   const noyau = useGame((s) => s.noyau)
+  const fragments = useGame((s) => s.fragments)
+  const poussiere = useGame((s) => s.poussiere)
   const createItem = useGame((s) => s.createItem)
 
   const ilvl = stageIlvl(bestStage)
@@ -37,7 +39,7 @@ export function CreatePanel({ onClose }: { onClose: () => void }) {
   const isWeapon = type === 'armePrincipale'
   const tier = RARITY_LIST.find((r) => r.id === rarity)!.tier
   const cost = createCost(tier, ilvl)
-  const canForge = essence >= cost.eclats && noyau >= cost.noyau
+  const canForge = essence >= cost.eclats && noyau >= cost.noyau && fragments >= (cost.fragments ?? 0) && poussiere >= (cost.poussiere ?? 0)
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={onClose}>
@@ -152,11 +154,17 @@ export function CreatePanel({ onClose }: { onClose: () => void }) {
         {/* Récapitulatif + coût */}
         <div className="mt-3 rounded-lg bg-black/30 p-3 text-xs text-slate-400">
           <div>iLvl de l'objet : <span className="text-slate-200">{ilvl}</span> (lié à ton record de palier)</div>
-          <div className="mt-1 flex items-center gap-3">
+          <div className="mt-1 flex flex-wrap items-center gap-3">
             <span>Coût :</span>
             <span className={essence >= cost.eclats ? 'text-cyan-300' : 'text-red-400'}>♦ {cost.eclats}</span>
             {cost.noyau > 0 && (
               <span className={noyau >= cost.noyau ? 'text-fuchsia-300' : 'text-red-400'}>💠 {cost.noyau}</span>
+            )}
+            {(cost.poussiere ?? 0) > 0 && (
+              <span className={poussiere >= (cost.poussiere ?? 0) ? 'text-indigo-300' : 'text-red-400'}>🌌 {cost.poussiere}</span>
+            )}
+            {(cost.fragments ?? 0) > 0 && (
+              <span className={fragments >= (cost.fragments ?? 0) ? 'text-sky-300' : 'text-red-400'}>✨ {cost.fragments}</span>
             )}
           </div>
           {tier >= 7 && <div className="mt-1 text-[10.5px] text-fuchsia-300/80">Rareté Artefact+ : chance d'obtenir un effet unique.</div>}

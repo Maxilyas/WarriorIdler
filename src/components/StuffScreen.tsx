@@ -6,11 +6,13 @@ import { ComparePanel } from './ComparePanel'
 import { CreatePanel } from './CreatePanel'
 import { EQUIP_SLOTS, ITEM_TYPES, equipSlotsForType, slotAccepts } from '../game/slots'
 import { RARITIES, RARITY_LIST } from '../game/rarities'
-import { itemScore } from '../game/items'
+import { itemScore, itemHasRareStat } from '../game/items'
+import { PRIMARY_META } from '../game/stats'
 import { rarityTextStyle, isPrism } from './rarityStyle'
-import type { EquipSlotId, Equipment, Item, ItemType } from '../game/types'
+import type { EquipSlotId, Equipment, Item, ItemType, OffensiveStat } from '../game/types'
 
 type SortMode = 'recent' | 'score' | 'rarity'
+const PRIMARY_FILTERS: OffensiveStat[] = ['force', 'agilite', 'intelligence']
 
 /** Objet équipé auquel comparer, selon le contexte (slot choisi ou auto). */
 function comparableEquipped(equipment: Equipment, type: ItemType, selectedSlot: EquipSlotId | null): Item | undefined {
@@ -39,6 +41,7 @@ export function StuffScreen() {
   const [selectedSlot, setSelectedSlot] = useState<EquipSlotId | null>(null)
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
   const [sort, setSort] = useState<SortMode>('score')
+  const [primaryFilter, setPrimaryFilter] = useState<OffensiveStat | null>(null)
   const [showCreate, setShowCreate] = useState(false)
   const [bulkTier, setBulkTier] = useState(4) // seuil de rareté pour vente/recyclage en masse
 
@@ -49,11 +52,12 @@ export function StuffScreen() {
   const visible = useMemo(() => {
     let arr = inventory
     if (filterType) arr = arr.filter((i) => i.type === filterType)
+    if (primaryFilter) arr = arr.filter((i) => i.primary === primaryFilter)
     arr = [...arr]
     if (sort === 'score') arr.sort((a, b) => itemScore(b) - itemScore(a))
     else if (sort === 'rarity') arr.sort((a, b) => RARITIES[b.rarity].tier - RARITIES[a.rarity].tier)
     return arr
-  }, [inventory, filterType, sort])
+  }, [inventory, filterType, primaryFilter, sort])
 
   // L'objet sélectionné peut être dans l'inventaire OU équipé.
   const equippedEntry = (Object.entries(equipment) as [EquipSlotId, Item][]).find(
@@ -158,6 +162,7 @@ export function StuffScreen() {
                     >
                       {item.name}
                     </span>
+                    {itemHasRareStat(item) && <span className="text-[9px]" title="Stat rare">💎</span>}
                     {item.unique && <span className="text-[9px] text-fuchsia-400">✦</span>}
                     <span
                       onClick={(e) => {
@@ -204,6 +209,26 @@ export function StuffScreen() {
               </button>
             ))}
           </div>
+        </div>
+
+        <div className="mb-1.5 flex flex-wrap items-center gap-1 px-1 text-[10px]">
+          <span className="text-slate-500">Affinité :</span>
+          <button
+            onClick={() => setPrimaryFilter(null)}
+            className={'rounded px-1.5 py-0.5 ' + (primaryFilter === null ? 'bg-slate-600 text-slate-100' : 'bg-slate-800 text-slate-400')}
+          >
+            Toutes
+          </button>
+          {PRIMARY_FILTERS.map((p) => (
+            <button
+              key={p}
+              onClick={() => setPrimaryFilter((f) => (f === p ? null : p))}
+              className={'rounded px-1.5 py-0.5 font-medium ' + (primaryFilter === p ? 'text-slate-950' : 'bg-slate-800')}
+              style={primaryFilter === p ? { background: PRIMARY_META[p].color } : { color: PRIMARY_META[p].color }}
+            >
+              {PRIMARY_META[p].short}
+            </button>
+          ))}
         </div>
 
         <div className="mb-1.5 flex flex-wrap items-center gap-1 px-1 text-[10px]">

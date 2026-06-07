@@ -1,12 +1,13 @@
 import type { ReactNode } from 'react'
-import { useGame, MYSTERY_BOXES, EXCHANGE_RATES, shopBuyPrice, shopRefreshCost } from '../game/store'
-import { UPGRADES, UPGRADE_CATEGORIES, upgradeCost, isMaxed, type UpgradeCategory } from '../game/upgrades'
-import { RARITIES } from '../game/rarities'
+import { useGame, MYSTERY_BOXES, EXCHANGE_RATES, RECRUIT_COST, RECRUIT_POUSSIERE, shopBuyPrice, shopRefreshCost } from '../game/store'
+import { UPGRADES, UPGRADE_CATEGORIES, upgradeCost, upgradePoussiere, isMaxed, type UpgradeCategory } from '../game/upgrades'
+import { RARITIES, RARITY_LIST } from '../game/rarities'
 import { ITEM_TYPES } from '../game/slots'
 import { rarityTextStyle, isPrism } from './rarityStyle'
 
 export function MerchantPanel() {
   const gold = useGame((s) => s.gold)
+  const poussiere = useGame((s) => s.poussiere)
   const shopStock = useGame((s) => s.shopStock)
   const upgrades = useGame((s) => s.upgrades)
   const bestStage = useGame((s) => s.bestStage)
@@ -20,7 +21,9 @@ export function MerchantPanel() {
   const recruitCharacter = useGame((s) => s.recruitCharacter)
 
   const refreshCost = shopRefreshCost(bestStage)
-  const recruitCost = characters.length === 1 ? 5000 : 20000
+  const recruitIdx = characters.length - 1
+  const recruitCost = RECRUIT_COST[recruitIdx] ?? 250000
+  const recruitPoussiere = RECRUIT_POUSSIERE[recruitIdx] ?? 0
 
   return (
     <div className="flex h-full flex-col">
@@ -30,22 +33,38 @@ export function MerchantPanel() {
       </div>
 
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
-        {/* Coffre mystère */}
+        {/* Coffres mystères (10 types, distribution de rareté + jackpot) */}
         <Section title="🎁 Coffres mystères" accent="text-fuchsia-300">
-          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-3">
-            {MYSTERY_BOXES.map((b) => (
-              <button
-                key={b.id}
-                disabled={gold < b.gold}
-                onClick={() => mysteryBox(b.id)}
-                className="flex flex-col items-center gap-1 rounded-lg border border-fuchsia-700/50 bg-fuchsia-950/20 p-2 hover:bg-fuchsia-900/30 disabled:opacity-40"
-              >
-                <span className="text-2xl">🧰</span>
-                <span className="text-[11px] font-semibold text-fuchsia-200">{b.name}</span>
-                <span className="text-[10px] text-slate-400">{b.count} objet{b.count > 1 ? 's' : ''}{b.luck ? ` · +rareté` : ''}</span>
-                <span className="text-[11px] text-yellow-400">💰 {b.gold.toLocaleString('fr-FR')}</span>
-              </button>
-            ))}
+          <p className="mb-1.5 text-[10px] leading-snug text-slate-500">
+            Chaque coffre tire une <b className="text-slate-300">fourchette de rareté</b> (pas une rareté fixe) avec
+            une petite chance de <b className="text-fuchsia-300">jackpot</b> au-dessus. Plus c'est cher, plus c'est fort.
+          </p>
+          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+            {MYSTERY_BOXES.map((b) => {
+              const minName = RARITY_LIST.find((r) => r.tier === b.minTier)
+              const maxName = RARITY_LIST.find((r) => r.tier === b.maxTier)
+              return (
+                <button
+                  key={b.id}
+                  disabled={gold < b.gold}
+                  onClick={() => mysteryBox(b.id)}
+                  title={b.desc}
+                  className="flex items-center gap-2 rounded-lg border border-fuchsia-700/40 bg-fuchsia-950/20 p-2 text-left hover:bg-fuchsia-900/30 disabled:opacity-40"
+                >
+                  <span className="text-2xl">{b.icon}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[12px] font-semibold text-fuchsia-200">{b.name}</span>
+                    <span className="block truncate text-[9px]">
+                      <span style={{ color: minName?.color }}>{minName?.name}</span>
+                      <span className="text-slate-600"> → </span>
+                      <span style={{ color: maxName?.color }}>{maxName?.name}</span>
+                      <span className="text-slate-500"> · {b.count} obj{b.guaranteeUnique ? ' · ✦' : ''}</span>
+                    </span>
+                    <span className="block text-[11px] font-medium text-yellow-400">💰 {b.gold.toLocaleString('fr-FR')}</span>
+                  </span>
+                </button>
+              )
+            })}
           </div>
         </Section>
 
@@ -108,6 +127,7 @@ export function MerchantPanel() {
                   const level = upgrades[u.id] ?? 0
                   const maxed = isMaxed(u, level)
                   const cost = upgradeCost(u, level)
+                  const pous = upgradePoussiere(u, level)
                   return (
                     <div key={u.id} className="flex items-center gap-2 rounded-lg border border-slate-800 bg-black/20 px-2 py-1">
                       <span>{u.icon}</span>
@@ -115,8 +135,8 @@ export function MerchantPanel() {
                         <span className="block truncate text-[12px] font-medium text-slate-200">{u.name} <span className="text-slate-500">Niv. {level}{u.maxLevel ? `/${u.maxLevel}` : ''}</span></span>
                         <span className="block truncate text-[9px] text-slate-500">{u.description}</span>
                       </span>
-                      <button onClick={() => buyUpgrade(u.id)} disabled={maxed || gold < cost} className="shrink-0 rounded bg-emerald-800/60 px-2 py-1 text-[10px] font-medium hover:bg-emerald-700 disabled:opacity-40">
-                        {maxed ? 'Max' : `💰 ${cost.toLocaleString('fr-FR')}`}
+                      <button onClick={() => buyUpgrade(u.id)} disabled={maxed || gold < cost || poussiere < pous} className="shrink-0 rounded bg-emerald-800/60 px-2 py-1 text-[10px] font-medium hover:bg-emerald-700 disabled:opacity-40">
+                        {maxed ? 'Max' : `💰 ${cost.toLocaleString('fr-FR')}${pous ? ` 🌌${pous}` : ''}`}
                       </button>
                     </div>
                   )
@@ -126,8 +146,8 @@ export function MerchantPanel() {
           ))}
 
           {characters.length < 3 && (
-            <button onClick={recruitCharacter} disabled={gold < recruitCost} className="mt-1 w-full rounded-lg bg-indigo-800/50 py-2 text-[11px] font-medium text-indigo-200 hover:bg-indigo-700/60 disabled:opacity-40">
-              🧑‍🤝‍🧑 Recruter un {characters.length === 1 ? '2ᵉ' : '3ᵉ'} personnage · 💰 {recruitCost.toLocaleString('fr-FR')}
+            <button onClick={recruitCharacter} disabled={gold < recruitCost || poussiere < recruitPoussiere} className="mt-1 w-full rounded-lg bg-indigo-800/50 py-2 text-[11px] font-medium text-indigo-200 hover:bg-indigo-700/60 disabled:opacity-40">
+              🧑‍🤝‍🧑 Recruter un {characters.length === 1 ? '2ᵉ' : '3ᵉ'} personnage · 💰 {recruitCost.toLocaleString('fr-FR')}{recruitPoussiere ? ` + 🌌 ${recruitPoussiere}` : ''}
             </button>
           )}
         </Section>

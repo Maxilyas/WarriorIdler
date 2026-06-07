@@ -3,13 +3,30 @@
 /** Stats primaires : orientent le build (le talent tree décidera laquelle scaler). */
 export type PrimaryStat = 'force' | 'agilite' | 'intelligence' | 'endurance'
 
-/** Stats secondaires : les "ratings" qui créent les synergies. */
+/**
+ * Stats secondaires : les "ratings" qui créent les synergies, groupées par rôle.
+ * Le pool est large mais chaque objet n'en porte qu'un petit nombre fixe (selon la
+ * rareté) → l'itémisation devient un choix entre offense, survie et soutien.
+ */
 export type SecondaryStat =
-  | 'critique'
-  | 'hate'
-  | 'maitrise'
-  | 'polyvalence'
-  | 'volDeVie'
+  // --- Offensif ---
+  | 'critique' // chance de coup critique
+  | 'degatsCrit' // multiplicateur des coups critiques
+  | 'hate' // vitesse d'attaque / d'incantation
+  | 'maitrise' // dégâts selon l'archétype
+  | 'penetration' // ignore une partie des résistances/armure ennemies
+  // --- Défensif ---
+  | 'reductionDegats' // réduction plate des dégâts subis
+  | 'esquive' // chance d'éviter complètement un coup
+  | 'bouclier' // bouclier d'absorption (PV effectifs en plus)
+  // --- Soutien ---
+  | 'polyvalence' // dégâts + réduction des dégâts subis
+  | 'regen' // régénération des PV
+  // --- RARES (apparition très faible, effets puissants) ---
+  | 'volDeVie' // soigne en infligeant des dégâts
+  | 'surpuissance' // +% de dégâts globaux (multiplicatif)
+  | 'multifrappe' // chance de frapper une seconde fois
+  | 'recuperation' // réduit le temps de recharge des capacités
 
 export type StatKey = PrimaryStat | SecondaryStat
 
@@ -57,20 +74,28 @@ export type DamageType =
   | 'ombre'
   | 'nature'
 
-/** Affixe de dégât élémentaire : +value% de dégâts du type donné. */
-export interface TypeAffix {
-  type: DamageType
-  value: number
-}
-
 // ---- Affixes ----
 
+/**
+ * Une « ligne » d'objet. Le nombre de lignes est FIXE par rareté (2→6) ; chaque ligne
+ * est soit une stat secondaire, soit un bonus de dégâts d'un type, soit une résistance
+ * à un type. Le joueur arbitre offense ↔ survie sur un budget de lignes limité.
+ */
+export type AffixKind = 'stat' | 'dmgType' | 'resist'
+
 export interface Affix {
-  stat: SecondaryStat
+  kind: AffixKind
+  /** Renseigné si kind === 'stat'. */
+  stat?: SecondaryStat
+  /** Renseigné si kind === 'dmgType' (+%dégâts) ou 'resist' (+%résistance). */
+  type?: DamageType
   value: number
 }
 
 // ---- Effets uniques (la future "âme" du jeu : centaines de capacités) ----
+
+/** Rôle d'un effet unique (pour le codex et le ciblage). */
+export type UniqueRole = 'dps' | 'heal' | 'tank' | 'resist' | 'utility'
 
 /** Définition d'un effet unique dans le registre (valeurs de base au rang 1). */
 export interface UniqueEffect {
@@ -78,8 +103,12 @@ export interface UniqueEffect {
   name: string
   /** Description (mécanique actuelle + accroche sur les synergies futures). */
   description: string
+  /** Rôle principal de l'effet (catalogue couvrant tous les rôles). */
+  role: UniqueRole
   /** Bonus de stats de base (rang 1), montés par le rang. */
   mods?: StatBlock
+  /** Bonus de résistances de base (rang 1), montés par le rang. */
+  resistMods?: Partial<Record<DamageType, number>>
 }
 
 /** Instance d'un effet unique posée sur un objet : référence + rang. */
@@ -152,11 +181,10 @@ export interface Item {
   endurance: number
   /** Arbitrage offensif/défensif (répartition du budget primaire ↔ endurance). */
   orientation: ItemOrientation
+  /** Lignes de l'objet (stats / dégâts de type / résistances), nombre fixé par la rareté. */
   affixes: Affix[]
   /** Type de dégâts de base (uniquement sur l'arme principale). */
   damageType?: DamageType
-  /** Affixes de dégâts élémentaires (+% par type). */
-  typeAffixes?: TypeAffix[]
   unique?: UniqueInstance
 }
 
@@ -167,7 +195,7 @@ export type Equipment = Partial<Record<EquipSlotId, Item>>
 export type PowerKind = 'active' | 'passive'
 
 /** Effet d'une capacité ACTIVE (auto-lancée sur cooldown en combat idle). */
-export type PowerEffect = 'heal' | 'nuke' | 'shield' | 'buffParty' | 'cleave'
+export type PowerEffect = 'heal' | 'nuke' | 'shield' | 'buffParty' | 'cleave' | 'dot' | 'hot'
 
 /** Définition d'une capacité dans le registre (valeurs de base, montées par le rang plus tard). */
 export interface PowerDef {
@@ -189,6 +217,10 @@ export interface PowerDef {
   effect?: PowerEffect
   /** Magnitude de base de l'effet (mise à l'échelle par la puissance du lanceur). */
   magnitude?: number
+  /** Stat primaire qui met la magnitude à l'échelle (sort=INT, frappe=FOR, finesse=AGI). */
+  scaleStat?: OffensiveStat
+  /** Type de dégât de la capacité (pour les nukes/DoT typés). */
+  damageType?: DamageType
 }
 
 // ---- Personnage ----
@@ -224,4 +256,12 @@ export interface Enemy {
   xp: number
   /** Résistances par type (fraction : 0.25 = -25% dégâts subis ; négatif = vulnérable). */
   resist: Partial<Record<DamageType, number>>
+  /** Type de dégâts infligés par l'ennemi (les résistances du héros le réduisent). */
+  damageType: DamageType
+  /** DoT actif posé par le héros (saignement/poison), résolu au tick. */
+  dot?: { dps: number; remaining: number }
+  /** Trait déterministe (texture du combat classique) : nom court affiché. */
+  trait?: string
+  /** Ennemi d'élite (stats accrues + meilleur butin). */
+  elite?: boolean
 }

@@ -27,13 +27,20 @@ export function CombatPanel() {
   const abandonRaid = useGame((s) => s.abandonRaid)
   const stage = useGame((s) => s.stage)
   const bestStage = useGame((s) => s.bestStage)
+  const farmLock = useGame((s) => s.farmLock)
+  const setStage = useGame((s) => s.setStage)
+  const toggleFarmLock = useGame((s) => s.toggleFarmLock)
   const log = useGame((s) => s.log)
 
   const enemy = raid ? raid.enemy : dungeon ? dungeon.enemy : normalEnemy
+  const atkType = DAMAGE_TYPES[enemy.damageType]
   const partyDps = characters
     .filter((c) => c.hp > 0)
     .reduce((sum, c) => sum + theoreticalDps(charDerived(c), charDamageProfile(c)), 0)
   const resistEntries = Object.entries(enemy.resist ?? {}) as [DamageType, number][]
+  // Combat classique : résistance globale (les 7 types égaux) ; donjon/raid : résistances typées.
+  const resistVals = resistEntries.map(([, v]) => v)
+  const globalResist = resistVals.length >= 7 && resistVals.every((v) => v === resistVals[0]) ? resistVals[0] : null
   const enemyPct = (enemy.hp / enemy.maxHp) * 100
   const boss = raid ? true : dungeon ? dungeon.current === dungeon.totalFights - 1 : isBossStage(stage)
 
@@ -112,6 +119,26 @@ export function CombatPanel() {
         </div>
       )}
 
+      {/* Verrou de palier (farm) */}
+      {!dungeon && !raid && (
+        <div className="flex items-center gap-2 rounded-xl border border-slate-800 bg-[#0d111a] px-3 py-2 text-xs">
+          <span className="text-slate-400">Palier de farm</span>
+          <div className="flex items-center rounded-lg border border-slate-700">
+            <button onClick={() => setStage(stage - 1)} disabled={stage <= 1} className="px-2 py-0.5 text-slate-300 hover:bg-white/5 disabled:opacity-30">−</button>
+            <span className="w-10 text-center tabular-nums text-slate-100">{stage}</span>
+            <button onClick={() => setStage(stage + 1)} disabled={stage >= bestStage} className="px-2 py-0.5 text-slate-300 hover:bg-white/5 disabled:opacity-30">+</button>
+          </div>
+          <span className="text-slate-500">/ {bestStage}</span>
+          <button
+            onClick={toggleFarmLock}
+            title={farmLock ? 'Verrouillé : le combat reste à ce palier' : 'Libre : progression normale'}
+            className={'ml-auto rounded-lg px-2.5 py-1 text-[11px] font-medium ' + (farmLock ? 'bg-amber-600 text-slate-950' : 'bg-slate-700 text-slate-300 hover:bg-slate-600')}
+          >
+            {farmLock ? '🔒 Verrouillé' : '🔓 Libre'}
+          </button>
+        </div>
+      )}
+
       {/* Ennemi */}
       <div className="rounded-xl border border-slate-800 bg-gradient-to-br from-[#1a1420] to-[#11151f] p-4">
         <div className="flex items-center justify-between text-xs text-slate-400">
@@ -139,9 +166,19 @@ export function CombatPanel() {
           <div className="mt-1 text-xs text-slate-400">
             {Math.ceil(enemy.hp).toLocaleString('fr-FR')} / {enemy.maxHp.toLocaleString('fr-FR')} PV
           </div>
+          <div className="mt-1 text-[11px]">
+            <span className="text-slate-500">Frappe en </span>
+            <span style={{ color: atkType.color }}>{atkType.icon} {atkType.name}</span>
+            <span className="text-slate-600"> · résiste-y pour encaisser</span>
+          </div>
         </div>
 
-        {resistEntries.length > 0 && (
+        {globalResist != null ? (
+          <div className="mt-2 text-center text-[11px] text-slate-400">
+            🛡 Résistance globale <span className="text-red-400">+{Math.round(globalResist * 100)}%</span>
+            <span className="text-slate-600"> · contrée par la Pénétration</span>
+          </div>
+        ) : resistEntries.length > 0 ? (
           <div className="mt-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-0.5 text-[11px]">
             {resistEntries.map(([type, val]) => {
               const m = DAMAGE_TYPES[type]
@@ -155,6 +192,13 @@ export function CombatPanel() {
                 </span>
               )
             })}
+          </div>
+        ) : null}
+        {enemy.trait && (
+          <div className="mt-1 text-center">
+            <span className={'rounded px-1.5 py-0.5 text-[10px] font-medium ' + (enemy.elite ? 'bg-amber-600/30 text-amber-200' : 'bg-slate-700/60 text-slate-300')}>
+              {enemy.elite ? '◆ ' : ''}{enemy.trait}
+            </span>
           </div>
         )}
 
