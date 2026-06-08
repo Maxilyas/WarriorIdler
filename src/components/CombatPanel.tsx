@@ -1,6 +1,6 @@
 import { useGame } from '../game/store'
 import type { LogKind } from '../game/store'
-import { charDerived, charMaxHp, charDamageProfile } from '../game/character'
+import { charDerived, charMaxHp, charDamageProfile, TALENT_START_LEVEL } from '../game/character'
 import { theoreticalDps } from '../game/combat'
 import { isBossStage } from '../game/enemies'
 import { DAMAGE_TYPES } from '../game/damage'
@@ -35,6 +35,9 @@ export function CombatPanel() {
 
   const enemy = raid ? raid.enemy : dungeon ? dungeon.enemy : normalEnemy
   const atkType = DAMAGE_TYPES[enemy.damageType]
+  // Objectif courant (tutoriel léger + signalisation des déblocages progressifs).
+  const maxLevel = characters.reduce((m, c) => Math.max(m, c.level), 1)
+  const objective = nextObjective(bestStage, maxLevel)
   const partyDps = characters
     .filter((c) => c.hp > 0)
     .reduce((sum, c) => sum + theoreticalDps(charDerived(c), charDamageProfile(c)), 0)
@@ -47,6 +50,13 @@ export function CombatPanel() {
 
   return (
     <div className="flex h-full flex-col gap-3">
+      {/* Objectif / tutoriel (disparaît une fois tout débloqué) */}
+      {objective && !dungeon && !raid && (
+        <div className="rounded-xl border border-orange-700/40 bg-orange-950/20 px-3 py-2 text-[11px] leading-snug text-orange-100">
+          <span className="font-semibold text-orange-300">🎯 Objectif&nbsp;:</span> {objective}
+        </div>
+      )}
+
       {/* Équipe */}
       <div className="space-y-1.5 rounded-xl border border-slate-800 bg-gradient-to-br from-[#141a26] to-[#0d111a] p-3">
         {characters.map((c) => {
@@ -225,6 +235,16 @@ export function CombatPanel() {
       </div>
     </div>
   )
+}
+
+/** Prochain objectif du joueur — sert de fil conducteur et annonce les déblocages. */
+function nextObjective(bestStage: number, maxLevel: number): string | null {
+  if (bestStage < 3) return 'Frappe ! Tue des ennemis pour ramasser du butin, puis équipe tes meilleures pièces dans l\'onglet 🎒 Stuff.'
+  if (maxLevel <= TALENT_START_LEVEL) return `Monte un personnage au niveau ${TALENT_START_LEVEL + 1} (onglet 🛡 Perso) pour débloquer l'arbre de 🌌 Talents.`
+  if (bestStage < 5) return 'Atteins le palier 5 pour débloquer les 🏰 Donjons — ta vraie source d\'or, d\'éclats et de ressources.'
+  if (bestStage < 10) return 'Atteins le palier 10 pour débloquer le 🏪 Marché et ses améliorations permanentes.'
+  if (bestStage < 50) return 'Atteins le palier 50 pour débloquer les ☠️ Raids (butin et ressources d\'élite).'
+  return null
 }
 
 function Metric({ label, value, accent }: { label: string; value: string; accent?: string }) {

@@ -68,18 +68,37 @@ export function theoreticalDps(derived: DerivedStats, profile: DamageProfile, bo
 }
 
 /**
- * Dégâts subis par le joueur (par seconde) après réduction par :
- * la résistance du héros au type d'attaque, l'esquive, la réduction plate et la Polyvalence.
+ * Plafond d'atténuation GÉNÉRIQUE (hors résistances de type) : le joueur encaisse
+ * toujours au moins (1 − cap) des dégâts génériques. Empêche l'invincibilité par
+ * empilement d'esquive / réduction / maîtrise / polyvalence → il faut survivre, pas
+ * juste tanker. Les RÉSISTANCES de type restent le levier stratégique (non capées ici,
+ * déjà bornées à RESIST_CAP par type), ce qui les rend déterminantes.
+ */
+export const EFFECTIVE_DR_CAP = 0.8
+
+/**
+ * Multiplicateur d'atténuation générique (toutes sources hors résistance de type),
+ * borné par EFFECTIVE_DR_CAP. `extraMitigation` = produit des réductions externes
+ * (capacités passives, keystones) déjà sous forme (1 − x).
+ */
+export function genericMitigation(derived: DerivedStats, extraMitigation = 1): number {
+  let g = (1 - derived.dodge) * (1 - derived.flatDr) * (1 - derived.masteryDr) * extraMitigation
+  g /= derived.versatilityMult
+  return Math.max(g, 1 - EFFECTIVE_DR_CAP)
+}
+
+/**
+ * Dégâts subis par le joueur (par seconde) :
+ * - la RÉSISTANCE du héros au type d'attaque réduit d'abord (levier stratégique, non capé ici) ;
+ * - puis l'atténuation générique, BORNÉE (esquive/réduction/maîtrise/polyvalence + externes).
  */
 export function incomingDps(
   enemyDamage: number,
   enemyType: DamageType,
   derived: DerivedStats,
   heroResist: Partial<Record<DamageType, number>>,
+  extraMitigation = 1,
 ): number {
-  let dmg = enemyDamage * (1 - (heroResist[enemyType] ?? 0))
-  dmg *= 1 - derived.dodge
-  dmg *= 1 - derived.flatDr
-  dmg /= derived.versatilityMult
-  return Math.max(0.5, dmg)
+  const afterResist = enemyDamage * (1 - (heroResist[enemyType] ?? 0))
+  return Math.max(0.5, afterResist * genericMitigation(derived, extraMitigation))
 }

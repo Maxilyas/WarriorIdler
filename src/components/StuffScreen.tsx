@@ -34,6 +34,10 @@ export function StuffScreen() {
   const recycle = useGame((s) => s.recycle)
   const sellAllBelow = useGame((s) => s.sellAllBelow)
   const recycleAllBelow = useGame((s) => s.recycleAllBelow)
+  const recycleThreshold = useGame((s) => s.recycleThreshold)
+  const setRecycleThreshold = useGame((s) => s.setRecycleThreshold)
+  const autoRecycle = useGame((s) => s.autoRecycle)
+  const toggleAutoRecycle = useGame((s) => s.toggleAutoRecycle)
 
   const active = characters[activeChar] ?? characters[0]
   const equipment: Equipment = active?.equipment ?? {}
@@ -43,7 +47,6 @@ export function StuffScreen() {
   const [sort, setSort] = useState<SortMode>('score')
   const [primaryFilter, setPrimaryFilter] = useState<OffensiveStat | null>(null)
   const [showCreate, setShowCreate] = useState(false)
-  const [bulkTier, setBulkTier] = useState(4) // seuil de rareté pour vente/recyclage en masse
 
   const filterType: ItemType | null = selectedSlot
     ? EQUIP_SLOTS.find((s) => s.id === selectedSlot)!.accepts
@@ -235,21 +238,28 @@ export function StuffScreen() {
           <button onClick={() => setShowCreate(true)} className="rounded bg-amber-700/70 px-1.5 py-0.5 font-medium text-amber-100 hover:bg-amber-600/70">
             🔨 Forger
           </button>
-          <span className="text-slate-500">en masse &lt;</span>
+          <span className="text-slate-500">sous</span>
           <select
-            value={bulkTier}
-            onChange={(e) => setBulkTier(Number(e.target.value))}
+            value={recycleThreshold}
+            onChange={(e) => setRecycleThreshold(Number(e.target.value))}
             className="rounded bg-slate-800 px-1 py-0.5 text-slate-200"
           >
             {RARITY_LIST.filter((r) => r.tier >= 2 && r.tier <= 14).map((r) => (
               <option key={r.id} value={r.tier}>{r.name}</option>
             ))}
           </select>
-          <button onClick={() => sellAllBelow(bulkTier)} className="rounded bg-yellow-900/40 px-1.5 py-0.5 text-yellow-300 hover:bg-yellow-900/60">
+          <button onClick={() => sellAllBelow(recycleThreshold)} className="rounded bg-yellow-900/40 px-1.5 py-0.5 text-yellow-300 hover:bg-yellow-900/60">
             💰 Vendre
           </button>
-          <button onClick={() => recycleAllBelow(bulkTier)} className="rounded bg-cyan-900/40 px-1.5 py-0.5 text-cyan-300 hover:bg-cyan-900/60">
+          <button onClick={() => recycleAllBelow(recycleThreshold)} className="rounded bg-cyan-900/40 px-1.5 py-0.5 text-cyan-300 hover:bg-cyan-900/60">
             ♻️ Recycler
+          </button>
+          <button
+            onClick={toggleAutoRecycle}
+            title="Recycle automatiquement tout butin (non unique) sous le seuil, directement au drop."
+            className={'rounded px-1.5 py-0.5 font-medium ' + (autoRecycle ? 'bg-emerald-600 text-slate-950' : 'bg-slate-800 text-slate-400 hover:text-slate-200')}
+          >
+            {autoRecycle ? '♻️ Auto ✓' : '♻️ Auto'}
           </button>
         </div>
 

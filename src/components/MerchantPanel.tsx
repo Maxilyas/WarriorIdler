@@ -1,13 +1,16 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useGame, MYSTERY_BOXES, EXCHANGE_RATES, RECRUIT_COST, RECRUIT_POUSSIERE, shopBuyPrice, shopRefreshCost } from '../game/store'
-import { UPGRADES, UPGRADE_CATEGORIES, upgradeCost, upgradePoussiere, isMaxed, type UpgradeCategory } from '../game/upgrades'
+import { UPGRADES, UPGRADE_CATEGORIES, upgradeCost, upgradePoussiere, upgradeEclats, isMaxed, type UpgradeCategory } from '../game/upgrades'
 import { RARITIES, RARITY_LIST } from '../game/rarities'
 import { ITEM_TYPES } from '../game/slots'
 import { rarityTextStyle, isPrism } from './rarityStyle'
 
 export function MerchantPanel() {
   const gold = useGame((s) => s.gold)
+  const essence = useGame((s) => s.essence)
   const poussiere = useGame((s) => s.poussiere)
+  const fragments = useGame((s) => s.fragments)
+  const cosmic = useGame((s) => s.cosmic)
   const shopStock = useGame((s) => s.shopStock)
   const upgrades = useGame((s) => s.upgrades)
   const bestStage = useGame((s) => s.bestStage)
@@ -19,6 +22,8 @@ export function MerchantPanel() {
   const buyResource = useGame((s) => s.buyResource)
   const buyUpgrade = useGame((s) => s.buyUpgrade)
   const recruitCharacter = useGame((s) => s.recruitCharacter)
+
+  const [qty, setQty] = useState(1)
 
   const refreshCost = shopRefreshCost(bestStage)
   const recruitIdx = characters.length - 1
@@ -43,10 +48,11 @@ export function MerchantPanel() {
             {MYSTERY_BOXES.map((b) => {
               const minName = RARITY_LIST.find((r) => r.tier === b.minTier)
               const maxName = RARITY_LIST.find((r) => r.tier === b.maxTier)
+              const affordable = gold >= b.gold && fragments >= (b.costFragments ?? 0) && cosmic >= (b.costCosmic ?? 0)
               return (
                 <button
                   key={b.id}
-                  disabled={gold < b.gold}
+                  disabled={!affordable}
                   onClick={() => mysteryBox(b.id)}
                   title={b.desc}
                   className="flex items-center gap-2 rounded-lg border border-fuchsia-700/40 bg-fuchsia-950/20 p-2 text-left hover:bg-fuchsia-900/30 disabled:opacity-40"
@@ -60,7 +66,11 @@ export function MerchantPanel() {
                       <span style={{ color: maxName?.color }}>{maxName?.name}</span>
                       <span className="text-slate-500"> · {b.count} obj{b.guaranteeUnique ? ' · ✦' : ''}</span>
                     </span>
-                    <span className="block text-[11px] font-medium text-yellow-400">💰 {b.gold.toLocaleString('fr-FR')}</span>
+                    <span className="block text-[11px] font-medium">
+                      <span className="text-yellow-400">💰 {b.gold.toLocaleString('fr-FR')}</span>
+                      {b.costFragments ? <span className={fragments >= b.costFragments ? 'text-sky-300' : 'text-red-400'}> · ✨ {b.costFragments}</span> : null}
+                      {b.costCosmic ? <span className={cosmic >= b.costCosmic ? 'text-violet-300' : 'text-red-400'}> · 💫 {b.costCosmic}</span> : null}
+                    </span>
                   </span>
                 </button>
               )
@@ -107,11 +117,28 @@ export function MerchantPanel() {
         </Section>
 
         {/* Comptoir d'échange */}
-        <Section title="🔄 Comptoir d'échange" accent="text-cyan-300">
+        <Section
+          title="🔄 Comptoir d'échange"
+          accent="text-cyan-300"
+          action={
+            <div className="flex items-center gap-1 text-[10px]">
+              <span className="text-slate-500">Quantité</span>
+              {[1, 10, 100].map((q) => (
+                <button
+                  key={q}
+                  onClick={() => setQty(q)}
+                  className={'rounded px-1.5 py-0.5 font-medium ' + (qty === q ? 'bg-cyan-600 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700')}
+                >
+                  ×{q}
+                </button>
+              ))}
+            </div>
+          }
+        >
           <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-3">
-            <ExchangeBtn label={`+${EXCHANGE_RATES.eclatsBatch} ♦ éclats`} cost={EXCHANGE_RATES.eclatGoldCost} gold={gold} onClick={buyEclats} />
-            <ExchangeBtn label="+1 🔑 Sceau de faille" cost={EXCHANGE_RATES.sceauGold} gold={gold} onClick={() => buyResource('sceau')} />
-            <ExchangeBtn label="+1 🔮 Orbe de raid" cost={EXCHANGE_RATES.orbeGold} gold={gold} onClick={() => buyResource('orbe')} />
+            <ExchangeBtn label={`+${(EXCHANGE_RATES.eclatsBatch * qty).toLocaleString('fr-FR')} ♦ éclats`} cost={EXCHANGE_RATES.eclatGoldCost * qty} gold={gold} onClick={() => buyEclats(qty)} />
+            <ExchangeBtn label={`+${qty} 🔑 Sceau${qty > 1 ? 'x' : ''} de faille`} cost={EXCHANGE_RATES.sceauGold * qty} gold={gold} onClick={() => buyResource('sceau', qty)} />
+            <ExchangeBtn label={`+${qty} 🔮 Orbe${qty > 1 ? 's' : ''} de raid`} cost={EXCHANGE_RATES.orbeGold * qty} gold={gold} onClick={() => buyResource('orbe', qty)} />
           </div>
         </Section>
 
@@ -128,6 +155,7 @@ export function MerchantPanel() {
                   const maxed = isMaxed(u, level)
                   const cost = upgradeCost(u, level)
                   const pous = upgradePoussiere(u, level)
+                  const ecl = upgradeEclats(u, level)
                   return (
                     <div key={u.id} className="flex items-center gap-2 rounded-lg border border-slate-800 bg-black/20 px-2 py-1">
                       <span>{u.icon}</span>
@@ -135,8 +163,8 @@ export function MerchantPanel() {
                         <span className="block truncate text-[12px] font-medium text-slate-200">{u.name} <span className="text-slate-500">Niv. {level}{u.maxLevel ? `/${u.maxLevel}` : ''}</span></span>
                         <span className="block truncate text-[9px] text-slate-500">{u.description}</span>
                       </span>
-                      <button onClick={() => buyUpgrade(u.id)} disabled={maxed || gold < cost || poussiere < pous} className="shrink-0 rounded bg-emerald-800/60 px-2 py-1 text-[10px] font-medium hover:bg-emerald-700 disabled:opacity-40">
-                        {maxed ? 'Max' : `💰 ${cost.toLocaleString('fr-FR')}${pous ? ` 🌌${pous}` : ''}`}
+                      <button onClick={() => buyUpgrade(u.id)} disabled={maxed || gold < cost || poussiere < pous || essence < ecl} className="shrink-0 rounded bg-emerald-800/60 px-2 py-1 text-[10px] font-medium hover:bg-emerald-700 disabled:opacity-40">
+                        {maxed ? 'Max' : <>💰 {cost.toLocaleString('fr-FR')}{ecl ? <span className={essence >= ecl ? '' : 'text-red-400'}> ♦{ecl}</span> : null}{pous ? ` 🌌${pous}` : ''}</>}
                       </button>
                     </div>
                   )

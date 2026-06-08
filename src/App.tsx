@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useGame } from './game/store'
 import { useMediaQuery } from './useMediaQuery'
+import { TALENT_START_LEVEL } from './game/character'
 import { CombatPanel } from './components/CombatPanel'
 import { CharacterPanel } from './components/CharacterPanel'
 import { TalentTree } from './components/TalentTree'
@@ -16,6 +17,11 @@ const TICK_MS = 200
 
 type Tab = 'combat' | 'perso' | 'talents' | 'stuff' | 'donjons' | 'raids' | 'marchand' | 'grimoire'
 
+/** Palier de déblocage de chaque fonctionnalité (révélation progressive de l'UI). */
+const MARCHAND_STAGE = 10
+const DONJON_STAGE = 5
+const RAID_STAGE = 50
+
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'combat', label: 'Combat', icon: '⚔' },
   { id: 'perso', label: 'Perso', icon: '🛡' },
@@ -26,6 +32,11 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'marchand', label: 'Marché', icon: '🏪' },
   { id: 'grimoire', label: 'Codex', icon: '📖' },
 ]
+
+const DESK_LABEL: Record<Exclude<Tab, 'combat'>, string> = {
+  stuff: '🎒 Équipement', perso: '🛡 Personnage', talents: '🌌 Talents',
+  donjons: '🏰 Donjons', raids: '☠️ Raids', marchand: '🏪 Marché', grimoire: '📖 Codex',
+}
 
 export default function App() {
   const tick = useGame((s) => s.tick)
@@ -39,6 +50,9 @@ export default function App() {
   const cosmic = useGame((s) => s.cosmic)
   const isDesktop = useMediaQuery('(min-width: 1024px)')
   const sceaux = useGame((s) => s.sceaux)
+  const bestStage = useGame((s) => s.bestStage)
+  const characters = useGame((s) => s.characters)
+  const dungeonProgress = useGame((s) => s.dungeonProgress)
   const inDungeon = useGame((s) => s.dungeon !== null)
   const inRaid = useGame((s) => s.raid !== null)
   const [tab, setTab] = useState<Tab>('combat')
@@ -48,6 +62,24 @@ export default function App() {
     const id = setInterval(() => tick(TICK_MS / 1000), TICK_MS)
     return () => clearInterval(id)
   }, [tick])
+
+  // Révélation progressive : on ne montre une fonctionnalité qu'une fois pertinente.
+  const maxLevel = characters.reduce((m, c) => Math.max(m, c.level), 1)
+  const anyDungeon = Object.values(dungeonProgress).some((v) => v > 0)
+  const unlocked: Record<Tab, boolean> = {
+    combat: true,
+    perso: true,
+    stuff: true,
+    grimoire: bestStage >= 3 || inventory.some((i) => i.unique),
+    talents: maxLevel > TALENT_START_LEVEL || characters.some((c) => c.talentPoints > 0),
+    donjons: sceaux > 0 || anyDungeon || inDungeon || bestStage >= DONJON_STAGE,
+    raids: orbes > 0 || inRaid || bestStage >= RAID_STAGE,
+    marchand: bestStage >= MARCHAND_STAGE,
+  }
+
+  const mobileTabs = TABS.filter((t) => unlocked[t.id])
+  const deskTabs = (['stuff', 'perso', 'talents', 'donjons', 'raids', 'marchand', 'grimoire'] as const).filter((t) => unlocked[t])
+  const navCols = mobileTabs.length
 
   return (
     <div className="mx-auto flex h-[100dvh] max-w-6xl flex-col">
@@ -74,8 +106,8 @@ export default function App() {
               <CombatPanel />
             </div>
             <div className="flex min-h-0 min-w-0 flex-col">
-              <div className="mb-3 flex gap-1.5">
-                {(['stuff', 'perso', 'talents', 'donjons', 'raids', 'marchand', 'grimoire'] as const).map((t) => (
+              <div className="mb-3 flex flex-wrap gap-1.5">
+                {deskTabs.map((t) => (
                   <button
                     key={t}
                     onClick={() => setDeskTab(t)}
@@ -84,7 +116,7 @@ export default function App() {
                       (deskTab === t ? 'bg-slate-700 text-slate-100' : 'bg-slate-800/50 text-slate-400 hover:text-slate-200')
                     }
                   >
-                    {t === 'stuff' ? '🎒 Équipement' : t === 'perso' ? '🛡 Personnage' : t === 'talents' ? '🌌 Talents' : t === 'donjons' ? '🏰 Donjons' : t === 'raids' ? '☠️ Raids' : t === 'marchand' ? '🏪 Marché' : '📖 Grimoire'}
+                    {DESK_LABEL[t]}
                     {t === 'donjons' && (sceaux > 0 || inDungeon) && (
                       <span className="ml-1.5 rounded-full bg-amber-500 px-1.5 text-[10px] text-slate-950">
                         {inDungeon ? '!' : sceaux}
@@ -99,7 +131,9 @@ export default function App() {
                 ))}
               </div>
               <div className="min-h-0 flex-1">
-                {deskTab === 'perso' ? (
+                {!unlocked[deskTab] ? (
+                  <StuffScreen />
+                ) : deskTab === 'perso' ? (
                   <div className="h-full overflow-y-auto pr-1">
                     <CharacterPanel />
                   </div>
@@ -138,10 +172,10 @@ export default function App() {
         )}
       </main>
 
-      {/* Barre d'onglets (mobile uniquement) */}
+      {/* Barre d'onglets (mobile uniquement) — n'affiche que les fonctionnalités débloquées */}
       {!isDesktop && (
-        <nav className="grid grid-cols-8 border-t border-slate-800">
-          {TABS.map((t) => (
+        <nav className="grid border-t border-slate-800" style={{ gridTemplateColumns: `repeat(${navCols}, minmax(0, 1fr))` }}>
+          {mobileTabs.map((t) => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}

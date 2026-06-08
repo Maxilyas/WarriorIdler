@@ -55,9 +55,9 @@ export function makeEnemy(stage: number): Enemy {
   const dmgMult = (isElite ? 1.4 : 1) * (trait?.dmgMult ?? 1)
   const armorMult = trait?.armorMult ?? 1
 
-  // Croissance exponentielle douce du HP.
-  const hpBase = 40 * Math.pow(1.18, stage - 1)
-  const maxHp = Math.round(hpBase * (isBoss ? 6 : 1) * hpMult)
+  // Croissance exponentielle douce du HP (réduite : moins de "sacs à PV"). Boss un peu moins gonflés.
+  const hpBase = 40 * Math.pow(1.17, stage - 1)
+  const maxHp = Math.round(hpBase * (isBoss ? 5 : 1) * hpMult)
   const baseName = isBoss
     ? BOSS_NAMES[Math.floor((stage / 10 - 1) % BOSS_NAMES.length)]
     : ENEMY_NAMES[(stage - 1) % ENEMY_NAMES.length]
@@ -76,7 +76,8 @@ export function makeEnemy(stage: number): Enemy {
     maxHp,
     hp: maxHp,
     armor: Math.round(stage * 1.5 * armorMult),
-    damage: Math.round(2.5 * Math.pow(1.12, stage - 1) * (isBoss ? 1.8 : 1) * dmgMult),
+    // Dégâts un peu plus mordants (la survie / les résistances doivent compter).
+    damage: Math.round(2.6 * Math.pow(1.125, stage - 1) * (isBoss ? 1.8 : 1) * dmgMult),
     xp: Math.round((isBoss ? 50 : isElite ? 22 : 8) * Math.pow(1.12, stage - 1)),
     resist,
     damageType,

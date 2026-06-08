@@ -2,21 +2,22 @@ import { create } from 'zustand'
 import type {
   Equipment, Item, Affix, PrimaryStat, OffensiveStat, EquipSlotId, ItemType, Enemy, DamageType, RarityId, Character, PowerDef,
 } from './types'
-import { rollHit, incomingDps } from './combat'
+import { rollHit, incomingDps, genericMitigation } from './combat'
 import type { DerivedStats } from './stats'
 import {
   makeCharacter, charDerived, charMaxHp, charDamageProfile, charPassives, charActives,
   charResist, charCombatMods, abilityPower, computeUnlockedPowers, setGlobalCombatMods,
+  talentPointsForLevel,
 } from './character'
 import { getTalent, canAllocate } from './talents'
-import { getUpgrade, upgradeCost as accountUpgradeCost, upgradePoussiere, isMaxed, computeGlobalMods } from './upgrades'
+import { getUpgrade, upgradeCost as accountUpgradeCost, upgradePoussiere, upgradeEclats, isMaxed, computeGlobalMods } from './upgrades'
 import {
   generateItem, rollBoxRarity, sellValue, recycleValue, recyclePoussiere, itemScore,
   reforgeItem, surillvlItem, ascendItem,
   reforgeCost, surillvlCost, ascendCost, createCost, transmuteCost,
 } from './items'
 import { makeEnemy, isBossStage, stageIlvl, stageLuckTier } from './enemies'
-import { RARITIES } from './rarities'
+import { RARITIES, RARITY_LIST } from './rarities'
 import { SECONDARY_STATS } from './stats'
 import { DAMAGE_TYPE_LIST, DAMAGE_TYPES } from './damage'
 import { equipSlotsForType, slotAccepts } from './slots'
@@ -128,6 +129,10 @@ interface SaveData {
   /** Stock de l'échoppe du marchand. */
   shopStock: Item[]
   inventory: Item[]
+  /** Seuil de rareté (tier) pour vente/recyclage en masse + recyclage auto. Persisté. */
+  recycleThreshold: number
+  /** Recyclage automatique : tout butin sous le seuil est recyclé directement au drop. */
+  autoRecycle: boolean
   /** Horodatage de la dernière sauvegarde (progression hors-ligne). */
   lastSeen: number
 }
@@ -141,6 +146,8 @@ interface GameState extends SaveData {
   tick: (dt: number) => void
   setStage: (n: number) => void
   toggleFarmLock: () => void
+  setRecycleThreshold: (tier: number) => void
+  toggleAutoRecycle: () => void
   insertEffect: (itemId: string, effectId: string) => void
   claimOffline: () => void
   equip: (itemId: string, targetSlot?: EquipSlotId) => void
@@ -171,8 +178,8 @@ interface GameState extends SaveData {
   buyUpgrade: (id: string) => void
   refreshShop: () => void
   buyShopItem: (itemId: string) => void
-  buyEclats: () => void
-  buyResource: (kind: 'sceau' | 'orbe') => void
+  buyEclats: (qty?: number) => void
+  buyResource: (kind: 'sceau' | 'orbe', qty?: number) => void
   mysteryBox: (tier: number) => void
   recruitCharacter: () => void
   reset: () => void
@@ -184,7 +191,8 @@ function pushLog(log: LogEntry[], text: string, kind: LogKind): LogEntry[] {
 }
 
 function xpForLevel(level: number): number {
-  return Math.round(50 * Math.pow(1.35, level - 1))
+  // Courbe un peu plus exigeante : les premiers niveaux s'enchaînent moins vite.
+  return Math.round(64 * Math.pow(1.37, level - 1))
 }
 
 // Cooldowns transitoires des capacités actives (clé `charId:powerId`). Non persistés.
@@ -215,6 +223,8 @@ function freshSave(): SaveData {
     upgrades: {},
     shopStock: [],
     inventory: [],
+    recycleThreshold: 4,
+    autoRecycle: false,
     lastSeen: Date.now(),
   }
 }
@@ -277,6 +287,8 @@ function sanitize(save: SaveData): SaveData {
   if (typeof save.poussiere !== 'number') save.poussiere = 0
   if (typeof save.cosmic !== 'number') save.cosmic = 0
   if (typeof save.farmLock !== 'boolean') save.farmLock = false
+  if (typeof save.recycleThreshold !== 'number') save.recycleThreshold = 4
+  if (typeof save.autoRecycle !== 'boolean') save.autoRecycle = false
   if (typeof save.lastSeen !== 'number') save.lastSeen = Date.now()
 
   // raidProgress : ancien `number` (raids génériques) → record par raid (refonte). On repart à 0.
@@ -329,8 +341,8 @@ function sanitize(save: SaveData): SaveData {
       spent += r
     }
     c.talents = talents
-    // Points restants = gagnés (niveau − 1) − dépensés (hors racine gratuite).
-    c.talentPoints = Math.max(0, c.level - 1 - spent)
+    // Points restants = gagnés (au-delà du niveau de départ des talents) − dépensés (hors racine gratuite).
+    c.talentPoints = Math.max(0, talentPointsForLevel(c.level) - spent)
     c.unlockedPowers = computeUnlockedPowers(talents)
     // On garde les capacités équipées encore débloquées (sinon créneau vidé).
     const equipped = Array.isArray(c.powers) ? c.powers : []
@@ -362,7 +374,7 @@ function migrateOldSave(p: any): SaveData {
     equipment: p.equipment ?? {},
     powers: [null, null, null, null, null],
     unlockedPowers: [],
-    talentPoints: Math.max(0, (p.level ?? 1) - 1),
+    talentPoints: talentPointsForLevel(p.level ?? 1),
     talents: {},
     primaryBias: p.primaryBias ?? 'force',
     hp: p.hp ?? 0,
@@ -426,6 +438,8 @@ function persist(s: GameState) {
     upgrades: s.upgrades,
     shopStock: s.shopStock,
     inventory: s.inventory,
+    recycleThreshold: s.recycleThreshold,
+    autoRecycle: s.autoRecycle,
     lastSeen: Date.now(),
   }
   try {
@@ -491,7 +505,8 @@ function refreshGlobals(upgrades: Record<string, number>) {
 
 // ---- Marchand ----
 const SHOP_SIZE = 6
-export const EXCHANGE_RATES = { eclatsBatch: 100, eclatGoldCost: 800, sceauGold: 2500, orbeGold: 6000 }
+// L'or est désormais rare (le combat classique n'en donne presque plus) → ces taux sont de vrais puits.
+export const EXCHANGE_RATES = { eclatsBatch: 100, eclatGoldCost: 1500, sceauGold: 8000, orbeGold: 25000 }
 export interface MysteryBox {
   id: number
   name: string
@@ -512,6 +527,9 @@ export interface MysteryBox {
   noyau?: number
   poussiere?: number
   fragments?: number
+  /** Coût SUPPLÉMENTAIRE en ressources de raid (les coffres d'élite ne s'achètent pas qu'avec de l'or). */
+  costFragments?: number
+  costCosmic?: number
   desc: string
 }
 
@@ -528,9 +546,9 @@ export const MYSTERY_BOXES: MysteryBox[] = [
   { id: 4, name: 'Coffre du gardien', icon: '🛡️', gold: 60000, count: 3, minTier: 5, maxTier: 9, jackpot: 0.05, biasResist: true, desc: 'Stuff défensif/résistances. Épique → Mythique.' },
   { id: 5, name: 'Coffre légendaire', icon: '🟠', gold: 150000, count: 4, minTier: 6, maxTier: 10, jackpot: 0.06, eclats: 600, noyau: 2, desc: 'Légendaire → Ascendant + ressources.' },
   { id: 6, name: 'Coffre du forgeron', icon: '🔨', gold: 400000, count: 1, minTier: 7, maxTier: 11, jackpot: 0.05, eclats: 3000, noyau: 12, poussiere: 8, desc: 'Matériaux de craft en MASSE + 1 objet.' },
-  { id: 7, name: 'Coffre mythique', icon: '🔴', gold: 800000, count: 4, minTier: 8, maxTier: 12, jackpot: 0.07, eclats: 1500, noyau: 5, poussiere: 3, desc: 'Mythique → Éternel + ressources rares.' },
-  { id: 8, name: 'Coffre cosmique', icon: '🌟', gold: 2500000, count: 5, minTier: 10, maxTier: 14, jackpot: 0.09, guaranteeUnique: true, eclats: 4000, noyau: 10, poussiere: 12, fragments: 2, desc: 'Ascendant → Abyssal, 1 unique garanti.' },
-  { id: 9, name: 'Coffre du Néant', icon: '🕳️', gold: 10000000, count: 6, minTier: 12, maxTier: 16, jackpot: 0.13, guaranteeUnique: true, eclats: 10000, noyau: 25, poussiere: 35, fragments: 8, desc: 'Le pari ultime : top raretés + jackpot Transcendant + uniques.' },
+  { id: 7, name: 'Coffre mythique', icon: '🔴', gold: 800000, count: 4, minTier: 8, maxTier: 12, jackpot: 0.07, eclats: 1500, noyau: 5, poussiere: 3, costFragments: 2, desc: 'Mythique → Éternel. Exige des Fragments de raid.' },
+  { id: 8, name: 'Coffre cosmique', icon: '🌟', gold: 2500000, count: 5, minTier: 10, maxTier: 14, jackpot: 0.09, guaranteeUnique: true, eclats: 4000, noyau: 10, poussiere: 12, fragments: 2, costFragments: 6, desc: 'Ascendant → Abyssal, 1 unique garanti. Exige des Fragments.' },
+  { id: 9, name: 'Coffre du Néant', icon: '🕳️', gold: 10000000, count: 6, minTier: 12, maxTier: 16, jackpot: 0.13, guaranteeUnique: true, eclats: 10000, noyau: 25, poussiere: 35, fragments: 8, costFragments: 18, costCosmic: 3, desc: 'Le pari ultime : exige Fragments ✨ ET Éclats cosmiques 💫 (donc des raids).' },
 ]
 
 /** Prix d'achat d'un objet en échoppe (croît FORTEMENT avec la rareté → vrai puits d'or). */
@@ -570,8 +588,9 @@ function grantXp(char: Character, xp: number): Character {
     base[char.primaryBias] = (base[char.primaryBias] ?? 0) + 2
     base.endurance = (base.endurance ?? 0) + 1
   }
-  const gained = level - char.level
-  return { ...char, level, xp: curXp, base, talentPoints: char.talentPoints + gained }
+  // Points de talent : seulement au-delà de TALENT_START_LEVEL (l'arbre se débloque plus tard).
+  const gainedPoints = talentPointsForLevel(level) - talentPointsForLevel(char.level)
+  return { ...char, level, xp: curXp, base, talentPoints: char.talentPoints + gainedPoints }
 }
 
 // ---- Combat d'équipe ----
@@ -697,8 +716,12 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
     const t = chars[targetI]
     const td = info[targetI]!
     const effDmg = enemy.damage * (1 + (mods?.enrage ?? 0) * (mods?.fightTime ?? 0)) * (mods?.dmgMult ?? 1)
-    let incoming = incomingDps(effDmg, enemy.damageType, td.derived, td.resist)
-      * (1 - td.passives.damageReduction) * (1 - td.derived.masteryDr) * (1 - td.cmods.flatDr) * dt
+    // L'atténuation générique (esquive/réduction/maîtrise/polyvalence + passives/keystones)
+    // est BORNÉE dans incomingDps → on encaisse toujours une part. Les résistances de type restent décisives.
+    let incoming = incomingDps(
+      effDmg, enemy.damageType, td.derived, td.resist,
+      (1 - td.passives.damageReduction) * (1 - td.cmods.flatDr),
+    ) * dt
     if (mods?.reflect) incoming += totalDealt * mods.reflect
     t.hp -= incoming
     // Épines (thorns) : renvoie une fraction des dégâts subis à l'ennemi.
@@ -762,15 +785,18 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
         const targetDmg = Math.random() < 0.5
         items.push(generateItem({ ilvl, luckTier: luck, primaryBias: bias, ...(targetDmg ? { forceDmgType: d.element } : { biasResist: d.element }) }))
       }
+      // Donjons = principale source d'or / éclats / ressources, récompense qui MONTE FORT avec le niveau.
+      const lv = d.level
       const chest: ChestReward = {
         dungeonName: d.name,
-        level: d.level,
+        level: lv,
         items,
-        eclats: Math.round(80 * d.level),
-        noyau: 1 + Math.floor(d.level / 2),
-        gold: noGold ? 0 : Math.round(150 * d.level),
-        sceaux: d.level >= 5 ? 1 : 0,
-        orbes: d.level >= 4 ? 1 : 0,
+        eclats: Math.round(160 * lv * (1 + lv * 0.14)),
+        noyau: 1 + Math.floor(lv / 2),
+        gold: noGold ? 0 : Math.round(260 * lv * (1 + lv * 0.2)),
+        sceaux: lv >= 5 ? 1 : 0,
+        orbes: lv >= 4 ? 1 : 0,
+        poussiere: lv >= 6 ? Math.floor(lv / 4) : 0,
       }
       log = pushLog(log, `🎉 ${d.name} vaincu ! Un coffre t'attend.`, 'kill')
       const healed = chars.map((c) => ({ ...c, hp: charMaxHp(c) }))
@@ -811,7 +837,8 @@ function applyAoe(chars: Character[], baseDmg: number, type: DamageType): Charac
     const p = charPassives(c)
     const cm = charCombatMods(c)
     const resist = charResist(c)[type] ?? 0
-    const dmg = (baseDmg * (1 - resist) / d.versatilityMult) * (1 - p.damageReduction) * (1 - d.masteryDr) * (1 - cm.flatDr) * (1 - d.dodge)
+    // Même plafond d'atténuation que les coups normaux (pas d'invincibilité face aux Novas).
+    const dmg = baseDmg * (1 - resist) * genericMitigation(d, (1 - p.damageReduction) * (1 - cm.flatDr))
     return { ...c, hp: Math.max(0, c.hp - dmg) }
   })
 }
@@ -991,10 +1018,11 @@ export const useGame = create<GameState>((set, get) => {
       }
 
       if (enemy.hp <= 0) {
-        let { stage, bestStage, gold, noyau, sceaux, inventory, orbes, poussiere } = s
+        let { stage, bestStage, gold, noyau, sceaux, inventory, orbes, poussiere, essence } = s
         const boss = isBossStage(stage)
         const eco = computeGlobalMods(s.upgrades)
-        const goldGain = Math.round(enemy.xp * 0.5 * eco.goldGain)
+        // Le combat CLASSIQUE n'est plus qu'un filet d'or/butin : la vraie source = donjons & raids.
+        const goldGain = Math.round(enemy.xp * 0.12 * eco.goldGain)
         const xpGain = Math.round(enemy.xp * eco.xpGain)
         gold += goldGain
 
@@ -1024,16 +1052,26 @@ export const useGame = create<GameState>((set, get) => {
 
         const elite = enemy.elite === true
         if (elite) { noyau += 1; log = pushLog(log, '◆ Élite vaincue : butin supérieur !', 'kill') }
-        const drops = (boss ? 3 : Math.random() < 0.55 + eco.lootChance ? 1 : 0) + (elite ? 2 : 0)
+        // Moins d'objets en combat classique (le farm de stuff se fait en donjon/raid).
+        const drops = (boss ? 2 : Math.random() < 0.30 + eco.lootChance ? 1 : 0) + (elite ? 1 : 0)
         const bias = pickBias(chars)
         const luck = stageLuckTier(stage) + (boss ? 1 : 0) + (elite ? 3 : 0) + Math.floor(eco.rarityLuck)
         let codex = s.codex
+        let autoRec = 0
         for (let dd = 0; dd < drops; dd++) {
           const it = generateItem({ ilvl: stageIlvl(stage), luckTier: luck, primaryBias: bias })
+          // Recyclage automatique : tout butin commun sous le seuil part directement en éclats (on garde les uniques).
+          if (s.autoRecycle && !it.unique && RARITIES[it.rarity].tier < s.recycleThreshold) {
+            essence += Math.round(recycleValue(it) * eco.eclatGain)
+            poussiere += recyclePoussiere(it)
+            autoRec++
+            continue
+          }
           inventory = [it, ...inventory].slice(0, invMax)
           if (it.unique) codex = discoverFromItems(codex, [it])
           log = pushLog(log, `Butin : ${it.name}`, 'loot')
         }
+        if (autoRec) log = pushLog(log, `♻️ ${autoRec} butin recyclé automatiquement.`, 'craft')
 
         // Le verrou de farm fige la progression au palier courant.
         let characters = chars
@@ -1061,7 +1099,7 @@ export const useGame = create<GameState>((set, get) => {
         const enemyNext = makeEnemy(stage)
         if (isBossStage(stage)) log = pushLog(log, `⚔ Un boss vous barre la route : ${enemyNext.name} !`, 'info')
 
-        const next = { ...s, characters, stage, bestStage, gold, noyau, sceaux, orbes, poussiere, codex, shopStock, inventory, enemy: enemyNext, log, killCount: s.killCount + 1 }
+        const next = { ...s, characters, stage, bestStage, gold, noyau, sceaux, orbes, poussiere, essence, codex, shopStock, inventory, enemy: enemyNext, log, killCount: s.killCount + 1 }
         persist(next)
         set(next)
         return
@@ -1082,6 +1120,20 @@ export const useGame = create<GameState>((set, get) => {
     toggleFarmLock: () => {
       const s = get()
       const next = { ...s, farmLock: !s.farmLock }
+      persist(next)
+      set(next)
+    },
+
+    setRecycleThreshold: (tier) => {
+      const s = get()
+      const next = { ...s, recycleThreshold: Math.max(2, Math.min(16, Math.round(tier))) }
+      persist(next)
+      set(next)
+    },
+
+    toggleAutoRecycle: () => {
+      const s = get()
+      const next = { ...s, autoRecycle: !s.autoRecycle, log: pushLog(s.log, `Recyclage auto ${s.autoRecycle ? 'désactivé' : 'activé'} (sous ${RARITIES[RARITY_LIST.find((r) => r.tier === s.recycleThreshold)?.id ?? 'rare'].name}).`, 'info') }
       persist(next)
       set(next)
     },
@@ -1554,12 +1606,13 @@ export const useGame = create<GameState>((set, get) => {
       if (isMaxed(def, level)) return
       const cost = accountUpgradeCost(def, level)
       const pous = upgradePoussiere(def, level)
-      if (s.gold < cost || s.poussiere < pous) return
+      const ecl = upgradeEclats(def, level)
+      if (s.gold < cost || s.poussiere < pous || s.essence < ecl) return
       const upgrades = { ...s.upgrades, [id]: level + 1 }
       let characters = s.characters
       if (id === 'talentBonus') characters = characters.map((c) => ({ ...c, talentPoints: c.talentPoints + 1 }))
       refreshGlobals(upgrades)
-      const next = { ...s, gold: s.gold - cost, poussiere: s.poussiere - pous, upgrades, characters, log: pushLog(s.log, `Amélioration : ${def.name} niv. ${level + 1} (-${cost} or${pous ? `, -${pous} 🌌` : ''}).`, 'gold') }
+      const next = { ...s, gold: s.gold - cost, poussiere: s.poussiere - pous, essence: s.essence - ecl, upgrades, characters, log: pushLog(s.log, `Amélioration : ${def.name} niv. ${level + 1} (-${cost.toLocaleString('fr-FR')} or${ecl ? `, -${ecl} ♦` : ''}${pous ? `, -${pous} 🌌` : ''}).`, 'gold') }
       persist(next)
       set(next)
     },
@@ -1592,25 +1645,29 @@ export const useGame = create<GameState>((set, get) => {
       set(next)
     },
 
-    buyEclats: () => {
+    buyEclats: (qty = 1) => {
       const s = get()
-      const c = EXCHANGE_RATES.eclatGoldCost
+      const n = Math.max(1, Math.floor(qty))
+      const c = EXCHANGE_RATES.eclatGoldCost * n
       if (s.gold < c) return
-      const next = { ...s, gold: s.gold - c, essence: s.essence + EXCHANGE_RATES.eclatsBatch, log: pushLog(s.log, `Acheté ${EXCHANGE_RATES.eclatsBatch} éclats (-${c} or).`, 'gold') }
+      const next = { ...s, gold: s.gold - c, essence: s.essence + EXCHANGE_RATES.eclatsBatch * n, log: pushLog(s.log, `Acheté ${EXCHANGE_RATES.eclatsBatch * n} éclats (-${c.toLocaleString('fr-FR')} or).`, 'gold') }
       persist(next)
       set(next)
     },
 
-    buyResource: (kind) => {
+    buyResource: (kind, qty = 1) => {
       const s = get()
+      const n = Math.max(1, Math.floor(qty))
       if (kind === 'sceau') {
-        if (s.gold < EXCHANGE_RATES.sceauGold) return
-        const next = { ...s, gold: s.gold - EXCHANGE_RATES.sceauGold, sceaux: s.sceaux + 1, log: pushLog(s.log, `Sceau de faille acheté (-${EXCHANGE_RATES.sceauGold} or).`, 'gold') }
+        const c = EXCHANGE_RATES.sceauGold * n
+        if (s.gold < c) return
+        const next = { ...s, gold: s.gold - c, sceaux: s.sceaux + n, log: pushLog(s.log, `Sceau de faille ×${n} acheté (-${c.toLocaleString('fr-FR')} or).`, 'gold') }
         persist(next)
         set(next)
       } else {
-        if (s.gold < EXCHANGE_RATES.orbeGold) return
-        const next = { ...s, gold: s.gold - EXCHANGE_RATES.orbeGold, orbes: s.orbes + 1, log: pushLog(s.log, `Orbe de raid achetée (-${EXCHANGE_RATES.orbeGold} or).`, 'gold') }
+        const c = EXCHANGE_RATES.orbeGold * n
+        if (s.gold < c) return
+        const next = { ...s, gold: s.gold - c, orbes: s.orbes + n, log: pushLog(s.log, `Orbe de raid ×${n} achetée (-${c.toLocaleString('fr-FR')} or).`, 'gold') }
         persist(next)
         set(next)
       }
@@ -1620,6 +1677,8 @@ export const useGame = create<GameState>((set, get) => {
       const s = get()
       const box = MYSTERY_BOXES[tier]
       if (!box || s.gold < box.gold || s.pendingChest) return
+      // Les coffres d'élite exigent en plus des ressources de raid (pas d'or seul).
+      if (s.fragments < (box.costFragments ?? 0) || s.cosmic < (box.costCosmic ?? 0)) return
       const ilvl = Math.max(1, stageIlvl(s.bestStage))
       const items: Item[] = []
       for (let i = 0; i < box.count; i++) {
@@ -1639,7 +1698,15 @@ export const useGame = create<GameState>((set, get) => {
         dungeonName: box.name, level: 0, items, gold: 0, sceaux: 0,
         eclats: box.eclats ?? 0, noyau: box.noyau ?? 0, poussiere: box.poussiere ?? 0, fragments: box.fragments ?? 0,
       }
-      const next = { ...s, gold: s.gold - box.gold, pendingChest: chest, log: pushLog(s.log, `${box.name} acheté (-${box.gold.toLocaleString('fr-FR')} or) !`, 'gold') }
+      const extraCost = `${box.costFragments ? ` -${box.costFragments} ✨` : ''}${box.costCosmic ? ` -${box.costCosmic} 💫` : ''}`
+      const next = {
+        ...s,
+        gold: s.gold - box.gold,
+        fragments: s.fragments - (box.costFragments ?? 0),
+        cosmic: s.cosmic - (box.costCosmic ?? 0),
+        pendingChest: chest,
+        log: pushLog(s.log, `${box.name} acheté (-${box.gold.toLocaleString('fr-FR')} or${extraCost}) !`, 'gold'),
+      }
       persist(next)
       set(next)
     },

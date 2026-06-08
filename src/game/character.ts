@@ -8,6 +8,18 @@ import {
 
 export const STARTING_BASE: StatBlock = { force: 5, agilite: 5, intelligence: 5, endurance: 10 }
 
+/**
+ * Niveau à partir duquel un personnage commence à gagner des points de talent.
+ * Les 10 premiers niveaux servent à se familiariser avec le combat/le stuff
+ * (l'arbre de talents reste caché tant qu'aucun point n'est disponible).
+ */
+export const TALENT_START_LEVEL = 10
+
+/** Points de talent accumulés à un niveau donné (1 par niveau au-delà de TALENT_START_LEVEL). */
+export function talentPointsForLevel(level: number): number {
+  return Math.max(0, level - TALENT_START_LEVEL)
+}
+
 let charSeq = 1
 
 /** Crée un personnage à un niveau donné (stats de base simulées pour ce niveau). */
@@ -31,7 +43,7 @@ export function makeCharacter(name: string, level: number, bias: PrimaryStat): C
     equipment: {},
     powers,
     unlockedPowers: unlocked,
-    talentPoints: Math.max(0, level - 1),
+    talentPoints: talentPointsForLevel(level),
     talents,
     primaryBias: bias,
     hp: 0,
