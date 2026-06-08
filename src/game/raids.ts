@@ -319,6 +319,11 @@ export function makeRaidBoss(def: RaidDef, tier: number, bossIndex: number, elem
     resist,
     damageType: element,
     elite: true,
+    // Boss de raid : esquive marquée (→ Précision) + étourdissement régulier (→ Ténacité).
+    boss: true,
+    dodge: 0.2,
+    ccDur: 2,
+    ccCd: 6,
   }
 }
 

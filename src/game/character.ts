@@ -25,7 +25,9 @@ let charSeq = 1
 /** Crée un personnage à un niveau donné (stats de base simulées pour ce niveau). */
 export function makeCharacter(name: string, level: number, bias: PrimaryStat): Character {
   const base: StatBlock = { ...STARTING_BASE }
-  base[bias] = (base[bias] ?? 0) + 2 * (level - 1)
+  // Gain par niveau VOLONTAIREMENT faible : la puissance vient du STUFF, pas du niveau seul
+  // (on doit s'équiper soigneusement pour passer les paliers).
+  base[bias] = (base[bias] ?? 0) + 1 * (level - 1)
   base.endurance = (base.endurance ?? 0) + 1 * (level - 1)
 
   // Le nœud racine « Éveil » est alloué d'office (débloque Frappe + stats de départ).

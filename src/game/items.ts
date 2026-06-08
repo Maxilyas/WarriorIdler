@@ -48,8 +48,9 @@ type LineSpec =
  */
 const STAT_WEIGHTS: Record<SecondaryStat, number> = {
   critique: 10, degatsCrit: 9, hate: 10, maitrise: 9, penetration: 7,
-  reductionDegats: 8, esquive: 7, bouclier: 7,
-  polyvalence: 0, regen: 6,
+  precision: 7, alteration: 6, degatsBoss: 6,
+  reductionDegats: 8, esquive: 7, barriere: 7, tenacite: 5,
+  regen: 6,
   volDeVie: 0.6, surpuissance: 0.3, multifrappe: 0.3, recuperation: 0.3,
 }
 

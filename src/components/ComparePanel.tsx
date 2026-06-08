@@ -499,9 +499,9 @@ function EquippedSummary({ item }: { item: Item }) {
 function orderedKeys(a: Record<string, number>, b: Record<string, number>): StatKey[] {
   const order: StatKey[] = [
     'force', 'agilite', 'intelligence', 'endurance',
-    'critique', 'degatsCrit', 'hate', 'maitrise', 'penetration',
-    'reductionDegats', 'esquive', 'bouclier',
-    'polyvalence', 'regen',
+    'critique', 'degatsCrit', 'hate', 'maitrise', 'penetration', 'precision', 'alteration', 'degatsBoss',
+    'reductionDegats', 'esquive', 'barriere', 'tenacite',
+    'regen',
     'volDeVie', 'surpuissance', 'multifrappe', 'recuperation',
   ]
   const present = new Set([...Object.keys(a), ...Object.keys(b)])

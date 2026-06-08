@@ -72,6 +72,7 @@ export function CombatPanel() {
               <div className="flex items-center justify-between text-[11px]">
                 <span className={'font-semibold ' + (dead ? 'text-red-500/70 line-through' : 'text-slate-100')}>
                   🛡 {c.name} <span className="text-slate-500">N{c.level}</span>
+                  {(c.stun ?? 0) > 0 && <span className="ml-1 rounded bg-yellow-500/20 px-1 text-[9px] text-yellow-300" title="Étourdi : n'attaque pas">💫 étourdi</span>}
                 </span>
                 <span className="text-slate-400">{Math.ceil(Math.max(0, c.hp)).toLocaleString('fr-FR')} / {Math.round(mh).toLocaleString('fr-FR')}</span>
               </div>

@@ -23,31 +23,34 @@ export const PRIMARY_META: Record<PrimaryStat, StatMeta> = {
 export const SECONDARY_META: Record<SecondaryStat, StatMeta> = {
   // Offensif
   critique: { key: 'critique', name: 'Critique', short: 'CRIT', color: '#ffa94d', desc: 'Chance d\'infliger un coup critique.' },
-  degatsCrit: { key: 'degatsCrit', name: 'Dégâts critiques', short: 'DCRI', color: '#ff922b', desc: 'Augmente les dégâts des coups critiques.' },
+  degatsCrit: { key: 'degatsCrit', name: 'Dégâts critiques', short: 'DCRI', color: '#ff922b', desc: 'Augmente les dégâts des coups critiques (inutile sans Critique).' },
   hate: { key: 'hate', name: 'Hâte', short: 'HÂTE', color: '#22d3ee', desc: 'Augmente la vitesse d\'attaque et d\'incantation.' },
-  maitrise: { key: 'maitrise', name: 'Maîtrise', short: 'MAÎT', color: '#c084fc', desc: 'Augmente les dégâts selon ta spécialisation (FOR/AGI/INT).' },
-  penetration: { key: 'penetration', name: 'Pénétration', short: 'PÉN', color: '#fab005', desc: 'Ignore une partie des résistances et de l\'armure ennemies.' },
+  maitrise: { key: 'maitrise', name: 'Maîtrise', short: 'MAÎT', color: '#c084fc', desc: 'Effet propre à ton archétype : Force = réduction (bruiser), Agilité = dégâts crit., Intelligence = dégâts bruts.' },
+  penetration: { key: 'penetration', name: 'Pénétration', short: 'PÉN', color: '#fab005', desc: 'Ignore une partie des résistances et de l\'armure ennemies (anti-tank).' },
+  precision: { key: 'precision', name: 'Précision', short: 'PRÉC', color: '#fcc419', desc: 'Annule l\'esquive des ennemis : indispensable contre les boss fuyants.' },
+  alteration: { key: 'alteration', name: 'Altération', short: 'ALT', color: '#e8590c', desc: 'Amplifie tes dégâts sur la durée (saignement, poison, feu). Cœur des builds DoT.' },
+  degatsBoss: { key: 'degatsBoss', name: 'Dégâts aux boss', short: 'BOSS', color: '#f03e3e', desc: 'Augmente les dégâts infligés aux boss et aux élites (farm de donjons/raids).' },
   // Défensif
-  reductionDegats: { key: 'reductionDegats', name: 'Réduction de dégâts', short: 'RÉD', color: '#74c0fc', desc: 'Réduction plate des dégâts subis.' },
-  esquive: { key: 'esquive', name: 'Esquive', short: 'ESQ', color: '#63e6be', desc: 'Chance d\'éviter complètement un coup ennemi.' },
-  bouclier: { key: 'bouclier', name: 'Bouclier', short: 'BOUC', color: '#4dabf7', desc: 'Bouclier d\'absorption : augmente tes PV effectifs.' },
+  reductionDegats: { key: 'reductionDegats', name: 'Réduction de dégâts', short: 'RÉD', color: '#74c0fc', desc: 'Réduction plate des dégâts subis (efficace contre les petits coups rapides).' },
+  esquive: { key: 'esquive', name: 'Esquive', short: 'ESQ', color: '#63e6be', desc: 'Chance d\'éviter complètement un coup ennemi (tout ou rien).' },
+  barriere: { key: 'barriere', name: 'Barrière', short: 'BARR', color: '#4dabf7', desc: 'Bouclier de départ : augmente tes PV effectifs. Excellent contre le burst.' },
+  tenacite: { key: 'tenacite', name: 'Ténacité', short: 'TÉN', color: '#a9e34b', desc: 'Réduit la durée des étourdissements et contrôles infligés par les boss.' },
   // Soutien
-  polyvalence: { key: 'polyvalence', name: 'Polyvalence', short: 'POLY', color: '#94d82d', desc: 'Augmente les dégâts et réduit les dégâts subis.' },
-  regen: { key: 'regen', name: 'Régénération', short: 'RÉG', color: '#51cf66', desc: 'Augmente la régénération des points de vie.' },
+  regen: { key: 'regen', name: 'Régénération', short: 'RÉG', color: '#51cf66', desc: 'Augmente la régénération des points de vie (combats longs).' },
   // RARES (apparition très faible, effets puissants)
-  volDeVie: { key: 'volDeVie', name: 'Vol de vie', short: 'VOL', color: '#f06595', desc: 'Soigne en infligeant des dégâts. Survie constante : très rare.', rare: true },
-  surpuissance: { key: 'surpuissance', name: 'Surpuissance', short: 'SURP', color: '#ff4d4d', desc: 'Augmente tous tes dégâts (multiplicatif). Extrêmement rare.', rare: true },
+  volDeVie: { key: 'volDeVie', name: 'Vol de vie', short: 'VOL', color: '#f06595', desc: 'Soigne en infligeant des dégâts. La stat des builds solo (DPS sans soigneur). Très rare.', rare: true },
+  surpuissance: { key: 'surpuissance', name: 'Surpuissance', short: 'SURP', color: '#ff4d4d', desc: 'Augmente TOUS tes dégâts (multiplicatif, universel). Extrêmement rare.', rare: true },
   multifrappe: { key: 'multifrappe', name: 'Multifrappe', short: 'MULT', color: '#ffd43b', desc: 'Chance de frapper une seconde fois. Extrêmement rare.', rare: true },
-  recuperation: { key: 'recuperation', name: 'Récupération', short: 'RÉCU', color: '#3bc9db', desc: 'Réduit le temps de recharge des capacités. Extrêmement rare.', rare: true },
+  recuperation: { key: 'recuperation', name: 'Récupération', short: 'RÉCU', color: '#3bc9db', desc: 'Réduit le temps de recharge des capacités (spam de compétences). Extrêmement rare.', rare: true },
 }
 
 export const ALL_STAT_META: Record<StatKey, StatMeta> = { ...PRIMARY_META, ...SECONDARY_META }
 
 export const PRIMARY_STATS: PrimaryStat[] = ['force', 'agilite', 'intelligence', 'endurance']
 export const SECONDARY_STATS: SecondaryStat[] = [
-  'critique', 'degatsCrit', 'hate', 'maitrise', 'penetration',
-  'reductionDegats', 'esquive', 'bouclier',
-  'polyvalence', 'regen',
+  'critique', 'degatsCrit', 'hate', 'maitrise', 'penetration', 'precision', 'alteration', 'degatsBoss',
+  'reductionDegats', 'esquive', 'barriere', 'tenacite',
+  'regen',
   'volDeVie', 'surpuissance', 'multifrappe', 'recuperation',
 ]
 
@@ -96,12 +99,15 @@ export interface DerivedStats {
   /** Multiplicateur des coups critiques (≥2). */
   critMult: number
   attacksPerSecond: number
-  masteryMult: number // multiplicateur de dégâts
-  versatilityMult: number
+  masteryMult: number // multiplicateur de dégâts (Maîtrise, selon l'archétype)
   /** Réduction de dégâts plate issue de la Maîtrise (build Force = bruiser). */
   masteryDr: number // 0..1
   leech: number // 0..1
   penetration: number // 0..1 (ignore résist/armure)
+  precision: number // 0..1 (annule l'esquive ennemie)
+  alterationMult: number // ≥1 multiplicateur des dégâts sur la durée (DoT)
+  bossDamageMult: number // ≥1 multiplicateur de dégâts contre les boss/élites
+  tenacity: number // 0..1 réduction de la durée des contrôles ennemis
   flatDr: number // 0..1 réduction plate supplémentaire
   dodge: number // 0..1 chance d'esquive
   regenBonus: number // ajouté au taux de régén PV
@@ -139,24 +145,25 @@ export function computeDerived(total: StatBlock): DerivedStats {
   offensive.sort((a, b) => b[1] - a[1])
   const [mainStat, mainValue] = offensive[0]
 
-  // Maîtrise SPÉCIFIQUE À L'ARCHÉTYPE (donne une identité à chaque build) :
-  // - Force        → dégâts + réduction de dégâts subis (bruiser)
-  // - Agilité      → dégâts critiques accrus (burst)
-  // - Intelligence → dégâts bruts accrus (glass cannon)
+  // Maîtrise SPÉCIFIQUE À L'ARCHÉTYPE — distincte de la Surpuissance (qui, elle, est un mult brut
+  // universel). La Maîtrise ne donne quasiment pas de dégâts bruts sauf pour l'Intelligence :
+  // - Force        → RÉDUCTION de dégâts (bruiser tanky) + un peu de dégâts
+  // - Agilité      → DÉGÂTS CRITIQUES accrus (burst, rien sans Critique)
+  // - Intelligence → DÉGÂTS BRUTS (le seul archétype « glass cannon » qui scale en dégâts purs)
   const masteryFrac = (total.maitrise ?? 0) / PER_PCT
   let masteryMult = 1
   let critMult = 2 + (total.degatsCrit ?? 0) / PER_PCT
   let masteryDr = 0
   if (mainStat === 'force') {
-    masteryMult = 1 + masteryFrac
-    masteryDr = Math.min(0.4, masteryFrac * 0.6)
+    masteryMult = 1 + masteryFrac * 0.5
+    masteryDr = Math.min(0.5, masteryFrac * 0.85)
   } else if (mainStat === 'agilite') {
-    critMult += masteryFrac * 2.5
+    critMult += masteryFrac * 3
   } else {
-    masteryMult = 1 + masteryFrac * 2
+    masteryMult = 1 + masteryFrac * 1.8
   }
 
-  const shieldPct = Math.min(1, (total.bouclier ?? 0) / PER_PCT)
+  const shieldPct = Math.min(1, (total.barriere ?? 0) / PER_PCT)
 
   return {
     mainStat,
@@ -169,10 +176,13 @@ export function computeDerived(total: StatBlock): DerivedStats {
     critMult,
     attacksPerSecond: 1 + (total.hate ?? 0) / PER_PCT,
     masteryMult,
-    versatilityMult: 1 + (total.polyvalence ?? 0) / PER_PCT,
     masteryDr,
     leech: Math.min(0.5, (total.volDeVie ?? 0) / 2500),
     penetration: Math.min(0.6, (total.penetration ?? 0) / PER_PCT),
+    precision: Math.min(0.95, (total.precision ?? 0) / PER_PCT),
+    alterationMult: 1 + Math.min(3, (total.alteration ?? 0) / PER_PCT),
+    bossDamageMult: 1 + Math.min(2.5, (total.degatsBoss ?? 0) / PER_PCT),
+    tenacity: Math.min(0.85, (total.tenacite ?? 0) / PER_PCT),
     flatDr: Math.min(0.5, (total.reductionDegats ?? 0) / PER_PCT),
     dodge: Math.min(0.4, (total.esquive ?? 0) / PER_PCT),
     regenBonus: (total.regen ?? 0) / PER_PCT,
@@ -226,12 +236,15 @@ export function describeStats(total: StatBlock): { primary: StatEffect[]; second
       case 'critique': effect = `${pct(d.critChance)} de coups critiques`; break
       case 'degatsCrit': effect = `coups critiques ×${d.critMult.toFixed(2)}`; break
       case 'hate': effect = `+${pct(d.attacksPerSecond - 1)} vitesse · ${d.attacksPerSecond.toFixed(2)} att/s`; break
-      case 'maitrise': effect = `+${pct(d.masteryMult - 1)} de dégâts${d.masteryDr > 0 ? ` · -${pct(d.masteryDr)} subis` : ''}`; break
+      case 'maitrise': effect = d.mainStat === 'agilite' ? `coups critiques ×${d.critMult.toFixed(2)} (archétype)` : `+${pct(d.masteryMult - 1)} de dégâts${d.masteryDr > 0 ? ` · -${pct(d.masteryDr)} subis` : ''}`; break
       case 'penetration': effect = `ignore ${pct(d.penetration)} des résistances/armure`; break
+      case 'precision': effect = `annule ${pct(d.precision)} de l'esquive ennemie`; break
+      case 'alteration': effect = `+${pct(d.alterationMult - 1)} de dégâts sur la durée`; break
+      case 'degatsBoss': effect = `+${pct(d.bossDamageMult - 1)} de dégâts aux boss/élites`; break
       case 'reductionDegats': effect = `-${pct(d.flatDr)} de dégâts subis`; break
       case 'esquive': effect = `${pct(d.dodge)} d'esquive`; break
-      case 'bouclier': effect = `+${Math.round((1 + Math.min(1, rating / PER_PCT)) * 100 - 100)}% PV effectifs`; break
-      case 'polyvalence': effect = `+${pct(d.versatilityMult - 1)} dégâts · -${pct(1 - 1 / d.versatilityMult)} subis`; break
+      case 'barriere': effect = `+${Math.round((1 + Math.min(1, rating / PER_PCT)) * 100 - 100)}% PV effectifs`; break
+      case 'tenacite': effect = `-${pct(d.tenacity)} de durée des contrôles`; break
       case 'regen': effect = `+${pct(d.regenBonus)} de régénération`; break
       case 'volDeVie': effect = `${pct(d.leech)} des dégâts rendus en vie`; break
       case 'surpuissance': effect = `+${pct(d.overpower - 1)} de dégâts globaux`; break

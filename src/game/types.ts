@@ -13,14 +13,17 @@ export type SecondaryStat =
   | 'critique' // chance de coup critique
   | 'degatsCrit' // multiplicateur des coups critiques
   | 'hate' // vitesse d'attaque / d'incantation
-  | 'maitrise' // dégâts selon l'archétype
+  | 'maitrise' // effet d'archétype (Force=bruiser, Agi=crit, Int=glass cannon) — distinct par build
   | 'penetration' // ignore une partie des résistances/armure ennemies
+  | 'precision' // annule l'esquive ennemie (touché garanti contre les boss fuyants)
+  | 'alteration' // amplifie les dégâts sur la durée (saignement/poison/feu)
+  | 'degatsBoss' // +% de dégâts contre les boss & élites (farm de donjons/raids)
   // --- Défensif ---
   | 'reductionDegats' // réduction plate des dégâts subis
   | 'esquive' // chance d'éviter complètement un coup
-  | 'bouclier' // bouclier d'absorption (PV effectifs en plus)
+  | 'barriere' // bouclier de départ : PV effectifs en plus (anti-burst)
+  | 'tenacite' // réduit la durée des étourdissements/contrôles ennemis
   // --- Soutien ---
-  | 'polyvalence' // dégâts + réduction des dégâts subis
   | 'regen' // régénération des PV
   // --- RARES (apparition très faible, effets puissants) ---
   | 'volDeVie' // soigne en infligeant des dégâts
@@ -245,6 +248,8 @@ export interface Character {
   primaryBias: PrimaryStat
   /** PV courants (les PV max sont dérivés du stuff). */
   hp: number
+  /** Étourdissement restant (s) — transitoire, posé par les contrôles ennemis ; n'attaque pas tant que > 0. */
+  stun?: number
 }
 
 // ---- Combat / ennemis ----
@@ -270,4 +275,12 @@ export interface Enemy {
   lifetime?: number
   /** Renfort secondaire (pas le boss / pas la cible d'objectif). */
   add?: boolean
+  /** Boss : reçoit les bonus « Dégâts vs Boss » et peut étourdir. */
+  boss?: boolean
+  /** Chance d'ESQUIVE de l'ennemi (0..1) — annulée par la Précision du héros. */
+  dodge?: number
+  /** Étourdissement : durée (s) du contrôle infligé périodiquement (boss/élites). */
+  ccDur?: number
+  /** Minuteur de recharge du contrôle (transitoire, décrémenté au tick). */
+  ccCd?: number
 }

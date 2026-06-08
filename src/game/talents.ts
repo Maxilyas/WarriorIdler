@@ -13,6 +13,7 @@ import type { StatBlock, DamageType, OffensiveStat } from './types'
 export type ConstellationId =
   | 'coeur' | 'force' | 'agilite' | 'intelligence' | 'bastion' | 'soin' | 'conversion'
   | 'templier' | 'elementaliste' | 'faucheur' | 'duelliste' | 'colosse'
+  | 'pestifere' | 'bourreau' | 'spectre' | 'briseur'
 
 export interface ConstellationMeta {
   id: ConstellationId
@@ -37,11 +38,16 @@ export const CONSTELLATIONS: Record<ConstellationId, ConstellationMeta> = {
   faucheur: { id: 'faucheur', name: 'Faucheur', role: 'Ombre · DoT · Drain', color: '#9775fa', icon: '☠', archetype: true },
   duelliste: { id: 'duelliste', name: 'Duelliste', role: 'Multifrappe · Burst', color: '#ffa94d', icon: '🗡', archetype: true },
   colosse: { id: 'colosse', name: 'Colosse', role: 'Juggernaut', color: '#a9b4c2', icon: '🗿', archetype: true },
+  pestifere: { id: 'pestifere', name: 'Pestiféré', role: 'Peste · DoT · Altération', color: '#74b816', icon: '🦠', archetype: true },
+  bourreau: { id: 'bourreau', name: 'Bourreau', role: 'Anti-boss · Exécution', color: '#c92a2a', icon: '🪓', archetype: true },
+  spectre: { id: 'spectre', name: 'Spectre', role: 'Évasion · Précision · Anti-contrôle', color: '#b197fc', icon: '👻', archetype: true },
+  briseur: { id: 'briseur', name: 'Briseur', role: 'Multi-cible · Inarrêtable', color: '#e8590c', icon: '🌋', archetype: true },
 }
 
 export const CONSTELLATION_LIST: ConstellationId[] = [
   'coeur', 'force', 'agilite', 'intelligence', 'bastion', 'soin', 'conversion',
   'templier', 'elementaliste', 'faucheur', 'duelliste', 'colosse',
+  'pestifere', 'bourreau', 'spectre', 'briseur',
 ]
 
 /** Effet fort d'un keystone, résolu par le moteur de combat (extensible). */
@@ -103,7 +109,8 @@ export const TALENTS: TalentNode[] = []
 const STAT_FR: Record<string, string> = {
   force: 'Force', agilite: 'Agilité', intelligence: 'Intelligence', endurance: 'Endurance',
   critique: 'Critique', degatsCrit: 'Dégâts crit.', hate: 'Hâte', maitrise: 'Maîtrise', penetration: 'Pénétration',
-  reductionDegats: 'Réduction', esquive: 'Esquive', bouclier: 'Bouclier', polyvalence: 'Polyvalence', regen: 'Régén',
+  precision: 'Précision', alteration: 'Altération', degatsBoss: 'Dégâts boss',
+  reductionDegats: 'Réduction', esquive: 'Esquive', barriere: 'Barrière', tenacite: 'Ténacité', regen: 'Régén',
   volDeVie: 'Vol de vie', surpuissance: 'Surpuissance', multifrappe: 'Multifrappe', recuperation: 'Récupération',
 }
 function sd(mods: StatBlock): string {
@@ -153,7 +160,7 @@ single({ id: 'co_start', name: 'Éveil', constellation: 'coeur', kind: 'ability'
   statMods: { force: 10, agilite: 10, intelligence: 10, endurance: 20 }, unlockPower: 'frappe_simple' })
 single({ id: 'co_vit', name: 'Vitalité', constellation: 'coeur', kind: 'minor', tier: 1, maxRank: 5, requires: ['co_start'], description: '+25 Endurance par rang.', statMods: { endurance: 25 } })
 single({ id: 'co_pow', name: 'Aguerri', constellation: 'coeur', kind: 'minor', tier: 1, maxRank: 5, requires: ['co_start'], description: '+8 à chaque stat offensive par rang.', statMods: { force: 8, agilite: 8, intelligence: 8 } })
-single({ id: 'co_vers', name: 'Adaptabilité', constellation: 'coeur', kind: 'minor', tier: 2, maxRank: 4, requires: ['co_vit', 'co_pow'], description: '+25 Polyvalence par rang.', statMods: { polyvalence: 25 } })
+single({ id: 'co_vers', name: 'Adaptabilité', constellation: 'coeur', kind: 'minor', tier: 2, maxRank: 4, requires: ['co_vit', 'co_pow'], description: '+25 Polyvalence par rang.', statMods: { maitrise: 25 } })
 single({ id: 'co_res', name: 'Endurci', constellation: 'coeur', kind: 'notable', tier: 2, maxRank: 3, requires: ['co_vit'], description: '+5% de résistance à tous les types par rang.', resistMods: allResist(0.05) })
 // Passerelles vers les 6 spécialisations.
 const coreGw: [string, string, StatBlock][] = [
@@ -162,7 +169,7 @@ const coreGw: [string, string, StatBlock][] = [
   ['co_gw_int', '→ Arcaniste', { intelligence: 15 }],
   ['co_gw_bas', '→ Bastion', { endurance: 40 }],
   ['co_gw_soin', '→ Oracle', { regen: 20, intelligence: 10 }],
-  ['co_gw_conv', '→ Métamorphe', { polyvalence: 20 }],
+  ['co_gw_conv', '→ Métamorphe', { maitrise: 20 }],
 ]
 for (const [id, name, mods] of coreGw) single({ id, name, constellation: 'coeur', kind: 'gateway', tier: 3, maxRank: 1, requires: ['co_vers', 'co_pow', 'co_vit'], description: `Ouvre la voie. ${sd(mods)}.`, statMods: mods })
 
@@ -190,7 +197,7 @@ chain('force', 'fo_c', 'fo_entry', 1, [
   { name: 'Vigueur', maxRank: 5, statMods: { force: 16, endurance: 16 } },
   { name: 'Pénétration brute', maxRank: 4, statMods: { penetration: 20 } },
   { name: 'Frappe sismique', kind: 'ability', unlockPower: 'choc_sismique', desc: 'Débloque Choc sismique (cleave puissant).' },
-  { name: 'Indomptable', maxRank: 3, statMods: { force: 28, polyvalence: 20 } },
+  { name: 'Indomptable', maxRank: 3, statMods: { force: 28, maitrise: 20 } },
   { name: 'Titan', kind: 'keystone', desc: 'Capstone : +60 Force/Maîtrise, +15% de dégâts.', statMods: { force: 60, maitrise: 60 }, keystone: { damageMult: 1.15 } },
 ])
 
@@ -256,19 +263,19 @@ chain('bastion', 'ba_a', 'ba_entry', 1, [
   { name: 'Peau de pierre', maxRank: 4, statMods: { reductionDegats: 28 } },
   { name: 'Os d\'acier II', maxRank: 5, statMods: { endurance: 45 } },
   { name: 'Bouclier runique', kind: 'ability', unlockPower: 'bouclier_runique', desc: 'Débloque Bouclier runique (absorption).' },
-  { name: 'Forteresse', kind: 'keystone', desc: '-15% de dégâts subis, +200 Bouclier.', statMods: { bouclier: 200 }, keystone: { flatDr: 0.15 } },
+  { name: 'Forteresse', kind: 'keystone', desc: '-15% de dégâts subis, +200 Bouclier.', statMods: { barriere: 200 }, keystone: { flatDr: 0.15 } },
   { name: 'Volonté', maxRank: 3, statMods: { endurance: 60, reductionDegats: 30 } },
   { name: 'Inébranlable', kind: 'keystone', desc: 'Capstone : +200 Endurance, -20% dégâts subis.', statMods: { endurance: 200, reductionDegats: 50 }, keystone: { flatDr: 0.2 } },
 ])
 chain('bastion', 'ba_b', 'ba_entry', 1, [
   { name: 'Égide I', maxRank: 4, statMods: {}, resistMods: allResist(0.06), desc: '+6% résistance tous types par rang.' },
-  { name: 'Bouclier de pointes', maxRank: 4, statMods: { bouclier: 80, reductionDegats: 14 } },
+  { name: 'Bouclier de pointes', maxRank: 4, statMods: { barriere: 80, reductionDegats: 14 } },
   { name: 'Représailles', kind: 'keystone', desc: 'Renvoie 20% des dégâts subis à l\'ennemi.', keystone: { thorns: 0.2 } },
   { name: 'Égide II', maxRank: 3, statMods: {}, resistMods: allResist(0.08), desc: '+8% résistance tous types par rang.' },
-  { name: 'Mur vivant', kind: 'keystone', desc: '+300 Bouclier, -10% dégâts subis.', statMods: { bouclier: 300 }, keystone: { flatDr: 0.1 } },
+  { name: 'Mur vivant', kind: 'keystone', desc: '+300 Bouclier, -10% dégâts subis.', statMods: { barriere: 300 }, keystone: { flatDr: 0.1 } },
 ])
 chain('bastion', 'ba_c', 'ba_entry', 1, [
-  { name: 'Stoïcisme', maxRank: 5, statMods: { endurance: 30, polyvalence: 14 } },
+  { name: 'Stoïcisme', maxRank: 5, statMods: { endurance: 30, maitrise: 14 } },
   { name: 'Régénération de plaque', maxRank: 4, statMods: { regen: 30, endurance: 20 } },
   { name: 'Sentinelle', maxRank: 3, statMods: { endurance: 50, esquive: 24 } },
 ])
@@ -292,25 +299,25 @@ chain('soin', 'so_b', 'so_entry', 1, [
   { name: 'Sève I', maxRank: 5, statMods: { regen: 24 } },
   { name: 'Transfert vital', kind: 'notable', maxRank: 2, statMods: { volDeVie: 20 }, desc: '+20 Vol de vie par rang (rare !).' },
   { name: 'Imposition des mains', kind: 'ability', unlockPower: 'imposition_des_mains', desc: 'Débloque Imposition des mains (soin de groupe).' },
-  { name: 'Sève II', maxRank: 3, statMods: { regen: 36, polyvalence: 18 } },
+  { name: 'Sève II', maxRank: 3, statMods: { regen: 36, maitrise: 18 } },
   { name: 'Symbiose', kind: 'keystone', desc: '+20 Vol de vie, +40 Régén.', statMods: { volDeVie: 20, regen: 40 } },
 ])
 chain('soin', 'so_c', 'so_entry', 1, [
-  { name: 'Sérénité', maxRank: 5, statMods: { polyvalence: 20, regen: 12 } },
+  { name: 'Sérénité', maxRank: 5, statMods: { maitrise: 20, regen: 12 } },
   { name: 'Lumière protectrice', maxRank: 4, statMods: {}, resistMods: allResist(0.05), desc: '+5% résistance tous types par rang.' },
   { name: 'Grâce', maxRank: 3, statMods: { intelligence: 30, regen: 30 } },
 ])
 
 /* ---------------- MÉTAMORPHE (Conversions) ---------------- */
-single({ id: 'cv_entry', name: 'Symbiose', constellation: 'conversion', kind: 'notable', tier: 0, maxRank: 1, requires: ['co_gw_conv'], description: '+30 à chaque stat offensive, +40 Polyvalence.', statMods: { force: 30, agilite: 30, intelligence: 30, polyvalence: 40 } })
+single({ id: 'cv_entry', name: 'Symbiose', constellation: 'conversion', kind: 'notable', tier: 0, maxRank: 1, requires: ['co_gw_conv'], description: '+30 à chaque stat offensive, +40 Polyvalence.', statMods: { force: 30, agilite: 30, intelligence: 30, maitrise: 40 } })
 chain('conversion', 'cv_a', 'cv_entry', 1, [
-  { name: 'Équilibre', maxRank: 4, statMods: { polyvalence: 24 } },
+  { name: 'Équilibre', maxRank: 4, statMods: { maitrise: 24 } },
   { name: 'Guerre dansante', kind: 'keystone', desc: '60% de ta Force compte aussi comme Agilité.', keystone: { statAsOther: { from: 'force', to: 'agilite', frac: 0.6 } } },
   { name: 'Esprit affûté', kind: 'keystone', desc: '60% de ton Agilité compte aussi comme Intelligence.', keystone: { statAsOther: { from: 'agilite', to: 'intelligence', frac: 0.6 } } },
   { name: 'Magie de guerre', kind: 'keystone', desc: '60% de ton Intelligence compte aussi comme Force.', keystone: { statAsOther: { from: 'intelligence', to: 'force', frac: 0.6 } } },
 ])
 chain('conversion', 'cv_b', 'cv_entry', 1, [
-  { name: 'Flux', maxRank: 4, statMods: { maitrise: 20, polyvalence: 16 } },
+  { name: 'Flux', maxRank: 4, statMods: { maitrise: 36 } },
   { name: 'Voile d\'ombre', kind: 'keystone', desc: 'Convertit 50% des dégâts Physiques en Ombre.', statMods: { maitrise: 30 }, keystone: { convertDamage: { from: 'physique', to: 'ombre', frac: 0.5 } } },
   { name: 'Givre éternel', kind: 'keystone', desc: 'Convertit 50% des dégâts Physiques en Froid.', statMods: { maitrise: 30 }, keystone: { convertDamage: { from: 'physique', to: 'froid', frac: 0.5 } } },
   { name: 'Omniscience', kind: 'keystone', desc: 'Capstone : +50 stats offensives, +20% dégâts, +10% réduction.', statMods: { force: 50, agilite: 50, intelligence: 50 }, keystone: { damageMult: 1.2, flatDr: 0.1 } },
@@ -337,7 +344,7 @@ chain('templier', 'tp_a', 'tp_entry', 1, [
 ])
 chain('templier', 'tp_b', 'tp_entry', 1, [
   { name: 'Aura protectrice', maxRank: 4, statMods: {}, resistMods: allResist(0.07), desc: '+7% résistance tous types par rang.' },
-  { name: 'Bouclier de foi', maxRank: 4, statMods: { bouclier: 120, intelligence: 16 } },
+  { name: 'Bouclier de foi', maxRank: 4, statMods: { barriere: 120, intelligence: 16 } },
   { name: 'Croisé', kind: 'keystone', desc: 'Capstone : +80 Endurance/Intelligence, +20% dégâts, -10% subis.', statMods: { endurance: 80, intelligence: 80 }, keystone: { damageMult: 1.2, flatDr: 0.1 } },
 ])
 
@@ -408,6 +415,69 @@ chain('colosse', 'jc_b', 'jc_entry', 1, [
 // Passerelles d'archétype hébergées dans les spécialisations correspondantes.
 single({ id: 'in_gw_elem', name: '→ Élémentaliste', constellation: 'intelligence', kind: 'gateway', tier: 4, maxRank: 1, requires: ['in_a3', 'in_b3'], description: 'Passerelle vers l\'Élémentaliste. +30 Intelligence.', statMods: { intelligence: 30 } })
 single({ id: 'ag_gw_duel', name: '→ Duelliste', constellation: 'agilite', kind: 'gateway', tier: 4, maxRank: 1, requires: ['ag_a3', 'ag_b2'], description: 'Passerelle vers le Duelliste. +30 Agilité.', statMods: { agilite: 30 } })
+
+/* ================== ARCHÉTYPES v0.17 (4 nouveaux) ================== */
+
+/* PESTIFÉRÉ — peste, DoT, Altération (scale via la nouvelle stat Altération) */
+single({ id: 'in_gw_peste', name: '→ Pestiféré', constellation: 'intelligence', kind: 'gateway', tier: 5, maxRank: 1, requires: ['in_a4', 'in_b2'], description: 'Passerelle vers le Pestiféré (peste/DoT). +30 Altération.', statMods: { alteration: 30 } })
+single({ id: 'pe_entry', name: 'Étreinte pestilentielle', constellation: 'pestifere', kind: 'notable', tier: 0, maxRank: 1, requires: ['in_gw_peste'], description: 'La maladie devient ton arme. +40 Intelligence, +30 Altération.', statMods: { intelligence: 40, alteration: 30 } })
+chain('pestifere', 'pe_a', 'pe_entry', 1, [
+  { name: 'Virulence', maxRank: 5, statMods: { alteration: 30, intelligence: 12 } },
+  { name: 'Contagion', kind: 'keystone', desc: 'ARCHÉTYPE : tes coups infligent une peste (DoT 28% du coup/s, 6 s, amplifié par l\'Altération).', statMods: { alteration: 30 }, keystone: { dot: { frac: 0.28, duration: 6 } } },
+  { name: 'Putréfaction', maxRank: 4, statMods: { alteration: 40 } },
+  { name: 'Épidémie', kind: 'keystone', desc: '+30% de dégâts, +40 Altération.', statMods: { alteration: 40 }, keystone: { damageMult: 1.3 } },
+])
+chain('pestifere', 'pe_b', 'pe_entry', 1, [
+  { name: 'Miasmes', maxRank: 5, statMods: { alteration: 28 } },
+  { name: 'Fléau d\'ombre', kind: 'ability', unlockPower: 'fleau_dombre', desc: 'Débloque Fléau d\'ombre (DoT puissant).' },
+  { name: 'Corruption', kind: 'keystone', desc: 'Convertit 50% des dégâts Physiques en Ombre.', statMods: { maitrise: 20 }, keystone: { convertDamage: { from: 'physique', to: 'ombre', frac: 0.5 } } },
+  { name: 'Avatar de peste', kind: 'keystone', desc: 'Capstone : +80 Intelligence, +60 Altération, +20% de dégâts.', statMods: { intelligence: 80, alteration: 60 }, keystone: { damageMult: 1.2 } },
+])
+
+/* BOURREAU — anti-boss, exécution, précision (stat Dégâts boss + Précision) */
+single({ id: 'fo_gw_bourreau', name: '→ Bourreau', constellation: 'force', kind: 'gateway', tier: 5, maxRank: 1, requires: ['fo_a3', 'fo_c1'], description: 'Passerelle vers le Bourreau (anti-boss). +30 Dégâts boss.', statMods: { degatsBoss: 30 } })
+single({ id: 'bo_entry', name: 'Sentence de mort', constellation: 'bourreau', kind: 'notable', tier: 0, maxRank: 1, requires: ['fo_gw_bourreau'], description: 'Les colosses tombent sous ta hache. +40 Force, +30 Dégâts boss.', statMods: { force: 40, degatsBoss: 30 } })
+chain('bourreau', 'bo_a', 'bo_entry', 1, [
+  { name: 'Marque du bourreau', maxRank: 5, statMods: { degatsBoss: 30 } },
+  { name: 'Décapitation', kind: 'ability', unlockPower: 'eviscaration', desc: 'Débloque Éviscération (nuke puissant).' },
+  { name: 'Précision létale', maxRank: 4, statMods: { precision: 40 } },
+  { name: 'Couperet', kind: 'keystone', desc: 'ARCHÉTYPE : exécute les ennemis sous 25% de PV (×3 dégâts).', statMods: { degatsBoss: 30 }, keystone: { executeBonus: { threshold: 0.25, mult: 3 } } },
+])
+chain('bourreau', 'bo_b', 'bo_entry', 1, [
+  { name: 'Traque', maxRank: 5, statMods: { degatsBoss: 28, critique: 14 } },
+  { name: 'Chasseur de titans', kind: 'keystone', desc: '+50 Dégâts boss, +30 Précision.', statMods: { degatsBoss: 50, precision: 30 } },
+  { name: 'Juge suprême', kind: 'keystone', desc: 'Capstone : +80 Force, +60 Dégâts boss, +25% de dégâts.', statMods: { force: 80, degatsBoss: 60 }, keystone: { damageMult: 1.25 } },
+])
+
+/* SPECTRE — évasion, précision, anti-contrôle (Esquive + Ténacité + Précision) */
+single({ id: 'ag_gw_spectre', name: '→ Spectre', constellation: 'agilite', kind: 'gateway', tier: 5, maxRank: 1, requires: ['ag_a3', 'ag_b0'], description: 'Passerelle vers le Spectre (évasion). +25 Esquive.', statMods: { esquive: 25 } })
+single({ id: 'sp_entry', name: 'Forme spectrale', constellation: 'spectre', kind: 'notable', tier: 0, maxRank: 1, requires: ['ag_gw_spectre'], description: 'Tu deviens insaisissable. +40 Agilité, +30 Esquive.', statMods: { agilite: 40, esquive: 30 } })
+chain('spectre', 'sp_a', 'sp_entry', 1, [
+  { name: 'Forme éthérée', maxRank: 5, statMods: { esquive: 30 } },
+  { name: 'Insaisissable', kind: 'keystone', desc: 'ARCHÉTYPE : +30 Esquive et +20% de dégâts.', statMods: { esquive: 30 }, keystone: { damageMult: 1.2 } },
+  { name: 'Frappe spectrale', maxRank: 4, statMods: { precision: 30, agilite: 16 } },
+  { name: 'Fantôme vengeur', kind: 'keystone', desc: 'Renvoie 25% des dégâts subis (épines), +30 Esquive.', statMods: { esquive: 30 }, keystone: { thorns: 0.25 } },
+])
+chain('spectre', 'sp_b', 'sp_entry', 1, [
+  { name: 'Volonté indomptable', maxRank: 4, statMods: { tenacite: 40 } },
+  { name: 'Esprit libre', kind: 'keystone', desc: 'Quasi-immunité au contrôle : +60 Ténacité, +30 Précision.', statMods: { tenacite: 60, precision: 30 } },
+  { name: 'Lame d\'outre-tombe', kind: 'keystone', desc: 'Capstone : +70 Agilité, +50 Esquive, +20% de dégâts.', statMods: { agilite: 70, esquive: 50 }, keystone: { damageMult: 1.2 } },
+])
+
+/* BRISEUR — multi-cible, inarrêtable (Ténacité anti-CC + cleave pour les packs) */
+single({ id: 'ba_gw_briseur', name: '→ Briseur', constellation: 'bastion', kind: 'gateway', tier: 5, maxRank: 1, requires: ['ba_a3', 'ba_c0'], description: 'Passerelle vers le Briseur (multi-cible). +30 Ténacité.', statMods: { tenacite: 30 } })
+single({ id: 'br_entry', name: 'Rage inarrêtable', constellation: 'briseur', kind: 'notable', tier: 0, maxRank: 1, requires: ['ba_gw_briseur'], description: 'Rien ne t\'arrête. +80 Endurance, +30 Ténacité.', statMods: { endurance: 80, tenacite: 30 } })
+chain('briseur', 'br_a', 'br_entry', 1, [
+  { name: 'Déchaînement', maxRank: 5, statMods: { force: 18, endurance: 18 } },
+  { name: 'Tourbillon', kind: 'ability', unlockPower: 'tourbillon', desc: 'Débloque Tourbillon (cleave : frappe tout le pack).' },
+  { name: 'Onde de choc', kind: 'keystone', desc: 'ARCHÉTYPE : +30% de dégâts et +40 Ténacité.', statMods: { tenacite: 40 }, keystone: { damageMult: 1.3 } },
+  { name: 'Imparable', kind: 'keystone', desc: '+60 Ténacité et -15% de dégâts subis.', statMods: { tenacite: 60 }, keystone: { flatDr: 0.15 } },
+])
+chain('briseur', 'br_b', 'br_entry', 1, [
+  { name: 'Carapace de fer', maxRank: 4, statMods: { reductionDegats: 24 } },
+  { name: 'Épines brûlantes', kind: 'keystone', desc: 'Renvoie 30% des dégâts subis à l\'ennemi.', keystone: { thorns: 0.3 } },
+  { name: 'Cataclysme vivant', kind: 'keystone', desc: 'Capstone : +200 Endurance, +40 Ténacité, +20% de dégâts au-dessus de 60% PV.', statMods: { endurance: 200, tenacite: 40 }, keystone: { highHpBonus: { threshold: 0.6, mult: 1.2 } } },
+])
 
 /* ------------------------------------------------------------------ */
 

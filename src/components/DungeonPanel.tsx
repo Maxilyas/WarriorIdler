@@ -1,13 +1,23 @@
 import { useState } from 'react'
 import { useGame, SCEAU_COST } from '../game/store'
-import { DUNGEON_ELEMENTS, dungeonVuln, dungeonFights, dungeonIlvl } from '../game/dungeons'
+import { DUNGEON_LIST, dungeonFights, dungeonIlvl, type DungeonDef, type DungeonReward } from '../game/dungeons'
 import { DAMAGE_TYPES } from '../game/damage'
-import type { DamageType } from '../game/types'
+
+const REWARD_LABEL: Record<DungeonReward, string> = {
+  gold: '💰 Or',
+  xp: '📚 Expérience',
+  eclats: '♦ Éclats d\'arcane',
+  noyau: '💠 Noyaux primordiaux',
+  stuff: '🎒 Stuff (haute rareté)',
+  cles: '🔑 Sceaux & 🔮 Orbes',
+  poussiere: '🌌 Poussière d\'étoile',
+}
 
 export function DungeonPanel() {
   const sceaux = useGame((s) => s.sceaux)
   const progress = useGame((s) => s.dungeonProgress)
   const dungeon = useGame((s) => s.dungeon)
+  const bestStage = useGame((s) => s.bestStage)
   const enterDungeon = useGame((s) => s.enterDungeon)
   const craftSceau = useGame((s) => s.craftSceau)
   const noyau = useGame((s) => s.noyau)
@@ -17,16 +27,16 @@ export function DungeonPanel() {
   return (
     <div className="flex h-full flex-col">
       <div className="mb-2 flex items-center justify-between">
-        <div className="text-sm font-semibold text-slate-200">🏰 Donjons élémentaires</div>
+        <div className="text-sm font-semibold text-slate-200">🏰 Donjons</div>
         <div className="text-xs">
           <span className="text-amber-300">🔑 {sceaux} sceau{sceaux > 1 ? 'x' : ''}</span>
         </div>
       </div>
 
       <p className="mb-2 text-[11px] leading-snug text-slate-500">
-        Un donjon par type de dégâts, monté <b className="text-slate-300">indépendamment</b>. Chaque donjon
-        lâche du stuff ciblé (dégâts ET résistance de son élément) — farme celui qu'il te faut. Réussir le
-        niveau N débloque N+1. Le Sceau de faille est la clé.
+        Chaque donjon <b className="text-slate-300">cible une ressource</b> (or, éclats, XP, stuff…) et possède une
+        <b className="text-slate-300"> identité de combat</b> qui valorise des builds différents — pas un mur de résistance.
+        Réussir le niveau N débloque N+1. Le Sceau de faille est la clé.
       </p>
 
       <button
@@ -44,14 +54,15 @@ export function DungeonPanel() {
       )}
 
       <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1">
-        {DUNGEON_ELEMENTS.map((element) => (
+        {DUNGEON_LIST.map((def) => (
           <DungeonCard
-            key={element}
-            element={element}
-            cleared={progress[element] ?? 0}
+            key={def.id}
+            def={def}
+            cleared={progress[def.id] ?? 0}
             sceaux={sceaux}
+            bestStage={bestStage}
             busy={!!dungeon}
-            onEnter={(lvl) => enterDungeon(element, lvl)}
+            onEnter={(lvl) => enterDungeon(def.id, lvl)}
           />
         ))}
       </div>
@@ -59,50 +70,57 @@ export function DungeonPanel() {
   )
 }
 
-function DungeonCard({ element, cleared, sceaux, busy, onEnter }: {
-  element: DamageType
+function DungeonCard({ def, cleared, sceaux, bestStage, busy, onEnter }: {
+  def: DungeonDef
   cleared: number
   sceaux: number
+  bestStage: number
   busy: boolean
   onEnter: (level: number) => void
 }) {
   const frontier = cleared + 1
   const [level, setLevel] = useState(frontier)
   const lvl = Math.max(1, Math.min(frontier, level))
-  const tm = DAMAGE_TYPES[element]
-  const vm = DAMAGE_TYPES[dungeonVuln(element)]
-  const canEnter = !busy && sceaux >= 1
+  const locked = bestStage < def.unlockStage
+  const el = DAMAGE_TYPES[def.element]
+  const canEnter = !busy && sceaux >= 1 && !locked
 
   return (
-    <div className="rounded-lg border border-slate-800 bg-[#11151f] p-2.5" style={{ borderColor: tm.color + '40' }}>
+    <div className="rounded-lg border border-slate-800 bg-[#11151f] p-2.5" style={{ borderColor: def.color + '40' }}>
       <div className="flex items-center justify-between">
-        <div className="font-medium" style={{ color: tm.color }}>
-          {tm.icon} Donjon {tm.name}
+        <div className="font-medium" style={{ color: def.color }}>
+          {def.icon} {def.name}
         </div>
-        <div className="text-[10px] text-slate-500">Record : niv. {cleared}</div>
+        <div className="text-[10px] text-slate-500">{locked ? `🔒 palier ${def.unlockStage}` : `Record : niv. ${cleared}`}</div>
       </div>
-      <div className="mt-1 text-[11px] text-slate-400">
-        Ennemis résistants au <span style={{ color: tm.color }}>{tm.name}</span>
-        <span className="text-slate-500"> · faibles au </span>
-        <span style={{ color: vm.color }}>{vm.icon} {vm.name}</span>
+      <div className="mt-0.5 text-[11px]">
+        <span className="text-slate-500">Récompense : </span>
+        <span style={{ color: def.color }}>{REWARD_LABEL[def.reward]}</span>
       </div>
+      <div className="mt-0.5 text-[10px] leading-snug text-slate-400">{def.traitLabel}</div>
       <div className="mt-0.5 text-[10px] text-slate-500">
-        Niv. {lvl} · {dungeonFights(lvl)} combats · coffre iLvl ~{dungeonIlvl(lvl)}
+        Attaques en <span style={{ color: el.color }}>{el.icon} {el.name}</span> · Niv. {lvl} · {dungeonFights(lvl)} combats · coffre iLvl ~{dungeonIlvl(lvl)}
       </div>
-      <div className="mt-2 flex items-center gap-1.5">
-        <div className="flex items-center rounded-lg border border-slate-700">
-          <button onClick={() => setLevel((l) => Math.max(1, Math.min(frontier, l) - 1))} className="px-2 py-1 text-xs text-slate-300 hover:bg-white/5">−</button>
-          <span className="w-7 text-center text-xs tabular-nums text-slate-200">{lvl}</span>
-          <button onClick={() => setLevel((l) => Math.min(frontier, Math.max(1, l) + 1))} className="px-2 py-1 text-xs text-slate-300 hover:bg-white/5">+</button>
+      {locked ? (
+        <div className="mt-2 rounded-lg bg-slate-800/60 py-1.5 text-center text-[11px] text-slate-500">
+          🔒 Atteins le palier {def.unlockStage} pour débloquer
         </div>
-        <button
-          disabled={!canEnter}
-          onClick={() => onEnter(lvl)}
-          className="flex-1 rounded-lg bg-amber-700/80 py-1.5 text-xs font-semibold hover:bg-amber-600 disabled:opacity-40"
-        >
-          {busy ? 'Donjon en cours…' : sceaux < 1 ? 'Pas de Sceau' : `Entrer niv. ${lvl} (1 🔑)`}
-        </button>
-      </div>
+      ) : (
+        <div className="mt-2 flex items-center gap-1.5">
+          <div className="flex items-center rounded-lg border border-slate-700">
+            <button onClick={() => setLevel((l) => Math.max(1, Math.min(frontier, l) - 1))} className="px-2 py-1 text-xs text-slate-300 hover:bg-white/5">−</button>
+            <span className="w-7 text-center text-xs tabular-nums text-slate-200">{lvl}</span>
+            <button onClick={() => setLevel((l) => Math.min(frontier, Math.max(1, l) + 1))} className="px-2 py-1 text-xs text-slate-300 hover:bg-white/5">+</button>
+          </div>
+          <button
+            disabled={!canEnter}
+            onClick={() => onEnter(lvl)}
+            className="flex-1 rounded-lg bg-amber-700/80 py-1.5 text-xs font-semibold hover:bg-amber-600 disabled:opacity-40"
+          >
+            {busy ? 'Donjon en cours…' : sceaux < 1 ? 'Pas de Sceau' : `Entrer niv. ${lvl} (1 🔑)`}
+          </button>
+        </div>
+      )}
     </div>
   )
 }

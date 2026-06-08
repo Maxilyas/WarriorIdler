@@ -177,7 +177,7 @@ export function CharacterPanel() {
         <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
           <Kv name="Puissance" value={Math.round(derived.power).toLocaleString('fr-FR')} />
           <Kv name="Points de vie" value={Math.round(maxHp).toLocaleString('fr-FR')} />
-          <Kv name="Multiplicateur dég." value={`×${(derived.masteryMult * derived.versatilityMult).toFixed(2)}`} />
+          <Kv name="Multiplicateur dég." value={`×${(derived.masteryMult * derived.overpower).toFixed(2)}`} />
           <Kv name="Vitesse" value={`${derived.attacksPerSecond.toFixed(2)} att/s`} />
         </div>
       </div>

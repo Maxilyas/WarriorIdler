@@ -23,7 +23,8 @@ import { DAMAGE_TYPE_LIST, DAMAGE_TYPES } from './damage'
 import { equipSlotsForType, slotAccepts } from './slots'
 import { essenceGain, upgradeCost, insertCost, getUnique, UNIQUE_MAX_RANK, randomUniqueInstance } from './uniques'
 import {
-  generateDungeon, makeDungeonPack, dungeonIlvl, dungeonLuckTier, type ActiveDungeon,
+  generateDungeon, makeDungeonPack, dungeonIlvl, dungeonLuckTier, dungeonRegen, getDungeonDef,
+  DUNGEONS, type ActiveDungeon, type DungeonId, type DungeonReward,
 } from './dungeons'
 import {
   generateRaid, makeRaidBoss, makeRaidAdd, getRaidDef, raidUnlocked, raidBerserkTime,
@@ -40,6 +41,8 @@ let invMax = INV_BASE // ajusté par l'amélioration "Sacoches"
 let regenMult = 1 // ajusté par l'amélioration "Régénération"
 const REGEN_RATE = 0.05
 const RETREAT_STAGES = 2
+/** Intervalle (s) entre deux étourdissements d'un boss (après le 1er, cadencé par ccCd). */
+const CC_INTERVAL = 8
 // Personnages 2 & 3 = VERY END-GAME (déblocage gratuit très tardif, recrutement très cher).
 const CHAR2_STAGE = 350
 const CHAR3_STAGE = 800
@@ -83,11 +86,11 @@ export const FRAGMENT_INFUSE_COST = 2 // Fragments d'éternité pour infuser un 
 /** Invocation d'un effet unique au CHOIX (Éclat cosmique + Fragments). */
 export const CHOOSE_UNIQUE_COST = { cosmic: 1, fragments: 3 }
 
-/** Progression de donjon par type de dégâts (un donjon par type). */
-export type DungeonProgress = Record<DamageType, number>
+/** Progression par donjon-ressource (chaque donjon monte indépendamment). */
+export type DungeonProgress = Record<DungeonId, number>
 function emptyDungeonProgress(): DungeonProgress {
   const out = {} as DungeonProgress
-  for (const t of DAMAGE_TYPE_LIST) out[t] = 0
+  for (const id of Object.keys(DUNGEONS) as DungeonId[]) out[id] = 0
   return out
 }
 
@@ -162,7 +165,7 @@ interface GameState extends SaveData {
   upgradeUnique: (itemId: string) => void
   transmute: (itemId: string, newPrimary: OffensiveStat) => void
   createItem: (opts: CreateOptions) => void
-  enterDungeon: (element: DamageType, level: number) => void
+  enterDungeon: (dungeonId: DungeonId, level: number) => void
   abandonDungeon: () => void
   enterRaid: (raidId: RaidId, tier: number) => void
   abandonRaid: () => void
@@ -191,8 +194,8 @@ function pushLog(log: LogEntry[], text: string, kind: LogKind): LogEntry[] {
 }
 
 function xpForLevel(level: number): number {
-  // Courbe un peu plus exigeante : les premiers niveaux s'enchaînent moins vite.
-  return Math.round(64 * Math.pow(1.37, level - 1))
+  // Courbe nettement plus exigeante : monter de niveau se mérite (le stuff fait l'essentiel du travail).
+  return Math.round(90 * Math.pow(1.42, level - 1))
 }
 
 // Cooldowns transitoires des capacités actives (clé `charId:powerId`). Non persistés.
@@ -258,13 +261,15 @@ function migrateItem(item: any) {
   if (typeof item.endurance !== 'number') item.endurance = 0
   if (!item.orientation) item.orientation = 'offensif'
   // Migration des affixes vers le format unifié (stat / dmgType / resist).
+  // Renommage v0.17 : Bouclier→Barrière, Polyvalence supprimée→Maîtrise (préserve la valeur du stuff).
+  const renameStat = (s: string): import('./types').SecondaryStat => (s === 'bouclier' ? 'barriere' : s === 'polyvalence' ? 'maitrise' : s) as import('./types').SecondaryStat
   const validStats = new Set<string>(SECONDARY_STATS)
   const affixes: Affix[] = []
   if (Array.isArray(item.affixes)) {
     for (const a of item.affixes) {
-      if (a && a.kind === 'stat') { if (a.stat && validStats.has(a.stat)) affixes.push(a as Affix) }
+      if (a && a.kind === 'stat') { const st = a.stat ? renameStat(a.stat) : undefined; if (st && validStats.has(st)) affixes.push({ ...a, stat: st } as Affix) }
       else if (a && a.kind) affixes.push(a as Affix)
-      else if (a && a.stat && validStats.has(a.stat)) affixes.push({ kind: 'stat', stat: a.stat, value: a.value })
+      else if (a && a.stat && validStats.has(renameStat(a.stat))) affixes.push({ kind: 'stat', stat: renameStat(a.stat), value: a.value })
     }
   }
   if (Array.isArray(item.typeAffixes)) {
@@ -303,31 +308,20 @@ function sanitize(save: SaveData): SaveData {
   // Raid en cours au format obsolète (pas de `raidId`) → abandonné par la migration.
   if (save.raid && !(save.raid as { raidId?: string }).raidId) save.raid = null
 
-  // dungeonProgress : ancien `number` → record par type.
+  // dungeonProgress : REFONTE v0.17 (clé = id de donjon-ressource, plus le type de dégâts) → reset propre,
+  // en conservant uniquement les clés déjà au nouveau format si présentes.
   const dp = save.dungeonProgress as unknown
-  if (typeof dp === 'number' || !dp) {
-    const old = typeof dp === 'number' ? dp : 0
-    const rec = emptyDungeonProgress()
-    for (const t of DAMAGE_TYPE_LIST) rec[t] = old
-    save.dungeonProgress = rec
-  } else {
-    const rec = emptyDungeonProgress()
-    for (const t of DAMAGE_TYPE_LIST) rec[t] = (dp as DungeonProgress)[t] ?? 0
-    save.dungeonProgress = rec
-  }
-
-  // Donjon/raid actifs : garantir element + migrer le combat mono-ennemi → pack (enemies[]).
-  if (save.dungeon) {
-    const d = save.dungeon as ActiveDungeon & { enemy?: Enemy }
-    if (!d.element) d.element = d.theme
-    if (!Array.isArray(d.enemies)) {
-      const old = d.enemy
-      if (old) { if (!old.damageType) old.damageType = d.theme; d.enemies = [old] }
-      else d.enemies = []
+  const dprec = emptyDungeonProgress()
+  if (dp && typeof dp === 'object') {
+    for (const id of Object.keys(DUNGEONS) as DungeonId[]) {
+      const v = (dp as Record<string, number>)[id]
+      if (typeof v === 'number') dprec[id] = v
     }
-    delete d.enemy
-    if (!d.enemies.length) save.dungeon = null // pack vide après migration → abandonné proprement
   }
+  save.dungeonProgress = dprec
+
+  // Donjon actif : structure refondue (v0.17). Sans `dungeonId` (ancien format), on l'abandonne proprement.
+  if (save.dungeon && !(save.dungeon as { dungeonId?: string }).dungeonId) save.dungeon = null
   if (save.raid) {
     const r = save.raid as ActiveRaid & { enemy?: Enemy }
     if (!Array.isArray(r.enemies)) {
@@ -600,7 +594,7 @@ function grantXp(char: Character, xp: number): Character {
   while (curXp >= xpForLevel(level)) {
     curXp -= xpForLevel(level)
     level++
-    base[char.primaryBias] = (base[char.primaryBias] ?? 0) + 2
+    base[char.primaryBias] = (base[char.primaryBias] ?? 0) + 1
     base.endurance = (base.endurance ?? 0) + 1
   }
   // Points de talent : seulement au-delà de TALENT_START_LEVEL (l'arbre se débloque plus tard).
@@ -627,7 +621,8 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, chars
       enemy.hp = Math.max(0, enemy.hp - mag)
       break
     case 'dot':
-      enemy.dot = { dps: Math.max(mag * 0.4, enemy.dot?.dps ?? 0), remaining: 5 }
+      // L'Altération amplifie les dégâts sur la durée.
+      enemy.dot = { dps: Math.max(mag * 0.4 * derived.alterationMult, enemy.dot?.dps ?? 0), remaining: 5 }
       break
     case 'heal':
     case 'hot': {
@@ -652,6 +647,8 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, chars
 function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: CombatMods) {
   const enemy: Enemy = { ...enemyIn, dot: enemyIn.dot ? { ...enemyIn.dot } : undefined }
   const chars = input.map((c) => ({ ...c }))
+  // Décompte de l'étourdissement (transitoire) avant d'agir.
+  for (const c of chars) if (c.stun && c.stun > 0) c.stun = Math.max(0, c.stun - dt)
   const info = chars.map((c) =>
     c.hp > 0
       ? {
@@ -663,10 +660,10 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
 
   let totalDealt = 0
 
-  // 1) Attaques automatiques (+ Multifrappe) + DoT (keystone).
+  // 1) Attaques automatiques (+ Multifrappe) + DoT (keystone). Les persos étourdis n'attaquent pas.
   chars.forEach((c, i) => {
     const d = info[i]
-    if (!d) return
+    if (!d || (c.stun ?? 0) > 0) return
     const hits = d.derived.attacksPerSecond * dt
     const whole = Math.floor(hits) + (Math.random() < hits % 1 ? 1 : 0)
     const hpFrac = c.hp / charMaxHp(c)
@@ -683,7 +680,7 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
         enemy.hp = Math.max(0, enemy.hp - hit.damage)
         totalDealt += hit.damage
         healed += hit.heal
-        if (d.cmods.dot) enemy.dot = { dps: Math.max(hit.damage * d.cmods.dot.frac, enemy.dot?.dps ?? 0), remaining: d.cmods.dot.duration }
+        if (d.cmods.dot) enemy.dot = { dps: Math.max(hit.damage * d.cmods.dot.frac * d.derived.alterationMult, enemy.dot?.dps ?? 0), remaining: d.cmods.dot.duration }
       }
     }
     if (healed) c.hp = Math.min(charMaxHp(c), c.hp + healed)
@@ -698,10 +695,10 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
     if (enemy.dot.remaining <= 0) enemy.dot = undefined
   }
 
-  // 3) Capacités actives auto-lancées (cooldown réduit par la Récupération).
+  // 3) Capacités actives auto-lancées (cooldown réduit par la Récupération). Étourdi = pas de cast.
   chars.forEach((c, i) => {
     const d = info[i]
-    if (!d) return
+    if (!d || (c.stun ?? 0) > 0) return
     for (const p of charActives(c)) {
       const key = `${c.id}:${p.id}`
       const cd = (cooldowns.get(key) ?? 0) - dt
@@ -730,9 +727,17 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
     }
     const t = chars[targetI]
     const td = info[targetI]!
+    // Étourdissement du boss (réduit par la Ténacité de la cible).
+    if (enemy.ccDur) {
+      enemy.ccCd = (enemy.ccCd ?? 0) - dt
+      if (enemy.ccCd <= 0) {
+        enemy.ccCd = CC_INTERVAL
+        t.stun = Math.max(t.stun ?? 0, enemy.ccDur * (1 - td.derived.tenacity))
+      }
+    }
     const effDmg = enemy.damage * (1 + (mods?.enrage ?? 0) * (mods?.fightTime ?? 0)) * (mods?.dmgMult ?? 1)
-    // L'atténuation générique (esquive/réduction/maîtrise/polyvalence + passives/keystones)
-    // est BORNÉE dans incomingDps → on encaisse toujours une part. Les résistances de type restent décisives.
+    // L'atténuation générique (esquive/réduction/maîtrise + passives/keystones) est BORNÉE
+    // dans incomingDps → on encaisse toujours une part. Les résistances de type restent décisives.
     let incoming = incomingDps(
       effDmg, enemy.damageType, td.derived, td.resist,
       (1 - td.passives.damageReduction) * (1 - td.cmods.flatDr),
@@ -768,6 +773,7 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
 function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number, mods?: CombatMods) {
   const enemies: Enemy[] = enemiesIn.map((e) => ({ ...e, dot: e.dot ? { ...e.dot } : undefined }))
   const chars = input.map((c) => ({ ...c }))
+  for (const c of chars) if (c.stun && c.stun > 0) c.stun = Math.max(0, c.stun - dt)
   const info = chars.map((c) =>
     c.hp > 0
       ? { derived: charDerived(c), profile: charDamageProfile(c), passives: charPassives(c), resist: charResist(c), cmods: charCombatMods(c) }
@@ -776,10 +782,10 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
   let totalDealt = 0
   const focus = (): Enemy | undefined => enemies.find((e) => e.hp > 0)
 
-  // 1) Auto-attaques (+ Multifrappe) sur la cible focus + DoT keystone.
+  // 1) Auto-attaques (+ Multifrappe) sur la cible focus + DoT keystone. Étourdi = pas d'attaque.
   chars.forEach((c, i) => {
     const d = info[i]
-    if (!d) return
+    if (!d || (c.stun ?? 0) > 0) return
     const hits = d.derived.attacksPerSecond * dt
     const whole = Math.floor(hits) + (Math.random() < hits % 1 ? 1 : 0)
     const hpFrac = c.hp / charMaxHp(c)
@@ -799,7 +805,7 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
         t2.hp = Math.max(0, t2.hp - hit.damage)
         totalDealt += hit.damage
         healed += hit.heal
-        if (d.cmods.dot) t2.dot = { dps: Math.max(hit.damage * d.cmods.dot.frac, t2.dot?.dps ?? 0), remaining: d.cmods.dot.duration }
+        if (d.cmods.dot) t2.dot = { dps: Math.max(hit.damage * d.cmods.dot.frac * d.derived.alterationMult, t2.dot?.dps ?? 0), remaining: d.cmods.dot.duration }
       }
     }
     if (healed) c.hp = Math.min(charMaxHp(c), c.hp + healed)
@@ -816,10 +822,10 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
     }
   }
 
-  // 3) Actives : `cleave` touche TOUS les ennemis, le reste la cible focus.
+  // 3) Actives : `cleave` touche TOUS les ennemis, le reste la cible focus. Étourdi = pas de cast.
   chars.forEach((c, i) => {
     const d = info[i]
-    if (!d) return
+    if (!d || (c.stun ?? 0) > 0) return
     for (const p of charActives(c)) {
       const key = `${c.id}:${p.id}`
       const cd = (cooldowns.get(key) ?? 0) - dt
@@ -852,6 +858,14 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
     }
     const t = chars[targetI]
     const td = info[targetI]!
+    // Étourdissement (boss) réduit par la Ténacité de la cible.
+    if (enemy.ccDur) {
+      enemy.ccCd = (enemy.ccCd ?? 0) - dt
+      if (enemy.ccCd <= 0) {
+        enemy.ccCd = CC_INTERVAL
+        t.stun = Math.max(t.stun ?? 0, enemy.ccDur * (1 - td.derived.tenacity))
+      }
+    }
     const effDmg = enemy.damage * (1 + (mods?.enrage ?? 0) * (mods?.fightTime ?? 0)) * (mods?.dmgMult ?? 1)
     let incoming = incomingDps(
       effDmg, enemy.damageType, td.derived, td.resist,
@@ -880,10 +894,11 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
 
 function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
   const d = s.dungeon!
+  const def = getDungeonDef(d.dungeonId)
   const fightTime = d.fightTime + dt
   let enrage = 0
   let reflect = 0
-  let regen = 0
+  let regen = dungeonRegen(d.trait) // identité 'regen' : les ennemis se régénèrent (→ il faut du burst)
   for (const m of d.modifiers) {
     if (m.enrageRampPerSec) enrage += m.enrageRampPerSec
     if (m.reflectPct) reflect += m.reflectPct
@@ -907,42 +922,37 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
   if (enemies.every((e) => e.hp <= 0)) {
     const nextIndex = d.current + 1
     if (nextIndex >= d.totalFights) {
+      const lv = d.level
       const noGold = d.modifiers.some((m) => m.noGold)
       const rareBonus = d.modifiers.reduce((a, m) => a + (m.rareBonus ?? 0), 0)
-      const ilvl = dungeonIlvl(d.level)
-      const luck = dungeonLuckTier(d.level) + rareBonus
-      const count = 3 + Math.floor(d.level / 2)
+      const isStuff = def.reward === 'stuff'
+      const ilvl = dungeonIlvl(lv)
+      const luck = dungeonLuckTier(lv) + rareBonus + (isStuff ? 3 : 0)
+      const count = (isStuff ? 5 : 3) + Math.floor(lv / 2)
       const bias = pickBias(s.characters)
       const items: Item[] = []
-      // Butin CIBLÉ : du stuff de l'élément du donjon (dégâts + résistance du type).
-      for (let i = 0; i < count; i++) {
-        const targetDmg = Math.random() < 0.5
-        items.push(generateItem({ ilvl, luckTier: luck, primaryBias: bias, ...(targetDmg ? { forceDmgType: d.element } : { biasResist: d.element }) }))
+      for (let i = 0; i < count; i++) items.push(generateItem({ ilvl, luckTier: luck, primaryBias: bias, ...(isStuff ? { minTier: 5 } : {}) }))
+
+      // Récompenses : base MODESTE + GROS bonus sur la ressource ciblée par CE donjon.
+      const bonus = (r: DungeonReward, amt: number) => (def.reward === r ? amt : 0)
+      const gold = noGold ? 0 : Math.round(80 * lv * (1 + lv * 0.1)) + bonus('gold', Math.round(280 * lv * (1 + lv * 0.28)))
+      const eclats = Math.round(45 * lv) + bonus('eclats', Math.round(170 * lv * (1 + lv * 0.2)))
+      const noyau = 1 + Math.floor(lv / 4) + bonus('noyau', 2 + lv)
+      const poussiere = (lv >= 10 ? Math.floor(lv / 8) : 0) + bonus('poussiere', 1 + Math.floor(lv / 2))
+      const sceaux = bonus('cles', 1 + Math.floor(lv / 4)) || (lv >= 6 ? 1 : 0)
+      const orbes = bonus('cles', Math.floor(lv / 3)) || (lv >= 4 ? 1 : 0)
+      const chest: ChestReward = { dungeonName: d.name, level: lv, items, eclats, noyau, gold, sceaux, orbes, poussiere }
+
+      let healed: Character[] = chars.map((c) => ({ ...c, hp: charMaxHp(c), stun: 0 }))
+      let log2 = pushLog(log, `🎉 ${d.name} vaincu ! Un coffre t'attend.`, 'kill')
+      // Donjon de Savoir : la récompense, c'est l'XP d'équipe.
+      if (def.reward === 'xp') {
+        const xpAmt = Math.round(120 * lv * Math.pow(1.12, lv))
+        healed = healed.map((c) => grantXp(c, xpAmt))
+        log2 = pushLog(log2, `📚 +${xpAmt.toLocaleString('fr-FR')} XP pour l'équipe !`, 'level')
       }
-      // Donjons = principale source d'or / éclats / ressources, récompense qui MONTE FORT avec le niveau.
-      const lv = d.level
-      const chest: ChestReward = {
-        dungeonName: d.name,
-        level: lv,
-        items,
-        eclats: Math.round(160 * lv * (1 + lv * 0.14)),
-        noyau: 1 + Math.floor(lv / 2),
-        gold: noGold ? 0 : Math.round(260 * lv * (1 + lv * 0.2)),
-        sceaux: lv >= 5 ? 1 : 0,
-        orbes: lv >= 4 ? 1 : 0,
-        poussiere: lv >= 6 ? Math.floor(lv / 4) : 0,
-      }
-      log = pushLog(log, `🎉 ${d.name} vaincu ! Un coffre t'attend.`, 'kill')
-      const healed = chars.map((c) => ({ ...c, hp: charMaxHp(c) }))
-      const dungeonProgress = { ...s.dungeonProgress, [d.element]: Math.max(s.dungeonProgress[d.element] ?? 0, d.level) }
-      const next = {
-        ...s,
-        characters: healed,
-        dungeon: null,
-        dungeonProgress,
-        pendingChest: chest,
-        log,
-      }
+      const dungeonProgress = { ...s.dungeonProgress, [d.dungeonId]: Math.max(s.dungeonProgress[d.dungeonId] ?? 0, lv) }
+      const next = { ...s, characters: healed, dungeon: null, dungeonProgress, pendingChest: chest, log: log2 }
       persist(next)
       set(next)
       return
@@ -950,7 +960,7 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
     const nd: ActiveDungeon = {
       ...d,
       current: nextIndex,
-      enemies: makeDungeonPack(d.level, nextIndex, d.totalFights, d.theme, d.vuln, d.modifiers),
+      enemies: makeDungeonPack(def, d.level, nextIndex, d.totalFights, d.modifiers),
       fightTime: 0,
     }
     log = pushLog(log, `${d.name} — combat ${nextIndex + 1}/${d.totalFights}.`, 'info')
@@ -1520,11 +1530,13 @@ export const useGame = create<GameState>((set, get) => {
       set(next)
     },
 
-    enterDungeon: (element, level) => {
+    enterDungeon: (dungeonId, level) => {
       const s = get()
       if (s.dungeon || s.raid || s.sceaux < 1) return
-      if (level < 1 || level > (s.dungeonProgress[element] ?? 0) + 1) return
-      const dungeon = generateDungeon(element, level)
+      const def = getDungeonDef(dungeonId)
+      if (!def || s.bestStage < def.unlockStage) return
+      if (level < 1 || level > (s.dungeonProgress[dungeonId] ?? 0) + 1) return
+      const dungeon = generateDungeon(dungeonId, level)
       const next = { ...s, sceaux: s.sceaux - 1, dungeon, log: pushLog(s.log, `🏰 Entrée dans ${dungeon.name} (${dungeon.totalFights} combats).`, 'info') }
       persist(next)
       set(next)

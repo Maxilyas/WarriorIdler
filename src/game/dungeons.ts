@@ -1,88 +1,155 @@
 import type { DamageType, Enemy } from './types'
-import { DAMAGE_TYPE_LIST, DAMAGE_TYPES } from './damage'
+import { DAMAGE_TYPES } from './damage'
 
-// ---- Modificateurs (style Mythique+) ----
+/**
+ * DONJONS « par RESSOURCE » (refonte v0.17).
+ *
+ * Fini les donjons « par type de résistance ». Désormais chaque donjon CIBLE une ressource
+ * (or, éclats, poussière, noyaux, XP, stuff, clés) et possède une IDENTITÉ MÉCANIQUE légère
+ * (pas un mur de résistance élémentaire) qui valorise des stats/builds différents :
+ *  - 'rapide'  → ennemis qui frappent fort  → il faut de la SURVIE (EHP / résistances)
+ *  - 'pack'    → nuées nombreuses           → privilégie le CLEAVE / les capacités de zone
+ *  - 'colosse' → un seul ennemi colossal    → DPS mono-cible + Dégâts vs Boss
+ *  - 'armure'  → ennemis très blindés       → PÉNÉTRATION obligatoire
+ *  - 'elite'   → élites coriaces            → DPS soutenu + Dégâts vs Boss
+ *  - 'regen'   → ennemis qui se régénèrent  → BURST (sinon ils ne meurent jamais)
+ *
+ * Boucle voulue : taper les paliers classiques → farmer les donjons (ressources/stuff)
+ * → réussir les raids (pièces hors-norme).
+ */
+
+export type DungeonId = 'or' | 'savoir' | 'eclats' | 'noyau' | 'butin' | 'failles' | 'poussiere'
+export type DungeonReward = 'gold' | 'xp' | 'eclats' | 'noyau' | 'stuff' | 'cles' | 'poussiere'
+export type DungeonTrait = 'rapide' | 'pack' | 'colosse' | 'armure' | 'elite' | 'regen'
+
+export interface DungeonDef {
+  id: DungeonId
+  name: string
+  icon: string
+  color: string
+  lore: string
+  reward: DungeonReward
+  trait: DungeonTrait
+  /** Description de l'identité de combat (affichée au joueur). */
+  traitLabel: string
+  /** Type d'attaque des ennemis (flavor — PAS de mur de résistance). */
+  element: DamageType
+  /** Palier de farm requis pour débloquer. */
+  unlockStage: number
+}
+
+export const DUNGEONS: Record<DungeonId, DungeonDef> = {
+  or: {
+    id: 'or', name: 'Chambre du Trésor', icon: '💰', color: '#ffd43b', reward: 'gold',
+    lore: 'Des gardiens d\'or massif veillent sur des montagnes de pièces. Ils frappent sans pitié quiconque convoite le trésor.',
+    trait: 'rapide', traitLabel: 'Gardiens avides : frappent vite et fort → il faut de la survie (EHP, résistances).',
+    element: 'physique', unlockStage: 5,
+  },
+  savoir: {
+    id: 'savoir', name: 'Sanctuaire du Savoir', icon: '⚗️', color: '#51cf66', reward: 'xp',
+    lore: 'Une bibliothèque infinie hantée d\'esprits studieux. Les terrasser nourrit ton expérience.',
+    trait: 'pack', traitLabel: 'Nuées d\'esprits : beaucoup de cibles → idéal au cleave / capacités de zone.',
+    element: 'nature', unlockStage: 8,
+  },
+  eclats: {
+    id: 'eclats', name: 'Faille Arcanique', icon: '♦', color: '#22d3ee', reward: 'eclats',
+    lore: 'Une déchirure dans la réalité d\'où jaillissent des éclats d\'arcane vivants qui se scindent sans cesse.',
+    trait: 'pack', traitLabel: 'Cristaux qui se multiplient : nuées denses → privilégie le cleave.',
+    element: 'arcane', unlockStage: 12,
+  },
+  noyau: {
+    id: 'noyau', name: 'Forge du Noyau', icon: '💠', color: '#f783ac', reward: 'noyau',
+    lore: 'Au cœur d\'un volcan, des golems de fonte gardent les noyaux primordiaux. Leur carapace défie l\'acier.',
+    trait: 'armure', traitLabel: 'Golems blindés : sans Pénétration, ton DPS s\'effondre.',
+    element: 'feu', unlockStage: 18,
+  },
+  butin: {
+    id: 'butin', name: 'Cache du Pilleur', icon: '🎒', color: '#a78bfa', reward: 'stuff',
+    lore: 'Le repaire d\'un seigneur-voleur, gardé par ses lieutenants d\'élite. Le butin y est exceptionnel.',
+    trait: 'elite', traitLabel: 'Lieutenants d\'élite coriaces → DPS soutenu et Dégâts vs Boss.',
+    element: 'ombre', unlockStage: 24,
+  },
+  failles: {
+    id: 'failles', name: 'Antre des Failles', icon: '🔑', color: '#4dd0e1', reward: 'cles',
+    lore: 'Un nœud de failles instables où grouillent des entités qui se reforment sans fin. On y récolte Sceaux et Orbes.',
+    trait: 'regen', traitLabel: 'Ennemis qui se régénèrent : sans burst, tu ne les tueras jamais.',
+    element: 'froid', unlockStage: 30,
+  },
+  poussiere: {
+    id: 'poussiere', name: 'Observatoire Stellaire', icon: '🌌', color: '#748ffc', reward: 'poussiere',
+    lore: 'Au sommet du monde, un colosse stellaire unique condense la Poussière d\'étoile. Un mur de PV à lui seul.',
+    trait: 'colosse', traitLabel: 'Un colosse unique : DPS mono-cible massif (et Dégâts vs Boss).',
+    element: 'foudre', unlockStage: 45,
+  },
+}
+
+export const DUNGEON_LIST: DungeonDef[] = [
+  DUNGEONS.or, DUNGEONS.savoir, DUNGEONS.eclats, DUNGEONS.noyau, DUNGEONS.butin, DUNGEONS.failles, DUNGEONS.poussiere,
+]
+
+export function getDungeonDef(id: DungeonId): DungeonDef {
+  return DUNGEONS[id]
+}
+
+// ---- Modificateurs (style Mythique+) : épice aléatoire en plus de l'identité du donjon ----
 
 export interface DungeonModifier {
   id: string
   name: string
   description: string
-  // --- effets statiques (à la création de l'ennemi) ---
   hpMult?: number
   armorMult?: number
-  resistBonus?: number // ajouté à toutes les résistances
   xpMult?: number
-  immunity?: 'physique' | 'elements' | 'random'
-  // --- effets économiques (au coffre) ---
   noGold?: boolean
-  rareBonus?: number // bonus de luckTier au butin
-  // --- effets dynamiques (gérés au tick) ---
-  enrageRampPerSec?: number // +fraction de dégâts ennemis / seconde
-  reflectPct?: number // % des dégâts infligés renvoyés au joueur
-  regenPct?: number // % des PV max régénérés / seconde par l'ennemi
+  rareBonus?: number
+  enrageRampPerSec?: number
+  reflectPct?: number
+  regenPct?: number
 }
 
-/** Pool de modificateurs jouables avec le moteur actuel (extensible). */
 export const DUNGEON_MODIFIERS: DungeonModifier[] = [
   { id: 'colossal', name: 'Colossal', description: '+40% de PV des ennemis.', hpMult: 1.4 },
-  { id: 'blinde', name: 'Blindé', description: 'Armure doublée, +15% de résistances.', armorMult: 2, resistBonus: 0.15 },
+  { id: 'blinde', name: 'Blindé', description: 'Armure doublée.', armorMult: 2 },
   { id: 'enrage', name: 'Enragé', description: 'Les ennemis frappent de plus en plus fort avec le temps.', enrageRampPerSec: 0.08 },
-  { id: 'reflectif', name: 'Réfléchissant', description: 'Renvoie 15% des dégâts que tu infliges.', reflectPct: 0.15 },
-  { id: 'vampirique', name: 'Vampirique', description: 'Les ennemis régénèrent leur vie (3%/s).', regenPct: 0.03 },
+  { id: 'reflectif', name: 'Réfléchissant', description: 'Renvoie 12% des dégâts que tu infliges.', reflectPct: 0.12 },
   { id: 'erudit', name: 'Érudit', description: '+100% XP, mais ennemis plus coriaces.', xpMult: 2, hpMult: 1.5 },
   { id: 'avare', name: 'Avare', description: 'Aucun or, mais davantage d\'objets rares.', noGold: true, rareBonus: 1 },
-  { id: 'polarise', name: 'Polarisé', description: 'Forte résistance (-65%) au Physique OU aux éléments.', immunity: 'random' },
 ]
-
-/** Résistance appliquée par Polarisé (au lieu d'une immunité totale, trop punitive). */
-const POLARISE_RESIST = 0.65
 
 // ---- Donjon actif ----
 
 export interface ActiveDungeon {
+  dungeonId: DungeonId
   level: number
   name: string
-  /** Type de dégâts du donjon (un donjon par type). */
+  trait: DungeonTrait
+  reward: DungeonReward
+  /** Type d'attaque des ennemis (flavor). */
   element: DamageType
-  theme: DamageType
-  vuln: DamageType
   modifiers: DungeonModifier[]
   totalFights: number
-  current: number // index du combat en cours (0-based)
-  /** Le combat courant : un PACK d'ennemis (les combats classiques sont à plusieurs adversaires). */
+  current: number
+  /** Le combat courant : un pack d'ennemis. */
   enemies: Enemy[]
-  fightTime: number // temps écoulé sur le combat courant (pour Enragé)
+  fightTime: number
 }
-
-const ELEMENTS: DamageType[] = DAMAGE_TYPE_LIST.filter((t) => t !== 'physique')
-
-/** Les 7 donjons (un par type de dégâts), montés indépendamment. */
-export const DUNGEON_ELEMENTS: DamageType[] = [...DAMAGE_TYPE_LIST]
-
-/** Type vulnérable d'un donjon (opposition thématique déterministe). */
-const VULN: Record<DamageType, DamageType> = {
-  physique: 'arcane', feu: 'froid', froid: 'feu', foudre: 'nature',
-  nature: 'foudre', arcane: 'ombre', ombre: 'arcane',
-}
-
-export function dungeonVuln(element: DamageType): DamageType {
-  return VULN[element]
-}
-
-const DUNGEON_NAMES: Record<DamageType, string> = {
-  physique: 'Arène de pierre',
-  feu: 'Fournaise ardente',
-  froid: 'Caveau de givre',
-  foudre: 'Nexus orageux',
-  arcane: 'Sanctuaire arcanique',
-  ombre: 'Crypte des ombres',
-  nature: 'Bosquet corrompu',
-}
-
-const ENEMY_NAMES = ['Sentinelle', 'Aberration', 'Gardien', 'Cultiste', 'Revenant', 'Colosse', 'Spectre', 'Traqueur']
 
 function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)]
+}
+
+const ENEMY_NAMES = ['Sentinelle', 'Aberration', 'Gardien', 'Cultiste', 'Revenant', 'Colosse', 'Spectre', 'Traqueur']
+const PACK_TAGS = ['α', 'β', 'γ', 'δ']
+
+/** Réglages de combat par identité de donjon. */
+interface TraitCfg { hp: number; dmg: number; armor: number; pack: number; elite?: boolean; regen?: number }
+const TRAIT_CFG: Record<DungeonTrait, TraitCfg> = {
+  rapide: { hp: 0.8, dmg: 1.5, armor: 1, pack: 2 },
+  pack: { hp: 0.55, dmg: 0.9, armor: 1, pack: 4 },
+  colosse: { hp: 2.6, dmg: 1.25, armor: 1.3, pack: 1 },
+  armure: { hp: 1.0, dmg: 1.0, armor: 3.4, pack: 2 },
+  elite: { hp: 1.5, dmg: 1.15, armor: 1.2, pack: 2, elite: true },
+  regen: { hp: 1.1, dmg: 1.0, armor: 1, pack: 2, regen: 0.03 },
 }
 
 /** Nombre de combats d'un donjon de niveau N. */
@@ -101,86 +168,76 @@ export function dungeonLuckTier(level: number): number {
 }
 
 // Constantes d'équilibrage des donjons (à ajuster facilement).
-const DUNGEON_HP_PREMIUM = 1.7 // PV des ennemis vs le farm de difficulté équivalente
-const DUNGEON_DMG_PREMIUM = 1.4 // dégâts des ennemis vs farm équivalent
-const EFF_STAGE_PER_LEVEL = 7 // un niveau de donjon ≈ ce ncombre de paliers de farm
+const DUNGEON_HP_PREMIUM = 1.7
+const DUNGEON_DMG_PREMIUM = 1.4
+const EFF_STAGE_PER_LEVEL = 7
 
-/** Construit l'ennemi d'un combat de donjon. */
+/** Régénération des ennemis (fraction des PV max/s) imposée par l'identité du donjon. */
+export function dungeonRegen(trait: DungeonTrait): number {
+  return TRAIT_CFG[trait].regen ?? 0
+}
+
+/** Taille du pack d'un combat (le boss final est seul). */
+export function dungeonPackSize(trait: DungeonTrait, fightIndex: number, totalFights: number): number {
+  if (fightIndex === totalFights - 1) return 1
+  return TRAIT_CFG[trait].pack
+}
+
+/** Construit un ennemi d'un combat de donjon selon l'identité (trait). Pas de mur de résistance. */
 export function makeDungeonEnemy(
+  def: DungeonDef,
   level: number,
   fightIndex: number,
   totalFights: number,
-  theme: DamageType,
-  vuln: DamageType,
   modifiers: DungeonModifier[],
 ): Enemy {
+  const cfg = TRAIT_CFG[def.trait]
   const isBoss = fightIndex === totalFights - 1
-  let hpMult = 1
-  let armorMult = 1
-  let resistBonus = 0
+  let hpMult = cfg.hp
+  let armorMult = cfg.armor
   let xpMult = 1
-  let immunity: 'physique' | 'elements' | undefined
   for (const m of modifiers) {
     if (m.hpMult) hpMult *= m.hpMult
     if (m.armorMult) armorMult *= m.armorMult
-    if (m.resistBonus) resistBonus += m.resistBonus
     if (m.xpMult) xpMult *= m.xpMult
-    if (m.immunity === 'physique' || m.immunity === 'elements') immunity = m.immunity
   }
 
-  // Difficulté calée sur la courbe du farm (que le joueur connaît) + une prime de donjon.
   const effStage = level * EFF_STAGE_PER_LEVEL + fightIndex
   const hpBase = 40 * Math.pow(1.18, effStage - 1) * DUNGEON_HP_PREMIUM
-  const maxHp = Math.round(hpBase * (isBoss ? 7 : 1) * hpMult)
+  const maxHp = Math.round(hpBase * (isBoss ? 6 : 1) * hpMult)
+  const isElite = cfg.elite && !isBoss
 
-  // Résistances : thème FORT (force à adapter son stuff), vulnérabilité marquée.
-  const resist: Partial<Record<DamageType, number>> = {}
-  if (resistBonus) for (const t of DAMAGE_TYPE_LIST) resist[t] = resistBonus
-  resist[theme] = (resist[theme] ?? 0) + (isBoss ? 0.6 : 0.5)
-  resist[vuln] = (resist[vuln] ?? 0) - 0.35
-  if (immunity === 'physique') resist.physique = Math.max(resist.physique ?? 0, POLARISE_RESIST)
-  else if (immunity === 'elements') for (const t of ELEMENTS) resist[t] = Math.max(resist[t] ?? 0, POLARISE_RESIST)
-
-  const name = `${pick(ENEMY_NAMES)} ${DAMAGE_TYPES[theme].name.toLowerCase()}`
+  const baseName = `${pick(ENEMY_NAMES)} ${DAMAGE_TYPES[def.element].name.toLowerCase()}`
+  const name = isBoss ? `★ ${baseName}` : isElite ? `◆ ${baseName}` : baseName
 
   return {
-    name: isBoss ? `★ ${name}` : name,
+    name,
     maxHp,
     hp: maxHp,
     armor: Math.round((10 + effStage * 1.5) * armorMult),
-    damage: Math.round(2.5 * Math.pow(1.12, effStage - 1) * DUNGEON_DMG_PREMIUM * (isBoss ? 1.8 : 1)),
+    damage: Math.round(2.5 * Math.pow(1.12, effStage - 1) * DUNGEON_DMG_PREMIUM * cfg.dmg * (isBoss ? 1.8 : 1)),
     xp: Math.round(8 * Math.pow(1.12, effStage - 1) * (isBoss ? 5 : 1) * xpMult),
-    resist,
-    damageType: theme, // l'ennemi frappe avec l'élément du donjon
+    resist: {},
+    damageType: def.element,
+    ...(isElite ? { elite: true, dodge: 0.1 } : {}),
+    ...(isBoss ? { boss: true, dodge: 0.15, ccDur: 1.6, ccCd: 7 } : {}),
   }
 }
 
-/** Taille du pack d'un combat de donjon (le boss final est seul). */
-export function dungeonPackSize(level: number, fightIndex: number, totalFights: number): number {
-  if (fightIndex === totalFights - 1) return 1 // boss
-  return Math.min(3, 2 + (level >= 4 ? 1 : 0))
-}
-
-const PACK_TAGS = ['α', 'β', 'γ']
-
-/**
- * Construit le PACK d'ennemis d'un combat de donjon (plusieurs adversaires simultanés).
- * Chaque membre a moins de PV qu'un ennemi solo (le pack tape fort en cumulé → survie de groupe).
- */
+/** Construit le PACK d'ennemis d'un combat (plusieurs adversaires simultanés selon l'identité). */
 export function makeDungeonPack(
+  def: DungeonDef,
   level: number,
   fightIndex: number,
   totalFights: number,
-  theme: DamageType,
-  vuln: DamageType,
   modifiers: DungeonModifier[],
 ): Enemy[] {
-  const size = dungeonPackSize(level, fightIndex, totalFights)
-  if (size <= 1) return [makeDungeonEnemy(level, fightIndex, totalFights, theme, vuln, modifiers)]
+  const size = dungeonPackSize(def.trait, fightIndex, totalFights)
+  if (size <= 1) return [makeDungeonEnemy(def, level, fightIndex, totalFights, modifiers)]
   const pack: Enemy[] = []
   for (let i = 0; i < size; i++) {
-    const e = makeDungeonEnemy(level, fightIndex, totalFights, theme, vuln, modifiers)
-    e.maxHp = Math.max(1, Math.round(e.maxHp * 0.7))
+    const e = makeDungeonEnemy(def, level, fightIndex, totalFights, modifiers)
+    e.maxHp = Math.max(1, Math.round(e.maxHp * 0.72))
     e.hp = e.maxHp
     e.name = `${e.name} ${PACK_TAGS[i] ?? i + 1}`
     pack.push(e)
@@ -188,32 +245,30 @@ export function makeDungeonPack(
   return pack
 }
 
-/** Génère un donjon prêt à jouer pour un type de dégâts + niveau donnés. */
-export function generateDungeon(element: DamageType, level: number): ActiveDungeon {
-  const theme = element
-  const vuln = VULN[element]
+/** Génère un donjon prêt à jouer pour un id de donjon + niveau donnés. */
+export function generateDungeon(dungeonId: DungeonId, level: number): ActiveDungeon {
+  const def = DUNGEONS[dungeonId]
   const totalFights = dungeonFights(level)
 
-  // 1 modificateur, +1 à partir du niveau 3.
-  const count = level >= 3 ? 2 : 1
+  // 1 modificateur, +1 à partir du niveau 4.
+  const count = level >= 4 ? 2 : 1
   const pool = [...DUNGEON_MODIFIERS]
   const modifiers: DungeonModifier[] = []
   for (let i = 0; i < count && pool.length; i++) {
-    const m = { ...pool.splice(Math.floor(Math.random() * pool.length), 1)[0] }
-    if (m.immunity === 'random') m.immunity = Math.random() < 0.5 ? 'physique' : 'elements'
-    modifiers.push(m)
+    modifiers.push({ ...pool.splice(Math.floor(Math.random() * pool.length), 1)[0] })
   }
 
   return {
+    dungeonId,
     level,
-    name: `${DUNGEON_NAMES[theme]} · Niv. ${level}`,
-    element,
-    theme,
-    vuln,
+    name: `${def.icon} ${def.name} · Niv. ${level}`,
+    trait: def.trait,
+    reward: def.reward,
+    element: def.element,
     modifiers,
     totalFights,
     current: 0,
-    enemies: makeDungeonPack(level, 0, totalFights, theme, vuln, modifiers),
+    enemies: makeDungeonPack(def, level, 0, totalFights, modifiers),
     fightTime: 0,
   }
 }

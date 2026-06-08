@@ -76,13 +76,16 @@ export function makeEnemy(stage: number): Enemy {
     maxHp,
     hp: maxHp,
     armor: Math.round(stage * 1.5 * armorMult),
-    // Dégâts un peu plus mordants (la survie / les résistances doivent compter).
-    damage: Math.round(2.6 * Math.pow(1.125, stage - 1) * (isBoss ? 1.8 : 1) * dmgMult),
-    xp: Math.round((isBoss ? 50 : isElite ? 22 : 8) * Math.pow(1.12, stage - 1)),
+    // Dégâts FRANCHEMENT mordants : sans stuff (EHP/résistances) on plafonne vite → il faut s'équiper.
+    damage: Math.round(3.2 * Math.pow(1.135, stage - 1) * (isBoss ? 1.8 : 1) * dmgMult),
+    // XP plus rare (monter de niveau se mérite).
+    xp: Math.round((isBoss ? 38 : isElite ? 17 : 6) * Math.pow(1.115, stage - 1)),
     resist,
     damageType,
     ...(trait ? { trait: trait.name } : isElite ? { trait: 'Élite' } : {}),
-    ...(isElite ? { elite: true } : {}),
+    ...(isElite ? { elite: true, dodge: 0.1 } : {}),
+    // Boss : reçoivent les « Dégâts vs Boss », esquivent (→ Précision) et étourdissent (→ Ténacité).
+    ...(isBoss ? { boss: true, dodge: 0.15, ccDur: 1.5, ccCd: 7 } : {}),
   }
 }
 

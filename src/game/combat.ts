@@ -12,6 +12,8 @@ export interface HitResult {
   damage: number
   crit: boolean
   heal: number
+  /** Coup esquivé par l'ennemi (Précision insuffisante). */
+  miss?: boolean
 }
 
 export interface HitOpts {
@@ -29,9 +31,15 @@ export interface HitOpts {
  * - les résistances de l'ennemi réduisent chaque type.
  */
 export function rollHit(derived: DerivedStats, profile: DamageProfile, enemy: Enemy, opts: HitOpts = {}): HitResult {
+  // Esquive ennemie (annulée par la Précision) : le coup peut être totalement manqué.
+  const effDodge = Math.max(0, (enemy.dodge ?? 0) - derived.precision)
+  if (effDodge > 0 && Math.random() < effDodge) return { damage: 0, crit: false, heal: 0, miss: true }
+
   const crit = Math.random() < derived.critChance
   const critMult = crit ? derived.critMult : 1
-  let raw = derived.power * derived.masteryMult * derived.versatilityMult * derived.overpower * critMult * (opts.bonusMult ?? 1)
+  let raw = derived.power * derived.masteryMult * derived.overpower * critMult * (opts.bonusMult ?? 1)
+  // Dégâts vs Boss : bonus contre boss & élites uniquement.
+  if ((enemy.boss || enemy.elite) && derived.bossDamageMult > 1) raw *= derived.bossDamageMult
   if (opts.execute && enemy.maxHp > 0 && enemy.hp / enemy.maxHp <= opts.execute.threshold) raw *= opts.execute.mult
 
   const pen = derived.penetration
@@ -64,7 +72,7 @@ export function theoreticalDps(derived: DerivedStats, profile: DamageProfile, bo
   }
   if (typeMult === 0) typeMult = 1
   const multistrikeMult = 1 + derived.multistrike
-  return derived.power * derived.masteryMult * derived.versatilityMult * derived.overpower * avgCrit * derived.attacksPerSecond * typeMult * multistrikeMult * bonusMult
+  return derived.power * derived.masteryMult * derived.overpower * avgCrit * derived.attacksPerSecond * typeMult * multistrikeMult * bonusMult
 }
 
 /**
@@ -82,8 +90,7 @@ export const EFFECTIVE_DR_CAP = 0.8
  * (capacités passives, keystones) déjà sous forme (1 − x).
  */
 export function genericMitigation(derived: DerivedStats, extraMitigation = 1): number {
-  let g = (1 - derived.dodge) * (1 - derived.flatDr) * (1 - derived.masteryDr) * extraMitigation
-  g /= derived.versatilityMult
+  const g = (1 - derived.dodge) * (1 - derived.flatDr) * (1 - derived.masteryDr) * extraMitigation
   return Math.max(g, 1 - EFFECTIVE_DR_CAP)
 }
 

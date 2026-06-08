@@ -26,23 +26,23 @@ export const UNIQUE_EFFECTS: UniqueEffect[] = [
   { id: 'danse_des_ombres', name: 'Danse des ombres', role: 'dps', description: 'Vous esquivez en frappant.', mods: { agilite: 60, hate: 20 }, active: 'Empile des charges de célérité en esquivant.' },
   { id: 'perce_armure', name: 'Perce-armure', role: 'dps', description: 'Rien ne vous résiste.', mods: { penetration: 60, force: 30 }, active: 'Ignore totalement l\'armure sur les crits.' },
   { id: 'maitre_des_elements', name: 'Maître des éléments', role: 'dps', description: 'Les éléments vous obéissent.', mods: { maitrise: 60, intelligence: 30 }, active: 'Alterne feu/givre/foudre pour des combos.' },
-  { id: 'echo_du_vide', name: 'Écho du vide', role: 'dps', description: 'Le néant amplifie vos coups.', mods: { polyvalence: 45, maitrise: 35 }, active: 'Chaque kill propage une explosion de vide.' },
+  { id: 'echo_du_vide', name: 'Écho du vide', role: 'dps', description: 'Le néant amplifie vos coups.', mods: { maitrise: 80 }, active: 'Chaque kill propage une explosion de vide.' },
   { id: 'colere_titanesque', name: 'Colère titanesque', role: 'dps', description: 'Chaque coup ébranle le monde.', mods: { force: 50, degatsCrit: 70 }, active: 'Les coups génèrent une onde de choc.' },
   { id: 'frappe_fantome', name: 'Frappe fantôme', role: 'dps', description: 'Vos lames traversent les défenses.', mods: { agilite: 45, penetration: 45 }, active: 'Les frappes ignorent une part des résistances.' },
 
   // ================= HEAL (historiques) =================
   { id: 'flux_vital', name: 'Flux vital', role: 'heal', description: 'La vie circule à travers vous.', mods: { regen: 60, intelligence: 30 }, active: 'Un soin différé suit chaque attaque.' },
   { id: 'sang_eternel', name: 'Sang éternel', role: 'heal', description: 'Vos blessures se referment seules.', mods: { volDeVie: 40, regen: 30 }, active: 'Un bouclier de sang se reforme hors combat.' },
-  { id: 'benediction_solaire', name: 'Bénédiction solaire', role: 'heal', description: 'Une lumière apaisante vous entoure.', mods: { intelligence: 50, polyvalence: 30, regen: 25 }, active: 'Soigne le groupe à chaque sort lancé.' },
+  { id: 'benediction_solaire', name: 'Bénédiction solaire', role: 'heal', description: 'Une lumière apaisante vous entoure.', mods: { intelligence: 50, maitrise: 30, regen: 25 }, active: 'Soigne le groupe à chaque sort lancé.' },
   { id: 'communion', name: 'Communion', role: 'heal', description: 'Votre esprit nourrit le groupe.', mods: { intelligence: 60, regen: 40 }, active: 'Soigne tout le groupe sur la durée.' },
   { id: 'renaissance', name: 'Renaissance', role: 'heal', description: 'Vous renaissez de vos cendres.', mods: { regen: 50, endurance: 60 }, active: 'Survit une fois à la mort par combat.' },
 
   // ================= TANK (historiques) =================
-  { id: 'colosse', name: 'Carrure de colosse', role: 'tank', description: 'Votre stature impose le respect.', mods: { endurance: 80, polyvalence: 25 }, active: 'Renvoie une partie des dégâts subis.' },
+  { id: 'colosse', name: 'Carrure de colosse', role: 'tank', description: 'Votre stature impose le respect.', mods: { endurance: 80, maitrise: 25 }, active: 'Renvoie une partie des dégâts subis.' },
   { id: 'gardien_eternel', name: 'Gardien éternel', role: 'tank', description: 'Une volonté inépuisable.', mods: { endurance: 60, reductionDegats: 50 }, active: 'Un bouclier se régénère hors combat.' },
-  { id: 'mur_dacier', name: 'Mur d\'acier', role: 'tank', description: 'Immobile face à la tempête.', mods: { reductionDegats: 70, bouclier: 200 }, active: 'Devient brièvement insensible aux coups.' },
+  { id: 'mur_dacier', name: 'Mur d\'acier', role: 'tank', description: 'Immobile face à la tempête.', mods: { reductionDegats: 70, barriere: 200 }, active: 'Devient brièvement insensible aux coups.' },
   { id: 'peau_de_dragon', name: 'Peau de dragon', role: 'tank', description: 'Des écailles ancestrales vous couvrent.', mods: { endurance: 100, esquive: 30 }, active: 'Reflète les attaques esquivées.' },
-  { id: 'rempart_vivant', name: 'Rempart vivant', role: 'tank', description: 'Vous attirez et encaissez tout.', mods: { endurance: 70, bouclier: 300 }, active: 'Provoque toute la salle.' },
+  { id: 'rempart_vivant', name: 'Rempart vivant', role: 'tank', description: 'Vous attirez et encaissez tout.', mods: { endurance: 70, barriere: 300 }, active: 'Provoque toute la salle.' },
 
   // ================= RESIST (historiques) =================
   { id: 'coeur_de_braise', name: 'Cœur de braise', role: 'resist', description: 'Le feu ne vous atteint plus.', mods: { endurance: 40 }, resistMods: { feu: 0.18 }, active: 'Immole les attaquants au contact.' },
@@ -55,9 +55,9 @@ export const UNIQUE_EFFECTS: UniqueEffect[] = [
 
   // ================= UTILITY (historiques) =================
   { id: 'esprit_vif', name: 'Esprit vif', role: 'utility', description: 'Vos réflexes dépassent l\'ennemi.', mods: { hate: 60, esquive: 30 }, active: 'Esquive garantie après un coup encaissé.' },
-  { id: 'fortune', name: 'Fortune du voyageur', role: 'utility', description: 'La chance vous sourit.', mods: { polyvalence: 50, regen: 30 }, active: 'Améliore le butin des combats.' },
-  { id: 'equilibre_parfait', name: 'Équilibre parfait', role: 'utility', description: 'Ni trop offensif, ni trop prudent.', mods: { polyvalence: 70 }, active: 'Adapte vos stats au combat.' },
-  { id: 'source_intarissable', name: 'Source intarissable', role: 'utility', description: 'Une vitalité qui ne tarit jamais.', mods: { regen: 80, polyvalence: 30 }, active: 'Régénère fortement hors combat.' },
+  { id: 'fortune', name: 'Fortune du voyageur', role: 'utility', description: 'La chance vous sourit.', mods: { maitrise: 50, regen: 30 }, active: 'Améliore le butin des combats.' },
+  { id: 'equilibre_parfait', name: 'Équilibre parfait', role: 'utility', description: 'Ni trop offensif, ni trop prudent.', mods: { maitrise: 70 }, active: 'Adapte vos stats au combat.' },
+  { id: 'source_intarissable', name: 'Source intarissable', role: 'utility', description: 'Une vitalité qui ne tarit jamais.', mods: { regen: 80, maitrise: 30 }, active: 'Régénère fortement hors combat.' },
 
   // ================================================================
   //                100 NOUVEAUX EFFETS UNIQUES
@@ -105,23 +105,23 @@ export const UNIQUE_EFFECTS: UniqueEffect[] = [
 
   // ---------------- TANK (20) ----------------
   { id: 'u_bastion_imperial', name: 'Bastion impérial', role: 'tank', description: 'Une forteresse à vous seul.', mods: { endurance: 90, reductionDegats: 30 }, active: 'Érige un mur qui absorbe les coups.' },
-  { id: 'u_carapace_ancestrale', name: 'Carapace ancestrale', role: 'tank', description: 'Une coquille gravée par les âges.', mods: { reductionDegats: 60, bouclier: 250 }, active: 'Durcit la carapace après chaque coup encaissé.' },
-  { id: 'u_volonte_de_fer', name: 'Volonté de fer', role: 'tank', description: 'Rien ne vous fait plier.', mods: { endurance: 70, polyvalence: 35 }, active: 'Ignore le prochain coup fatal une fois.' },
+  { id: 'u_carapace_ancestrale', name: 'Carapace ancestrale', role: 'tank', description: 'Une coquille gravée par les âges.', mods: { reductionDegats: 60, barriere: 250 }, active: 'Durcit la carapace après chaque coup encaissé.' },
+  { id: 'u_volonte_de_fer', name: 'Volonté de fer', role: 'tank', description: 'Rien ne vous fait plier.', mods: { endurance: 70, maitrise: 35 }, active: 'Ignore le prochain coup fatal une fois.' },
   { id: 'u_montagne_vivante', name: 'Montagne vivante', role: 'tank', description: 'Inébranlable comme le roc.', mods: { endurance: 120 }, active: 'Plus vous êtes immobile, plus vous résistez.' },
-  { id: 'u_serment_du_gardien', name: 'Serment du gardien', role: 'tank', description: 'Vous protégez les vôtres.', mods: { endurance: 60, reductionDegats: 45, polyvalence: 20 }, active: 'Redirige une part des dégâts du groupe sur vous.' },
-  { id: 'u_aegis_runique', name: 'Aegis runique', role: 'tank', description: 'Un bouclier de runes scellées.', mods: { bouclier: 400, endurance: 40 }, active: 'Le bouclier renvoie l\'énergie absorbée.' },
+  { id: 'u_serment_du_gardien', name: 'Serment du gardien', role: 'tank', description: 'Vous protégez les vôtres.', mods: { endurance: 60, reductionDegats: 45, maitrise: 20 }, active: 'Redirige une part des dégâts du groupe sur vous.' },
+  { id: 'u_aegis_runique', name: 'Aegis runique', role: 'tank', description: 'Un bouclier de runes scellées.', mods: { barriere: 400, endurance: 40 }, active: 'Le bouclier renvoie l\'énergie absorbée.' },
   { id: 'u_chair_de_pierre', name: 'Chair de pierre', role: 'tank', description: 'Votre peau se mue en granit.', mods: { reductionDegats: 80 }, active: 'Pétrification temporaire : quasi-invulnérable.' },
   { id: 'u_coeur_de_montagne', name: 'Cœur de montagne', role: 'tank', description: 'Un cœur lourd comme un mont.', mods: { endurance: 85, esquive: 25 }, active: 'Convertit une part des PV en bouclier.' },
   { id: 'u_garde_du_crepuscule', name: 'Garde du crépuscule', role: 'tank', description: 'Sentinelle entre deux mondes.', mods: { endurance: 65, reductionDegats: 40 }, active: 'Provoque et encaisse une salve entière.' },
-  { id: 'u_titan_eveille', name: 'Titan éveillé', role: 'tank', description: 'Un colosse qui se redresse.', mods: { endurance: 100, polyvalence: 20 }, active: 'Grandit à chaque coup subi (plus de PV).' },
+  { id: 'u_titan_eveille', name: 'Titan éveillé', role: 'tank', description: 'Un colosse qui se redresse.', mods: { endurance: 100, maitrise: 20 }, active: 'Grandit à chaque coup subi (plus de PV).' },
   { id: 'u_ancre_abyssale', name: 'Ancre abyssale', role: 'tank', description: 'Rien ne peut vous déplacer.', mods: { endurance: 75, reductionDegats: 35 }, active: 'Immunité aux contrôles et au repli forcé.' },
-  { id: 'u_bouclier_solaire', name: 'Bouclier solaire', role: 'tank', description: 'Un disque de lumière vous protège.', mods: { bouclier: 300, regen: 30 }, active: 'Le bouclier soigne quand il se brise.' },
+  { id: 'u_bouclier_solaire', name: 'Bouclier solaire', role: 'tank', description: 'Un disque de lumière vous protège.', mods: { barriere: 300, regen: 30 }, active: 'Le bouclier soigne quand il se brise.' },
   { id: 'u_peau_d_ecorce', name: 'Peau d\'écorce', role: 'tank', description: 'L\'écorce ancestrale vous recouvre.', mods: { endurance: 70, reductionDegats: 30, regen: 20 }, active: 'Régénère tant que vous restez en garde.' },
-  { id: 'u_rempart_d_os', name: 'Rempart d\'os', role: 'tank', description: 'Un mur fait des ennemis tombés.', mods: { endurance: 80, bouclier: 200 }, active: 'Chaque kill érige un fragment de mur d\'os.' },
+  { id: 'u_rempart_d_os', name: 'Rempart d\'os', role: 'tank', description: 'Un mur fait des ennemis tombés.', mods: { endurance: 80, barriere: 200 }, active: 'Chaque kill érige un fragment de mur d\'os.' },
   { id: 'u_egide_du_juge', name: 'Égide du juge', role: 'tank', description: 'Le bouclier de la sentence.', mods: { reductionDegats: 55, endurance: 45 }, active: 'Renvoie les coups esquivés à l\'agresseur.' },
-  { id: 'u_forme_de_golem', name: 'Forme de golem', role: 'tank', description: 'Un automate de pierre et de mana.', mods: { endurance: 90, bouclier: 150 }, active: 'Se reconstruit lentement hors combat.' },
-  { id: 'u_serment_inviolable', name: 'Serment inviolable', role: 'tank', description: 'Une promesse que rien ne brise.', mods: { reductionDegats: 50, polyvalence: 30 }, active: 'Réduit fortement les dégâts du premier boss.' },
-  { id: 'u_carcasse_runique', name: 'Carcasse runique', role: 'tank', description: 'Une armure vivante de runes.', mods: { endurance: 60, bouclier: 280, reductionDegats: 20 }, active: 'Les runes scintillent et bloquent un coup.' },
+  { id: 'u_forme_de_golem', name: 'Forme de golem', role: 'tank', description: 'Un automate de pierre et de mana.', mods: { endurance: 90, barriere: 150 }, active: 'Se reconstruit lentement hors combat.' },
+  { id: 'u_serment_inviolable', name: 'Serment inviolable', role: 'tank', description: 'Une promesse que rien ne brise.', mods: { reductionDegats: 50, maitrise: 30 }, active: 'Réduit fortement les dégâts du premier boss.' },
+  { id: 'u_carcasse_runique', name: 'Carcasse runique', role: 'tank', description: 'Une armure vivante de runes.', mods: { endurance: 60, barriere: 280, reductionDegats: 20 }, active: 'Les runes scintillent et bloquent un coup.' },
   { id: 'u_geant_des_glaces', name: 'Géant des glaces', role: 'tank', description: 'Une masse de glace impassible.', mods: { endurance: 95, esquive: 20 }, active: 'Gèle les attaquants au contact.' },
   { id: 'u_sentinelle_eternelle', name: 'Sentinelle éternelle', role: 'tank', description: 'La garde qui ne dort jamais.', mods: { endurance: 70, reductionDegats: 35, regen: 25 }, active: 'Veille : régénère et provoque en continu.' },
 
@@ -129,16 +129,16 @@ export const UNIQUE_EFFECTS: UniqueEffect[] = [
   { id: 'u_calice_de_vie', name: 'Calice de vie', role: 'heal', description: 'Une coupe qui ne se vide jamais.', mods: { regen: 70, intelligence: 35 }, active: 'Déverse un flot de soins sur le plus blessé.' },
   { id: 'u_larme_de_seraphin', name: 'Larme de séraphin', role: 'heal', description: 'Une larme d\'ange cristallisée.', mods: { intelligence: 55, regen: 45 }, active: 'Ressuscite un allié tombé une fois.' },
   { id: 'u_sang_de_phenix', name: 'Sang de phénix', role: 'heal', description: 'La chaleur du renouveau.', mods: { regen: 55, endurance: 50 }, active: 'Une renaissance ardente après la mort.' },
-  { id: 'u_chant_de_guerison', name: 'Chant de guérison', role: 'heal', description: 'Votre voix apaise les plaies.', mods: { intelligence: 65, polyvalence: 30 }, active: 'Un chant soigne tout le groupe sur la durée.' },
+  { id: 'u_chant_de_guerison', name: 'Chant de guérison', role: 'heal', description: 'Votre voix apaise les plaies.', mods: { intelligence: 65, maitrise: 30 }, active: 'Un chant soigne tout le groupe sur la durée.' },
   { id: 'u_rosee_sylvestre', name: 'Rosée sylvestre', role: 'heal', description: 'La rosée du matin guérit tout.', mods: { regen: 60, volDeVie: 20 }, active: 'Régénération accélérée sous les soins.' },
   { id: 'u_pacte_vital', name: 'Pacte vital', role: 'heal', description: 'Vos vies sont liées.', mods: { regen: 50, endurance: 55 }, active: 'Partage les soins reçus avec le groupe.' },
   { id: 'u_aura_curative', name: 'Aura curative', role: 'heal', description: 'Une lumière douce vous nimbe.', mods: { intelligence: 50, regen: 50 }, active: 'Soigne passivement les alliés proches.' },
   { id: 'u_eau_benie', name: 'Eau bénie', role: 'heal', description: 'Une source sanctifiée.', mods: { regen: 65, intelligence: 30 }, active: 'Purge une altération et soigne d\'un coup.' },
-  { id: 'u_souffle_de_vie', name: 'Souffle de vie', role: 'heal', description: 'Un dernier souffle ranime.', mods: { regen: 45, endurance: 45, polyvalence: 20 }, active: 'Empêche un allié de tomber sous 1 PV.' },
+  { id: 'u_souffle_de_vie', name: 'Souffle de vie', role: 'heal', description: 'Un dernier souffle ranime.', mods: { regen: 45, endurance: 45, maitrise: 20 }, active: 'Empêche un allié de tomber sous 1 PV.' },
   { id: 'u_main_du_guerisseur', name: 'Main du guérisseur', role: 'heal', description: 'Un simple contact suffit.', mods: { intelligence: 60, regen: 40 }, active: 'Soin instantané sur la cible la plus basse.' },
   { id: 'u_fontaine_eternelle', name: 'Fontaine éternelle', role: 'heal', description: 'Une eau qui jaillit sans fin.', mods: { regen: 90 }, active: 'Une zone de soins persistante autour de vous.' },
   { id: 'u_benediction_lunaire', name: 'Bénédiction lunaire', role: 'heal', description: 'La lune veille sur vos blessés.', mods: { intelligence: 45, regen: 45, esquive: 20 }, active: 'Soins majorés la nuit du combat.' },
-  { id: 'u_serment_du_clerc', name: 'Serment du clerc', role: 'heal', description: 'Dévoué corps et âme.', mods: { regen: 55, polyvalence: 35 }, active: 'Convertit une part de vos dégâts en soins de groupe.' },
+  { id: 'u_serment_du_clerc', name: 'Serment du clerc', role: 'heal', description: 'Dévoué corps et âme.', mods: { regen: 55, maitrise: 35 }, active: 'Convertit une part de vos dégâts en soins de groupe.' },
   { id: 'u_lien_d_ame', name: 'Lien d\'âme', role: 'heal', description: 'Deux âmes, un seul destin.', mods: { regen: 50, intelligence: 35, endurance: 25 }, active: 'Répartit les dégâts létaux sur le groupe.' },
 
   // ---------------- RESIST (14) ----------------
@@ -159,19 +159,19 @@ export const UNIQUE_EFFECTS: UniqueEffect[] = [
 
   // ---------------- UTILITY (14) ----------------
   { id: 'u_pas_de_l_ombre', name: 'Pas de l\'ombre', role: 'utility', description: 'Vous glissez entre les coups.', mods: { esquive: 45, agilite: 30 }, active: 'Téléportation courte qui esquive un coup.' },
-  { id: 'u_chance_du_pillard', name: 'Chance du pillard', role: 'utility', description: 'Le butin vous trouve.', mods: { polyvalence: 40, regen: 25 }, active: 'Améliore nettement la qualité du butin.' },
+  { id: 'u_chance_du_pillard', name: 'Chance du pillard', role: 'utility', description: 'Le butin vous trouve.', mods: { maitrise: 40, regen: 25 }, active: 'Améliore nettement la qualité du butin.' },
   { id: 'u_horloge_brisee', name: 'Horloge brisée', role: 'utility', description: 'Le temps joue pour vous.', mods: { recuperation: 18, hate: 30 }, active: 'Réduit fortement les temps de recharge.' },
   { id: 'u_souffle_du_vent', name: 'Souffle du vent', role: 'utility', description: 'Léger comme la brise.', mods: { hate: 50, esquive: 25 }, active: 'Vitesse accrue après une esquive.' },
-  { id: 'u_oeil_omniscient', name: 'Œil omniscient', role: 'utility', description: 'Rien ne vous échappe.', mods: { critique: 35, polyvalence: 35 }, active: 'Révèle et exploite les faiblesses ennemies.' },
-  { id: 'u_pacte_du_marchand', name: 'Pacte du marchand', role: 'utility', description: 'Tout a un prix… avantageux.', mods: { polyvalence: 50, regen: 20 }, active: 'Convertit l\'excédent de soins en or.' },
-  { id: 'u_boussole_astrale', name: 'Boussole astrale', role: 'utility', description: 'Les astres vous guident.', mods: { polyvalence: 45, hate: 25 }, active: 'Oriente vos coups vers la cible idéale.' },
+  { id: 'u_oeil_omniscient', name: 'Œil omniscient', role: 'utility', description: 'Rien ne vous échappe.', mods: { critique: 35, maitrise: 35 }, active: 'Révèle et exploite les faiblesses ennemies.' },
+  { id: 'u_pacte_du_marchand', name: 'Pacte du marchand', role: 'utility', description: 'Tout a un prix… avantageux.', mods: { maitrise: 50, regen: 20 }, active: 'Convertit l\'excédent de soins en or.' },
+  { id: 'u_boussole_astrale', name: 'Boussole astrale', role: 'utility', description: 'Les astres vous guident.', mods: { maitrise: 45, hate: 25 }, active: 'Oriente vos coups vers la cible idéale.' },
   { id: 'u_grimoire_vivant', name: 'Grimoire vivant', role: 'utility', description: 'Un livre qui pense pour vous.', mods: { intelligence: 45, recuperation: 12 }, active: 'Relance automatiquement votre dernier sort.' },
-  { id: 'u_fil_du_destin', name: 'Fil du destin', role: 'utility', description: 'Vous tissez votre sort.', mods: { polyvalence: 55 }, active: 'Une seconde chance sur un coup raté.' },
-  { id: 'u_talisman_du_voyageur', name: 'Talisman du voyageur', role: 'utility', description: 'La route vous est clémente.', mods: { regen: 40, esquive: 25, polyvalence: 15 }, active: 'Régénère plus vite hors combat.' },
+  { id: 'u_fil_du_destin', name: 'Fil du destin', role: 'utility', description: 'Vous tissez votre sort.', mods: { maitrise: 55 }, active: 'Une seconde chance sur un coup raté.' },
+  { id: 'u_talisman_du_voyageur', name: 'Talisman du voyageur', role: 'utility', description: 'La route vous est clémente.', mods: { regen: 40, esquive: 25, maitrise: 15 }, active: 'Régénère plus vite hors combat.' },
   { id: 'u_sablier_d_argent', name: 'Sablier d\'argent', role: 'utility', description: 'Le sable s\'écoule à votre rythme.', mods: { recuperation: 16, regen: 30 }, active: 'Ralentit l\'enrage des boss.' },
-  { id: 'u_clef_des_songes', name: 'Clef des songes', role: 'utility', description: 'Ouvre des portes invisibles.', mods: { polyvalence: 40, critique: 25 }, active: 'Améliore les récompenses de donjon et raid.' },
-  { id: 'u_plume_de_phenix', name: 'Plume de phénix', role: 'utility', description: 'Une plume porte-bonheur.', mods: { regen: 35, polyvalence: 30, hate: 15 }, active: 'Évite la mort une fois par combat.' },
-  { id: 'u_dé_pipé', name: 'Dé pipé', role: 'utility', description: 'Le hasard vous obéit.', mods: { critique: 40, polyvalence: 25 }, active: 'Force un résultat favorable périodiquement.' },
+  { id: 'u_clef_des_songes', name: 'Clef des songes', role: 'utility', description: 'Ouvre des portes invisibles.', mods: { maitrise: 40, critique: 25 }, active: 'Améliore les récompenses de donjon et raid.' },
+  { id: 'u_plume_de_phenix', name: 'Plume de phénix', role: 'utility', description: 'Une plume porte-bonheur.', mods: { regen: 35, maitrise: 30, hate: 15 }, active: 'Évite la mort une fois par combat.' },
+  { id: 'u_dé_pipé', name: 'Dé pipé', role: 'utility', description: 'Le hasard vous obéit.', mods: { critique: 40, maitrise: 25 }, active: 'Force un résultat favorable périodiquement.' },
 ]
 
 export const UNIQUE_MAX_RANK = 10
