@@ -121,13 +121,24 @@ export function raidUnlocked(def: RaidDef, bestStage: number, progress: Record<R
   return true
 }
 
-// ---- Constantes d'équilibrage (TRÈS DUR — à nudger ici) ----
-const RAID_HP_PREMIUM = 3.0       // PV bruts vs un ennemi de farm de palier équivalent
-const RAID_DMG_PREMIUM = 2.2      // dégâts bruts vs farm équivalent
-const FINAL_BOSS_MULT = 2.6       // le dernier boss du raid est un mur
-const TIER_STAGE_STEP = 22        // un tier de raid ≈ +22 paliers de farm (saut violent)
+// ---- Constantes d'équilibrage (DUR mais sans mur — à nudger ici) ----
+const RAID_HP_PREMIUM = 2.5       // PV bruts vs un ennemi de farm de palier équivalent
+const RAID_DMG_PREMIUM = 1.95     // dégâts bruts vs farm équivalent
+const FINAL_BOSS_MULT = 2.2       // le dernier boss du raid est un mur (adouci)
+// Pas (en paliers de farm) entre deux tiers — désormais PROGRESSIF : les premiers tiers
+// montent doucement (plus de mur au tier 2), l'écart s'élargit ensuite.
+const TIER_STAGE_BASE = 11        // pas du tier 2
+const TIER_STAGE_GROWTH = 2.4     // +X paliers de pas par tier supplémentaire
 const BOSS_STAGE_STEP = 6         // chaque boss suivant est plus dur (modéré : un raid à 4 boss
                                   // n'écrase plus un raid à 3 boss au même palier d'accès)
+
+/** Paliers de farm cumulés ajoutés par les tiers (courbe douce au début, plus raide ensuite). */
+function tierStageOffset(tier: number): number {
+  // tier 1 = 0 ; tier 2 = BASE ; ensuite chaque tier ajoute BASE + (t-2)*GROWTH.
+  let off = 0
+  for (let t = 2; t <= tier; t++) off += TIER_STAGE_BASE + (t - 2) * TIER_STAGE_GROWTH
+  return off
+}
 const FORTRESS_ARMOR_MULT = 3.2   // 'fortress' : armure colossale
 const FORTRESS_RESIST_BONUS = 0.2 // 'fortress' : +résistance au thème
 
@@ -150,7 +161,8 @@ export interface ActiveRaid {
   /** Index du boss en cours (0-based). */
   current: number
   totalBosses: number
-  enemy: Enemy
+  /** enemies[0] = le boss (cible d'objectif) ; les suivants = renforts temporaires (mécanique Déferlante). */
+  enemies: Enemy[]
   /** Mécaniques signature (depuis la def). */
   mechanics: RaidMechanicKind[]
   /** Type d'attaque courant (pour 'rotate'/'rotating'). */
@@ -173,7 +185,7 @@ export function raidBossCount(def: RaidDef, tier: number): number {
 
 /** Palier de farm « effectif » d'un boss (sert à toutes les courbes). */
 function effStage(def: RaidDef, tier: number, bossIndex: number): number {
-  return def.unlockStage + (tier - 1) * TIER_STAGE_STEP + bossIndex * BOSS_STAGE_STEP
+  return def.unlockStage + tierStageOffset(tier) + bossIndex * BOSS_STAGE_STEP
 }
 
 /** Délai d'enrage dur (s) — rétrécit avec le tier → exige toujours plus de DPS. */
@@ -310,6 +322,27 @@ export function makeRaidBoss(def: RaidDef, tier: number, bossIndex: number, elem
   }
 }
 
+/**
+ * Crée un RENFORT de raid (mécanique Déferlante) : un add temporaire qui frappe l'équipe puis
+ * disparaît (`lifetime`). Délivre le « combat à plusieurs adversaires » sans casser le combat de boss.
+ */
+export function makeRaidAdd(def: RaidDef, tier: number, element: DamageType): Enemy {
+  const eff = effStage(def, tier, 0)
+  const hp = Math.round(40 * Math.pow(1.18, eff - 1) * 0.45 * def.baseDifficulty)
+  return {
+    name: `${def.icon} Rejeton`,
+    maxHp: hp,
+    hp,
+    armor: Math.round(8 + eff),
+    damage: Math.round(bossDamage(def, tier, 0) * 0.45),
+    xp: 0,
+    resist: {},
+    damageType: element,
+    lifetime: 8,
+    add: true,
+  }
+}
+
 /** Crée le cycle d'éléments d'attaque (raids 'rotating'/mécanique 'rotate'). */
 function rotateListFor(def: RaidDef): DamageType[] {
   if (def.element === 'rotating') return [...ELEMENTS]
@@ -329,7 +362,7 @@ export function generateRaid(raidId: RaidId, tier: number): ActiveRaid {
     name: `${def.name} · Tier ${tier}`,
     current: 0,
     totalBosses,
-    enemy: makeRaidBoss(def, tier, 0, startEl),
+    enemies: [makeRaidBoss(def, tier, 0, startEl)],
     mechanics: def.signature,
     element: startEl,
     rotateList,

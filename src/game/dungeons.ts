@@ -49,7 +49,8 @@ export interface ActiveDungeon {
   modifiers: DungeonModifier[]
   totalFights: number
   current: number // index du combat en cours (0-based)
-  enemy: Enemy
+  /** Le combat courant : un PACK d'ennemis (les combats classiques sont à plusieurs adversaires). */
+  enemies: Enemy[]
   fightTime: number // temps écoulé sur le combat courant (pour Enragé)
 }
 
@@ -154,6 +155,39 @@ export function makeDungeonEnemy(
   }
 }
 
+/** Taille du pack d'un combat de donjon (le boss final est seul). */
+export function dungeonPackSize(level: number, fightIndex: number, totalFights: number): number {
+  if (fightIndex === totalFights - 1) return 1 // boss
+  return Math.min(3, 2 + (level >= 4 ? 1 : 0))
+}
+
+const PACK_TAGS = ['α', 'β', 'γ']
+
+/**
+ * Construit le PACK d'ennemis d'un combat de donjon (plusieurs adversaires simultanés).
+ * Chaque membre a moins de PV qu'un ennemi solo (le pack tape fort en cumulé → survie de groupe).
+ */
+export function makeDungeonPack(
+  level: number,
+  fightIndex: number,
+  totalFights: number,
+  theme: DamageType,
+  vuln: DamageType,
+  modifiers: DungeonModifier[],
+): Enemy[] {
+  const size = dungeonPackSize(level, fightIndex, totalFights)
+  if (size <= 1) return [makeDungeonEnemy(level, fightIndex, totalFights, theme, vuln, modifiers)]
+  const pack: Enemy[] = []
+  for (let i = 0; i < size; i++) {
+    const e = makeDungeonEnemy(level, fightIndex, totalFights, theme, vuln, modifiers)
+    e.maxHp = Math.max(1, Math.round(e.maxHp * 0.7))
+    e.hp = e.maxHp
+    e.name = `${e.name} ${PACK_TAGS[i] ?? i + 1}`
+    pack.push(e)
+  }
+  return pack
+}
+
 /** Génère un donjon prêt à jouer pour un type de dégâts + niveau donnés. */
 export function generateDungeon(element: DamageType, level: number): ActiveDungeon {
   const theme = element
@@ -179,7 +213,7 @@ export function generateDungeon(element: DamageType, level: number): ActiveDunge
     modifiers,
     totalFights,
     current: 0,
-    enemy: makeDungeonEnemy(level, 0, totalFights, theme, vuln, modifiers),
+    enemies: makeDungeonPack(level, 0, totalFights, theme, vuln, modifiers),
     fightTime: 0,
   }
 }

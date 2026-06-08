@@ -50,8 +50,13 @@ export interface KeystoneEffect {
   statAsOther?: { from: OffensiveStat; to: OffensiveStat; frac: number }
   /** Convertit une fraction de l'Endurance en une stat offensive (Templier/Colosse). */
   enduranceAs?: { to: OffensiveStat; frac: number }
-  /** Convertit une fraction d'un type de dégâts en un autre. */
+  /** Convertit une fraction d'un type de dégâts en un autre (déplace : retire de `from`). */
   convertDamage?: { from: DamageType; to: DamageType; frac: number }
+  /**
+   * « Le type X compte AUSSI comme Y » : ajoute une part du poids de `from` au type `to`
+   * SANS la retirer de `from` (double appartenance → frappe la meilleure résistance des deux).
+   */
+  splashType?: { from: DamageType; to: DamageType; frac: number }
   /** Les coups appliquent un DoT : fraction des dégâts du coup / seconde, sur N secondes. */
   dot?: { frac: number; duration: number }
   /** Les soins sont amplifiés (HoT) : +X%. */
@@ -310,6 +315,14 @@ chain('conversion', 'cv_b', 'cv_entry', 1, [
   { name: 'Givre éternel', kind: 'keystone', desc: 'Convertit 50% des dégâts Physiques en Froid.', statMods: { maitrise: 30 }, keystone: { convertDamage: { from: 'physique', to: 'froid', frac: 0.5 } } },
   { name: 'Omniscience', kind: 'keystone', desc: 'Capstone : +50 stats offensives, +20% dégâts, +10% réduction.', statMods: { force: 50, agilite: 50, intelligence: 50 }, keystone: { damageMult: 1.2, flatDr: 0.1 } },
 ])
+// EMPREINTE — variantes « le Physique compte aussi comme … » vers les types non couverts par
+// l'Élémentaliste (Ombre/Arcane/Nature), pour un build hybride physique-multitype.
+chain('conversion', 'cv_c', 'cv_entry', 1, [
+  { name: 'Empreinte d\'ombre', kind: 'keystone', statMods: { maitrise: 16 }, desc: 'Tes dégâts Physiques comptent AUSSI comme Ombre (50%).', keystone: { splashType: { from: 'physique', to: 'ombre', frac: 0.5 } } },
+  { name: 'Empreinte arcanique', kind: 'keystone', statMods: { maitrise: 16 }, desc: 'Tes dégâts Physiques comptent AUSSI comme Arcane (50%).', keystone: { splashType: { from: 'physique', to: 'arcane', frac: 0.5 } } },
+  { name: 'Empreinte sylvestre', kind: 'keystone', statMods: { maitrise: 16 }, desc: 'Tes dégâts Physiques comptent AUSSI comme Nature (50%).', keystone: { splashType: { from: 'physique', to: 'nature', frac: 0.5 } } },
+  { name: 'Polymorphie', kind: 'keystone', statMods: { force: 30, agilite: 30, intelligence: 30 }, desc: 'Capstone : +30 à chaque stat offensive, +18% de dégâts.', keystone: { damageMult: 1.18 } },
+])
 single({ id: 'cv_gw_faucheur', name: '→ Faucheur', constellation: 'conversion', kind: 'gateway', tier: 2, maxRank: 1, requires: ['cv_b1'], description: 'Passerelle vers le Faucheur (ombre/DoT). +30 Intelligence.', statMods: { intelligence: 30 } })
 
 /* ================== ARCHÉTYPES ================== */
@@ -340,6 +353,14 @@ chain('elementaliste', 'el_b', 'el_entry', 1, [
   { name: 'Prisme', maxRank: 4, statMods: {}, resistMods: allResist(0.07), desc: '+7% résistance tous types par rang.' },
   { name: 'Conduit', maxRank: 4, statMods: { intelligence: 18, hate: 16 } },
   { name: 'Embrasement total', kind: 'keystone', desc: 'Tes coups brûlent fort (DoT 30% du coup/s, 5 s).', keystone: { dot: { frac: 0.3, duration: 5 } } },
+])
+// DIFFUSION — « ton type de base compte AUSSI comme un élément » (ajoute sans retirer → diversifie
+// ton profil pour contourner les résistances typées des ennemis). Empilables : couvre plusieurs types.
+chain('elementaliste', 'el_c', 'el_entry', 1, [
+  { name: 'Diffusion ardente', kind: 'keystone', statMods: { penetration: 14 }, desc: 'Tes dégâts Physiques comptent AUSSI comme Feu (50%).', keystone: { splashType: { from: 'physique', to: 'feu', frac: 0.5 } } },
+  { name: 'Diffusion givrée', kind: 'keystone', statMods: { penetration: 14 }, desc: 'Tes dégâts Physiques comptent AUSSI comme Froid (50%).', keystone: { splashType: { from: 'physique', to: 'froid', frac: 0.5 } } },
+  { name: 'Diffusion fulgurante', kind: 'keystone', statMods: { penetration: 14 }, desc: 'Tes dégâts Physiques comptent AUSSI comme Foudre (50%).', keystone: { splashType: { from: 'physique', to: 'foudre', frac: 0.5 } } },
+  { name: 'Prisme parfait', kind: 'keystone', statMods: { penetration: 30, intelligence: 30 }, desc: 'Capstone : +30 Pénétration/Intelligence, +20% de dégâts.', keystone: { damageMult: 1.2 } },
 ])
 
 /* FAUCHEUR — ombre, DoT, drain */

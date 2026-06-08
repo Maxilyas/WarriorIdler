@@ -5,7 +5,7 @@ import { theoreticalDps } from '../game/combat'
 import { isBossStage } from '../game/enemies'
 import { DAMAGE_TYPES } from '../game/damage'
 import { RAID_MECHANIC_META } from '../game/raids'
-import type { DamageType } from '../game/types'
+import type { DamageType, Enemy } from '../game/types'
 
 const LOG_COLORS: Record<LogKind, string> = {
   hit: 'text-slate-300',
@@ -33,7 +33,11 @@ export function CombatPanel() {
   const toggleFarmLock = useGame((s) => s.toggleFarmLock)
   const log = useGame((s) => s.log)
 
-  const enemy = raid ? raid.enemy : dungeon ? dungeon.enemy : normalEnemy
+  // Donjons/raids = combat à PLUSIEURS adversaires. En combat classique, un seul ennemi.
+  const enemies: Enemy[] = raid ? raid.enemies : dungeon ? dungeon.enemies : [normalEnemy]
+  const enemy = enemies.find((e) => e.hp > 0) ?? enemies[0]
+  const multi = enemies.length > 1
+  const enemyDmgTotal = enemies.filter((e) => e.hp > 0).reduce((a, e) => a + e.damage, 0)
   const atkType = DAMAGE_TYPES[enemy.damageType]
   // Objectif courant (tutoriel léger + signalisation des déblocages progressifs).
   const maxLevel = characters.reduce((m, c) => Math.max(m, c.level), 1)
@@ -170,16 +174,49 @@ export function CombatPanel() {
         </div>
 
         <div className="mt-2 text-center">
-          <div className={'text-lg font-bold ' + (boss ? 'text-rose-300' : 'text-slate-100')}>{enemy.name}</div>
-          <div className="mt-2 h-5 w-full overflow-hidden rounded-full bg-slate-800">
-            <div
-              className={'h-full transition-all duration-150 ' + (boss ? 'bg-gradient-to-r from-rose-700 to-rose-500' : 'bg-gradient-to-r from-red-700 to-red-500')}
-              style={{ width: `${enemyPct}%` }}
-            />
-          </div>
-          <div className="mt-1 text-xs text-slate-400">
-            {Math.ceil(enemy.hp).toLocaleString('fr-FR')} / {enemy.maxHp.toLocaleString('fr-FR')} PV
-          </div>
+          {multi ? (
+            <>
+              <div className="text-[11px] font-semibold text-slate-300">
+                {enemies.filter((e) => e.hp > 0).length} adversaire{enemies.filter((e) => e.hp > 0).length > 1 ? 's' : ''}
+              </div>
+              <div className="mt-1.5 space-y-1">
+                {enemies.map((e, i) => {
+                  const pct = Math.max(0, (e.hp / e.maxHp) * 100)
+                  const dead = e.hp <= 0
+                  const isFocus = e === enemy
+                  return (
+                    <div key={i} className={dead ? 'opacity-40' : ''}>
+                      <div className="flex items-center justify-between text-[10px]">
+                        <span className={'truncate ' + (e.add ? 'text-rose-300/80' : 'text-slate-200')}>
+                          {isFocus ? '🎯 ' : ''}{e.name}
+                        </span>
+                        <span className="ml-2 shrink-0 text-slate-500">{Math.ceil(Math.max(0, e.hp)).toLocaleString('fr-FR')}/{e.maxHp.toLocaleString('fr-FR')}</span>
+                      </div>
+                      <div className="mt-0.5 h-2.5 w-full overflow-hidden rounded-full bg-slate-800">
+                        <div
+                          className={'h-full transition-all duration-150 ' + (dead ? 'bg-slate-700' : e.add ? 'bg-gradient-to-r from-rose-800 to-rose-600' : 'bg-gradient-to-r from-red-700 to-red-500')}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className={'text-lg font-bold ' + (boss ? 'text-rose-300' : 'text-slate-100')}>{enemy.name}</div>
+              <div className="mt-2 h-5 w-full overflow-hidden rounded-full bg-slate-800">
+                <div
+                  className={'h-full transition-all duration-150 ' + (boss ? 'bg-gradient-to-r from-rose-700 to-rose-500' : 'bg-gradient-to-r from-red-700 to-red-500')}
+                  style={{ width: `${enemyPct}%` }}
+                />
+              </div>
+              <div className="mt-1 text-xs text-slate-400">
+                {Math.ceil(enemy.hp).toLocaleString('fr-FR')} / {enemy.maxHp.toLocaleString('fr-FR')} PV
+              </div>
+            </>
+          )}
           <div className="mt-1 text-[11px]">
             <span className="text-slate-500">Frappe en </span>
             <span style={{ color: atkType.color }}>{atkType.icon} {atkType.name}</span>
@@ -218,7 +255,7 @@ export function CombatPanel() {
 
         <div className="mt-3 grid grid-cols-2 gap-2 text-center text-xs">
           <Metric label="DPS équipe" value={Math.round(partyDps).toLocaleString('fr-FR')} accent="text-emerald-300" />
-          <Metric label="Dégâts ennemi/s" value={Math.round(enemy.damage).toLocaleString('fr-FR')} accent="text-red-300" />
+          <Metric label={multi ? 'Dégâts pack/s' : 'Dégâts ennemi/s'} value={Math.round(enemyDmgTotal).toLocaleString('fr-FR')} accent="text-red-300" />
         </div>
       </div>
 

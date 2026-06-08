@@ -266,4 +266,8 @@ export interface Enemy {
   trait?: string
   /** Ennemi d'élite (stats accrues + meilleur butin). */
   elite?: boolean
+  /** Renfort temporaire (adds de raid) : disparaît après `lifetime` secondes. */
+  lifetime?: number
+  /** Renfort secondaire (pas le boss / pas la cible d'objectif). */
+  add?: boolean
 }

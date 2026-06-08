@@ -82,6 +82,9 @@ export function ComparePanel({ item, equipped, occupied, onEquip, onSell, onRecy
         )}
       </div>
 
+      {/* Objet actuellement équipé (identité complète : rareté, unique, type) pour comparer en un coup d'œil. */}
+      {cmp && <EquippedSummary item={cmp} />}
+
       {/* Tableau de comparaison */}
       <div className="mt-2 overflow-hidden rounded-lg bg-black/30 text-[12px]">
         <div className="grid grid-cols-[1fr_auto_auto] gap-x-3 px-2.5 py-1 text-[9px] uppercase tracking-wide text-slate-500">
@@ -448,6 +451,45 @@ function UniqueBlock({ item }: { item: Item }) {
         >
           Monter rang {inst.rank + 1} · {cost.essences} essences ({have}) + ♦ {cost.eclats}
         </button>
+      )}
+    </div>
+  )
+}
+
+/** Résumé de l'objet ÉQUIPÉ (rareté, unique, type) affiché au-dessus de la comparaison. */
+function EquippedSummary({ item }: { item: Item }) {
+  const rarity = RARITIES[item.rarity]
+  const uniqueName = item.unique ? getUnique(item.unique.id)?.name : null
+  const typeLines = item.affixes.filter((a) => a.kind !== 'stat')
+  return (
+    <div className="mt-2 rounded-lg border border-slate-700/60 bg-black/20 p-2">
+      <div className="text-[9px] uppercase tracking-wide text-slate-500">Équipé actuellement</div>
+      <div className="mt-0.5 flex items-center gap-1.5">
+        <span>{ITEM_TYPES[item.type].icon}</span>
+        <span className={'min-w-0 flex-1 truncate text-[12px] font-semibold ' + (isPrism(item.rarity) ? 'prism' : '')} style={rarityTextStyle(item.rarity)}>
+          {item.name}
+        </span>
+        {itemHasRareStat(item) && <span className="text-[10px]" title="Stat RARE">💎</span>}
+        {item.unique && <span className="text-[10px] text-fuchsia-400" title={uniqueName ?? undefined}>✦</span>}
+      </div>
+      <div className="text-[9.5px] text-slate-500">
+        <span style={{ color: rarity.color }}>{rarity.name}</span> · iLvl {item.ilvl}
+        {item.damageType && item.damageType !== 'physique' && (
+          <span style={{ color: DAMAGE_TYPES[item.damageType].color }}> · {DAMAGE_TYPES[item.damageType].icon} {DAMAGE_TYPES[item.damageType].name}</span>
+        )}
+      </div>
+      {uniqueName && <div className="mt-0.5 text-[10px] font-medium text-fuchsia-300/90">✦ {uniqueName} (rang {item.unique!.rank})</div>}
+      {typeLines.length > 0 && (
+        <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[10px]">
+          {typeLines.map((a, i) => {
+            const m = a.type ? DAMAGE_TYPES[a.type] : null
+            return (
+              <span key={i} style={{ color: m?.color }}>
+                {a.kind === 'resist' ? '🛡' : m?.icon} +{a.value}% {a.kind === 'resist' ? 'rés.' : ''} {m?.name}
+              </span>
+            )
+          })}
+        </div>
       )}
     </div>
   )

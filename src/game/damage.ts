@@ -33,41 +33,69 @@ export interface DamageProfile {
   mainType: DamageType
 }
 
+/** Poids de base de l'arme dans le profil (le reste vient des affixes +% type de TOUT le stuff). */
+const WEAPON_BASE_WEIGHT = 1
+/** Part d'un affixe « +% type » reversée dans la RÉPARTITION du profil (diversification). */
+const AFFIX_PROFILE_SHARE = 0.7
+/** Part d'un affixe « +% type » conservée en bonus multiplicatif brut (+% de dégâts). */
+const AFFIX_BONUS_SHARE = 0.5
+
 /**
- * Calcule le profil de dégâts du personnage à partir de son équipement + des keystones.
- * - Le type de base vient de l'arme principale (Physique par défaut).
- * - Les affixes `dmgType` (+% type) s'accumulent en bonus multiplicatifs par type.
- * - Les keystones `convertDamage` redistribuent une fraction d'un type vers un autre.
+ * Calcule le profil de dégâts à partir de TOUT l'équipement (plus seulement l'arme) + des keystones.
+ * - L'arme principale pose un poids de base sur son type.
+ * - Chaque affixe `+% type` (n'importe quelle pièce) ajoute du POIDS à ce type dans la répartition
+ *   ET un bonus multiplicatif → empiler du Feu sur une arme Physique fait basculer ton profil vers
+ *   le Feu. Le stuff entier façonne le profil, l'arme ne le verrouille plus.
+ * - `convertDamage` déplace une part d'un type vers un autre ; `splashType` ajoute une part SANS
+ *   retirer (double appartenance), pour les nœuds « le Physique compte aussi comme Feu ».
  */
 export function computeDamageProfile(equipment: Equipment, keystones: KeystoneEffect[] = []): DamageProfile {
   const mainTypeBase: DamageType = equipment.armePrincipale?.damageType ?? 'physique'
-  const profile: Partial<Record<DamageType, number>> = { [mainTypeBase]: 1 }
 
-  // Conversions de type (keystones).
-  for (const k of keystones) {
-    if (!k.convertDamage) continue
-    const { from, to, frac } = k.convertDamage
-    const moved = (profile[from] ?? 0) * frac
-    if (moved <= 0) continue
-    profile[from] = (profile[from] ?? 0) - moved
-    profile[to] = (profile[to] ?? 0) + moved
-  }
-
+  // 1) Poids bruts par type : arme de base + contribution des affixes +% type de tout le stuff.
+  const weight: Partial<Record<DamageType, number>> = { [mainTypeBase]: WEAPON_BASE_WEIGHT }
   const bonus: Partial<Record<DamageType, number>> = {}
   for (const slot in equipment) {
     const item = equipment[slot as keyof Equipment]
     if (!item) continue
     for (const aff of item.affixes) {
-      if (aff.kind === 'dmgType' && aff.type) bonus[aff.type] = (bonus[aff.type] ?? 0) + aff.value / 100
+      if (aff.kind === 'dmgType' && aff.type) {
+        weight[aff.type] = (weight[aff.type] ?? 0) + (aff.value / 100) * AFFIX_PROFILE_SHARE
+        bonus[aff.type] = (bonus[aff.type] ?? 0) + (aff.value / 100) * AFFIX_BONUS_SHARE
+      }
     }
   }
 
-  // Type dominant = part de profil la plus haute.
+  // 2) Conversions (déplacent) puis éclaboussures (ajoutent sans retirer).
+  for (const k of keystones) {
+    if (!k.convertDamage) continue
+    const { from, to, frac } = k.convertDamage
+    const moved = (weight[from] ?? 0) * frac
+    if (moved <= 0) continue
+    weight[from] = (weight[from] ?? 0) - moved
+    weight[to] = (weight[to] ?? 0) + moved
+  }
+  for (const k of keystones) {
+    if (!k.splashType) continue
+    const { from, to, frac } = k.splashType
+    const added = (weight[from] ?? 0) * frac
+    if (added <= 0) continue
+    weight[to] = (weight[to] ?? 0) + added
+  }
+
+  // 3) Normalisation → répartition (somme = 1).
+  let total = 0
+  for (const t in weight) total += Math.max(0, weight[t as DamageType] ?? 0)
+  if (total <= 0) { total = 1; weight[mainTypeBase] = 1 }
+  const profile: Partial<Record<DamageType, number>> = {}
   let mainType = mainTypeBase
   let best = -1
-  for (const t in profile) {
-    const v = profile[t as DamageType] ?? 0
-    if (v > best) { best = v; mainType = t as DamageType }
+  for (const t in weight) {
+    const type = t as DamageType
+    const v = Math.max(0, weight[type] ?? 0) / total
+    if (v <= 0) continue
+    profile[type] = v
+    if (v > best) { best = v; mainType = type }
   }
 
   return { profile, bonus, mainType }

@@ -5,6 +5,21 @@ import {
   type ConstellationId, type TalentNode,
 } from '../game/talents'
 import { getPower } from '../game/powers'
+import { DAMAGE_TYPES } from '../game/damage'
+import type { DamageType } from '../game/types'
+
+/** Types de dégâts mis en avant par un nœud (conversion/éclaboussure de keystone + sort débloqué). */
+function nodeDamageTypes(node: TalentNode): DamageType[] {
+  const out = new Set<DamageType>()
+  const k = node.keystone
+  if (k?.convertDamage) out.add(k.convertDamage.to)
+  if (k?.splashType) out.add(k.splashType.to)
+  if (node.unlockPower) {
+    const p = getPower(node.unlockPower)
+    if (p?.damageType && p.damageType !== 'physique') out.add(p.damageType)
+  }
+  return [...out]
+}
 
 const KIND_ICON: Record<TalentNode['kind'], string> = {
   minor: '•', notable: '◆', keystone: '✦', ability: '⚡', gateway: '⛩',
@@ -166,6 +181,13 @@ function NodeChip({
       <span className="text-[11px] font-semibold leading-tight" style={{ color }}>
         {KIND_ICON[node.kind]} {node.name}
       </span>
+      {nodeDamageTypes(node).length > 0 && (
+        <span className="flex items-center gap-0.5 text-[9px]" title="Type de dégâts mis en avant">
+          {nodeDamageTypes(node).map((t) => (
+            <span key={t} style={{ color: DAMAGE_TYPES[t].color }}>{DAMAGE_TYPES[t].icon}</span>
+          ))}
+        </span>
+      )}
       {node.maxRank > 1 ? (
         <span className="flex items-center gap-0.5">
           {Array.from({ length: node.maxRank }).map((_, i) => (

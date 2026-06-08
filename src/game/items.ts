@@ -41,17 +41,24 @@ type LineSpec =
 /**
  * Poids de tirage des stats secondaires. Les stats RARES ont un poids minuscule
  * (Vol de vie ~2% par objet, Surpuissance/Multifrappe/Récupération encore plus rares).
+ *
+ * `polyvalence` est à 0 : volontairement RETIRÉE du butin aléatoire. C'était la stat
+ * « strictement bonne » (+dégâts ET -dégâts subis) qui diluait le choix offense ↔ survie.
+ * Elle reste disponible comme IDENTITÉ via les talents (Métamorphe) et les effets uniques.
  */
 const STAT_WEIGHTS: Record<SecondaryStat, number> = {
   critique: 10, degatsCrit: 9, hate: 10, maitrise: 9, penetration: 7,
   reductionDegats: 8, esquive: 7, bouclier: 7,
-  polyvalence: 8, regen: 6,
+  polyvalence: 0, regen: 6,
   volDeVie: 0.6, surpuissance: 0.3, multifrappe: 0.3, recuperation: 0.3,
 }
 
 function buildPool(): LineSpec[] {
   const pool: LineSpec[] = []
-  for (const s of Object.keys(STAT_WEIGHTS) as SecondaryStat[]) pool.push({ kind: 'stat', stat: s, weight: STAT_WEIGHTS[s] })
+  for (const s of Object.keys(STAT_WEIGHTS) as SecondaryStat[]) {
+    if (STAT_WEIGHTS[s] <= 0) continue // stats retirées du tirage aléatoire (ex. polyvalence)
+    pool.push({ kind: 'stat', stat: s, weight: STAT_WEIGHTS[s] })
+  }
   for (const t of DAMAGE_TYPE_LIST) pool.push({ kind: 'dmgType', type: t, weight: t === 'physique' ? 4 : 6 })
   for (const t of DAMAGE_TYPE_LIST) pool.push({ kind: 'resist', type: t, weight: 5 })
   return pool

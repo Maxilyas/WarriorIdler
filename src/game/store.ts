@@ -23,10 +23,10 @@ import { DAMAGE_TYPE_LIST, DAMAGE_TYPES } from './damage'
 import { equipSlotsForType, slotAccepts } from './slots'
 import { essenceGain, upgradeCost, insertCost, getUnique, UNIQUE_MAX_RANK, randomUniqueInstance } from './uniques'
 import {
-  generateDungeon, makeDungeonEnemy, dungeonIlvl, dungeonLuckTier, type ActiveDungeon,
+  generateDungeon, makeDungeonPack, dungeonIlvl, dungeonLuckTier, type ActiveDungeon,
 } from './dungeons'
 import {
-  generateRaid, makeRaidBoss, getRaidDef, raidUnlocked, raidBerserkTime,
+  generateRaid, makeRaidBoss, makeRaidAdd, getRaidDef, raidUnlocked, raidBerserkTime,
   raidIlvl, raidMinTier, raidMaxTier, raidRarityDecay, raidRarityJackpot,
   raidLootCount, raidFragments, raidCosmicChance, raidCosmicQty, pickRaidLootType,
   RAIDS, type ActiveRaid, type RaidId,
@@ -316,10 +316,25 @@ function sanitize(save: SaveData): SaveData {
     save.dungeonProgress = rec
   }
 
-  // Donjon/raid actifs : garantir element + type d'attaque ennemi.
+  // Donjon/raid actifs : garantir element + migrer le combat mono-ennemi → pack (enemies[]).
   if (save.dungeon) {
-    if (!save.dungeon.element) save.dungeon.element = save.dungeon.theme
-    if (save.dungeon.enemy && !save.dungeon.enemy.damageType) save.dungeon.enemy.damageType = save.dungeon.theme
+    const d = save.dungeon as ActiveDungeon & { enemy?: Enemy }
+    if (!d.element) d.element = d.theme
+    if (!Array.isArray(d.enemies)) {
+      const old = d.enemy
+      if (old) { if (!old.damageType) old.damageType = d.theme; d.enemies = [old] }
+      else d.enemies = []
+    }
+    delete d.enemy
+    if (!d.enemies.length) save.dungeon = null // pack vide après migration → abandonné proprement
+  }
+  if (save.raid) {
+    const r = save.raid as ActiveRaid & { enemy?: Enemy }
+    if (!Array.isArray(r.enemies)) {
+      r.enemies = r.enemy ? [r.enemy] : []
+    }
+    delete r.enemy
+    if (!r.enemies.length) save.raid = null
   }
   for (const c of save.characters) {
     for (const slot in c.equipment) {
@@ -744,6 +759,125 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
   return { chars, enemy, anyAlive: chars.some((c) => c.hp > 0), totalDealt }
 }
 
+/**
+ * Pas de combat de l'équipe contre PLUSIEURS ennemis simultanés (donjons en pack, raids avec adds).
+ * - Les auto-attaques + capacités mono-cible concentrent le feu sur le 1er ennemi vivant (focus).
+ * - Les capacités `cleave` touchent TOUS les ennemis vivants.
+ * - CHAQUE ennemi vivant frappe la plus haute menace → un pack met l'équipe sous pression (survie de groupe).
+ */
+function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number, mods?: CombatMods) {
+  const enemies: Enemy[] = enemiesIn.map((e) => ({ ...e, dot: e.dot ? { ...e.dot } : undefined }))
+  const chars = input.map((c) => ({ ...c }))
+  const info = chars.map((c) =>
+    c.hp > 0
+      ? { derived: charDerived(c), profile: charDamageProfile(c), passives: charPassives(c), resist: charResist(c), cmods: charCombatMods(c) }
+      : null,
+  )
+  let totalDealt = 0
+  const focus = (): Enemy | undefined => enemies.find((e) => e.hp > 0)
+
+  // 1) Auto-attaques (+ Multifrappe) sur la cible focus + DoT keystone.
+  chars.forEach((c, i) => {
+    const d = info[i]
+    if (!d) return
+    const hits = d.derived.attacksPerSecond * dt
+    const whole = Math.floor(hits) + (Math.random() < hits % 1 ? 1 : 0)
+    const hpFrac = c.hp / charMaxHp(c)
+    const lowHp = d.cmods.lowHp && hpFrac <= d.cmods.lowHp.threshold ? d.cmods.lowHp.mult : 1
+    const highHp = d.cmods.highHp && hpFrac >= d.cmods.highHp.threshold ? d.cmods.highHp.mult : 1
+    const bonusMult = d.cmods.damageMult * lowHp * highHp
+    const multistrikeChance = Math.min(0.85, d.derived.multistrike + d.cmods.multistrike)
+    let healed = 0
+    for (let h = 0; h < whole; h++) {
+      const target = focus()
+      if (!target) break
+      const strikes = 1 + (Math.random() < multistrikeChance ? 1 : 0)
+      for (let st = 0; st < strikes; st++) {
+        const t2 = focus()
+        if (!t2) break
+        const hit = rollHit(d.derived, d.profile, t2, { bonusMult, execute: d.cmods.execute })
+        t2.hp = Math.max(0, t2.hp - hit.damage)
+        totalDealt += hit.damage
+        healed += hit.heal
+        if (d.cmods.dot) t2.dot = { dps: Math.max(hit.damage * d.cmods.dot.frac, t2.dot?.dps ?? 0), remaining: d.cmods.dot.duration }
+      }
+    }
+    if (healed) c.hp = Math.min(charMaxHp(c), c.hp + healed)
+  })
+
+  // 2) DoT par ennemi.
+  for (const enemy of enemies) {
+    if (enemy.dot && enemy.hp > 0) {
+      const dmg = enemy.dot.dps * dt
+      enemy.hp = Math.max(0, enemy.hp - dmg)
+      totalDealt += dmg
+      enemy.dot.remaining -= dt
+      if (enemy.dot.remaining <= 0) enemy.dot = undefined
+    }
+  }
+
+  // 3) Actives : `cleave` touche TOUS les ennemis, le reste la cible focus.
+  chars.forEach((c, i) => {
+    const d = info[i]
+    if (!d) return
+    for (const p of charActives(c)) {
+      const key = `${c.id}:${p.id}`
+      const cd = (cooldowns.get(key) ?? 0) - dt
+      if (cd <= 0) {
+        cooldowns.set(key, (p.cooldown ?? 3) * (1 - d.derived.cdr))
+        if (p.effect === 'cleave') {
+          for (const e of enemies) if (e.hp > 0) fireActive(p, c, d.derived, chars, e, d.cmods.hot)
+        } else {
+          fireActive(p, c, d.derived, chars, focus() ?? enemies[0], d.cmods.hot)
+        }
+      } else {
+        cooldowns.set(key, cd)
+      }
+    }
+  })
+
+  // 4) Chaque ennemi vivant frappe la plus haute menace (l'équipe doit survivre au pack).
+  let reflectApplied = false
+  for (const enemy of enemies) {
+    if (enemy.hp <= 0) continue
+    const liveNow = chars.map((_, i) => i).filter((i) => chars[i].hp > 0 && info[i])
+    if (!liveNow.length) break
+    let targetI = liveNow[0]
+    let best = -1
+    for (const i of liveNow) {
+      const d = info[i]!
+      const dps = d.derived.power * d.derived.attacksPerSecond
+      const score = (dps + 1) * d.passives.threatMult
+      if (score > best) { best = score; targetI = i }
+    }
+    const t = chars[targetI]
+    const td = info[targetI]!
+    const effDmg = enemy.damage * (1 + (mods?.enrage ?? 0) * (mods?.fightTime ?? 0)) * (mods?.dmgMult ?? 1)
+    let incoming = incomingDps(
+      effDmg, enemy.damageType, td.derived, td.resist,
+      (1 - td.passives.damageReduction) * (1 - td.cmods.flatDr),
+    ) * dt
+    if (mods?.reflect && !reflectApplied) { incoming += totalDealt * mods.reflect; reflectApplied = true }
+    t.hp -= incoming
+    if (td.cmods.thorns > 0 && enemy.hp > 0) enemy.hp = Math.max(0, enemy.hp - incoming * td.cmods.thorns)
+  }
+
+  // 5) Régénération ennemie (Vampirique/Sangsue) sur tous les ennemis vivants.
+  if (mods?.regen) for (const enemy of enemies) if (enemy.hp > 0) enemy.hp = Math.min(enemy.maxHp, enemy.hp + enemy.maxHp * mods.regen * dt)
+
+  // 6) Régénération des persos + clamp.
+  chars.forEach((c, i) => {
+    const d = info[i]
+    if (c.hp > 0 && d) {
+      const mh = charMaxHp(c)
+      c.hp = Math.min(mh, c.hp + mh * REGEN_RATE * (1 + d.derived.regenBonus) * regenMult * dt)
+    }
+    if (c.hp < 0) c.hp = 0
+  })
+
+  return { chars, enemies, anyAlive: chars.some((c) => c.hp > 0), totalDealt }
+}
+
 function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
   const d = s.dungeon!
   const fightTime = d.fightTime + dt
@@ -756,9 +890,9 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
     if (m.regenPct) regen += m.regenPct
   }
 
-  const res = partyCombatStep(s.characters, d.enemy, dt, { enrage, reflect, regen, fightTime })
-  let chars = res.chars
-  const enemy = res.enemy
+  const res = partyCombatStepMulti(s.characters, d.enemies, dt, { enrage, reflect, regen, fightTime })
+  const chars = res.chars
+  const enemies = res.enemies
   let log = s.log
 
   if (!res.anyAlive) {
@@ -770,7 +904,7 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
     return
   }
 
-  if (enemy.hp <= 0) {
+  if (enemies.every((e) => e.hp <= 0)) {
     const nextIndex = d.current + 1
     if (nextIndex >= d.totalFights) {
       const noGold = d.modifiers.some((m) => m.noGold)
@@ -816,7 +950,7 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
     const nd: ActiveDungeon = {
       ...d,
       current: nextIndex,
-      enemy: makeDungeonEnemy(d.level, nextIndex, d.totalFights, d.theme, d.vuln, d.modifiers),
+      enemies: makeDungeonPack(d.level, nextIndex, d.totalFights, d.theme, d.vuln, d.modifiers),
       fightTime: 0,
     }
     log = pushLog(log, `${d.name} — combat ${nextIndex + 1}/${d.totalFights}.`, 'info')
@@ -826,7 +960,7 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
     return
   }
 
-  set({ ...s, characters: chars, dungeon: { ...d, enemy, fightTime }, log })
+  set({ ...s, characters: chars, dungeon: { ...d, enemies, fightTime }, log })
 }
 
 /** Dégâts de zone (Nova/adds) sur l'équipe, typés et atténués par chaque perso. */
@@ -857,11 +991,13 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
   let dmgMult = 1
   if (mech.includes('berserk') && overtime > 0) dmgMult *= 1 + overtime * 0.6
   // Acharnement : le boss frappe plus fort à mesure qu'il agonise.
-  if (mech.includes('execute')) dmgMult *= 1 + (1 - r.enemy.hp / Math.max(1, r.enemy.maxHp)) * 0.7
+  const bossIn = r.enemies[0]
+  if (mech.includes('execute')) dmgMult *= 1 + (1 - bossIn.hp / Math.max(1, bossIn.maxHp)) * 0.7
 
-  const res = partyCombatStep(s.characters, r.enemy, dt, { enrage, regen: drain, fightTime, dmgMult })
+  const res = partyCombatStepMulti(s.characters, r.enemies, dt, { enrage, regen: drain, fightTime, dmgMult })
   let chars = res.chars
-  const enemy = res.enemy
+  let enemies = res.enemies
+  const boss = enemies[0]
   let log = s.log
   let novaCd = r.novaCd - dt
   let swarmCd = r.swarmCd - dt
@@ -874,21 +1010,31 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
     rotateCd = 7
     rotateIdx = (rotateIdx + 1) % r.rotateList.length
     element = r.rotateList[rotateIdx]
-    enemy.damageType = element
-    log = pushLog(log, `🌈 ${r.enemy.name} bascule en ${DAMAGE_TYPES[element].name} !`, 'info')
+    boss.damageType = element
+    log = pushLog(log, `🌈 ${boss.name} bascule en ${DAMAGE_TYPES[element].name} !`, 'info')
   }
   // Nova cataclysmique : grosse AoE typée (check d'EHP/mitigation).
   if (mech.includes('nova') && novaCd <= 0) {
     novaCd = 6
-    chars = applyAoe(chars, enemy.damage * 4 * def.baseDifficulty, element)
-    log = pushLog(log, `☄️ ${r.enemy.name} déchaîne une Nova ${DAMAGE_TYPES[element].name} !`, 'death')
+    chars = applyAoe(chars, boss.damage * 4 * def.baseDifficulty, element)
+    log = pushLog(log, `☄️ ${boss.name} déchaîne une Nova ${DAMAGE_TYPES[element].name} !`, 'death')
   }
-  // Déferlante : vagues d'adds sur tout le groupe.
+  // Déferlante : fait SURGIR des renforts réels (combat à plusieurs adversaires), plafonnés.
   if (mech.includes('swarm') && swarmCd <= 0) {
     swarmCd = 5
-    chars = applyAoe(chars, enemy.damage * 2.2 * def.baseDifficulty, element)
-    log = pushLog(log, '🐛 Des renforts assaillent l\'équipe !', 'death')
+    const liveAdds = enemies.filter((e) => e.add && e.hp > 0).length
+    const toSpawn = Math.max(0, Math.min(2, 3 - liveAdds))
+    for (let k = 0; k < toSpawn; k++) enemies.push(makeRaidAdd(def, r.tier, element))
+    if (toSpawn > 0) log = pushLog(log, `🐛 ${toSpawn} renfort(s) surgissent !`, 'death')
   }
+
+  // Renforts : décompte de durée de vie + nettoyage (le boss en [0] est toujours conservé).
+  enemies = enemies.filter((e, idx) => {
+    if (idx === 0) return true
+    if (e.hp <= 0) return false
+    if (e.lifetime != null) { e.lifetime -= dt; if (e.lifetime <= 0) return false }
+    return true
+  })
 
   if (!chars.some((c) => c.hp > 0)) {
     const healed = chars.map((c) => ({ ...c, hp: charMaxHp(c) }))
@@ -900,7 +1046,7 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
     return
   }
 
-  if (enemy.hp <= 0) {
+  if (boss.hp <= 0) {
     const nextIndex = r.current + 1
     if (nextIndex >= r.totalBosses) {
       const tier = r.tier
@@ -946,7 +1092,7 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
     const nr: ActiveRaid = {
       ...r,
       current: nextIndex,
-      enemy: makeRaidBoss(def, r.tier, nextIndex, startEl),
+      enemies: [makeRaidBoss(def, r.tier, nextIndex, startEl)],
       element: startEl,
       rotateIdx: 0,
       fightTime: 0,
@@ -962,7 +1108,7 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
     return
   }
 
-  set({ ...s, characters: chars, raid: { ...r, enemy, fightTime, novaCd, swarmCd, rotateCd, element, rotateIdx }, log })
+  set({ ...s, characters: chars, raid: { ...r, enemies, fightTime, novaCd, swarmCd, rotateCd, element, rotateIdx }, log })
 }
 
 export const useGame = create<GameState>((set, get) => {
