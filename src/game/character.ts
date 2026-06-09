@@ -132,12 +132,27 @@ export function charMaxHp(char: Character): number {
   return charDerived(char).hp
 }
 
-/** Puissance d'une capacité selon sa stat de scaling. */
-export function abilityPower(d: DerivedStats, scaleStat?: OffensiveStat): number {
-  if (scaleStat === 'force') return d.forcePower
-  if (scaleStat === 'agilite') return d.agiPower
-  if (scaleStat === 'intelligence') return d.intPower
+/**
+ * Puissance d'une capacité selon sa stat de scaling.
+ * - stat unique → la puissance de cette stat.
+ * - liste de stats → la MEILLEURE d'entre elles (build Force OU Agilité, etc.).
+ * - rien → la STAT DOMINANTE (`d.power`) → utilitaire ouvert à tous les builds.
+ */
+export function abilityPower(d: DerivedStats, scale?: OffensiveStat | OffensiveStat[]): number {
+  if (Array.isArray(scale)) {
+    let best = 0
+    for (const s of scale) best = Math.max(best, abilityPower(d, s))
+    return best || d.power
+  }
+  if (scale === 'force') return d.forcePower
+  if (scale === 'agilite') return d.agiPower
+  if (scale === 'intelligence') return d.intPower
   return d.power
+}
+
+/** Stat(s) de scaling effectives d'une capacité (multi prioritaire sur simple). */
+export function powerScale(p: PowerDef): OffensiveStat | OffensiveStat[] | undefined {
+  return p.scaleStats ?? p.scaleStat
 }
 
 export function charDamageProfile(char: Character): DamageProfile {
@@ -147,7 +162,7 @@ export function charDamageProfile(char: Character): DamageProfile {
 /** DPS d'un sort actif (mêmes règles qu'en combat : dégâts directs/DoT, scalent sur le profil de l'arme). */
 function abilityDps(p: PowerDef, derived: DerivedStats, profileMult: number): number {
   if (p.kind !== 'active' || !p.effect) return 0
-  const value = (p.magnitude ?? 0) * abilityPower(derived, p.scaleStat) * profileMult
+  const value = (p.magnitude ?? 0) * abilityPower(derived, powerScale(p)) * profileMult
   const cd = Math.max(0.5, (p.cooldown ?? 3) * (1 - derived.cdr))
   switch (p.effect) {
     case 'nuke': case 'cleave': case 'megaCleave': case 'lifeNuke': return value / cd

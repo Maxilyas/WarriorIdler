@@ -6,7 +6,7 @@ import { rollHit, incomingDps, genericMitigation } from './combat'
 import type { DerivedStats } from './stats'
 import {
   makeCharacter, charDerived, charMaxHp, charDamageProfile, charPassives,
-  charResist, charCombatMods, abilityPower, computeUnlockedPowers, setGlobalCombatMods,
+  charResist, charCombatMods, abilityPower, powerScale, computeUnlockedPowers, setGlobalCombatMods,
   talentPointsForLevel,
 } from './character'
 import { getTalent, canAllocate } from './talents'
@@ -769,7 +769,7 @@ function enemyVuln(enemy: Enemy): number {
  * les auto-attaques — pour qu'un build qui empile un type booste aussi ses sorts.
  */
 function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profile: DamageProfile, chars: Character[], enemy: Enemy, hotBonus: number): number {
-  const base = (p.magnitude ?? 1) * abilityPower(derived, p.scaleStat) // soins / boucliers (sans profil)
+  const base = (p.magnitude ?? 1) * abilityPower(derived, powerScale(p)) // soins / boucliers (sans profil)
   const magDmg = base * profileDamageMult(profile) // dégâts : scalent sur le profil de l'arme
   const vm = enemyVuln(enemy)
   const hit = (dmg: number): number => { const before = enemy.hp; enemy.hp = Math.max(0, enemy.hp - dmg); return before - enemy.hp }

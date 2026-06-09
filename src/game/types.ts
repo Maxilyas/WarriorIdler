@@ -247,9 +247,15 @@ export interface PowerDef {
   magnitude?: number
   /** Durée (s) des effets temporels : charge, invuln, frenzy, rupture (DoT/anti-régén), mark. */
   duration?: number
-  /** Stat primaire qui met la magnitude à l'échelle (sort=INT, frappe=FOR, finesse=AGI). */
+  /** Stat primaire UNIQUE qui met la magnitude à l'échelle (sort=INT, frappe=FOR, finesse=AGI). */
   scaleStat?: OffensiveStat
-  /** Type de dégât de la capacité (pour les nukes/DoT typés). */
+  /**
+   * Scaling MULTI-STAT : la capacité prend la MEILLEURE des stats listées (ex. ['force','agilite']
+   * pour une frappe d'arme utilisable autant par un build Force qu'Agilité). Prioritaire sur
+   * `scaleStat`. Ni l'un ni l'autre = scale sur la STAT DOMINANTE (utilitaire ouvert à tous).
+   */
+  scaleStats?: OffensiveStat[]
+  /** Type de dégât EXPLICITE (sorts élémentaires). À défaut, le sort prend le type de l'arme équipée. */
   damageType?: DamageType
 }
 

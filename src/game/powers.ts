@@ -1,4 +1,4 @@
-import type { PowerDef, PowerEffect } from './types'
+import type { PowerDef, PowerEffect, DamageType } from './types'
 
 /**
  * Registre des capacités équipables (powers).
@@ -17,32 +17,32 @@ export const POWERS: PowerDef[] = [
   // --- Capacité de départ (débloquée par le nœud Cœur « Éveil ») ---
   {
     id: 'frappe_simple', name: 'Frappe', kind: 'active',
-    description: 'Un coup d\'arme rapide. Scale sur ta stat dominante.',
-    unlockLevel: 1, cooldown: 3, effect: 'nuke', magnitude: 2.2, scaleStat: 'force',
+    description: 'Un coup d\'arme rapide. Scale FOR/AGI (la meilleure).',
+    unlockLevel: 1, cooldown: 3, effect: 'nuke', magnitude: 2.2, scaleStats: ['force', 'agilite'],
   },
 
   // --- Berserker (Force / mêlée) ---
   {
     id: 'frappe_lourde', name: 'Frappe lourde', kind: 'active',
-    description: 'Assène un coup dévastateur. Scale FOR.',
-    unlockLevel: 1, cooldown: 3.5, effect: 'nuke', magnitude: 4.4, scaleStat: 'force',
+    description: 'Assène un coup dévastateur. Scale FOR/AGI.',
+    unlockLevel: 1, cooldown: 3.5, effect: 'nuke', magnitude: 4.4, scaleStats: ['force', 'agilite'],
   },
   {
     id: 'tourbillon', name: 'Tourbillon', kind: 'active',
-    description: 'Frappe lourde répétée à fort dégât. Scale FOR.',
-    unlockLevel: 1, cooldown: 2.5, effect: 'cleave', magnitude: 2.8, scaleStat: 'force',
+    description: 'Frappe lourde répétée à fort dégât. Scale FOR/AGI.',
+    unlockLevel: 1, cooldown: 2.5, effect: 'cleave', magnitude: 2.8, scaleStats: ['force', 'agilite'],
   },
 
   // --- Rôdeur (Agilité / furtivité) ---
   {
     id: 'tir_precis', name: 'Tir précis', kind: 'active',
-    description: 'Un tir visant les points vitaux. Scale AGI.',
-    unlockLevel: 1, cooldown: 2.5, effect: 'nuke', magnitude: 3.4, scaleStat: 'agilite',
+    description: 'Un tir visant les points vitaux. Scale FOR/AGI.',
+    unlockLevel: 1, cooldown: 2.5, effect: 'nuke', magnitude: 3.4, scaleStats: ['force', 'agilite'],
   },
   {
     id: 'poison', name: 'Lames empoisonnées', kind: 'active',
-    description: 'Empoisonne l\'ennemi (DoT). Scale AGI.',
-    unlockLevel: 1, cooldown: 4, effect: 'dot', magnitude: 1.4, scaleStat: 'agilite',
+    description: 'Empoisonne l\'ennemi (DoT). Scale FOR/AGI.',
+    unlockLevel: 1, cooldown: 4, effect: 'dot', magnitude: 1.4, scaleStats: ['force', 'agilite'],
   },
 
   // --- Arcaniste (Intelligence / sorts) ---
@@ -65,8 +65,8 @@ export const POWERS: PowerDef[] = [
   },
   {
     id: 'bouclier_runique', name: 'Bouclier runique', kind: 'active',
-    description: 'Érige un bouclier qui absorbe des dégâts sur le porteur. Scale INT.',
-    unlockLevel: 1, cooldown: 6, effect: 'shield', magnitude: 3, scaleStat: 'intelligence',
+    description: 'Érige un bouclier qui absorbe des dégâts sur le porteur. Scale sur ta stat principale.',
+    unlockLevel: 1, cooldown: 6, effect: 'shield', magnitude: 3,
   },
 
   // --- Oracle (soin) ---
@@ -84,23 +84,23 @@ export const POWERS: PowerDef[] = [
   // --- Capacités d'archétypes / nœuds avancés ---
   {
     id: 'laceration', name: 'Lacération', kind: 'active',
-    description: 'Ouvre des plaies béantes (DoT physique). Scale FOR.',
-    unlockLevel: 1, cooldown: 4.5, effect: 'dot', magnitude: 2.2, scaleStat: 'force',
+    description: 'Ouvre des plaies béantes (DoT). Scale FOR/AGI.',
+    unlockLevel: 1, cooldown: 4.5, effect: 'dot', magnitude: 2.2, scaleStats: ['force', 'agilite'],
   },
   {
     id: 'choc_sismique', name: 'Choc sismique', kind: 'active',
-    description: 'Frappe le sol, dégâts massifs. Scale FOR.',
-    unlockLevel: 1, cooldown: 4, effect: 'cleave', magnitude: 4.2, scaleStat: 'force',
+    description: 'Frappe le sol, dégâts massifs. Scale FOR/AGI.',
+    unlockLevel: 1, cooldown: 4, effect: 'cleave', magnitude: 4.2, scaleStats: ['force', 'agilite'],
   },
   {
     id: 'volee_de_fleches', name: 'Volée de flèches', kind: 'active',
-    description: 'Une pluie de traits rapides. Scale AGI.',
-    unlockLevel: 1, cooldown: 3, effect: 'cleave', magnitude: 3, scaleStat: 'agilite',
+    description: 'Une pluie de traits rapides. Scale FOR/AGI.',
+    unlockLevel: 1, cooldown: 3, effect: 'cleave', magnitude: 3, scaleStats: ['force', 'agilite'],
   },
   {
     id: 'eviscaration', name: 'Éviscération', kind: 'active',
-    description: 'Coup mortel sur cible affaiblie. Scale AGI.',
-    unlockLevel: 1, cooldown: 3.5, effect: 'nuke', magnitude: 5, scaleStat: 'agilite',
+    description: 'Coup mortel sur cible affaiblie. Scale FOR/AGI.',
+    unlockLevel: 1, cooldown: 3.5, effect: 'nuke', magnitude: 5, scaleStats: ['force', 'agilite'],
   },
   {
     id: 'trait_de_givre', name: 'Trait de givre', kind: 'active',
@@ -131,27 +131,27 @@ export const POWERS: PowerDef[] = [
   // --- Cœur (tronc commun) : capacité polyvalente précoce ---
   {
     id: 'onde_de_force', name: 'Onde de force', kind: 'active',
-    description: 'Une déflagration concentrique qui frappe tout le pack. Scale FOR.',
-    unlockLevel: 1, cooldown: 3.2, effect: 'cleave', magnitude: 2.4, scaleStat: 'force',
+    description: 'Une déflagration concentrique qui frappe tout le pack. Scale FOR/AGI.',
+    unlockLevel: 1, cooldown: 3.2, effect: 'cleave', magnitude: 2.4, scaleStats: ['force', 'agilite'],
   },
 
   // --- Bourreau (Force / anti-boss & exécution) ---
   {
     id: 'decapitation', name: 'Décapitation', kind: 'active',
-    description: 'Un coup de hache fatal qui décapite les cibles affaiblies. Scale FOR.',
-    unlockLevel: 1, cooldown: 3.5, effect: 'nuke', magnitude: 5, scaleStat: 'force',
+    description: 'Un coup de hache fatal qui décapite les cibles affaiblies. Scale FOR/AGI.',
+    unlockLevel: 1, cooldown: 3.5, effect: 'nuke', magnitude: 5, scaleStats: ['force', 'agilite'],
   },
 
   // ================= ULTIMES (v0.19) : sorts surpuissants à long cooldown =================
   {
     id: 'verdict', name: 'Verdict', kind: 'active',
-    description: 'Une sentence dévastatrice : +250% de dégâts selon les PV MANQUANTS de la cible (finisher anti-boss). Scale FOR.',
-    unlockLevel: 1, cooldown: 12, effect: 'executeNuke', magnitude: 4, scaleStat: 'force',
+    description: 'Une sentence dévastatrice : +250% de dégâts selon les PV MANQUANTS de la cible (finisher anti-boss). Scale FOR/AGI.',
+    unlockLevel: 1, cooldown: 12, effect: 'executeNuke', magnitude: 4, scaleStats: ['force', 'agilite'],
   },
   {
     id: 'soif_du_neant', name: 'Soif du néant', kind: 'active',
-    description: 'Une frappe d\'ombre colossale qui te rend 60% des dégâts en vie (build solo). Scale AGI.',
-    unlockLevel: 1, cooldown: 14, effect: 'lifeNuke', magnitude: 6, scaleStat: 'agilite', damageType: 'ombre',
+    description: 'Une frappe d\'ombre colossale qui te rend 60% des dégâts en vie (build solo). Scale FOR/AGI.',
+    unlockLevel: 1, cooldown: 14, effect: 'lifeNuke', magnitude: 6, scaleStats: ['force', 'agilite'], damageType: 'ombre',
   },
   {
     id: 'deluge_stellaire', name: 'Déluge stellaire', kind: 'active',
@@ -170,8 +170,8 @@ export const POWERS: PowerDef[] = [
   },
   {
     id: 'egide_titanesque', name: 'Égide titanesque', kind: 'active',
-    description: 'Érige un ÉNORME bouclier d\'absorption sur toi (et 40% à l\'équipe), soaké avant tes PV. Long cooldown. Scale INT.',
-    unlockLevel: 1, cooldown: 30, effect: 'bigShield', magnitude: 14, scaleStat: 'intelligence',
+    description: 'Érige un ÉNORME bouclier d\'absorption sur toi (et 40% à l\'équipe), soaké avant tes PV. Long cooldown. Scale sur ta stat principale.',
+    unlockLevel: 1, cooldown: 30, effect: 'bigShield', magnitude: 14,
   },
   {
     id: 'phase_etheree', name: 'Phase éthérée', kind: 'active',
@@ -180,13 +180,13 @@ export const POWERS: PowerDef[] = [
   },
   {
     id: 'vengeance_differee', name: 'Vengeance différée', kind: 'active',
-    description: 'Pendant 5 s, enregistre tous tes dégâts ; à l\'issue, frappe une fois pour ×3 le total accumulé. Scale FOR.',
-    unlockLevel: 1, cooldown: 18, effect: 'charge', magnitude: 3, duration: 5, scaleStat: 'force',
+    description: 'Pendant 5 s, enregistre tous tes dégâts ; à l\'issue, frappe une fois pour ×3 le total accumulé.',
+    unlockLevel: 1, cooldown: 18, effect: 'charge', magnitude: 3, duration: 5, scaleStats: ['force', 'agilite'],
   },
   {
     id: 'furie_sanguinaire', name: 'Furie sanguinaire', kind: 'active',
-    description: 'Tu entres en transe : +100% de tous tes dégâts pendant 6 s. Scale FOR.',
-    unlockLevel: 1, cooldown: 22, effect: 'frenzy', magnitude: 2, duration: 6, scaleStat: 'force',
+    description: 'Tu entres en transe : +100% de tous tes dégâts pendant 6 s.',
+    unlockLevel: 1, cooldown: 22, effect: 'frenzy', magnitude: 2, duration: 6, scaleStats: ['force', 'agilite'],
   },
   {
     id: 'sceau_faiblesse', name: 'Sceau de faiblesse', kind: 'active',
@@ -264,6 +264,36 @@ export const SCALE_SHORT: Record<NonNullable<PowerDef['scaleStat']>, string> = {
   force: 'FOR', agilite: 'AGI', intelligence: 'INT',
 }
 
+/**
+ * Libellé du scaling pour l'UI :
+ * - multi-stat → "FOR/AGI" (prend la meilleure),
+ * - stat unique → "FOR",
+ * - aucune → "Stat principale" (scale sur ta stat dominante : ouvert à tous les builds).
+ */
+export function scaleLabel(p: PowerDef): string | null {
+  if (p.scaleStats?.length) return p.scaleStats.map((s) => SCALE_SHORT[s]).join('/')
+  if (p.scaleStat) return SCALE_SHORT[p.scaleStat]
+  return 'Stat principale'
+}
+
+/** Effets qui infligent des dégâts TYPÉS (les seuls qui portent un type de dégât affichable). */
+const TYPED_DAMAGE_EFFECTS: ReadonlySet<PowerEffect> = new Set<PowerEffect>([
+  'nuke', 'cleave', 'dot', 'executeNuke', 'megaCleave', 'lifeNuke', 'rupture',
+])
+
+/** Le sort inflige-t-il des dégâts typés (→ a un type de dégât affichable) ? */
+export function powerHasDamageType(p: PowerDef): boolean {
+  return !!p.effect && TYPED_DAMAGE_EFFECTS.has(p.effect)
+}
+
+/**
+ * Type de dégât EFFECTIF d'un sort : son type explicite (sorts élémentaires), sinon le type de
+ * l'arme équipée (`weaponMainType`). Une Frappe sur une arme Ombre devient donc Ombre.
+ */
+export function powerDamageType(p: PowerDef, weaponMainType: DamageType): DamageType {
+  return p.damageType ?? weaponMainType
+}
+
 /** Résumé d'affichage d'un sort actif (null pour les passifs). */
 export interface PowerSummary {
   cooldown: number
@@ -278,7 +308,7 @@ export function powerSummary(p: PowerDef): PowerSummary | null {
   return {
     cooldown: p.cooldown ?? 0,
     effectMeta: POWER_EFFECT_META[p.effect],
-    scaleShort: p.scaleStat ? SCALE_SHORT[p.scaleStat] : null,
+    scaleShort: p.kind === 'active' ? scaleLabel(p) : null,
     damageType: p.damageType,
     magnitude: p.magnitude ?? 0,
   }

@@ -5,8 +5,8 @@ import type { StatEffect } from '../game/stats'
 import type { PrimaryStat, DamageType, Character, PowerDef } from '../game/types'
 import type { DerivedStats } from '../game/stats'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from '../game/damage'
-import { charTotalStats, charDerived, charMaxHp, charDamageProfile, charResist, abilityPower } from '../game/character'
-import { getPower, POWER_EFFECT_META } from '../game/powers'
+import { charTotalStats, charDerived, charMaxHp, charDamageProfile, charResist, abilityPower, powerScale } from '../game/character'
+import { getPower, POWER_EFFECT_META, scaleLabel, powerDamageType } from '../game/powers'
 
 const DMG_EFFECTS: ReadonlySet<string> = new Set(['nuke', 'cleave', 'dot', 'executeNuke', 'megaCleave', 'lifeNuke', 'rupture'])
 // Effets dont la magnitude est une VALEUR affichable (dégâts/PV). Les autres (charge/marque/frénésie/
@@ -17,12 +17,13 @@ const VALUE_EFFECTS: ReadonlySet<string> = new Set([
 ])
 
 /** Détail chiffré d'une capacité active : type, cooldown réel, valeur théorique (1 chiffre). */
-function powerDetail(p: PowerDef, derived: DerivedStats) {
-  const value = Math.round((p.magnitude ?? 0) * abilityPower(derived, p.scaleStat))
+function powerDetail(p: PowerDef, derived: DerivedStats, weaponType: DamageType) {
+  const value = Math.round((p.magnitude ?? 0) * abilityPower(derived, powerScale(p)))
   const cd = (p.cooldown ?? 0) * (1 - derived.cdr)
   const isDmg = DMG_EFFECTS.has(p.effect ?? '')
-  const type: DamageType | undefined = p.damageType ?? (isDmg ? 'physique' : undefined)
-  return { value, cd, type, dmg: isDmg, showValue: VALUE_EFFECTS.has(p.effect ?? '') }
+  // Sans type explicite, un sort de dégâts prend le type de l'ARME équipée (Ombre, Feu…).
+  const type: DamageType | undefined = isDmg ? powerDamageType(p, weaponType) : p.damageType
+  return { value, cd, type, dmg: isDmg, scale: scaleLabel(p), showValue: VALUE_EFFECTS.has(p.effect ?? '') }
 }
 
 const SPEC_INFO: Record<PrimaryStat, string> = {
@@ -213,6 +214,7 @@ function PowersSection({ char }: { char: Character }) {
   const setPower = useGame((s) => s.setPower)
   const togglePowerAuto = useGame((s) => s.togglePowerAuto)
   const derived = charDerived(char)
+  const weaponType = charDamageProfile(char).mainType
   const equipped = new Set(char.powers.filter(Boolean) as string[])
   const available = char.unlockedPowers.filter((id) => !equipped.has(id))
 
@@ -227,7 +229,7 @@ function PowersSection({ char }: { char: Character }) {
           }
           const active = p.kind === 'active'
           const auto = char.powerAuto?.[slot] !== false
-          const det = active ? powerDetail(p, derived) : null
+          const det = active ? powerDetail(p, derived, weaponType) : null
           return (
             <div key={slot} className="rounded-lg border border-slate-700 bg-black/20 px-2 py-1.5">
               <div className="flex items-center gap-2">
@@ -250,6 +252,7 @@ function PowersSection({ char }: { char: Character }) {
                 <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-slate-400">
                   {det.type && <span style={{ color: DAMAGE_TYPES[det.type].color }}>{DAMAGE_TYPES[det.type].icon} {DAMAGE_TYPES[det.type].name}</span>}
                   <span>{POWER_EFFECT_META[p.effect ?? 'nuke'].label}</span>
+                  {det.scale && <span className="text-amber-300/80">📈 {det.scale}</span>}
                   <span>CD {det.cd.toFixed(1)}s</span>
                   {det.showValue && <span className="text-slate-200">≈ {det.value.toLocaleString('fr-FR')} {det.dmg ? 'dég.' : 'PV'}</span>}
                 </div>

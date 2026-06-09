@@ -4,7 +4,8 @@ import {
   CONSTELLATIONS, CONSTELLATION_LIST, TALENTS, talentsByConstellation, getTalent, canAllocate, isReachable,
   type ConstellationId, type TalentNode,
 } from '../game/talents'
-import { getPower, powerSummary, powerIcon } from '../game/powers'
+import { getPower, powerSummary, powerIcon, powerHasDamageType, powerDamageType } from '../game/powers'
+import { charDamageProfile } from '../game/character'
 import { DAMAGE_TYPES } from '../game/damage'
 import { ALL_STAT_META } from '../game/stats'
 import type { DamageType, StatKey, PowerDef } from '../game/types'
@@ -169,6 +170,7 @@ export function TalentTree() {
   const activeChar = useGame((s) => s.activeChar)
   const setActiveChar = useGame((s) => s.setActiveChar)
   const char = characters[activeChar] ?? characters[0]
+  const weaponType = charDamageProfile(char).mainType
   const [selected, setSelected] = useState<string | null>(null)
   const [focus, setFocus] = useState<ConstellationId | null>(null)
 
@@ -356,7 +358,7 @@ export function TalentTree() {
       </div>
 
       {/* Panneau de détail */}
-      {selectedNode && <NodeDetail node={selectedNode} char={char} onClose={() => setSelected(null)} />}
+      {selectedNode && <NodeDetail node={selectedNode} char={char} weaponType={weaponType} onClose={() => setSelected(null)} />}
 
       <RespecBar char={char} />
     </div>
@@ -451,9 +453,13 @@ function CanvasNode({
 }
 
 /** Fiche de sort détaillée dans le panneau de nœud : type, recharge, scaling, cibles, valeur ≈. */
-function SpellCard({ power }: { power: PowerDef }) {
+function SpellCard({ power, weaponType }: { power: PowerDef; weaponType: DamageType }) {
   const sum = powerSummary(power)
-  const dt = power.damageType ? DAMAGE_TYPES[power.damageType] : null
+  // Type affiché : explicite (élémentaire) sinon celui de l'arme équipée. Masqué pour les sorts non typés.
+  const typed = powerHasDamageType(power)
+  const resolvedType = typed ? powerDamageType(power, weaponType) : power.damageType
+  const dt = resolvedType ? DAMAGE_TYPES[resolvedType] : null
+  const fromWeapon = typed && !power.damageType
   return (
     <div className="mb-1.5 rounded-lg border border-emerald-700/40 bg-emerald-950/20 p-2">
       <div className="flex items-center gap-1.5">
@@ -475,9 +481,12 @@ function SpellCard({ power }: { power: PowerDef }) {
           {sum.scaleShort && (
             <span className="text-amber-300/90">📈 Scale : <span className="font-semibold">{sum.scaleShort}</span></span>
           )}
-          <span className="text-slate-300">
-            Type : {dt ? <span style={{ color: dt.color }}>{dt.icon} {dt.name}</span> : <span style={{ color: DAMAGE_TYPES.physique.color }}>{DAMAGE_TYPES.physique.icon} Physique</span>}
-          </span>
+          {dt && (
+            <span className="text-slate-300">
+              Type : <span style={{ color: dt.color }}>{dt.icon} {dt.name}</span>
+              {fromWeapon && <span className="text-slate-500"> (arme)</span>}
+            </span>
+          )}
           {sum.magnitude > 0 && !['charge', 'mark', 'frenzy', 'invuln'].includes(power.effect ?? '') && (
             <span className="col-span-2 text-slate-400">≈ valeur : <span className="font-semibold tabular-nums">×{sum.magnitude.toFixed(1)}</span> de la puissance (scale aussi sur ton profil d'arme)</span>
           )}
@@ -488,10 +497,11 @@ function SpellCard({ power }: { power: PowerDef }) {
 }
 
 function NodeDetail({
-  node, char, onClose,
+  node, char, weaponType, onClose,
 }: {
   node: TalentNode
   char: { talents: Record<string, number>; talentPoints: number }
+  weaponType: DamageType
   onClose: () => void
 }) {
   const allocateTalent = useGame((s) => s.allocateTalent)
@@ -558,7 +568,7 @@ function NodeDetail({
         <div className="mb-1.5 rounded bg-fuchsia-500/10 px-1.5 py-1 text-[10px] text-fuchsia-200">✦ Effet de build (keystone)</div>
       )}
 
-      {power && <SpellCard power={power} />}
+      {power && <SpellCard power={power} weaponType={weaponType} />}
       {reqNames && !reachable && (
         <p className="mb-1 text-[10px] text-rose-300">🔒 Requiert : {reqNames}</p>
       )}

@@ -175,10 +175,10 @@ single({ id: 'fo_entry', name: 'Fureur', constellation: 'force', kind: 'minor', 
 chain('force', 'fo_a', 'fo_entry', 1, [
   { name: 'Force brute I', maxRank: 5, statMods: { force: 18 } },
   { name: 'Brutalité', maxRank: 4, statMods: { critique: 22, degatsCrit: 18 } },
-  { name: 'Frappe lourde', kind: 'ability', unlockPower: 'frappe_lourde', desc: 'Débloque Frappe lourde (nuke, scale FOR).' },
+  { name: 'Frappe lourde', kind: 'ability', unlockPower: 'frappe_lourde', desc: 'Débloque Frappe lourde (nuke, scale FOR/AGI).' },
   { name: 'Force brute II', maxRank: 5, statMods: { force: 24 } },
   { name: 'Maître d\'armes', maxRank: 4, statMods: { maitrise: 28 } },
-  { name: 'Tourbillon', kind: 'ability', unlockPower: 'tourbillon', desc: 'Débloque Tourbillon (cleave, scale FOR).' },
+  { name: 'Tourbillon', kind: 'ability', unlockPower: 'tourbillon', desc: 'Débloque Tourbillon (cleave, scale FOR/AGI).' },
   { name: 'Sang pour sang', maxRank: 3, statMods: { force: 30, degatsCrit: 25 } },
   { name: 'Berserker', kind: 'keystone', desc: '+40% de dégâts sous 50% de tes PV.', statMods: { force: 40 }, keystone: { lowHpBonus: { threshold: 0.5, mult: 1.4 } } },
 ])
@@ -203,16 +203,16 @@ single({ id: 'ag_entry', name: 'Célérité', constellation: 'agilite', kind: 'm
 chain('agilite', 'ag_a', 'ag_entry', 1, [
   { name: 'Réflexes I', maxRank: 5, statMods: { agilite: 18 } },
   { name: 'Vivacité', maxRank: 4, statMods: { hate: 28 } },
-  { name: 'Tir précis', kind: 'ability', unlockPower: 'tir_precis', desc: 'Débloque Tir précis (nuke, scale AGI).' },
+  { name: 'Tir précis', kind: 'ability', unlockPower: 'tir_precis', desc: 'Débloque Tir précis (nuke, scale FOR/AGI).' },
   { name: 'Réflexes II', maxRank: 5, statMods: { agilite: 24 } },
   { name: 'Précision', maxRank: 4, statMods: { critique: 30, degatsCrit: 24 } },
-  { name: 'Volée de flèches', kind: 'ability', unlockPower: 'volee_de_fleches', desc: 'Débloque Volée de flèches (cleave, scale AGI).' },
+  { name: 'Volée de flèches', kind: 'ability', unlockPower: 'volee_de_fleches', desc: 'Débloque Volée de flèches (cleave, scale FOR/AGI).' },
   { name: 'Œil de lynx', maxRank: 3, statMods: { critique: 35, penetration: 20 } },
   { name: 'Coup fatal', kind: 'keystone', desc: 'Exécute sous 20% de PV (×3 dégâts).', statMods: { degatsCrit: 40 }, keystone: { executeBonus: { threshold: 0.2, mult: 3 } } },
 ])
 chain('agilite', 'ag_b', 'ag_entry', 1, [
   { name: 'Souplesse', maxRank: 5, statMods: { esquive: 26 } },
-  { name: 'Lames empoisonnées', kind: 'ability', unlockPower: 'poison', desc: 'Débloque Poison (DoT, scale AGI).' },
+  { name: 'Lames empoisonnées', kind: 'ability', unlockPower: 'poison', desc: 'Débloque Poison (DoT, scale FOR/AGI).' },
   { name: 'Pas de l\'ombre', maxRank: 4, statMods: { esquive: 24, hate: 16 } },
   { name: 'Toxines', kind: 'keystone', desc: 'Tes coups empoisonnent (DoT 20% du coup/s, 5 s).', keystone: { dot: { frac: 0.2, duration: 5 } } },
   { name: 'Insaisissable', maxRank: 3, statMods: { esquive: 30, agilite: 20 } },
@@ -441,7 +441,7 @@ single({ id: 'fo_gw_bourreau', name: '→ Bourreau', constellation: 'force', kin
 single({ id: 'bo_entry', name: 'Sentence de mort', constellation: 'bourreau', kind: 'notable', tier: 0, maxRank: 1, requires: ['fo_gw_bourreau'], description: 'Les colosses tombent sous ta hache. +40 Force, +30 Dégâts boss.', statMods: { force: 40, degatsBoss: 30 } })
 chain('bourreau', 'bo_a', 'bo_entry', 1, [
   { name: 'Marque du bourreau', maxRank: 5, statMods: { degatsBoss: 30 } },
-  { name: 'Décapitation', kind: 'ability', unlockPower: 'decapitation', desc: 'Débloque Décapitation (exécution, scale FOR).' },
+  { name: 'Décapitation', kind: 'ability', unlockPower: 'decapitation', desc: 'Débloque Décapitation (exécution, scale FOR/AGI).' },
   { name: 'Précision létale', maxRank: 4, statMods: { precision: 40 } },
   { name: 'Couperet', kind: 'keystone', desc: 'ARCHÉTYPE : exécute les ennemis sous 25% de PV (×3 dégâts).', statMods: { degatsBoss: 30 }, keystone: { executeBonus: { threshold: 0.25, mult: 3 } } },
 ])
