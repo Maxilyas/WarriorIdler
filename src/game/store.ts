@@ -278,14 +278,16 @@ function pushLog(log: LogEntry[], text: string, kind: LogKind): LogEntry[] {
 }
 
 function xpForLevel(level: number): number {
-  // Exponentielle UNIQUE et douce (×1.10/niveau) : pas de cassure/mur (l'ancienne phase 2 à ×2.19
-  // murait dès ~110). Reste exponentielle, donc auto-régulée : à stage fixe le revenu d'XP (1.115^stage)
-  // ne dépasse plus la courbe → fini les centaines de niveaux/seconde.
+  // Exponentielle ACCÉLÉRÉE (le taux de croissance augmente avec le niveau) calibrée sur un planning
+  // de temps cible « meilleur rendement » : ~10 min au niv 10, ~1 h au 30, ~2 h au 50, ~10 h au 70,
+  // ~25 h au 90, ~150 h au 100 — puis ça devient un vrai mur d'endgame au-delà.
   //
-  // Profil voulu : 1→90 sur quelques heures (« le début, pas trop vite »), montée ÉTALÉE ensuite,
-  //   ~150 = endgame (déblocage du dernier raid), ~200 = plafond atteignable à la sueur.
-  //   Repères (coût d'un niveau) : 90 ≈ 217 k · 100 ≈ 563 k · 150 ≈ 73 M · 200 ≈ 8,5 Md.
-  return Math.round(45 * Math.pow(1.10, level - 1))
+  // Calage : à partir du point de repère « courbe précédente = niv 50 en ~5 min », on a estimé le
+  // revenu d'XP au meilleur rendement (≈ croît en 1.10/niveau), puis ajusté A/α/β pour que le COÛT
+  // (= revenu × temps voulu par niveau) suive le planning. α = pente de base, β·L² = accélération.
+  // (Constantes faciles à régler : A=échelle globale, α=pente, β=durcissement de fin de course.)
+  const x = level - 1
+  return Math.round(560 * Math.exp(0.105 * x + 0.00055 * x * x))
 }
 
 // Cooldowns transitoires des capacités actives (clé `charId:powerId`). Non persistés.
