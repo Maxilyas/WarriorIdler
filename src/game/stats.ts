@@ -127,6 +127,20 @@ function statPower(value: number): number {
   return 10 + value * 2
 }
 
+/**
+ * Soft cap façon WoW : plein rendement (1:1) jusqu'à `soft`, puis rendement DÉGRESSIF au-delà.
+ * La pente vaut 1 au passage du seuil (continuité, aucun nerf sous l'ancien cap) puis décroît,
+ * en s'approchant asymptotiquement de `hard` sans jamais l'atteindre. Plus de mur sec : continuer
+ * d'empiler la stat reste utile, simplement de moins en moins (le surplus n'est plus gaspillé).
+ */
+function softCap(value: number, soft: number, hard: number): number {
+  if (value <= soft) return value
+  const head = hard - soft
+  if (head <= 0) return soft
+  const excess = value - soft
+  return soft + (head * excess) / (excess + head)
+}
+
 /** Calcule les stats dérivées de combat à partir des stats totales. */
 export function computeDerived(total: StatBlock): DerivedStats {
   const force = total.force ?? 0
@@ -158,14 +172,14 @@ export function computeDerived(total: StatBlock): DerivedStats {
   let masteryDr = 0
   if (mainStat === 'force') {
     masteryMult = 1 + masteryFrac * 0.5
-    masteryDr = Math.min(0.5, masteryFrac * 0.85)
+    masteryDr = softCap(masteryFrac * 0.85, 0.5, 0.7)
   } else if (mainStat === 'agilite') {
     critMult += masteryFrac * 3
   } else {
     masteryMult = 1 + masteryFrac * 1.8
   }
 
-  const shieldPct = Math.min(1, (total.barriere ?? 0) / PER_PCT)
+  const shieldPct = softCap((total.barriere ?? 0) / PER_PCT, 1, 1.6)
 
   return {
     mainStat,
@@ -174,25 +188,27 @@ export function computeDerived(total: StatBlock): DerivedStats {
     agiPower,
     intPower,
     hp: (100 + endurance * 10) * (1 + shieldPct),
-    critChance: Math.min(0.75, 0.05 + (total.critique ?? 0) / PER_PCT),
+    // Soft caps (style WoW) : plein rendement jusqu'au seuil (= ancien cap), puis dégressif au-delà
+    // en approchant une limite haute. Plus aucun rating gaspillé après le seuil.
+    critChance: softCap(0.05 + (total.critique ?? 0) / PER_PCT, 0.75, 0.92),
     critMult,
     attacksPerSecond: 1 + (total.hate ?? 0) / PER_PCT,
     masteryMult,
     masteryDr,
-    leech: Math.min(0.5, (total.volDeVie ?? 0) / 2500),
-    penetration: Math.min(0.6, (total.penetration ?? 0) / PER_PCT),
-    precision: Math.min(0.95, (total.precision ?? 0) / PER_PCT),
-    alterationMult: 1 + Math.min(3, (total.alteration ?? 0) / PER_PCT),
-    bossDamageMult: 1 + Math.min(2.5, (total.degatsBoss ?? 0) / PER_PCT),
-    tenacity: Math.min(0.85, (total.tenacite ?? 0) / PER_PCT),
-    purge: Math.min(0.8, (total.purge ?? 0) / PER_PCT),
-    flatDr: Math.min(0.5, (total.reductionDegats ?? 0) / PER_PCT),
-    dodge: Math.min(0.4, (total.esquive ?? 0) / PER_PCT),
+    leech: softCap((total.volDeVie ?? 0) / 2500, 0.5, 0.72),
+    penetration: softCap((total.penetration ?? 0) / PER_PCT, 0.6, 0.82),
+    precision: softCap((total.precision ?? 0) / PER_PCT, 0.95, 0.99),
+    alterationMult: 1 + softCap((total.alteration ?? 0) / PER_PCT, 3, 5.5),
+    bossDamageMult: 1 + softCap((total.degatsBoss ?? 0) / PER_PCT, 2.5, 4.5),
+    tenacity: softCap((total.tenacite ?? 0) / PER_PCT, 0.85, 0.96),
+    purge: softCap((total.purge ?? 0) / PER_PCT, 0.8, 0.93),
+    flatDr: softCap((total.reductionDegats ?? 0) / PER_PCT, 0.5, 0.72),
+    dodge: softCap((total.esquive ?? 0) / PER_PCT, 0.4, 0.62),
     regenBonus: (total.regen ?? 0) / PER_PCT,
     // stats rares (divisor plus généreux → impact fort malgré la rareté)
-    overpower: 1 + Math.min(2, (total.surpuissance ?? 0) / 1500),
-    multistrike: Math.min(0.6, (total.multifrappe ?? 0) / 1500),
-    cdr: Math.min(0.6, (total.recuperation ?? 0) / 1500),
+    overpower: 1 + softCap((total.surpuissance ?? 0) / 1500, 2, 4),
+    multistrike: softCap((total.multifrappe ?? 0) / 1500, 0.6, 0.85),
+    cdr: softCap((total.recuperation ?? 0) / 1500, 0.6, 0.82),
   }
 }
 
@@ -246,7 +262,7 @@ export function describeStats(total: StatBlock): { primary: StatEffect[]; second
       case 'degatsBoss': effect = `+${pct(d.bossDamageMult - 1)} de dégâts aux boss/élites`; break
       case 'reductionDegats': effect = `-${pct(d.flatDr)} de dégâts subis`; break
       case 'esquive': effect = `${pct(d.dodge)} d'esquive`; break
-      case 'barriere': effect = `+${Math.round((1 + Math.min(1, rating / PER_PCT)) * 100 - 100)}% PV effectifs`; break
+      case 'barriere': effect = `+${Math.round(softCap(rating / PER_PCT, 1, 1.6) * 100)}% PV effectifs`; break
       case 'tenacite': effect = `-${pct(d.tenacity)} de durée des contrôles`; break
       case 'purge': effect = `-${pct(d.purge)} de durée/intensité des altérations subies`; break
       case 'regen': effect = `+${pct(d.regenBonus)} de régénération`; break
