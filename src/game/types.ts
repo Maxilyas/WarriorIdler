@@ -205,8 +205,23 @@ export type Equipment = Partial<Record<EquipSlotId, Item>>
 
 export type PowerKind = 'active' | 'passive'
 
-/** Effet d'une capacité ACTIVE (auto-lancée sur cooldown en combat idle). */
-export type PowerEffect = 'heal' | 'nuke' | 'shield' | 'buffParty' | 'cleave' | 'dot' | 'hot'
+/**
+ * Effet d'une capacité ACTIVE (auto-lancée sur cooldown en combat idle).
+ * Base : heal / nuke / shield / buffParty / cleave / dot / hot.
+ * Ultimes (v0.19) : effets forts à long cooldown qui dynamisent le combat.
+ */
+export type PowerEffect =
+  | 'heal' | 'nuke' | 'shield' | 'buffParty' | 'cleave' | 'dot' | 'hot'
+  | 'bigShield'    // énorme bouclier d'absorption (soaké avant les PV)
+  | 'invuln'       // immunité brève aux dégâts directs (absorbe une attaque)
+  | 'charge'       // enregistre les dégâts infligés pendant `duration`, puis frappe ×magnitude
+  | 'frenzy'       // multiplicateur de dégâts temporaire sur le porteur
+  | 'executeNuke'  // nuke amplifié par les PV MANQUANTS de la cible (finisher)
+  | 'megaCleave'   // cataclysme : énorme dégât de zone (tout le pack)
+  | 'bigHeal'      // soin massif de tout le groupe
+  | 'lifeNuke'     // grosse frappe qui rend une part des dégâts en vie au lanceur
+  | 'rupture'      // brise la régénération ennemie + forte plaie (DoT)
+  | 'mark'         // marque la cible : elle subit ×magnitude de dégâts pendant `duration`
 
 /** Définition d'une capacité dans le registre (valeurs de base, montées par le rang plus tard). */
 export interface PowerDef {
@@ -228,8 +243,10 @@ export interface PowerDef {
   // --- Actives (auto-cast) ---
   cooldown?: number // secondes entre deux déclenchements
   effect?: PowerEffect
-  /** Magnitude de base de l'effet (mise à l'échelle par la puissance du lanceur). */
+  /** Magnitude de base de l'effet (mise à l'échelle par la puissance du lanceur ; ou multiplicateur brut pour charge/frenzy/mark). */
   magnitude?: number
+  /** Durée (s) des effets temporels : charge, invuln, frenzy, rupture (DoT/anti-régén), mark. */
+  duration?: number
   /** Stat primaire qui met la magnitude à l'échelle (sort=INT, frappe=FOR, finesse=AGI). */
   scaleStat?: OffensiveStat
   /** Type de dégât de la capacité (pour les nukes/DoT typés). */
@@ -264,6 +281,14 @@ export interface Character {
   dots?: { dps: number; type: DamageType; remaining: number }[]
   /** Affaiblissement (malédiction) — transitoire : multiplie les dégâts du héros tant que remaining > 0. */
   weaken?: { mult: number; remaining: number }
+  /** Bouclier d'absorption (sort « Égide titanesque ») — soaké AVANT les PV. Transitoire. */
+  absorb?: number
+  /** Immunité aux dégâts directs restante (s) — sort « Phase éthérée ». Transitoire. */
+  invuln?: number
+  /** « Vengeance différée » : enregistre les dégâts infligés puis frappe ×mult à expiration. Transitoire. */
+  charge?: { dealt: number; remaining: number; mult: number }
+  /** Frénésie (« Furie sanguinaire ») : multiplicateur de dégâts temporaire. Transitoire. */
+  frenzy?: { mult: number; remaining: number }
 }
 
 // ---- Sorts ennemis (techniques télégraphiées, miroir du kit héros) ----
@@ -330,4 +355,8 @@ export interface Enemy {
   ccCd?: number
   /** Techniques signature (DoT/burst/CC/debuff/drain) selon le biome. Résolues au tick. */
   abilities?: EnemyAbility[]
+  /** Suppression de régénération restante (s) — posée par « Hémorragie cosmique » (brise les murs de régén). */
+  noRegen?: number
+  /** Vulnérabilité — multiplicateur de dégâts SUBIS, posé par « Sceau de faiblesse ». Transitoire. */
+  vuln?: { mult: number; remaining: number }
 }

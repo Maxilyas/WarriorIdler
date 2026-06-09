@@ -18,26 +18,26 @@ export const POWERS: PowerDef[] = [
   {
     id: 'frappe_simple', name: 'Frappe', kind: 'active',
     description: 'Un coup d\'arme rapide. Scale sur ta stat dominante.',
-    unlockLevel: 1, cooldown: 3, effect: 'nuke', magnitude: 1.8, scaleStat: 'force',
+    unlockLevel: 1, cooldown: 3, effect: 'nuke', magnitude: 2.2, scaleStat: 'force',
   },
 
   // --- Berserker (Force / mêlée) ---
   {
     id: 'frappe_lourde', name: 'Frappe lourde', kind: 'active',
     description: 'Assène un coup dévastateur. Scale FOR.',
-    unlockLevel: 1, cooldown: 3.5, effect: 'nuke', magnitude: 3, scaleStat: 'force',
+    unlockLevel: 1, cooldown: 3.5, effect: 'nuke', magnitude: 4.4, scaleStat: 'force',
   },
   {
     id: 'tourbillon', name: 'Tourbillon', kind: 'active',
     description: 'Frappe lourde répétée à fort dégât. Scale FOR.',
-    unlockLevel: 1, cooldown: 2.5, effect: 'cleave', magnitude: 3.5, scaleStat: 'force',
+    unlockLevel: 1, cooldown: 2.5, effect: 'cleave', magnitude: 2.8, scaleStat: 'force',
   },
 
   // --- Rôdeur (Agilité / furtivité) ---
   {
     id: 'tir_precis', name: 'Tir précis', kind: 'active',
     description: 'Un tir visant les points vitaux. Scale AGI.',
-    unlockLevel: 1, cooldown: 2.5, effect: 'nuke', magnitude: 2.6, scaleStat: 'agilite',
+    unlockLevel: 1, cooldown: 2.5, effect: 'nuke', magnitude: 3.4, scaleStat: 'agilite',
   },
   {
     id: 'poison', name: 'Lames empoisonnées', kind: 'active',
@@ -49,7 +49,7 @@ export const POWERS: PowerDef[] = [
   {
     id: 'eclair', name: 'Éclair arcanique', kind: 'active',
     description: 'Décharge d\'arcane. Scale INT.',
-    unlockLevel: 1, cooldown: 2.5, effect: 'nuke', magnitude: 3.2, scaleStat: 'intelligence', damageType: 'arcane',
+    unlockLevel: 1, cooldown: 2.5, effect: 'nuke', magnitude: 3.8, scaleStat: 'intelligence', damageType: 'arcane',
   },
   {
     id: 'embrasement', name: 'Embrasement', kind: 'active',
@@ -100,7 +100,7 @@ export const POWERS: PowerDef[] = [
   {
     id: 'eviscaration', name: 'Éviscération', kind: 'active',
     description: 'Coup mortel sur cible affaiblie. Scale AGI.',
-    unlockLevel: 1, cooldown: 3.5, effect: 'nuke', magnitude: 4, scaleStat: 'agilite',
+    unlockLevel: 1, cooldown: 3.5, effect: 'nuke', magnitude: 5, scaleStat: 'agilite',
   },
   {
     id: 'trait_de_givre', name: 'Trait de givre', kind: 'active',
@@ -115,7 +115,7 @@ export const POWERS: PowerDef[] = [
   {
     id: 'chatiment', name: 'Châtiment sacré', kind: 'active',
     description: 'Foudroie l\'ennemi d\'une lumière punitive. Scale INT.',
-    unlockLevel: 1, cooldown: 3, effect: 'nuke', magnitude: 3.6, scaleStat: 'intelligence', damageType: 'arcane',
+    unlockLevel: 1, cooldown: 3, effect: 'nuke', magnitude: 4.4, scaleStat: 'intelligence', damageType: 'arcane',
   },
   {
     id: 'imposition_des_mains', name: 'Imposition des mains', kind: 'active',
@@ -139,7 +139,59 @@ export const POWERS: PowerDef[] = [
   {
     id: 'decapitation', name: 'Décapitation', kind: 'active',
     description: 'Un coup de hache fatal qui décapite les cibles affaiblies. Scale FOR.',
-    unlockLevel: 1, cooldown: 3.5, effect: 'nuke', magnitude: 4, scaleStat: 'force',
+    unlockLevel: 1, cooldown: 3.5, effect: 'nuke', magnitude: 5, scaleStat: 'force',
+  },
+
+  // ================= ULTIMES (v0.19) : sorts surpuissants à long cooldown =================
+  {
+    id: 'verdict', name: 'Verdict', kind: 'active',
+    description: 'Une sentence dévastatrice : +250% de dégâts selon les PV MANQUANTS de la cible (finisher anti-boss). Scale FOR.',
+    unlockLevel: 1, cooldown: 12, effect: 'executeNuke', magnitude: 4, scaleStat: 'force',
+  },
+  {
+    id: 'soif_du_neant', name: 'Soif du néant', kind: 'active',
+    description: 'Une frappe d\'ombre colossale qui te rend 60% des dégâts en vie (build solo). Scale AGI.',
+    unlockLevel: 1, cooldown: 14, effect: 'lifeNuke', magnitude: 6, scaleStat: 'agilite', damageType: 'ombre',
+  },
+  {
+    id: 'deluge_stellaire', name: 'Déluge stellaire', kind: 'active',
+    description: 'Un cataclysme d\'arcane qui pulvérise TOUT le pack d\'un coup énorme. Scale INT.',
+    unlockLevel: 1, cooldown: 20, effect: 'megaCleave', magnitude: 7, scaleStat: 'intelligence', damageType: 'arcane',
+  },
+  {
+    id: 'aube_salvatrice', name: 'Aube salvatrice', kind: 'active',
+    description: 'Une vague de lumière qui rend une énorme quantité de PV à TOUT le groupe. Scale INT.',
+    unlockLevel: 1, cooldown: 24, effect: 'bigHeal', magnitude: 12, scaleStat: 'intelligence',
+  },
+  {
+    id: 'hemorragie_cosmique', name: 'Hémorragie cosmique', kind: 'active',
+    description: 'Ouvre une plaie béante : BRISE la régénération ennemie 8 s et inflige un DoT massif (amplifié par l\'Altération). Scale INT.',
+    unlockLevel: 1, cooldown: 16, effect: 'rupture', magnitude: 8, duration: 8, scaleStat: 'intelligence', damageType: 'ombre',
+  },
+  {
+    id: 'egide_titanesque', name: 'Égide titanesque', kind: 'active',
+    description: 'Érige un ÉNORME bouclier d\'absorption sur toi (et 40% à l\'équipe), soaké avant tes PV. Long cooldown. Scale INT.',
+    unlockLevel: 1, cooldown: 30, effect: 'bigShield', magnitude: 14, scaleStat: 'intelligence',
+  },
+  {
+    id: 'phase_etheree', name: 'Phase éthérée', kind: 'active',
+    description: 'Tu deviens immatériel : immunité TOTALE aux dégâts directs pendant 2 s (absorbe l\'attaque la plus mortelle).',
+    unlockLevel: 1, cooldown: 28, effect: 'invuln', magnitude: 0, duration: 2, scaleStat: 'intelligence',
+  },
+  {
+    id: 'vengeance_differee', name: 'Vengeance différée', kind: 'active',
+    description: 'Pendant 5 s, enregistre tous tes dégâts ; à l\'issue, frappe une fois pour ×3 le total accumulé. Scale FOR.',
+    unlockLevel: 1, cooldown: 18, effect: 'charge', magnitude: 3, duration: 5, scaleStat: 'force',
+  },
+  {
+    id: 'furie_sanguinaire', name: 'Furie sanguinaire', kind: 'active',
+    description: 'Tu entres en transe : +100% de tous tes dégâts pendant 6 s. Scale FOR.',
+    unlockLevel: 1, cooldown: 22, effect: 'frenzy', magnitude: 2, duration: 6, scaleStat: 'force',
+  },
+  {
+    id: 'sceau_faiblesse', name: 'Sceau de faiblesse', kind: 'active',
+    description: 'Marque la cible : elle subit +45% de TOUS les dégâts (auto-attaques et sorts) pendant 8 s. Scale INT.',
+    unlockLevel: 1, cooldown: 20, effect: 'mark', magnitude: 1.45, duration: 8, scaleStat: 'intelligence',
   },
 ]
 
@@ -157,6 +209,9 @@ const POWER_ICON: Record<string, string> = {
   chatiment: '⚜️', decapitation: '🪓', onde_de_force: '💢',
   provocation: '🚩', bouclier_runique: '🛡️',
   vague_de_soin: '💧', guerison_majeure: '💚', imposition_des_mains: '🙌',
+  // Ultimes
+  verdict: '⚖️', soif_du_neant: '🦇', deluge_stellaire: '🌠', aube_salvatrice: '🌅', hemorragie_cosmique: '🧨',
+  egide_titanesque: '🔰', phase_etheree: '🌫️', vengeance_differee: '⏳', furie_sanguinaire: '😡', sceau_faiblesse: '🔻',
 }
 
 /** Icône d'un sort : champ explicite, table, puis repli (rôle/type). */
@@ -191,6 +246,17 @@ export const POWER_EFFECT_META: Record<PowerEffect, PowerEffectMeta> = {
   hot: { label: 'Soin sur la durée', icon: '💞', targets: 'Allié · sur la durée', family: 'soin' },
   shield: { label: 'Bouclier', icon: '🛡️', targets: 'Porteur', family: 'soutien' },
   buffParty: { label: 'Soin de groupe', icon: '✳️', targets: 'Tout le groupe', family: 'soin' },
+  // Ultimes
+  bigShield: { label: 'Bouclier massif', icon: '🔰', targets: 'Porteur (+ équipe)', family: 'soutien' },
+  invuln: { label: 'Immunité', icon: '🌫️', targets: 'Porteur · brève immunité', family: 'soutien' },
+  charge: { label: 'Charge → frappe', icon: '⏳', targets: 'Mono-cible · différé ×3', family: 'offense' },
+  frenzy: { label: 'Frénésie', icon: '😡', targets: 'Porteur · buff de dégâts', family: 'offense' },
+  executeNuke: { label: 'Exécution', icon: '⚖️', targets: 'Mono-cible · PV manquants', family: 'offense' },
+  megaCleave: { label: 'Cataclysme (zone)', icon: '🌠', targets: 'Tout le pack', family: 'offense' },
+  bigHeal: { label: 'Soin massif', icon: '🌅', targets: 'Tout le groupe', family: 'soin' },
+  lifeNuke: { label: 'Frappe vampirique', icon: '🦇', targets: 'Mono-cible + vol de vie', family: 'offense' },
+  rupture: { label: 'Anti-régén + DoT', icon: '🧨', targets: 'Mono-cible · brise la régén', family: 'offense' },
+  mark: { label: 'Vulnérabilité', icon: '🔻', targets: 'Mono-cible · amplifie les dégâts', family: 'offense' },
 }
 
 /** Stat de scaling d'un sort, en court (FOR / AGI / INT). */

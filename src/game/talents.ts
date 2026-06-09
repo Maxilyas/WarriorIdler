@@ -498,6 +498,26 @@ for (const [id, name, from, to, mods] of CARREFOURS) {
   single({ id, name, constellation: 'coeur', kind: 'notable', tier: 6, maxRank: 1, requires: [from, to], description: `Pont entre deux voies. ${sd(mods)}.`, statMods: mods })
 }
 
+/* ================== ULTIMES : 10 sorts surpuissants (nœuds-capacité profonds) ==================
+ * Récompenses fortes à long cooldown, ancrées dans la voie thématique de chaque effet.
+ */
+const ULTIMATES: [string, string, ConstellationId, string, string][] = [
+  // id, nom, constellation, prérequis (nœud existant), capacité débloquée
+  ['ult_verdict', 'Verdict', 'bourreau', 'bo_entry', 'verdict'],
+  ['ult_soif', 'Soif du néant', 'faucheur', 'fa_entry', 'soif_du_neant'],
+  ['ult_deluge', 'Déluge stellaire', 'elementaliste', 'el_entry', 'deluge_stellaire'],
+  ['ult_aube', 'Aube salvatrice', 'soin', 'so_a3', 'aube_salvatrice'],
+  ['ult_hemo', 'Hémorragie cosmique', 'pestifere', 'pe_entry', 'hemorragie_cosmique'],
+  ['ult_egide', 'Égide titanesque', 'bastion', 'ba_a4', 'egide_titanesque'],
+  ['ult_phase', 'Phase éthérée', 'spectre', 'sp_entry', 'phase_etheree'],
+  ['ult_vengeance', 'Vengeance différée', 'force', 'fo_a5', 'vengeance_differee'],
+  ['ult_furie', 'Furie sanguinaire', 'duelliste', 'du_entry', 'furie_sanguinaire'],
+  ['ult_sceau', 'Sceau de faiblesse', 'intelligence', 'in_a3', 'sceau_faiblesse'],
+]
+for (const [id, name, c, req, power] of ULTIMATES) {
+  single({ id, name, constellation: c, kind: 'ability', tier: 9, maxRank: 1, requires: [req], description: `ULTIME — débloque ${name} (sort surpuissant, long cooldown).`, unlockPower: power })
+}
+
 /* ------------------------------------------------------------------ */
 
 const BY_ID = new Map(TALENTS.map((t) => [t.id, t]))

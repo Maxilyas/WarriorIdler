@@ -2,17 +2,13 @@ import { useState } from 'react'
 import { useGame, xpForLevel } from '../game/store'
 import { describeStats, PRIMARY_META } from '../game/stats'
 import type { StatEffect } from '../game/stats'
-import type { PrimaryStat, DamageType, Character, PowerDef, PowerEffect } from '../game/types'
+import type { PrimaryStat, DamageType, Character, PowerDef } from '../game/types'
 import type { DerivedStats } from '../game/stats'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from '../game/damage'
 import { charTotalStats, charDerived, charMaxHp, charDamageProfile, charResist, abilityPower } from '../game/character'
-import { getPower } from '../game/powers'
+import { getPower, POWER_EFFECT_META } from '../game/powers'
 
-const EFFECT_LABEL: Record<PowerEffect, string> = {
-  nuke: 'Frappe directe', cleave: 'Zone (tout le pack)', dot: 'Dégâts sur la durée',
-  heal: 'Soin', hot: 'Soin sur la durée', shield: 'Bouclier', buffParty: 'Soin de groupe',
-}
-const DMG_EFFECTS: ReadonlySet<string> = new Set(['nuke', 'cleave', 'dot'])
+const DMG_EFFECTS: ReadonlySet<string> = new Set(['nuke', 'cleave', 'dot', 'executeNuke', 'megaCleave', 'lifeNuke', 'rupture'])
 
 /** Détail chiffré d'une capacité active : type, cooldown réel, valeur théorique (1 chiffre). */
 function powerDetail(p: PowerDef, derived: DerivedStats) {
@@ -247,7 +243,7 @@ function PowersSection({ char }: { char: Character }) {
               {det && (
                 <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-slate-400">
                   {det.type && <span style={{ color: DAMAGE_TYPES[det.type].color }}>{DAMAGE_TYPES[det.type].icon} {DAMAGE_TYPES[det.type].name}</span>}
-                  <span>{EFFECT_LABEL[p.effect ?? 'nuke']}</span>
+                  <span>{POWER_EFFECT_META[p.effect ?? 'nuke'].label}</span>
                   <span>CD {det.cd.toFixed(1)}s</span>
                   <span className="text-slate-200">≈ {det.value.toLocaleString('fr-FR')} {det.dmg ? 'dég.' : 'PV'}</span>
                 </div>

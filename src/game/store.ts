@@ -748,16 +748,44 @@ interface CombatMods {
   dmgMult?: number
 }
 
+/** Multiplicateur de dégâts SUBIS par un ennemi (vulnérabilité « Sceau de faiblesse »). */
+function enemyVuln(enemy: Enemy): number {
+  return enemy.vuln && enemy.vuln.remaining > 0 ? enemy.vuln.mult : 1
+}
+
 function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, chars: Character[], enemy: Enemy, hotBonus: number) {
   const mag = (p.magnitude ?? 1) * abilityPower(derived, p.scaleStat)
+  const vm = enemyVuln(enemy)
   switch (p.effect) {
     case 'nuke':
     case 'cleave':
-      enemy.hp = Math.max(0, enemy.hp - mag)
+    case 'megaCleave':
+      enemy.hp = Math.max(0, enemy.hp - mag * vm)
       break
+    case 'executeNuke': {
+      // +250% de dégâts à PV pleins manquants : finisher dévastateur.
+      const missing = 1 - enemy.hp / Math.max(1, enemy.maxHp)
+      enemy.hp = Math.max(0, enemy.hp - mag * (1 + missing * 2.5) * vm)
+      break
+    }
+    case 'lifeNuke': {
+      const before = enemy.hp
+      enemy.hp = Math.max(0, enemy.hp - mag * vm)
+      caster.hp = Math.min(charMaxHp(caster), caster.hp + (before - enemy.hp) * 0.6)
+      break
+    }
     case 'dot':
       // L'Altération amplifie les dégâts sur la durée.
       enemy.dot = { dps: Math.max(mag * 0.4 * derived.alterationMult, enemy.dot?.dps ?? 0), remaining: 5 }
+      break
+    case 'rupture':
+      // Brise la régén ennemie + grosse plaie (dégât immédiat + DoT puissant).
+      enemy.noRegen = Math.max(enemy.noRegen ?? 0, p.duration ?? 8)
+      enemy.hp = Math.max(0, enemy.hp - mag * 0.5 * vm)
+      enemy.dot = { dps: Math.max(mag * 0.5 * derived.alterationMult, enemy.dot?.dps ?? 0), remaining: p.duration ?? 8 }
+      break
+    case 'mark':
+      enemy.vuln = { mult: p.magnitude ?? 1.4, remaining: p.duration ?? 8 }
       break
     case 'heal':
     case 'hot': {
@@ -769,13 +797,46 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, chars
       }
       break
     }
+    case 'bigHeal':
+      for (const a of chars) if (a.hp > 0) a.hp = Math.min(charMaxHp(a), a.hp + mag * (1 + hotBonus))
+      break
     case 'buffParty':
       for (const a of chars) if (a.hp > 0) a.hp = Math.min(charMaxHp(a), a.hp + mag * 0.5 * (1 + hotBonus))
       break
     case 'shield':
       caster.hp = Math.min(charMaxHp(caster), caster.hp + mag)
       break
+    case 'bigShield':
+      // Énorme bouclier d'absorption (soaké avant les PV) + 40% à l'équipe.
+      caster.absorb = (caster.absorb ?? 0) + mag
+      for (const a of chars) if (a.hp > 0 && a !== caster) a.absorb = (a.absorb ?? 0) + mag * 0.4
+      break
+    case 'invuln':
+      caster.invuln = Math.max(caster.invuln ?? 0, p.duration ?? 2)
+      break
+    case 'charge':
+      // Démarre l'accumulation ; la frappe différée est résolue dans le pas de combat.
+      caster.charge = { dealt: 0, remaining: p.duration ?? 5, mult: p.magnitude ?? 3 }
+      break
+    case 'frenzy':
+      caster.frenzy = { mult: p.magnitude ?? 2, remaining: p.duration ?? 6 }
+      break
   }
+}
+
+/** Applique des dégâts à un héros via l'immunité puis le bouclier d'absorption. Renvoie les PV réellement perdus. */
+function damageHero(c: Character, amount: number): number {
+  if (amount <= 0) return 0
+  if ((c.invuln ?? 0) > 0) return 0 // immunité totale (Phase éthérée)
+  let amt = amount
+  if ((c.absorb ?? 0) > 0) {
+    const soak = Math.min(c.absorb!, amt)
+    c.absorb = c.absorb! - soak
+    amt -= soak
+    if ((c.absorb ?? 0) <= 0) c.absorb = undefined
+  }
+  c.hp -= amt
+  return amt
 }
 
 /** Contexte de combat d'un héros utilisé pour résoudre les techniques ennemies. */
@@ -801,10 +862,11 @@ function applyEnemyAbility(ab: EnemyAbility, enemy: Enemy, t: Character, ctx: Ab
     }
     case 'burst':
     case 'drain': {
-      // Coup unique télégraphié : atténué comme une attaque (résist + esquive/réduction + barrière via PV).
+      // Coup unique télégraphié : atténué comme une attaque (résist + esquive/réduction + barrière via PV),
+      // puis passé par l'immunité/bouclier d'absorption du héros.
       const dmg = incomingDps(enemy.damage * ab.magnitude, ab.element, ctx.derived, ctx.resist, extra)
-      t.hp -= dmg
-      if (ab.kind === 'drain') enemy.hp = Math.min(enemy.maxHp, enemy.hp + dmg * 0.6)
+      const taken = damageHero(t, dmg)
+      if (ab.kind === 'drain') enemy.hp = Math.min(enemy.maxHp, enemy.hp + taken * 0.6)
       break
     }
     case 'cc': {
@@ -856,6 +918,9 @@ function tickHeroStatuses(chars: Character[], dt: number) {
   for (const c of chars) {
     if (c.stun && c.stun > 0) c.stun = Math.max(0, c.stun - dt)
     if (c.weaken) { c.weaken.remaining -= dt; if (c.weaken.remaining <= 0) c.weaken = undefined }
+    if ((c.invuln ?? 0) > 0) { c.invuln = Math.max(0, c.invuln! - dt); if ((c.invuln ?? 0) <= 0) c.invuln = undefined }
+    if (c.frenzy) { c.frenzy.remaining -= dt; if (c.frenzy.remaining <= 0) c.frenzy = undefined }
+    if (c.charge) c.charge.remaining -= dt // la frappe différée est résolue dans le pas de combat
     if (c.dots && c.dots.length) {
       let dmg = 0
       for (const d of c.dots) { dmg += d.dps * dt; d.remaining -= dt }
@@ -892,26 +957,42 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
     const hpFrac = c.hp / charMaxHp(c)
     const lowHp = d.cmods.lowHp && hpFrac <= d.cmods.lowHp.threshold ? d.cmods.lowHp.mult : 1
     const highHp = d.cmods.highHp && hpFrac >= d.cmods.highHp.threshold ? d.cmods.highHp.mult : 1
-    // Malédiction (debuff ennemi) : réduit les dégâts du héros tant qu'elle est active.
+    // Malédiction (debuff ennemi) réduit les dégâts ; Frénésie (« Furie sanguinaire ») les amplifie.
     const weakenMult = c.weaken ? c.weaken.mult : 1
-    const bonusMult = d.cmods.damageMult * lowHp * highHp * weakenMult
+    const frenzyMult = c.frenzy && c.frenzy.remaining > 0 ? c.frenzy.mult : 1
+    const bonusMult = d.cmods.damageMult * lowHp * highHp * weakenMult * frenzyMult
     const multistrikeChance = Math.min(0.85, d.derived.multistrike + d.cmods.multistrike)
     let healed = 0
+    let dealtThis = 0
     for (let h = 0; h < whole && enemy.hp > 0; h++) {
       // Multifrappe : chance de déclencher un coup supplémentaire.
       const strikes = 1 + (Math.random() < multistrikeChance ? 1 : 0)
       for (let s = 0; s < strikes && enemy.hp > 0; s++) {
         const hit = rollHit(d.derived, d.profile, enemy, { bonusMult, execute: d.cmods.execute })
-        enemy.hp = Math.max(0, enemy.hp - hit.damage)
-        totalDealt += hit.damage
+        const dmg = hit.damage * enemyVuln(enemy) // Sceau de faiblesse amplifie aussi les auto-attaques
+        enemy.hp = Math.max(0, enemy.hp - dmg)
+        totalDealt += dmg
+        dealtThis += dmg
         healed += hit.heal
         if (d.cmods.dot) enemy.dot = { dps: Math.max(hit.damage * d.cmods.dot.frac * d.derived.alterationMult, enemy.dot?.dps ?? 0), remaining: d.cmods.dot.duration }
       }
     }
+    if (c.charge) c.charge.dealt += dealtThis
     if (healed) c.hp = Math.min(charMaxHp(c), c.hp + healed)
   })
 
-  // 2) Dégâts du DoT sur l'ennemi.
+  // 1b) Vengeance différée : à l'expiration de la fenêtre, frappe ×mult le total accumulé.
+  for (const c of chars) {
+    if (!c.charge || c.charge.remaining > 0) continue
+    if (c.hp > 0 && enemy.hp > 0 && c.charge.dealt > 0) {
+      const burst = c.charge.dealt * c.charge.mult * enemyVuln(enemy)
+      enemy.hp = Math.max(0, enemy.hp - burst)
+      totalDealt += burst
+    }
+    c.charge = undefined
+  }
+
+  // 2) Dégâts du DoT sur l'ennemi + décompte de ses statuts (vulnérabilité, anti-régén).
   if (enemy.dot && enemy.hp > 0) {
     const dmg = enemy.dot.dps * dt
     enemy.hp = Math.max(0, enemy.hp - dmg)
@@ -919,12 +1000,16 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
     enemy.dot.remaining -= dt
     if (enemy.dot.remaining <= 0) enemy.dot = undefined
   }
+  if ((enemy.noRegen ?? 0) > 0) enemy.noRegen = Math.max(0, enemy.noRegen! - dt)
+  if (enemy.vuln) { enemy.vuln.remaining -= dt; if (enemy.vuln.remaining <= 0) enemy.vuln = undefined }
 
   // 3) Capacités actives (cooldown réduit par la Récupération). AUTO = auto-lancées ; MANUEL = sur tap
-  //    (castPower) uniquement, lancement STRICT (si pas prêt, rien). Étourdi = pas de cast.
+  //    (castPower) uniquement, lancement STRICT (si pas prêt, rien). Étourdi = on ne LANCE pas, mais
+  //    les RECHARGES continuent de tourner (le CD se résorbe même étourdi).
   chars.forEach((c, i) => {
     const d = info[i]
-    if (!d || (c.stun ?? 0) > 0) return
+    if (!d) return
+    const stunned = (c.stun ?? 0) > 0
     c.powers.forEach((pid, slot) => {
       if (!pid) return
       const p = getPower(pid)
@@ -932,13 +1017,13 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
       const key = `${c.id}:${pid}`
       const cd = (cooldowns.get(key) ?? 0) - dt
       const auto = c.powerAuto?.[slot] !== false
-      if (cd <= 0 && (auto || manualFire.has(key))) {
+      if (cd <= 0 && !stunned && (auto || manualFire.has(key))) {
         cooldowns.set(key, (p.cooldown ?? 3) * (1 - d.derived.cdr))
         manualFire.delete(key)
         fireActive(p, c, d.derived, chars, enemy, d.cmods.hot)
       } else {
         cooldowns.set(key, Math.max(0, cd))
-        if (!auto) manualFire.delete(key) // cast manuel strict : pas de file d'attente
+        if (!auto && !stunned) manualFire.delete(key) // cast manuel strict : pas de file d'attente
       }
     })
   })
@@ -975,16 +1060,17 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
       (1 - td.passives.damageReduction) * (1 - td.cmods.flatDr),
     ) * dt
     if (mods?.reflect) incoming += totalDealt * mods.reflect
-    t.hp -= incoming
-    // Épines (thorns) : renvoie une fraction des dégâts subis à l'ennemi.
+    // Immunité / bouclier d'absorption du héros (Phase éthérée, Égide titanesque).
+    damageHero(t, incoming)
+    // Épines (thorns) : renvoie une fraction de l'attaque à l'ennemi (basée sur le coup, bouclier inclus).
     if (td.cmods.thorns > 0 && enemy.hp > 0) enemy.hp = Math.max(0, enemy.hp - incoming * td.cmods.thorns)
   }
 
   // 4b) Techniques signature de l'ennemi (DoT/burst/CC/debuff/drain) sur la plus haute menace.
   tickEnemyAbilities(enemy, chars, info, dt)
 
-  // 5) Régénération de l'ennemi (Vampirique).
-  if (mods?.regen && enemy.hp > 0) enemy.hp = Math.min(enemy.maxHp, enemy.hp + enemy.maxHp * mods.regen * dt)
+  // 5) Régénération de l'ennemi (Vampirique) — annulée par « Hémorragie cosmique ».
+  if (mods?.regen && enemy.hp > 0 && (enemy.noRegen ?? 0) <= 0) enemy.hp = Math.min(enemy.maxHp, enemy.hp + enemy.maxHp * mods.regen * dt)
 
   // 6) Régénération des persos (+ bonus de régén) + clamp.
   chars.forEach((c, i) => {
@@ -1027,9 +1113,11 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
     const lowHp = d.cmods.lowHp && hpFrac <= d.cmods.lowHp.threshold ? d.cmods.lowHp.mult : 1
     const highHp = d.cmods.highHp && hpFrac >= d.cmods.highHp.threshold ? d.cmods.highHp.mult : 1
     const weakenMult = c.weaken ? c.weaken.mult : 1
-    const bonusMult = d.cmods.damageMult * lowHp * highHp * weakenMult
+    const frenzyMult = c.frenzy && c.frenzy.remaining > 0 ? c.frenzy.mult : 1
+    const bonusMult = d.cmods.damageMult * lowHp * highHp * weakenMult * frenzyMult
     const multistrikeChance = Math.min(0.85, d.derived.multistrike + d.cmods.multistrike)
     let healed = 0
+    let dealtThis = 0
     for (let h = 0; h < whole; h++) {
       const target = focus()
       if (!target) break
@@ -1038,16 +1126,31 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
         const t2 = focus()
         if (!t2) break
         const hit = rollHit(d.derived, d.profile, t2, { bonusMult, execute: d.cmods.execute })
-        t2.hp = Math.max(0, t2.hp - hit.damage)
-        totalDealt += hit.damage
+        const dmg = hit.damage * enemyVuln(t2)
+        t2.hp = Math.max(0, t2.hp - dmg)
+        totalDealt += dmg
+        dealtThis += dmg
         healed += hit.heal
         if (d.cmods.dot) t2.dot = { dps: Math.max(hit.damage * d.cmods.dot.frac * d.derived.alterationMult, t2.dot?.dps ?? 0), remaining: d.cmods.dot.duration }
       }
     }
+    if (c.charge) c.charge.dealt += dealtThis
     if (healed) c.hp = Math.min(charMaxHp(c), c.hp + healed)
   })
 
-  // 2) DoT par ennemi.
+  // 1b) Vengeance différée : frappe ×mult le total accumulé, sur la cible focus.
+  for (const c of chars) {
+    if (!c.charge || c.charge.remaining > 0) continue
+    const tg = focus()
+    if (c.hp > 0 && tg && c.charge.dealt > 0) {
+      const burst = c.charge.dealt * c.charge.mult * enemyVuln(tg)
+      tg.hp = Math.max(0, tg.hp - burst)
+      totalDealt += burst
+    }
+    c.charge = undefined
+  }
+
+  // 2) DoT par ennemi + décompte de ses statuts (vulnérabilité, anti-régén).
   for (const enemy of enemies) {
     if (enemy.dot && enemy.hp > 0) {
       const dmg = enemy.dot.dps * dt
@@ -1056,12 +1159,16 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
       enemy.dot.remaining -= dt
       if (enemy.dot.remaining <= 0) enemy.dot = undefined
     }
+    if ((enemy.noRegen ?? 0) > 0) enemy.noRegen = Math.max(0, enemy.noRegen! - dt)
+    if (enemy.vuln) { enemy.vuln.remaining -= dt; if (enemy.vuln.remaining <= 0) enemy.vuln = undefined }
   }
 
-  // 3) Actives : `cleave` touche TOUS les ennemis, le reste la cible focus. AUTO auto-lancé ; MANUEL sur tap.
+  // 3) Actives : `cleave`/AoE touchent TOUS les ennemis, le reste la cible focus. Étourdi = on ne
+  //    LANCE pas, mais les RECHARGES continuent de tourner.
   chars.forEach((c, i) => {
     const d = info[i]
-    if (!d || (c.stun ?? 0) > 0) return
+    if (!d) return
+    const stunned = (c.stun ?? 0) > 0
     c.powers.forEach((pid, slot) => {
       if (!pid) return
       const p = getPower(pid)
@@ -1069,17 +1176,17 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
       const key = `${c.id}:${pid}`
       const cd = (cooldowns.get(key) ?? 0) - dt
       const auto = c.powerAuto?.[slot] !== false
-      if (cd <= 0 && (auto || manualFire.has(key))) {
+      if (cd <= 0 && !stunned && (auto || manualFire.has(key))) {
         cooldowns.set(key, (p.cooldown ?? 3) * (1 - d.derived.cdr))
         manualFire.delete(key)
-        if (p.effect === 'cleave') {
+        if (p.effect === 'cleave' || p.effect === 'megaCleave') {
           for (const e of enemies) if (e.hp > 0) fireActive(p, c, d.derived, chars, e, d.cmods.hot)
         } else {
           fireActive(p, c, d.derived, chars, focus() ?? enemies[0], d.cmods.hot)
         }
       } else {
         cooldowns.set(key, Math.max(0, cd))
-        if (!auto) manualFire.delete(key)
+        if (!auto && !stunned) manualFire.delete(key)
       }
     })
   })
@@ -1114,14 +1221,15 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
       (1 - td.passives.damageReduction) * (1 - td.cmods.flatDr),
     ) * dt
     if (mods?.reflect && !reflectApplied) { incoming += totalDealt * mods.reflect; reflectApplied = true }
-    t.hp -= incoming
+    // Immunité / bouclier d'absorption du héros (Phase éthérée, Égide titanesque).
+    damageHero(t, incoming)
     if (td.cmods.thorns > 0 && enemy.hp > 0) enemy.hp = Math.max(0, enemy.hp - incoming * td.cmods.thorns)
     // Techniques signature de CET ennemi (sur la plus haute menace).
     tickEnemyAbilities(enemy, chars, info, dt)
   }
 
-  // 5) Régénération ennemie (Vampirique/Sangsue) sur tous les ennemis vivants.
-  if (mods?.regen) for (const enemy of enemies) if (enemy.hp > 0) enemy.hp = Math.min(enemy.maxHp, enemy.hp + enemy.maxHp * mods.regen * dt)
+  // 5) Régénération ennemie (Vampirique/Sangsue) — annulée par « Hémorragie cosmique ».
+  if (mods?.regen) for (const enemy of enemies) if (enemy.hp > 0 && (enemy.noRegen ?? 0) <= 0) enemy.hp = Math.min(enemy.maxHp, enemy.hp + enemy.maxHp * mods.regen * dt)
 
   // 6) Régénération des persos + clamp.
   chars.forEach((c, i) => {
@@ -1280,7 +1388,11 @@ function applyAoe(chars: Character[], baseDmg: number, type: DamageType): Charac
     const resist = charResist(c)[type] ?? 0
     // Même plafond d'atténuation que les coups normaux (pas d'invincibilité face aux Novas).
     const dmg = baseDmg * (1 - resist) * genericMitigation(d, (1 - p.damageReduction) * (1 - cm.flatDr))
-    return { ...c, hp: Math.max(0, c.hp - dmg) }
+    if ((c.invuln ?? 0) > 0) return c // Phase éthérée : immunité totale
+    let amt = dmg
+    let absorb = c.absorb
+    if (absorb && absorb > 0) { const soak = Math.min(absorb, amt); absorb -= soak; amt -= soak }
+    return { ...c, hp: Math.max(0, c.hp - amt), absorb: absorb && absorb > 0 ? absorb : undefined }
   })
 }
 
