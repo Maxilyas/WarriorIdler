@@ -10,7 +10,8 @@
     "validate": "node scripts/validate-talents.mjs",
     "dps": "node scripts/dps-check.mjs",
     "sim": "node scripts/build-sim.mjs",
-    "survival": "node scripts/survival-sim.mjs"
+    "survival": "node scripts/survival-sim.mjs",
+    "dungeon": "node scripts/dungeon-sim.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",

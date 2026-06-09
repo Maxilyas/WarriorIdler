@@ -27,3 +27,8 @@ Harnais de SURVIE : compare, par palier, le temps-pour-mourir (EHP tank / dégâ
 temps-pour-tuer (PV ennemi / DPS). Sert à vérifier que les dégâts ennemis ne dépassent pas la
 capacité de survie (PV ~linéaires) au fil des paliers. (Le build DPS de référence y est volontairement
 modeste — utiliser `npm run sim` pour le vrai plafond de DPS.)
+
+## `dungeon-sim.mjs` — `npm run dungeon`
+Harnais de progression DONJON : pour des builds FOR/AGI/INT stuffés selon le niveau de perso
+(10/25/50/75/100), affiche le niveau de donjon MAX franchissable (survivre + tuer le boss), sur
+plusieurs traits (rapide / elite / colosse). Sert à garder une COURBE de progression (et pas un mur).
