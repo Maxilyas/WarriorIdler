@@ -1,5 +1,6 @@
 import { createPortal } from 'react-dom'
 import { useGame } from '../game/store'
+import { DAMAGE_TYPES } from '../game/damage'
 
 function fmtDuration(ms: number): string {
   const min = Math.floor(ms / 60000)
@@ -29,6 +30,9 @@ export function WelcomeBackModal() {
           <Row label="⬆ XP (par perso)" value={`+${report.xp.toLocaleString('fr-FR')}`} color="text-violet-300" />
           {report.noyau > 0 && <Row label="💠 Noyaux" value={`+${report.noyau}`} color="text-fuchsia-300" />}
           {report.sceaux > 0 && <Row label="🔑 Sceaux" value={`+${report.sceaux}`} color="text-amber-300" />}
+          {report.quint && report.quint.amount > 0 && (
+            <Row label={`${DAMAGE_TYPES[report.quint.type].icon} Quintessence de ${DAMAGE_TYPES[report.quint.type].name}`} value={`+${report.quint.amount}`} color="text-emerald-300" />
+          )}
           {report.items.length > 0 && <Row label="🎒 Objets trouvés" value={`+${report.items.length}`} color="text-sky-300" />}
         </div>
 

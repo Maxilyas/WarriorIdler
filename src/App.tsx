@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useGame } from './game/store'
 import { useMediaQuery } from './useMediaQuery'
+import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from './game/damage'
 import { TALENT_START_LEVEL } from './game/character'
 import { CombatPanel } from './components/CombatPanel'
 import { CharacterPanel } from './components/CharacterPanel'
@@ -45,6 +46,7 @@ export default function App() {
   const essence = useGame((s) => s.essence)
   const noyau = useGame((s) => s.noyau)
   const poussiere = useGame((s) => s.poussiere)
+  const quint = useGame((s) => s.quint)
   const orbes = useGame((s) => s.orbes)
   const fragments = useGame((s) => s.fragments)
   const cosmic = useGame((s) => s.cosmic)
@@ -92,6 +94,12 @@ export default function App() {
           <span className="text-cyan-300" title="Éclats d'arcane">♦ {essence.toLocaleString('fr-FR')}</span>
           <span className="text-fuchsia-300" title="Noyau primordial (boss)">💠 {noyau.toLocaleString('fr-FR')}</span>
           {poussiere > 0 && <span className="text-indigo-300" title="Poussière d'étoile (craft sommital)">🌌 {poussiere.toLocaleString('fr-FR')}</span>}
+          {(() => {
+            const total = DAMAGE_TYPE_LIST.reduce((a, t) => a + (quint[t] ?? 0), 0)
+            if (total <= 0) return null
+            const breakdown = DAMAGE_TYPE_LIST.filter((t) => (quint[t] ?? 0) > 0).map((t) => `${DAMAGE_TYPES[t].icon} ${DAMAGE_TYPES[t].name} : ${quint[t]}`).join('\n')
+            return <span className="text-emerald-300" title={`Quintessences élémentaires (craft typé)\n${breakdown}`}>⚗️ {total.toLocaleString('fr-FR')}</span>
+          })()}
           {orbes > 0 && <span className="text-rose-300" title="Orbe de raid">🔮 {orbes.toLocaleString('fr-FR')}</span>}
           {fragments > 0 && <span className="text-sky-300" title="Fragment d'éternité">✨ {fragments.toLocaleString('fr-FR')}</span>}
           {cosmic > 0 && <span className="text-violet-300" title="Éclat cosmique (raids)">💫 {cosmic.toLocaleString('fr-FR')}</span>}

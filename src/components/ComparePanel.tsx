@@ -1,14 +1,15 @@
 import { useState } from 'react'
-import type { Item, EquipSlotId, StatKey, Affix } from '../game/types'
+import type { Item, EquipSlotId, StatKey, Affix, DamageType } from '../game/types'
 import { RARITIES } from '../game/rarities'
 import { ALL_STAT_META } from '../game/stats'
 import {
   sellValue, recycleValue, itemStatBlock, itemScore, itemHasRareStat,
   reforgeCost, surillvlCost, ascendCost, nextRarity, SURILLVL_STEP, transmuteCost,
+  quintCost, QUINT_GAIN,
 } from '../game/items'
 import type { OffensiveStat } from '../game/types'
 import { ITEM_TYPES, equipSlotsForType } from '../game/slots'
-import { DAMAGE_TYPES } from '../game/damage'
+import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from '../game/damage'
 import {
   getUnique, uniqueActiveText, isUniqueActive, instanceMods, instanceResist, upgradeCost, insertCost,
   UNIQUE_EFFECTS, UNIQUE_ROLES, UNIQUE_MAX_RANK, UNIQUE_ACTIVE_RANK,
@@ -141,9 +142,17 @@ export function ComparePanel({ item, equipped, occupied, onEquip, onSell, onRecy
           )}
           {item.affixes.filter((a) => a.kind !== 'stat').map((a, i) => {
             const m = a.type ? DAMAGE_TYPES[a.type] : null
+            const up = a.upgraded ?? 0
             return (
-              <div key={i} style={{ color: m?.color }}>
-                {a.kind === 'resist' ? '🛡 ' : m?.icon + ' '}+{a.value}% {a.kind === 'resist' ? 'résistance' : 'dégâts'} {m?.name}
+              <div key={i} className="flex items-center gap-1" style={{ color: m?.color }}>
+                <span style={up > 0 ? { textShadow: `0 0 6px ${m?.color}` } : undefined}>
+                  {a.kind === 'resist' ? '🛡 ' : m?.icon + ' '}+{a.value}% {a.kind === 'resist' ? 'résistance' : 'dégâts'} {m?.name}
+                </span>
+                {up > 0 && (
+                  <span className="rounded-full bg-emerald-500/20 px-1 text-[8.5px] font-bold text-emerald-300 ring-1 ring-emerald-400/40" title={`Renforcé ${up}× à la Quintessence`}>
+                    ⚗️+{up}
+                  </span>
+                )}
               </div>
             )
           })}
@@ -312,6 +321,8 @@ function CraftSection({ item }: { item: Item }) {
             <div className="text-center text-[10px] italic text-slate-600">Rareté maximale atteinte.</div>
           )}
 
+          <QuintessenceSection item={item} />
+
           <InsertEffectSection item={item} />
 
           <ChooseUniqueSection item={item} />
@@ -325,6 +336,75 @@ function CraftSection({ item }: { item: Item }) {
           >
             ✨ {item.unique ? 'Renforcer l\'unique' : 'Infuser un unique'} · {FRAGMENT_INFUSE_COST} fragments
           </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Craft typé à la Quintessence élémentaire : ajoute/améliore une ligne de Dégâts ou de Résistance
+ * d'un type. Coût exponentiel par amélioration (puits sans fin), remboursé à 75% au recyclage.
+ */
+function QuintessenceSection({ item }: { item: Item }) {
+  const quint = useGame((s) => s.quint)
+  const enhanceTyped = useGame((s) => s.enhanceTyped)
+  const [open, setOpen] = useState(false)
+
+  // Types pertinents : ceux dont on a des Quintessences, ou déjà présents sur l'objet.
+  const present = new Set(item.affixes.filter((a) => a.kind !== 'stat' && a.type).map((a) => a.type as DamageType))
+  const types = DAMAGE_TYPE_LIST.filter((t) => (quint[t] ?? 0) > 0 || present.has(t))
+  const totalOwned = DAMAGE_TYPE_LIST.reduce((a, t) => a + (quint[t] ?? 0), 0)
+
+  const find = (t: DamageType, kind: 'dmgType' | 'resist') => item.affixes.find((a) => a.kind === kind && a.type === t)
+
+  return (
+    <div className="rounded border border-emerald-800/40 bg-emerald-950/10 p-2">
+      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center justify-between text-[11px] font-semibold text-emerald-300">
+        <span>⚗️ Quintessences élémentaires</span>
+        <span className="text-[9.5px] font-normal text-slate-400">⚗️ {totalOwned} · {open ? '▾' : '▸'}</span>
+      </button>
+      {open && (
+        <div className="mt-1.5">
+          <div className="mb-1 text-[9.5px] leading-snug text-emerald-200/60">
+            Ajoute ou renforce une ligne typée. Coût exponentiel par palier · 75% remboursé au recyclage.
+          </div>
+          {types.length === 0 ? (
+            <div className="text-[10px] italic text-slate-500">Aucune Quintessence — farme les biomes (drop ultra-rare ~1%).</div>
+          ) : (
+            <div className="space-y-1">
+              {types.map((t) => {
+                const m = DAMAGE_TYPES[t]
+                const owned = quint[t] ?? 0
+                return (
+                  <div key={t} className="flex items-center gap-1.5 rounded bg-black/20 px-1.5 py-1">
+                    <span className="w-20 shrink-0 truncate text-[10px] font-medium" style={{ color: m.color }}>{m.icon} {m.name}</span>
+                    <span className="w-12 shrink-0 text-[9px] text-slate-400" title="Quintessences disponibles">⚗️ {owned}</span>
+                    <div className="flex flex-1 gap-1">
+                      {(['dmgType', 'resist'] as const).map((kind) => {
+                        const aff = find(t, kind)
+                        const level = aff?.upgraded ?? 0
+                        const cost = quintCost(level)
+                        const can = owned >= cost
+                        const label = kind === 'resist' ? 'Résist.' : 'Dégâts'
+                        return (
+                          <button
+                            key={kind}
+                            disabled={!can}
+                            onClick={() => enhanceTyped(item.id, t, kind)}
+                            title={aff ? `+${QUINT_GAIN[kind]}% (palier ${level} → ${level + 1})` : `Ajoute +${kind === 'resist' ? 4 : 8}% ${label}`}
+                            className="flex-1 rounded border border-emerald-700/40 px-1 py-0.5 text-[9.5px] font-medium text-emerald-100 enabled:hover:bg-emerald-900/30 disabled:opacity-40"
+                          >
+                            {aff ? '⬆' : '+'} {label} · {m.icon}{cost}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -437,3 +437,72 @@ export function ascendItem(item: Item): Partial<Item> | null {
 export function transmuteCost(item: Item): number {
   return Math.round(item.ilvl * 1.5 * RARITIES[item.rarity].tier)
 }
+
+// ---- Quintessences élémentaires (craft typé, ressource ultra-rare par biome) ----
+
+/**
+ * Coût de base d'une amélioration de ligne typée (en Quintessences). Élevé même la 1re fois :
+ * la Quintessence ne tombe qu'à ~1% sur les ennemis du biome → 4 unités ≈ ~400 kills.
+ */
+export const QUINT_BASE_COST = 4
+/** Croissance exponentielle du coût par niveau : 4 → 8 → 16 → 32 … (puits sans fin). */
+export const QUINT_GROWTH = 2
+/** Fraction de Quintessence remboursée au recyclage d'un objet renforcé. */
+export const QUINT_RECYCLE_REFUND = 0.75
+/** Gain de valeur par amélioration : +% dégâts (dmgType) ou +% résistance (resist). */
+export const QUINT_GAIN = { dmgType: 6, resist: 3 } as const
+/** Valeur de départ d'une ligne typée AJOUTÉE par Quintessence (avant la 1re amélioration). */
+const QUINT_STARTER = { dmgType: 8, resist: 4 } as const
+
+/** Coût (en Quintessences du type) pour passer du niveau `level` au niveau `level + 1`. */
+export function quintCost(level: number): number {
+  return QUINT_BASE_COST * Math.pow(QUINT_GROWTH, Math.max(0, level))
+}
+
+/** Quintessences totales déjà investies pour atteindre `level` améliorations (somme géométrique). */
+export function quintInvestedForLevel(level: number): number {
+  let sum = 0
+  for (let i = 0; i < level; i++) sum += quintCost(i)
+  return sum
+}
+
+/** Quintessences investies dans un objet, par type (pour le remboursement au recyclage). */
+export function quintInvested(item: Item): Partial<Record<DamageType, number>> {
+  const out: Partial<Record<DamageType, number>> = {}
+  for (const a of item.affixes) {
+    if ((a.kind === 'dmgType' || a.kind === 'resist') && a.type && (a.upgraded ?? 0) > 0) {
+      out[a.type] = (out[a.type] ?? 0) + quintInvestedForLevel(a.upgraded ?? 0)
+    }
+  }
+  return out
+}
+
+/** Quintessences remboursées au recyclage d'un objet (75% de l'investi), par type. */
+export function quintRefund(item: Item): Partial<Record<DamageType, number>> {
+  const inv = quintInvested(item)
+  const out: Partial<Record<DamageType, number>> = {}
+  for (const t in inv) out[t as DamageType] = Math.floor((inv[t as DamageType] ?? 0) * QUINT_RECYCLE_REFUND)
+  return out
+}
+
+/**
+ * Améliore (ou ajoute) la ligne typée d'un objet via une Quintessence.
+ * Renvoie les nouveaux affixes + le coût en Quintessences, ou null si rien à faire.
+ */
+export function enhanceTypedAffixes(
+  item: Item, type: DamageType, kind: 'dmgType' | 'resist',
+): { affixes: Affix[]; cost: number } | null {
+  const idx = item.affixes.findIndex((a) => a.kind === kind && a.type === type)
+  if (idx >= 0) {
+    const a = item.affixes[idx]
+    const level = a.upgraded ?? 0
+    const cost = quintCost(level)
+    const next: Affix = { ...a, value: a.value + QUINT_GAIN[kind], upgraded: level + 1 }
+    const affixes = item.affixes.map((x, i) => (i === idx ? next : x))
+    return { affixes, cost }
+  }
+  // Pas de ligne de ce (type, kind) : on en AJOUTE une (coût = 1re amélioration).
+  const cost = quintCost(0)
+  const fresh: Affix = { kind, type, value: QUINT_STARTER[kind], upgraded: 1 }
+  return { affixes: [...item.affixes, fresh], cost }
+}

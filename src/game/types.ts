@@ -94,6 +94,11 @@ export interface Affix {
   /** Renseigné si kind === 'dmgType' (+%dégâts) ou 'resist' (+%résistance). */
   type?: DamageType
   value: number
+  /**
+   * Nombre d'améliorations par Quintessence élémentaire (lignes typées uniquement).
+   * 0/absent = ligne brute ; > 0 = ligne renforcée (marqueur visuel + remboursement au recyclage).
+   */
+  upgraded?: number
 }
 
 // ---- Effets uniques (la future "âme" du jeu : centaines de capacités) ----

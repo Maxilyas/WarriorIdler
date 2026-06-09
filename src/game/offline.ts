@@ -1,4 +1,4 @@
-import type { Character, Item } from './types'
+import type { Character, Item, DamageType } from './types'
 import { charDerived, charDamageProfile } from './character'
 import { theoreticalDps } from './combat'
 import { makeEnemy, stageIlvl, stageLuckTier } from './enemies'
@@ -19,6 +19,8 @@ export interface OfflineReport {
   items: Item[]
   sceaux: number
   noyau: number
+  /** Quintessence du biome actif récoltée hors-ligne (drop ~1% des kills). */
+  quint?: { type: DamageType; amount: number }
 }
 
 /**
@@ -31,6 +33,7 @@ export function simulateOffline(
   stage: number,
   upgrades: Record<string, number>,
   elapsedMs: number,
+  activeBiome: DamageType,
 ): OfflineReport | null {
   if (elapsedMs < MIN_OFFLINE_MS) return null
   const capped = Math.min(elapsedMs, OFFLINE_CAP_MS)
@@ -60,5 +63,9 @@ export function simulateOffline(
   const sceaux = Math.floor(kills / 50) // ~1 sceau / 50 kills
   const noyau = Math.floor(kills / 80)
 
-  return { durationMs: capped, kills, gold, xp, items, sceaux, noyau }
+  // Quintessence du biome : ~1% des kills (même taux que le drop normal en ligne).
+  const qAmount = Math.floor(kills * 0.01)
+  const quint = qAmount > 0 ? { type: activeBiome, amount: qAmount } : undefined
+
+  return { durationMs: capped, kills, gold, xp, items, sceaux, noyau, quint }
 }

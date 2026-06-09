@@ -16,6 +16,7 @@ import {
   generateItem, rollBoxRarity, sellValue, recycleValue, recyclePoussiere, itemScore,
   reforgeItem, surillvlItem, ascendItem,
   reforgeCost, surillvlCost, ascendCost, createCost, transmuteCost,
+  enhanceTypedAffixes, quintRefund,
 } from './items'
 import { makeEnemy, isBossStage, stageIlvl, stageLuckTier } from './enemies'
 import { BIOME_IDS, biomeUnlocked, getBiomeDef, type BiomeId } from './biomes'
@@ -118,6 +119,35 @@ function globalBest(biomeBest: Record<BiomeId, number>): number {
   return best
 }
 
+/** Stock de Quintessences vide (une entrée par type de dégâts). */
+function emptyQuint(): Record<DamageType, number> {
+  return Object.fromEntries(DAMAGE_TYPE_LIST.map((t) => [t, 0])) as Record<DamageType, number>
+}
+
+/** Ajoute un sac de Quintessences typées à un stock (immutable). */
+function addQuint(base: Record<DamageType, number>, add: Partial<Record<DamageType, number>>): Record<DamageType, number> {
+  let changed = false
+  const out = { ...base }
+  for (const t in add) {
+    const v = add[t as DamageType] ?? 0
+    if (v > 0) { out[t as DamageType] = (out[t as DamageType] ?? 0) + v; changed = true }
+  }
+  return changed ? out : base
+}
+
+/** Suffixe de log « + 🔥3 + ❄️2 » pour un remboursement de Quintessences (vide si rien). */
+function quintLogSuffix(refund: Partial<Record<DamageType, number>>): string {
+  const parts: string[] = []
+  for (const t in refund) {
+    const v = refund[t as DamageType] ?? 0
+    if (v > 0) parts.push(`${DAMAGE_TYPES[t as DamageType].icon}${v}`)
+  }
+  return parts.length ? ` + ${parts.join(' ')}` : ''
+}
+
+/** Chances de drop d'une Quintessence du biome actif selon le rang d'ennemi. */
+const QUINT_DROP = { normal: 0.01, elite: 0.05, boss: 0.1 }
+
 interface SaveData {
   characters: Character[]
   activeChar: number
@@ -138,6 +168,8 @@ interface SaveData {
   noyau: number
   /** Poussière d'étoile : matériau rare de craft sommital. */
   poussiere: number
+  /** Quintessences élémentaires : 1 par type de dégâts (drop ~1% par biome). Craft typé sur le stuff. */
+  quint: Record<DamageType, number>
   essences: Record<string, number>
   sceaux: number
   dungeonProgress: DungeonProgress
@@ -191,6 +223,8 @@ interface GameState extends SaveData {
   ascend: (itemId: string) => void
   upgradeUnique: (itemId: string) => void
   transmute: (itemId: string, newPrimary: OffensiveStat) => void
+  /** Améliore (ou ajoute) la ligne typée (dégâts/résist) d'un objet via une Quintessence du type. */
+  enhanceTyped: (itemId: string, type: DamageType, kind: 'dmgType' | 'resist') => void
   createItem: (opts: CreateOptions) => void
   enterDungeon: (dungeonId: DungeonId, level: number) => void
   abandonDungeon: () => void
@@ -256,6 +290,7 @@ function freshSave(): SaveData {
     essence: 0,
     noyau: 0,
     poussiere: 0,
+    quint: emptyQuint(),
     essences: {},
     sceaux: 0,
     dungeonProgress: emptyDungeonProgress(),
@@ -336,6 +371,12 @@ function sanitize(save: SaveData): SaveData {
   // Ressources / champs ajoutés.
   if (typeof save.poussiere !== 'number') save.poussiere = 0
   if (typeof save.cosmic !== 'number') save.cosmic = 0
+  {
+    const q = emptyQuint()
+    const src = (save.quint ?? {}) as Record<string, number>
+    for (const t of DAMAGE_TYPE_LIST) if (typeof src[t] === 'number') q[t] = src[t]
+    save.quint = q
+  }
   if (typeof save.farmLock !== 'boolean') save.farmLock = false
   if (typeof save.recycleThreshold !== 'number') save.recycleThreshold = 4
   if (typeof save.autoRecycle !== 'boolean') save.autoRecycle = false
@@ -507,6 +548,7 @@ function persist(s: GameState) {
     essence: s.essence,
     noyau: s.noyau,
     poussiere: s.poussiere,
+    quint: s.quint,
     essences: s.essences,
     sceaux: s.sceaux,
     dungeonProgress: s.dungeonProgress,
@@ -1334,12 +1376,13 @@ export const useGame = create<GameState>((set, get) => {
   let pendingOffline: OfflineReport | null = null
   const elapsed = Date.now() - (save.lastSeen ?? Date.now())
   if (elapsed > 0) {
-    const report = simulateOffline(save.characters, save.stage, save.upgrades, elapsed)
+    const report = simulateOffline(save.characters, save.stage, save.upgrades, elapsed, save.activeBiome)
     if (report) {
       pendingOffline = report
       save.gold += report.gold
       save.noyau += report.noyau
       save.sceaux += report.sceaux
+      if (report.quint) save.quint = addQuint(save.quint, { [report.quint.type]: report.quint.amount })
       save.characters = save.characters.map((c) => (c.hp > 0 ? grantXp(c, report.xp) : c))
       for (const it of report.items) save.inventory = [it, ...save.inventory].slice(0, invMax)
     }
@@ -1431,6 +1474,18 @@ export const useGame = create<GameState>((set, get) => {
         }
         if (autoRec) log = pushLog(log, `♻️ ${autoRec} butin recyclé automatiquement.`, 'craft')
 
+        // Quintessence élémentaire : ressource ultra-rare du biome (type = celui des monstres).
+        // 1% sur un ennemi normal, 5% sur une élite, 10% sur un boss. Farm continu et patient.
+        let quint = s.quint
+        {
+          const qChance = boss ? QUINT_DROP.boss : elite ? QUINT_DROP.elite : QUINT_DROP.normal
+          if (Math.random() < qChance) {
+            const t = s.activeBiome
+            quint = { ...quint, [t]: (quint[t] ?? 0) + 1 }
+            log = pushLog(log, `${DAMAGE_TYPES[t].icon} Quintessence de ${DAMAGE_TYPES[t].name} récoltée ! (ultra-rare)`, 'loot')
+          }
+        }
+
         // Le verrou de farm fige la progression au palier courant.
         let characters = chars
         let biomeBest = s.biomeBest
@@ -1457,7 +1512,7 @@ export const useGame = create<GameState>((set, get) => {
         const enemyNext = makeEnemy(stage, s.activeBiome)
         if (isBossStage(stage)) log = pushLog(log, `⚔ Un boss vous barre la route : ${enemyNext.name} !`, 'info')
 
-        const next = { ...s, characters, stage, bestStage, biomeBest, gold, sceaux, poussiere, essence, codex, inventory, enemy: enemyNext, log, killCount: s.killCount + 1 }
+        const next = { ...s, characters, stage, bestStage, biomeBest, gold, sceaux, poussiere, quint, essence, codex, inventory, enemy: enemyNext, log, killCount: s.killCount + 1 }
         persist(next)
         set(next)
         return
@@ -1587,6 +1642,7 @@ export const useGame = create<GameState>((set, get) => {
       if (!item) return
       const gain = Math.round(recycleValue(item) * computeGlobalMods(s.upgrades).eclatGain)
       const pous = recyclePoussiere(item)
+      const refund = quintRefund(item)
       const essences = { ...s.essences }
       let essLog = ''
       if (item.unique) {
@@ -1594,13 +1650,15 @@ export const useGame = create<GameState>((set, get) => {
         essences[item.unique.id] = (essences[item.unique.id] ?? 0) + eg
         essLog = ` + ${eg} essences de ${getUnique(item.unique.id)?.name ?? 'l\'effet'}`
       }
+      const qLog = quintLogSuffix(refund)
       const next = {
         ...s,
         essence: s.essence + gain,
         poussiere: s.poussiere + pous,
+        quint: addQuint(s.quint, refund),
         essences,
         inventory: s.inventory.filter((i) => i.id !== itemId),
-        log: pushLog(s.log, `Recyclé : ${item.name} (+${gain} éclats${pous ? ` + ${pous} 🌌` : ''}${essLog}).`, 'craft'),
+        log: pushLog(s.log, `Recyclé : ${item.name} (+${gain} éclats${pous ? ` + ${pous} 🌌` : ''}${qLog}${essLog}).`, 'craft'),
       }
       persist(next)
       set(next)
@@ -1627,6 +1685,7 @@ export const useGame = create<GameState>((set, get) => {
       const s = get()
       let essence = s.essence
       let poussiere = s.poussiere
+      let quint = s.quint
       let count = 0
       const essences = { ...s.essences }
       const keep: Item[] = []
@@ -1634,12 +1693,13 @@ export const useGame = create<GameState>((set, get) => {
         if (RARITIES[item.rarity].tier < tier) {
           essence += recycleValue(item)
           poussiere += recyclePoussiere(item)
+          quint = addQuint(quint, quintRefund(item))
           if (item.unique) essences[item.unique.id] = (essences[item.unique.id] ?? 0) + essenceGain(RARITIES[item.rarity].tier, item.unique.rank)
           count++
         } else keep.push(item)
       }
       const gained = essence - s.essence
-      const next = { ...s, essence, poussiere, essences, inventory: keep, log: count ? pushLog(s.log, `${count} objet(s) recyclé(s) (+${gained} éclats).`, 'craft') : s.log }
+      const next = { ...s, essence, poussiere, quint, essences, inventory: keep, log: count ? pushLog(s.log, `${count} objet(s) recyclé(s) (+${gained} éclats).`, 'craft') : s.log }
       persist(next)
       set(next)
     },
@@ -1650,7 +1710,10 @@ export const useGame = create<GameState>((set, get) => {
       if (!item) return
       const cost = reforgeCost(item)
       if (s.essence < cost) return
-      const upd = applyItemPatch(s, itemId, { affixes: reforgeItem(item, locked) })
+      // Les lignes renforcées à la Quintessence sont protégées (jamais re-tirées).
+      const enhanced = item.affixes.map((a, i) => ((a.upgraded ?? 0) > 0 ? i : -1)).filter((i) => i >= 0)
+      const allLocked = [...new Set([...locked, ...enhanced])]
+      const upd = applyItemPatch(s, itemId, { affixes: reforgeItem(item, allLocked) })
       if (!upd) return
       const next = { ...s, ...upd, essence: s.essence - cost, log: pushLog(s.log, `Reforge : ${item.name} (-${cost} éclats).`, 'craft') }
       persist(next)
@@ -1726,6 +1789,28 @@ export const useGame = create<GameState>((set, get) => {
       const upd = applyItemPatch(s, itemId, { primary: newPrimary })
       if (!upd) return
       const next = { ...s, ...upd, essence: s.essence - cost, log: pushLog(s.log, `Affinité transmutée : ${item.name} → ${newPrimary} (-${cost} éclats).`, 'craft') }
+      persist(next)
+      set(next)
+    },
+
+    enhanceTyped: (itemId, type, kind) => {
+      const s = get()
+      const item = findItemById(s, itemId)
+      if (!item) return
+      const res = enhanceTypedAffixes(item, type, kind)
+      if (!res) return
+      const have = s.quint[type] ?? 0
+      if (have < res.cost) return
+      const upd = applyItemPatch(s, itemId, { affixes: res.affixes })
+      if (!upd) return
+      const m = DAMAGE_TYPES[type]
+      const verb = item.affixes.some((a) => a.kind === kind && a.type === type) ? 'renforcée' : 'ajoutée'
+      const next = {
+        ...s,
+        ...upd,
+        quint: { ...s.quint, [type]: have - res.cost },
+        log: pushLog(s.log, `${m.icon} Ligne ${kind === 'resist' ? 'Résist.' : 'Dégâts'} ${m.name} ${verb} (-${res.cost} Quintessence).`, 'craft'),
+      }
       persist(next)
       set(next)
     },
