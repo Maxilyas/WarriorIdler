@@ -21,3 +21,9 @@ Harnais d'ÉQUILIBRAGE : construit des builds FOR/AGI/INT avec stuff optimisé +
 et sort un tableau DPS (auto + sorts + DoT) / EHP par rareté (épique/cosmique/transcendant) et niveau
 (50/100), plus le ratio de déséquilibre meilleur/pire build. À relancer après tout changement de
 scaling (maîtrise, keystones, items) pour vérifier qu'aucun build ne domine.
+
+## `survival-sim.mjs` — `npm run survival`
+Harnais de SURVIE : compare, par palier, le temps-pour-mourir (EHP tank / dégâts ennemis) au
+temps-pour-tuer (PV ennemi / DPS). Sert à vérifier que les dégâts ennemis ne dépassent pas la
+capacité de survie (PV ~linéaires) au fil des paliers. (Le build DPS de référence y est volontairement
+modeste — utiliser `npm run sim` pour le vrai plafond de DPS.)

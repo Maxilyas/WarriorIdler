@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "validate": "node scripts/validate-talents.mjs",
     "dps": "node scripts/dps-check.mjs",
-    "sim": "node scripts/build-sim.mjs"
+    "sim": "node scripts/build-sim.mjs",
+    "survival": "node scripts/survival-sim.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",
