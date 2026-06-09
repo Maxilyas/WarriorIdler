@@ -15,3 +15,9 @@ Garde-fou anti-régression sur l'arbre de talents (`src/game/talents.ts`). Véri
 ## `dps-check.mjs` — `npm run dps`
 Calcule `charDps` (le DPS affiché) pour comparer des configs — utile pour vérifier qu'un
 multiplicateur (keystone, profil…) est bien pris en compte dans l'estimation.
+
+## `build-sim.mjs` — `npm run sim`
+Harnais d'ÉQUILIBRAGE : construit des builds FOR/AGI/INT avec stuff optimisé + keystones optimaux,
+et sort un tableau DPS (auto + sorts + DoT) / EHP par rareté (épique/cosmique/transcendant) et niveau
+(50/100), plus le ratio de déséquilibre meilleur/pire build. À relancer après tout changement de
+scaling (maîtrise, keystones, items) pour vérifier qu'aucun build ne domine.

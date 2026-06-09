@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "validate": "node scripts/validate-talents.mjs",
-    "dps": "node scripts/dps-check.mjs"
+    "dps": "node scripts/dps-check.mjs",
+    "sim": "node scripts/build-sim.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",
