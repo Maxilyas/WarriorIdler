@@ -201,9 +201,16 @@ export function dungeonLuckTier(level: number): number {
 }
 
 // Constantes d'équilibrage des donjons (à ajuster facilement).
-const DUNGEON_HP_PREMIUM = 1.7
-const DUNGEON_DMG_PREMIUM = 1.4
-const EFF_STAGE_PER_LEVEL = 7
+const EFF_STAGE_PER_LEVEL = 7 // sert aux RÉCOMPENSES (xp) et à l'armure → économie inchangée.
+// Scaling COMBAT (refonte) : PV/dégâts par NIVEAU de donjon DÉCOUPLÉS du nombre de combats, calés
+// sur une vraie courbe de progression (cf. npm run dungeon). Avant : effStage=level*7+combat avec
+// base 1.18/1.12 → PV ×3.18 ET dégâts ridicules en début de palier ET ×8.6 PV sur un run.
+const DUNGEON_HP_BASE = 3200       // PV d'un ennemi NORMAL, donjon niv 1, 1er combat (neutre)
+const DUNGEON_HP_PER_LEVEL = 1.42  // ×PV par niveau de donjon (montée douce → progression réelle)
+const DUNGEON_DMG_BASE = 389       // dégâts de base RELEVÉS (fini les dégâts ridicules au début)
+const DUNGEON_DMG_PER_LEVEL = 1.26 // ×dégâts par niveau (plus lent que les PV → la survie suit)
+const DUNGEON_FIGHT_RAMP = 1.04    // ×PV & dégâts par combat DANS un run (rampe douce, pas un mur)
+const DUNGEON_BOSS_HP_MULT = 5     // le boss (dernier combat) reste un pic de PV
 
 /** Régénération des ennemis (fraction des PV max/s) imposée par l'identité du donjon. */
 export function dungeonRegen(trait: DungeonTrait): number {
@@ -235,9 +242,11 @@ export function makeDungeonEnemy(
     if (m.xpMult) xpMult *= m.xpMult
   }
 
-  const effStage = level * EFF_STAGE_PER_LEVEL + fightIndex
-  const hpBase = 40 * Math.pow(1.18, effStage - 1) * DUNGEON_HP_PREMIUM
-  const maxHp = Math.round(hpBase * (isBoss ? 6 : 1) * hpMult)
+  const lvl = level - 1
+  const effStage = level * EFF_STAGE_PER_LEVEL + fightIndex // récompenses (xp) + armure (économie inchangée)
+  // PV : montée modérée par NIVEAU (1.42) + rampe douce par COMBAT (1.04) → courbe de progression.
+  const hpBase = DUNGEON_HP_BASE * Math.pow(DUNGEON_HP_PER_LEVEL, lvl) * Math.pow(DUNGEON_FIGHT_RAMP, fightIndex)
+  const maxHp = Math.round(hpBase * (isBoss ? DUNGEON_BOSS_HP_MULT : 1) * hpMult)
   const isElite = cfg.elite && !isBoss
 
   const baseName = `${pick(ENEMY_NAMES)} ${DAMAGE_TYPES[def.element].name.toLowerCase()}`
@@ -247,8 +256,9 @@ export function makeDungeonEnemy(
     name,
     maxHp,
     hp: maxHp,
-    armor: Math.round((10 + effStage * 1.5) * armorMult),
-    damage: Math.round(2.5 * Math.pow(1.12, effStage - 1) * DUNGEON_DMG_PREMIUM * cfg.dmg * (isBoss ? 1.8 : 1)),
+    armor: Math.round((10 + level * 10) * armorMult),
+    // Dégâts : base RELEVÉE + croissance par niveau plus lente que les PV (1.26 < 1.42) → survie suit.
+    damage: Math.round(DUNGEON_DMG_BASE * Math.pow(DUNGEON_DMG_PER_LEVEL, lvl) * Math.pow(DUNGEON_FIGHT_RAMP, fightIndex) * cfg.dmg * (isBoss ? 1.8 : 1)),
     xp: Math.round(8 * Math.pow(1.12, effStage - 1) * (isBoss ? 5 : 1) * xpMult),
     resist: {},
     damageType: def.element,
