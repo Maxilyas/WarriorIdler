@@ -276,12 +276,13 @@ function xpForLevel(level: number): number {
   // Phase 1 (1→100) : coût qui suit la croissance du revenu (1.115/niveau, calé sur l'XP des
   //   ennemis). À progression régulière (~1 niveau par stage), le temps par niveau reste stable :
   //   1→90 se joue sur quelques heures, le 100 marque la fin de la montée « rapide ».
-  // Phase 2 (100+) : soft cap. Croissance plus rapide que le revenu (1.17 > 1.115) → chaque niveau
-  //   coûte strictement plus que ce qu'un stage de plus rapporte, donc la montée ralentit sans cesse
-  //   (heures, puis jours par niveau en fin de course).
+  // Phase 2 (100+) : soft cap = MUR très raide. Croissance ×2.19/niveau (= 1.17^5) : chaque niveau
+  //   plus que double le coût. La montée qui s'étalait jusqu'au 150 est compressée sur ~10 niveaux,
+  //   donc le coût d'antan au niveau 150 est désormais atteint dès ~110 → au-delà de 110, plusieurs
+  //   heures puis jours par niveau. (Constante facile à adoucir/durcir : 2.19 → moins raide si besoin.)
   if (level <= 100) return Math.round(50 * Math.pow(1.115, level - 1))
   const at100 = 50 * Math.pow(1.115, 99)
-  return Math.round(at100 * Math.pow(1.17, level - 100))
+  return Math.round(at100 * Math.pow(2.19, level - 100))
 }
 
 // Cooldowns transitoires des capacités actives (clé `charId:powerId`). Non persistés.
