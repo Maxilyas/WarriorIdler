@@ -6,6 +6,15 @@ import { ITEM_TYPES } from '../game/slots'
 import { getUnique } from '../game/uniques'
 import { rarityTextStyle, rarityNameClass } from './rarityStyle'
 
+/** Une ligne de récompense (icône + montant formaté + unité). */
+function Reward({ color, icon, value, unit }: { color: string; icon: string; value: number; unit: string }) {
+  return (
+    <span className={color}>
+      {icon} {value.toLocaleString('fr-FR')} {unit}
+    </span>
+  )
+}
+
 export function ChestModal() {
   const chest = useGame((s) => s.pendingChest)
   const claim = useGame((s) => s.claimChest)
@@ -61,16 +70,18 @@ export function ChestModal() {
             </div>
 
             <div
-              className="pop-in mt-2 flex flex-wrap items-center justify-center gap-3 text-xs"
+              className="pop-in mt-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 text-xs"
               style={{ animationDelay: `${chest.items.length * 80 + 100}ms` }}
             >
-              <span className="text-cyan-300">♦ {chest.eclats} éclats</span>
-              <span className="text-fuchsia-300">💠 {chest.noyau} noyaux</span>
-              {chest.gold > 0 && <span className="text-yellow-400">💰 {chest.gold} or</span>}
-              {chest.sceaux > 0 && <span className="text-amber-300">🔑 {chest.sceaux} sceau</span>}
-              {(chest.orbes ?? 0) > 0 && <span className="text-rose-300">🔮 {chest.orbes} orbe</span>}
-              {(chest.fragments ?? 0) > 0 && <span className="text-sky-300">✨ {chest.fragments} fragments</span>}
-              {(chest.cosmic ?? 0) > 0 && <span className="font-semibold text-violet-300">💫 {chest.cosmic} Éclat cosmique</span>}
+              {(chest.xp ?? 0) > 0 && <Reward color="text-violet-300" icon="📚" value={chest.xp!} unit="XP" />}
+              {chest.gold > 0 && <Reward color="text-yellow-400" icon="💰" value={chest.gold} unit="or" />}
+              {chest.eclats > 0 && <Reward color="text-cyan-300" icon="♦" value={chest.eclats} unit="éclats" />}
+              {chest.noyau > 0 && <Reward color="text-fuchsia-300" icon="💠" value={chest.noyau} unit="noyaux" />}
+              {(chest.poussiere ?? 0) > 0 && <Reward color="text-indigo-300" icon="🌌" value={chest.poussiere!} unit="poussière" />}
+              {chest.sceaux > 0 && <Reward color="text-amber-300" icon="🔑" value={chest.sceaux} unit="sceau" />}
+              {(chest.orbes ?? 0) > 0 && <Reward color="text-rose-300" icon="🔮" value={chest.orbes!} unit="orbe" />}
+              {(chest.fragments ?? 0) > 0 && <Reward color="text-sky-300" icon="✨" value={chest.fragments!} unit="fragments" />}
+              {(chest.cosmic ?? 0) > 0 && <Reward color="font-semibold text-violet-300" icon="💫" value={chest.cosmic!} unit="Éclat cosmique" />}
             </div>
 
             <button

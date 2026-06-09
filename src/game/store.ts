@@ -82,6 +82,8 @@ export interface ChestReward {
   poussiere?: number
   /** Éclat cosmique 💫 — ressource ultra-rare exclusive aux raids. */
   cosmic?: number
+  /** XP d'équipe gagnée pendant le donjon (déjà créditée combat par combat ; affichage récap). */
+  xp?: number
 }
 
 export const SCEAU_COST = { noyau: 3, eclats: 600 }
@@ -147,6 +149,14 @@ function quintLogSuffix(refund: Partial<Record<DamageType, number>>): string {
 
 /** Chances de drop d'une Quintessence du biome actif selon le rang d'ennemi. */
 const QUINT_DROP = { normal: 0.01, elite: 0.05, boss: 0.1 }
+
+/**
+ * Donjons = voie RENTABLE pour monter de niveau & farmer l'or. À CHAQUE combat gagné, l'équipe
+ * gagne de l'XP (créditée tout de suite, gardée même si le run échoue) et de l'or (versé au coffre).
+ * Multiplicateurs volontairement GÉNÉREUX (le levelling est lent par design) — à affiner.
+ */
+const DUNGEON_FIGHT_XP_MULT = 7 // ×XP de l'équipe par combat (sur la somme d'XP du pack)
+const DUNGEON_FIGHT_GOLD_MULT = 4 // ×or par combat (sur la somme d'XP du pack)
 
 interface SaveData {
   characters: Character[]
@@ -1139,7 +1149,7 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
   }
 
   const res = partyCombatStepMulti(s.characters, d.enemies, dt, { enrage, reflect, regen, fightTime })
-  const chars = res.chars
+  let chars = res.chars
   const enemies = res.enemies
   let log = s.log
 
@@ -1153,19 +1163,38 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
   }
 
   if (enemies.every((e) => e.hp <= 0)) {
+    const eco = computeGlobalMods(s.upgrades)
+    const noGold = d.modifiers.some((m) => m.noGold)
+    // XP & or « PAR COMBAT » : calculés sur la somme d'XP du pack vaincu, fortement bonifiés →
+    // farmer les donjons devient LA voie rentable pour monter de niveau et amasser de l'or.
+    const packXp = enemies.reduce((a, e) => a + (e.xp ?? 0), 0)
+    const fightXp = Math.round(packXp * eco.xpGain * DUNGEON_FIGHT_XP_MULT)
+    const fightGold = noGold ? 0 : Math.round(packXp * eco.goldGain * DUNGEON_FIGHT_GOLD_MULT)
+    // L'XP est créditée TOUT DE SUITE (levelling incrémental, conservé même si le run échoue).
+    let leveled = false
+    chars = chars.map((c) => {
+      if (c.hp <= 0) return c
+      const nc = grantXp(c, fightXp)
+      if (nc.level > c.level) leveled = true
+      return nc
+    })
+    const earnedXp = (d.earnedXp ?? 0) + fightXp
+    const earnedGold = (d.earnedGold ?? 0) + fightGold
+    log = pushLog(log, `⚔️ Combat ${d.current + 1}/${d.totalFights} remporté · +${fightXp.toLocaleString('fr-FR')} XP${fightGold ? ` · +${fightGold.toLocaleString('fr-FR')} or` : ''}.`, 'kill')
+    if (leveled) log = pushLog(log, '⬆ Niveau gagné en donjon !', 'level')
+
     const nextIndex = d.current + 1
     if (nextIndex >= d.totalFights) {
       const lv = d.level
-      const noGold = d.modifiers.some((m) => m.noGold)
       const rareBonus = d.modifiers.reduce((a, m) => a + (m.rareBonus ?? 0), 0)
       const bias = pickBias(s.characters)
 
-      // Coffre MONO-RESSOURCE (refonte v0.18) : un donjon ne donne QUE sa ressource (gros gains),
-      // SAUF 'butin' qui donne des objets (avec rampe de rareté). 'xp' donne de l'XP d'équipe.
+      // Coffre : bonus de SPÉCIALITÉ du donjon, EN PLUS de l'XP/or accumulés à chaque combat.
       let items: Item[] = []
-      let gold = 0, eclats = 0, noyau = 0, poussiere = 0, sceaux = 0, orbes = 0, xpAmt = 0
+      let gold = earnedGold, eclats = 0, noyau = 0, poussiere = 0, sceaux = 0, orbes = 0
+      let xpTotal = earnedXp
       switch (def.reward) {
-        case 'gold': gold = noGold ? 0 : Math.round(450 * lv * (1 + lv * 0.15)); break
+        case 'gold': gold += noGold ? 0 : Math.round(2200 * lv * (1 + lv * 0.2)); break
         case 'eclats': eclats = Math.round(300 * lv * (1 + lv * 0.13)); break
         case 'noyau': noyau = Math.round(12 * lv * (1 + lv * 0.1)); break
         case 'sceaux': sceaux = Math.round(3 + lv * 0.9); break
@@ -1177,7 +1206,13 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
           poussiere = base + (Math.random() < bonusChance ? 1 + Math.floor(Math.random() * 2) : 0)
           break
         }
-        case 'xp': xpAmt = Math.round(180 * lv * Math.pow(1.1, lv)); break
+        case 'xp': {
+          // Sanctuaire du Savoir : LA source d'XP — gros bonus de fin en plus de l'XP par combat.
+          const bonus = Math.round(1200 * lv * Math.pow(1.12, lv))
+          chars = chars.map((c) => (c.hp > 0 ? grantXp(c, bonus) : c))
+          xpTotal += bonus
+          break
+        }
         case 'stuff': {
           const ilvl = dungeonIlvl(lv)
           const count = 3 + Math.floor(lv / 2)
@@ -1190,14 +1225,10 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
           break
         }
       }
-      const chest: ChestReward = { dungeonName: d.name, level: lv, items, eclats, noyau, gold, sceaux, orbes, poussiere }
+      const chest: ChestReward = { dungeonName: d.name, level: lv, items, eclats, noyau, gold, sceaux, orbes, poussiere, xp: xpTotal }
 
-      let healed: Character[] = chars.map(fullHeal)
-      let log2 = pushLog(log, `🎉 ${d.name} vaincu ! Un coffre t'attend.`, 'kill')
-      if (def.reward === 'xp' && xpAmt > 0) {
-        healed = healed.map((c) => grantXp(c, xpAmt))
-        log2 = pushLog(log2, `📚 +${xpAmt.toLocaleString('fr-FR')} XP pour l'équipe !`, 'level')
-      }
+      const healed: Character[] = chars.map(fullHeal)
+      const log2 = pushLog(log, `🎉 ${d.name} vaincu ! Un coffre t'attend (récap des gains du run).`, 'kill')
       const dungeonProgress = { ...s.dungeonProgress, [d.dungeonId]: Math.max(s.dungeonProgress[d.dungeonId] ?? 0, lv) }
       const next = { ...s, characters: healed, dungeon: null, dungeonProgress, pendingChest: chest, log: log2 }
       persist(next)
@@ -1209,8 +1240,9 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
       current: nextIndex,
       enemies: makeDungeonPack(def, d.level, nextIndex, d.totalFights, d.modifiers),
       fightTime: 0,
+      earnedXp,
+      earnedGold,
     }
-    log = pushLog(log, `${d.name} — combat ${nextIndex + 1}/${d.totalFights}.`, 'info')
     const next = { ...s, characters: chars, dungeon: nd, log }
     persist(next)
     set(next)

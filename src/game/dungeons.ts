@@ -161,6 +161,10 @@ export interface ActiveDungeon {
   /** Le combat courant : un pack d'ennemis. */
   enemies: Enemy[]
   fightTime: number
+  /** XP d'équipe accumulée pendant le run (créditée combat par combat, gardée même en cas d'échec). */
+  earnedXp: number
+  /** Or accumulé pendant le run (crédité à l'ouverture du coffre). */
+  earnedGold: number
 }
 
 function pick<T>(arr: T[]): T {
@@ -299,5 +303,7 @@ export function generateDungeon(dungeonId: DungeonId, level: number): ActiveDung
     current: 0,
     enemies: makeDungeonPack(def, level, 0, totalFights, modifiers),
     fightTime: 0,
+    earnedXp: 0,
+    earnedGold: 0,
   }
 }
