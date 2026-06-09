@@ -158,20 +158,23 @@ const allResist = (v: number): Partial<Record<DamageType, number>> =>
 single({ id: 'co_start', name: 'Éveil', constellation: 'coeur', kind: 'ability', tier: 0, maxRank: 1,
   description: '+10 stats primaires, +20 Endurance, et débloque Frappe.',
   statMods: { force: 10, agilite: 10, intelligence: 10, endurance: 20 }, unlockPower: 'frappe_simple' })
+// HUB CŒUR = étoile propre : TOUS ces nœuds partent directement de `co_start` (un seul parent →
+// aucun entrelacement). Quelques passifs fondateurs + l'Onde de force, puis les 6 passerelles.
 single({ id: 'co_vit', name: 'Vitalité', constellation: 'coeur', kind: 'minor', tier: 1, maxRank: 5, requires: ['co_start'], description: '+25 Endurance par rang.', statMods: { endurance: 25 } })
 single({ id: 'co_pow', name: 'Aguerri', constellation: 'coeur', kind: 'minor', tier: 1, maxRank: 5, requires: ['co_start'], description: '+8 à chaque stat offensive par rang.', statMods: { force: 8, agilite: 8, intelligence: 8 } })
-single({ id: 'co_vers', name: 'Adaptabilité', constellation: 'coeur', kind: 'minor', tier: 2, maxRank: 4, requires: ['co_vit', 'co_pow'], description: '+25 Polyvalence par rang.', statMods: { maitrise: 25 } })
-single({ id: 'co_res', name: 'Endurci', constellation: 'coeur', kind: 'notable', tier: 2, maxRank: 3, requires: ['co_vit'], description: '+5% de résistance à tous les types par rang.', resistMods: allResist(0.05) })
-// Passerelles vers les 6 spécialisations.
-const coreGw: [string, string, StatBlock][] = [
-  ['co_gw_force', '→ Berserker', { force: 15 }],
-  ['co_gw_agi', '→ Rôdeur', { agilite: 15 }],
-  ['co_gw_int', '→ Arcaniste', { intelligence: 15 }],
-  ['co_gw_bas', '→ Bastion', { endurance: 40 }],
-  ['co_gw_soin', '→ Oracle', { regen: 20, intelligence: 10 }],
-  ['co_gw_conv', '→ Métamorphe', { maitrise: 20 }],
+single({ id: 'co_res', name: 'Endurci', constellation: 'coeur', kind: 'notable', tier: 2, maxRank: 3, requires: ['co_start'], description: '+5% de résistance à tous les types par rang.', resistMods: allResist(0.05) })
+single({ id: 'co_spell', name: 'Onde de force', constellation: 'coeur', kind: 'ability', tier: 2, maxRank: 1, requires: ['co_start'], description: 'Débloque Onde de force (zone précoce, scale FOR).', unlockPower: 'onde_de_force' })
+// Les 6 passerelles RAYONNENT directement du centre. Leur ORDRE (tier) place les voies pour que les
+// CARREFOURS relient des voisines : force – agi – int – soin – conv – bastion (boucle).
+const coreGw: [string, string, number, StatBlock][] = [
+  ['co_gw_force', '→ Berserker', 10, { force: 15 }],
+  ['co_gw_agi', '→ Rôdeur', 11, { agilite: 15 }],
+  ['co_gw_int', '→ Arcaniste', 12, { intelligence: 15 }],
+  ['co_gw_soin', '→ Oracle', 13, { regen: 20, intelligence: 10 }],
+  ['co_gw_conv', '→ Métamorphe', 14, { maitrise: 20 }],
+  ['co_gw_bas', '→ Bastion', 15, { endurance: 40 }],
 ]
-for (const [id, name, mods] of coreGw) single({ id, name, constellation: 'coeur', kind: 'gateway', tier: 3, maxRank: 1, requires: ['co_vers', 'co_pow', 'co_vit'], description: `Ouvre la voie. ${sd(mods)}.`, statMods: mods })
+for (const [id, name, tier, mods] of coreGw) single({ id, name, constellation: 'coeur', kind: 'gateway', tier, maxRank: 1, requires: ['co_start'], description: `Ouvre la voie. ${sd(mods)}.`, statMods: mods })
 
 /* ---------------- BERSERKER (Force) ---------------- */
 single({ id: 'fo_entry', name: 'Fureur', constellation: 'force', kind: 'minor', tier: 0, maxRank: 5, requires: ['co_gw_force'], description: '+20 Force par rang.', statMods: { force: 20 } })
@@ -479,15 +482,10 @@ chain('briseur', 'br_b', 'br_entry', 1, [
   { name: 'Cataclysme vivant', kind: 'keystone', desc: 'Capstone : +200 Endurance, +40 Ténacité, +20% de dégâts au-dessus de 60% PV.', statMods: { endurance: 200, tenacite: 40 }, keystone: { highHpBonus: { threshold: 0.6, mult: 1.2 } } },
 ])
 
-/* ================== CŒUR : passifs supplémentaires & CARREFOURS inter-voies ==================
- * Les CARREFOURS relient deux voies « cœur » adjacentes (prérequis OR sur les deux entrées) :
- * ils forment un ANNEAU autour du centre et permettent de tisser un build hybride sans repasser
- * par le hub. Web stratégique : on navigue d'une voie à l'autre pour ne prendre que ce qu'on veut.
+/* ================== CARREFOURS inter-voies (anneau autour du centre) ==================
+ * Chaque carrefour relie deux voies « cœur » ADJACENTES (prérequis OR sur les deux entrées). Grâce
+ * à l'ordre des passerelles ci-dessus, ils forment un anneau propre — sans traverser le centre.
  */
-single({ id: 'co_focus', name: 'Concentration', constellation: 'coeur', kind: 'minor', tier: 1, maxRank: 5, requires: ['co_start'], description: '+12 Critique, +12 Hâte par rang.', statMods: { critique: 12, hate: 12 } })
-single({ id: 'co_guard', name: 'Instinct de survie', constellation: 'coeur', kind: 'minor', tier: 1, maxRank: 5, requires: ['co_start'], description: '+10 Réduction, +10 Esquive par rang.', statMods: { reductionDegats: 10, esquive: 10 } })
-single({ id: 'co_spell', name: 'Onde de force', constellation: 'coeur', kind: 'ability', tier: 2, maxRank: 1, requires: ['co_pow', 'co_focus'], description: 'Débloque Onde de force (zone précoce, scale FOR).', unlockPower: 'onde_de_force' })
-
 const CARREFOURS: [string, string, string, string, StatBlock][] = [
   ['xr_for_bas', 'Carrefour du Rempart', 'fo_entry', 'ba_entry', { force: 25, endurance: 40 }],
   ['xr_for_agi', 'Carrefour du Duel', 'fo_entry', 'ag_entry', { force: 25, agilite: 25 }],

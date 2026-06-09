@@ -179,7 +179,7 @@ export function TalentTree() {
   const [size, setSize] = useState({ w: 600, h: 520 })
   const [view, setView] = useState({ panX: 300, panY: 260, scale: 0.5 })
   const drag = useRef<{ x: number; y: number; panX: number; panY: number; moved: boolean } | null>(null)
-  const didInit = useRef(false)
+  const userMoved = useRef(false)
 
   useLayoutEffect(() => {
     const el = viewportRef.current
@@ -192,14 +192,15 @@ export function TalentTree() {
   }, [])
 
   const center = useCallback(() => {
+    userMoved.current = false
     const scale = Math.max(MIN_SCALE, Math.min(1, Math.min(size.w, size.h) / (layout.radius * 2.1)))
     setView({ scale, panX: size.w / 2, panY: size.h / 2 })
   }, [size.w, size.h, layout.radius])
 
-  // Centrage initial une fois la taille connue.
+  // Recentre TANT QUE l'utilisateur n'a pas déplacé la vue (re-déclenché quand la taille réelle
+  // arrive après le 1er rendu) → `co_start` reste bien au centre du viewport.
   useLayoutEffect(() => {
-    if (didInit.current || size.w <= 1) return
-    didInit.current = true
+    if (userMoved.current || size.w <= 1) return
     center()
   }, [size.w, size.h, center])
 
@@ -211,12 +212,13 @@ export function TalentTree() {
     const d = drag.current
     if (!d) return
     const dx = e.clientX - d.x, dy = e.clientY - d.y
-    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) d.moved = true
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) { d.moved = true; userMoved.current = true }
     setView((v) => ({ ...v, panX: d.panX + dx, panY: d.panY + dy }))
   }
   const onPointerUp = () => { drag.current = null }
 
   const zoomBy = useCallback((f: number) => {
+    userMoved.current = true
     setView((v) => {
       const scale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, v.scale * f))
       const k = scale / v.scale

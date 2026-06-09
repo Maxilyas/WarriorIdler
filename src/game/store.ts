@@ -155,8 +155,9 @@ const QUINT_DROP = { normal: 0.01, elite: 0.05, boss: 0.1 }
  * gagne de l'XP (créditée tout de suite, gardée même si le run échoue) et de l'or (versé au coffre).
  * Multiplicateurs volontairement GÉNÉREUX (le levelling est lent par design) — à affiner.
  */
-const DUNGEON_FIGHT_XP_MULT = 7 // ×XP de l'équipe par combat (sur la somme d'XP du pack)
-const DUNGEON_FIGHT_GOLD_MULT = 4 // ×or par combat (sur la somme d'XP du pack)
+const DUNGEON_FIGHT_XP_MULT = 7 // ×XP de l'équipe par combat dans le Sanctuaire du Savoir (donjon d'XP)
+/** Boost de l'XP du combat CLASSIQUE : recale le ratio donjon/classique (~×80 → ~×10). */
+const CLASSIC_XP_MULT = 8
 
 interface SaveData {
   characters: Character[]
@@ -1164,37 +1165,38 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
 
   if (enemies.every((e) => e.hp <= 0)) {
     const eco = computeGlobalMods(s.upgrades)
-    const noGold = d.modifiers.some((m) => m.noGold)
-    // XP & or « PAR COMBAT » : calculés sur la somme d'XP du pack vaincu, fortement bonifiés →
-    // farmer les donjons devient LA voie rentable pour monter de niveau et amasser de l'or.
-    const packXp = enemies.reduce((a, e) => a + (e.xp ?? 0), 0)
-    const fightXp = Math.round(packXp * eco.xpGain * DUNGEON_FIGHT_XP_MULT)
-    const fightGold = noGold ? 0 : Math.round(packXp * eco.goldGain * DUNGEON_FIGHT_GOLD_MULT)
-    // L'XP est créditée TOUT DE SUITE (levelling incrémental, conservé même si le run échoue).
-    let leveled = false
-    chars = chars.map((c) => {
-      if (c.hp <= 0) return c
-      const nc = grantXp(c, fightXp)
-      if (nc.level > c.level) leveled = true
-      return nc
-    })
-    const earnedXp = (d.earnedXp ?? 0) + fightXp
-    const earnedGold = (d.earnedGold ?? 0) + fightGold
-    log = pushLog(log, `⚔️ Combat ${d.current + 1}/${d.totalFights} remporté · +${fightXp.toLocaleString('fr-FR')} XP${fightGold ? ` · +${fightGold.toLocaleString('fr-FR')} or` : ''}.`, 'kill')
-    if (leveled) log = pushLog(log, '⬆ Niveau gagné en donjon !', 'level')
+    // MONO-RESSOURCE : chaque donjon ne donne QUE sa ressource (au coffre). Seul le Sanctuaire du
+    // Savoir (reward 'xp') verse de l'XP, créditée PAR COMBAT (levelling incrémental, conservé même
+    // en cas d'échec). Les autres donjons ne donnent NI XP NI or pendant les combats.
+    let earnedXp = d.earnedXp ?? 0
+    if (def.reward === 'xp') {
+      const packXp = enemies.reduce((a, e) => a + (e.xp ?? 0), 0)
+      const fightXp = Math.round(packXp * eco.xpGain * DUNGEON_FIGHT_XP_MULT)
+      let leveled = false
+      chars = chars.map((c) => {
+        if (c.hp <= 0) return c
+        const nc = grantXp(c, fightXp)
+        if (nc.level > c.level) leveled = true
+        return nc
+      })
+      earnedXp += fightXp
+      log = pushLog(log, `📚 Combat ${d.current + 1}/${d.totalFights} · +${fightXp.toLocaleString('fr-FR')} XP.`, 'kill')
+      if (leveled) log = pushLog(log, '⬆ Niveau gagné !', 'level')
+    }
 
     const nextIndex = d.current + 1
     if (nextIndex >= d.totalFights) {
       const lv = d.level
       const rareBonus = d.modifiers.reduce((a, m) => a + (m.rareBonus ?? 0), 0)
+      const noGold = d.modifiers.some((m) => m.noGold)
       const bias = pickBias(s.characters)
 
-      // Coffre : bonus de SPÉCIALITÉ du donjon, EN PLUS de l'XP/or accumulés à chaque combat.
+      // Coffre MONO-RESSOURCE : uniquement la ressource ciblée par le donjon.
       let items: Item[] = []
-      let gold = earnedGold, eclats = 0, noyau = 0, poussiere = 0, sceaux = 0, orbes = 0
+      let gold = 0, eclats = 0, noyau = 0, poussiere = 0, sceaux = 0, orbes = 0
       let xpTotal = earnedXp
       switch (def.reward) {
-        case 'gold': gold += noGold ? 0 : Math.round(2200 * lv * (1 + lv * 0.2)); break
+        case 'gold': gold = noGold ? 0 : Math.round(600 * lv * (1 + lv * 0.15)); break
         case 'eclats': eclats = Math.round(300 * lv * (1 + lv * 0.13)); break
         case 'noyau': noyau = Math.round(12 * lv * (1 + lv * 0.1)); break
         case 'sceaux': sceaux = Math.round(3 + lv * 0.9); break
@@ -1238,7 +1240,7 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
         if (credited.sceaux >= def.sceauCost) {
           const nd = generateDungeon(d.dungeonId, lv)
           nd.repeatLeft = repeatLeft - 1
-          const log3 = pushLog(log, `🔁 Auto-farm : run encaissé (+${xpTotal.toLocaleString('fr-FR')} XP${gold ? `, +${gold.toLocaleString('fr-FR')} or` : ''}) · ${repeatLeft} relance${repeatLeft > 1 ? 's' : ''} restante${repeatLeft > 1 ? 's' : ''}.`, 'info')
+          const log3 = pushLog(log, `🔁 Auto-farm : run encaissé · ${repeatLeft} relance${repeatLeft > 1 ? 's' : ''} restante${repeatLeft > 1 ? 's' : ''}.`, 'info')
           const next = { ...s, ...credited, characters: healed, dungeonProgress, sceaux: credited.sceaux - def.sceauCost, dungeon: nd, log: log3 }
           persist(next)
           set(next)
@@ -1258,7 +1260,6 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
       enemies: makeDungeonPack(def, d.level, nextIndex, d.totalFights, d.modifiers),
       fightTime: 0,
       earnedXp,
-      earnedGold,
     }
     const next = { ...s, characters: chars, dungeon: nd, log }
     persist(next)
@@ -1517,7 +1518,7 @@ export const useGame = create<GameState>((set, get) => {
         const eco = computeGlobalMods(s.upgrades)
         // Le combat CLASSIQUE n'est plus qu'un filet d'or/butin : la vraie source = donjons & raids.
         const goldGain = Math.round(enemy.xp * 0.12 * eco.goldGain)
-        const xpGain = Math.round(enemy.xp * eco.xpGain)
+        const xpGain = Math.round(enemy.xp * eco.xpGain * CLASSIC_XP_MULT)
         gold += goldGain
 
         chars = chars.map((c) => {

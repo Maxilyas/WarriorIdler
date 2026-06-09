@@ -52,7 +52,8 @@ export function simulateOffline(
   const eco = computeGlobalMods(upgrades)
   // Même filet d'or que le combat classique en ligne (la richesse vient des donjons/raids).
   const gold = Math.round(kills * enemy.xp * 0.12 * eco.goldGain)
-  const xp = Math.round(kills * enemy.xp * eco.xpGain)
+  // Même boost d'XP que le combat classique en ligne (CLASSIC_XP_MULT = 8 dans le store).
+  const xp = Math.round(kills * enemy.xp * eco.xpGain * 8)
 
   // Quelques drops représentatifs (plafonnés pour ne pas saturer l'inventaire).
   const dropCount = Math.min(MAX_OFFLINE_DROPS, Math.floor(kills * (0.2 + eco.lootChance)))
