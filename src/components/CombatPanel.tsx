@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useGame, powerCooldowns } from '../game/store'
 import type { LogKind } from '../game/store'
 import { charMaxHp, charDps, TALENT_START_LEVEL } from '../game/character'
@@ -39,6 +40,10 @@ export function CombatPanel() {
   const setStage = useGame((s) => s.setStage)
   const toggleFarmLock = useGame((s) => s.toggleFarmLock)
   const log = useGame((s) => s.log)
+
+  // Le sélecteur de biome est replié par défaut sur mobile (rarement changé en combat → gagne de la
+  // place ; le biome courant reste visible dans l'en-tête). Déplié par défaut sur grand écran.
+  const [biomeOpen, setBiomeOpen] = useState(() => typeof window === 'undefined' || window.innerWidth >= 640)
 
   const me = characters[activeChar] ?? characters[0]
   // Recharges courantes du perso actif (re-render à chaque tick → barre de cooldown vivante).
@@ -165,14 +170,22 @@ export function CombatPanel() {
         </div>
       )}
 
-      {/* Sélecteur de biome (farm) — grille de cartes lisibles */}
+      {/* Sélecteur de biome (farm) — repliable (gagne de la place sur mobile) */}
       {!dungeon && !raid && (
         <div className="rounded-xl border border-slate-800 bg-[#0d111a] p-2">
-          <div className="mb-1.5 flex items-center justify-between">
+          <button
+            onClick={() => setBiomeOpen((o) => !o)}
+            className="flex w-full items-center justify-between"
+            title={biomeOpen ? 'Replier les biomes' : 'Déplier les biomes'}
+          >
             <span className="text-[10px] uppercase tracking-wide text-slate-500">🧭 Biome</span>
-            <span className="text-[11px] font-semibold" style={{ color: biomeDef.color }}>{biomeDef.icon} {biomeDef.name}</span>
-          </div>
-          <div className="grid grid-cols-4 gap-1.5">
+            <span className="flex items-center gap-1 text-[11px] font-semibold" style={{ color: biomeDef.color }}>
+              {biomeDef.icon} {biomeDef.name}
+              <span className="text-slate-500">{biomeOpen ? '▾' : '▸'}</span>
+            </span>
+          </button>
+          {biomeOpen && (
+          <div className="mt-1.5 grid grid-cols-4 gap-1.5">
             {BIOME_LIST.map((b) => {
               const unlocked = biomeUnlocked(b.id, physiqueBest, bestStage)
               const active = b.id === activeBiome
@@ -198,6 +211,7 @@ export function CombatPanel() {
               )
             })}
           </div>
+          )}
         </div>
       )}
 
@@ -364,7 +378,8 @@ export function CombatPanel() {
             <span className="text-[10px] uppercase tracking-wide text-slate-500">⚔️ Capacités de {me!.name}</span>
             <span className="text-[8.5px] text-slate-600">AUTO = lancée seule · MANUEL = au tap</span>
           </div>
-          <div className="grid grid-cols-3 gap-1.5">
+          {/* Mobile : rangée horizontale scrollable (1 ligne) · Desktop : grille 3 colonnes */}
+          <div className="flex gap-1.5 overflow-x-auto pb-1 sm:grid sm:grid-cols-3 sm:overflow-visible sm:pb-0">
             {castSlots.map(({ slot, p }) => {
               const cd = pcd[p.id] ?? 0
               const ready = cd <= 0
@@ -376,7 +391,7 @@ export function CombatPanel() {
                 <div
                   key={slot}
                   className={
-                    'relative overflow-hidden rounded-lg border ' +
+                    'relative w-[68px] shrink-0 overflow-hidden rounded-lg border sm:w-auto ' +
                     (auto ? 'border-cyan-700/50 bg-cyan-950/20' : canTap ? 'border-amber-500 bg-amber-900/20' : 'border-slate-700 bg-black/20')
                   }
                 >
