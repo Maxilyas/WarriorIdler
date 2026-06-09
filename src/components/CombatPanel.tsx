@@ -1,11 +1,13 @@
-import { useGame } from '../game/store'
+import { useGame, powerCooldowns } from '../game/store'
 import type { LogKind } from '../game/store'
 import { charDerived, charMaxHp, charDamageProfile, TALENT_START_LEVEL } from '../game/character'
 import { theoreticalDps } from '../game/combat'
 import { isBossStage } from '../game/enemies'
+import { getPower } from '../game/powers'
 import { DAMAGE_TYPES } from '../game/damage'
 import { RAID_MECHANIC_META } from '../game/raids'
-import type { DamageType, Enemy } from '../game/types'
+import { BIOME_LIST, biomeUnlocked, biomeUnlockHint, getBiomeDef } from '../game/biomes'
+import type { DamageType, Enemy, EnemyAbility, PowerDef } from '../game/types'
 
 const LOG_COLORS: Record<LogKind, string> = {
   hit: 'text-slate-300',
@@ -28,10 +30,25 @@ export function CombatPanel() {
   const abandonRaid = useGame((s) => s.abandonRaid)
   const stage = useGame((s) => s.stage)
   const bestStage = useGame((s) => s.bestStage)
+  const activeBiome = useGame((s) => s.activeBiome)
+  const biomeBest = useGame((s) => s.biomeBest)
+  const setBiome = useGame((s) => s.setBiome)
+  const activeChar = useGame((s) => s.activeChar)
+  const castPower = useGame((s) => s.castPower)
   const farmLock = useGame((s) => s.farmLock)
   const setStage = useGame((s) => s.setStage)
   const toggleFarmLock = useGame((s) => s.toggleFarmLock)
   const log = useGame((s) => s.log)
+
+  const me = characters[activeChar] ?? characters[0]
+  // Recharges courantes du perso actif (re-render à chaque tick → barre de cooldown vivante).
+  const pcd = me ? powerCooldowns(me) : {}
+  const castSlots = me ? me.powers.map((pid, slot) => ({ slot, p: pid ? getPower(pid) : null })).filter((x): x is { slot: number; p: PowerDef } => !!x.p && x.p.kind === 'active') : []
+
+  const biomeDef = getBiomeDef(activeBiome)
+  const physiqueBest = biomeBest.physique ?? 0
+  // Cap de farm = record DANS LE BIOME ACTIF (pas le record global).
+  const activeBiomeBest = Math.max(1, biomeBest[activeBiome] ?? 1)
 
   // Donjons/raids = combat à PLUSIEURS adversaires. En combat classique, un seul ennemi.
   const enemies: Enemy[] = raid ? raid.enemies : dungeon ? dungeon.enemies : [normalEnemy]
@@ -41,7 +58,7 @@ export function CombatPanel() {
   const atkType = DAMAGE_TYPES[enemy.damageType]
   // Objectif courant (tutoriel léger + signalisation des déblocages progressifs).
   const maxLevel = characters.reduce((m, c) => Math.max(m, c.level), 1)
-  const objective = nextObjective(bestStage, maxLevel)
+  const objective = nextObjective(bestStage, maxLevel, physiqueBest)
   const partyDps = characters
     .filter((c) => c.hp > 0)
     .reduce((sum, c) => sum + theoreticalDps(charDerived(c), charDamageProfile(c)), 0)
@@ -73,6 +90,8 @@ export function CombatPanel() {
                 <span className={'font-semibold ' + (dead ? 'text-red-500/70 line-through' : 'text-slate-100')}>
                   🛡 {c.name} <span className="text-slate-500">N{c.level}</span>
                   {(c.stun ?? 0) > 0 && <span className="ml-1 rounded bg-yellow-500/20 px-1 text-[9px] text-yellow-300" title="Étourdi : n'attaque pas">💫 étourdi</span>}
+                  {c.dots && c.dots.length > 0 && <span className="ml-1 rounded bg-rose-500/20 px-1 text-[9px] text-rose-300" title="Altération subie (DoT) — Purge et résistance la réduisent">🩸 altéré</span>}
+                  {c.weaken && <span className="ml-1 rounded bg-fuchsia-500/20 px-1 text-[9px] text-fuchsia-300" title="Affaibli (malédiction) — Purge en réduit la durée">✨ affaibli</span>}
                 </span>
                 <span className="text-slate-400">{Math.ceil(Math.max(0, c.hp)).toLocaleString('fr-FR')} / {Math.round(mh).toLocaleString('fr-FR')}</span>
               </div>
@@ -138,16 +157,45 @@ export function CombatPanel() {
         </div>
       )}
 
+      {/* Sélecteur de biome (farm) */}
+      {!dungeon && !raid && (
+        <div className="rounded-xl border border-slate-800 bg-[#0d111a] px-2 py-1.5">
+          <div className="flex items-center gap-1.5 overflow-x-auto">
+            <span className="shrink-0 text-[10px] uppercase tracking-wide text-slate-500">Biome</span>
+            {BIOME_LIST.map((b) => {
+              const unlocked = biomeUnlocked(b.id, physiqueBest, bestStage)
+              const active = b.id === activeBiome
+              return (
+                <button
+                  key={b.id}
+                  disabled={!unlocked}
+                  onClick={() => setBiome(b.id)}
+                  title={unlocked ? `${b.name} — record ${biomeBest[b.id] ?? 0}` : `🔒 ${biomeUnlockHint(b.id)}`}
+                  className={
+                    'flex shrink-0 items-center gap-1 rounded-lg border px-2 py-1 text-[11px] transition-colors ' +
+                    (active ? 'border-current bg-white/5 font-semibold' : unlocked ? 'border-slate-700 text-slate-300 hover:border-slate-500' : 'border-slate-800 text-slate-600')
+                  }
+                  style={active ? { color: b.color } : undefined}
+                >
+                  <span className="text-sm leading-none">{unlocked ? b.icon : '🔒'}</span>
+                  {active && <span className="whitespace-nowrap">{b.name}</span>}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Verrou de palier (farm) */}
       {!dungeon && !raid && (
         <div className="flex items-center gap-2 rounded-xl border border-slate-800 bg-[#0d111a] px-3 py-2 text-xs">
-          <span className="text-slate-400">Palier de farm</span>
+          <span className="text-slate-400">Palier</span>
           <div className="flex items-center rounded-lg border border-slate-700">
             <button onClick={() => setStage(stage - 1)} disabled={stage <= 1} className="px-2 py-0.5 text-slate-300 hover:bg-white/5 disabled:opacity-30">−</button>
             <span className="w-10 text-center tabular-nums text-slate-100">{stage}</span>
-            <button onClick={() => setStage(stage + 1)} disabled={stage >= bestStage} className="px-2 py-0.5 text-slate-300 hover:bg-white/5 disabled:opacity-30">+</button>
+            <button onClick={() => setStage(stage + 1)} disabled={stage >= activeBiomeBest} className="px-2 py-0.5 text-slate-300 hover:bg-white/5 disabled:opacity-30">+</button>
           </div>
-          <span className="text-slate-500">/ {bestStage}</span>
+          <span className="text-slate-500" title={`Record en ${biomeDef.name}`}>/ {activeBiomeBest}</span>
           <button
             onClick={toggleFarmLock}
             title={farmLock ? 'Verrouillé : le combat reste à ce palier' : 'Libre : progression normale'}
@@ -254,11 +302,77 @@ export function CombatPanel() {
           </div>
         )}
 
+        {/* Techniques de l'ennemi + télégraphe (barre de préavis sur les gros coups) */}
+        {enemy.abilities && enemy.abilities.length > 0 && (
+          <div className="mt-2">
+            <div className="flex flex-wrap items-center justify-center gap-1.5">
+              {enemy.abilities.map((a, i) => (
+                <span
+                  key={i}
+                  title={abilityHint(a)}
+                  className="rounded bg-slate-800/70 px-1.5 py-0.5 text-[10px] font-medium"
+                  style={{ color: DAMAGE_TYPES[a.element].color }}
+                >
+                  {a.icon} {a.name}
+                </span>
+              ))}
+            </div>
+            {(() => {
+              const casting = enemy.abilities!.find((a) => (a.cast ?? 0) > 0 && a.telegraph)
+              if (!casting) return null
+              const frac = Math.min(1, Math.max(0, 1 - (casting.cast ?? 0) / (casting.telegraph ?? 1)))
+              return (
+                <div className="mt-1.5">
+                  <div className="flex items-center justify-between text-[10px] font-semibold text-amber-300">
+                    <span>⚠️ {casting.icon} {casting.name} — incantation&nbsp;!</span>
+                    <span>{(casting.cast ?? 0).toFixed(1)}s</span>
+                  </div>
+                  <div className="mt-0.5 h-2 w-full overflow-hidden rounded-full bg-slate-800">
+                    <div className="h-full bg-gradient-to-r from-amber-500 to-red-500" style={{ width: `${frac * 100}%` }} />
+                  </div>
+                </div>
+              )
+            })()}
+          </div>
+        )}
+
         <div className="mt-3 grid grid-cols-2 gap-2 text-center text-xs">
           <Metric label="DPS équipe" value={Math.round(partyDps).toLocaleString('fr-FR')} accent="text-emerald-300" />
           <Metric label={multi ? 'Dégâts pack/s' : 'Dégâts ennemi/s'} value={Math.round(enemyDmgTotal).toLocaleString('fr-FR')} accent="text-red-300" />
         </div>
       </div>
+
+      {/* Capacités : boutons de lancement (AUTO = automatique ; MANUEL = tap quand prêt) */}
+      {castSlots.length > 0 && (
+        <div className="rounded-xl border border-slate-800 bg-[#0d111a] p-2">
+          <div className="mb-1 text-[10px] uppercase tracking-wide text-slate-500">Capacités de {me!.name}</div>
+          <div className="grid grid-cols-5 gap-1">
+            {castSlots.map(({ slot, p }) => {
+              const cd = pcd[p.id] ?? 0
+              const ready = cd <= 0
+              const auto = me!.powerAuto?.[slot] !== false
+              const total = p.cooldown ?? 3
+              const frac = ready ? 1 : Math.max(0, 1 - cd / total)
+              return (
+                <button
+                  key={slot}
+                  disabled={auto || !ready}
+                  onClick={() => castPower(slot)}
+                  title={auto ? `${p.name} — lancement automatique (bascule en Manuel dans l'onglet Perso)` : ready ? `Lancer ${p.name}` : `${p.name} — ${cd.toFixed(1)} s`}
+                  className={
+                    'relative flex flex-col items-center gap-0.5 overflow-hidden rounded-lg border py-1.5 ' +
+                    (auto ? 'border-slate-700/70 text-slate-500' : ready ? 'border-cyan-500 bg-cyan-900/30 text-cyan-100 hover:bg-cyan-800/40' : 'border-slate-700 text-slate-500')
+                  }
+                >
+                  <span className="text-base leading-none">{powerGlyph(p)}</span>
+                  <span className="text-[7.5px] font-semibold leading-none">{auto ? 'AUTO' : ready ? 'PRÊT' : `${cd.toFixed(1)}s`}</span>
+                  {!ready && <div className="absolute bottom-0 left-0 h-0.5 bg-cyan-500" style={{ width: `${frac * 100}%` }} />}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Journal */}
       <div className="flex min-h-0 flex-1 flex-col rounded-xl border border-slate-800 bg-[#0d111a] p-3">
@@ -275,13 +389,34 @@ export function CombatPanel() {
   )
 }
 
-/** Prochain objectif du joueur — sert de fil conducteur et annonce les déblocages. */
-function nextObjective(bestStage: number, maxLevel: number): string | null {
+/** Pictogramme d'une capacité du héros (type de dégât, ou rôle pour soin/bouclier). */
+function powerGlyph(p: PowerDef): string {
+  if (p.damageType) return DAMAGE_TYPES[p.damageType].icon
+  if (p.effect === 'heal' || p.effect === 'hot' || p.effect === 'buffParty') return '✚'
+  if (p.effect === 'shield') return '🛡'
+  return '⚔️'
+}
+
+/** Aide d'une technique ennemie : type + le contre du kit héros à privilégier. */
+function abilityHint(a: EnemyAbility): string {
+  const counter: Record<EnemyAbility['kind'], string> = {
+    dot: 'résiste au type + Purge (+ régén)',
+    burst: 'Barrière / Esquive / Réduction + résiste',
+    cc: 'Ténacité',
+    debuff: 'Purge',
+    drain: 'Burst (tue-le vite) + résiste',
+  }
+  return `${a.name} · ${DAMAGE_TYPES[a.element].name} — contre : ${counter[a.kind]}`
+}
+
+/** Prochain objectif du joueur — sert de fil conducteur et annonce les déblocages (intro progressive). */
+function nextObjective(bestStage: number, maxLevel: number, physiqueBest: number): string | null {
   if (bestStage < 3) return 'Frappe ! Tue des ennemis pour ramasser du butin, puis équipe tes meilleures pièces dans l\'onglet 🎒 Stuff.'
+  if (bestStage < 5) return 'Les ennemis frappent de plus en plus fort : équipe-toi (Endurance, résistances). Le palier 5 débloque les 🏰 Donjons.'
+  if (bestStage < 10) return 'Atteins le palier 10 pour débloquer le 🏪 Marché. Un boss t\'y attend : prépare ton stuff.'
   if (maxLevel <= TALENT_START_LEVEL) return `Monte un personnage au niveau ${TALENT_START_LEVEL + 1} (onglet 🛡 Perso) pour débloquer l'arbre de 🌌 Talents.`
-  if (bestStage < 5) return 'Atteins le palier 5 pour débloquer les 🏰 Donjons — ta vraie source d\'or, d\'éclats et de ressources.'
-  if (bestStage < 10) return 'Atteins le palier 10 pour débloquer le 🏪 Marché et ses améliorations permanentes.'
-  if (bestStage < 50) return 'Atteins le palier 50 pour débloquer les ☠️ Raids (butin et ressources d\'élite).'
+  if (physiqueBest < 20) return 'Atteins le palier 20 aux Champs de Bataille pour débloquer 4 nouveaux 🧭 biomes (Feu, Froid, Foudre, Nature) — chacun son butin et ses menaces.'
+  if (bestStage < 50) return 'Atteins le palier 50 (n\'importe quel biome) pour débloquer les ☠️ Raids et les biomes Arcane & Ombre.'
   return null
 }
 

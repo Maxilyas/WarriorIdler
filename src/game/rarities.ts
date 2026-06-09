@@ -6,22 +6,22 @@ import type { Rarity, RarityId } from './types'
  * et plus il est rare au drop (weight décroissant).
  */
 export const RARITIES: Record<RarityId, Rarity> = {
-  mediocre: { id: 'mediocre', name: 'Médiocre', tier: 1, color: '#9d9d9d', affixCount: 1, statMult: 0.6, weight: 1000 },
-  commun: { id: 'commun', name: 'Commun', tier: 2, color: '#ffffff', affixCount: 2, statMult: 0.85, weight: 700 },
-  inhabituel: { id: 'inhabituel', name: 'Inhabituel', tier: 3, color: '#1eff00', affixCount: 2, statMult: 1.0, weight: 450 },
-  rare: { id: 'rare', name: 'Rare', tier: 4, color: '#0070dd', affixCount: 3, statMult: 1.25, weight: 250 },
-  epique: { id: 'epique', name: 'Épique', tier: 5, color: '#a335ee', affixCount: 3, statMult: 1.6, weight: 120 },
-  legendaire: { id: 'legendaire', name: 'Légendaire', tier: 6, color: '#ff8000', affixCount: 4, statMult: 2.1, weight: 55 },
-  artefact: { id: 'artefact', name: 'Artefact', tier: 7, color: '#e6cc80', affixCount: 4, statMult: 2.7, weight: 26 },
-  patrimoine: { id: 'patrimoine', name: 'Patrimoine', tier: 8, color: '#00ccff', affixCount: 4, statMult: 3.4, weight: 13 },
-  mythique: { id: 'mythique', name: 'Mythique', tier: 9, color: '#ff2d55', affixCount: 5, statMult: 4.3, weight: 7 },
-  ascendant: { id: 'ascendant', name: 'Ascendant', tier: 10, color: '#ff5ed2', affixCount: 5, statMult: 5.4, weight: 4 },
-  celeste: { id: 'celeste', name: 'Céleste', tier: 11, color: '#3ff0e0', affixCount: 5, statMult: 6.8, weight: 2.2 },
-  eternel: { id: 'eternel', name: 'Éternel', tier: 12, color: '#ffbf3f', affixCount: 5, statMult: 8.5, weight: 1.2 },
-  cosmique: { id: 'cosmique', name: 'Cosmique', tier: 13, color: '#7af0ff', affixCount: 6, statMult: 10.6, weight: 0.6 },
-  abyssal: { id: 'abyssal', name: 'Abyssal', tier: 14, color: '#8a2be2', affixCount: 6, statMult: 13.2, weight: 0.3 },
-  primordial: { id: 'primordial', name: 'Primordial', tier: 15, color: '#ff5a1f', affixCount: 6, statMult: 16.5, weight: 0.15 },
-  transcendant: { id: 'transcendant', name: 'Transcendant', tier: 16, color: '#f5f5ff', affixCount: 6, statMult: 20.6, weight: 0.07 },
+  mediocre: { id: 'mediocre', name: 'Médiocre', tier: 1, color: '#9d9d9d', affixCount: 1, statMult: 0.70, weight: 1000 },
+  commun: { id: 'commun', name: 'Commun', tier: 2, color: '#ffffff', affixCount: 2, statMult: 0.80, weight: 700 },
+  inhabituel: { id: 'inhabituel', name: 'Inhabituel', tier: 3, color: '#1eff00', affixCount: 2, statMult: 0.90, weight: 450 },
+  rare: { id: 'rare', name: 'Rare', tier: 4, color: '#0070dd', affixCount: 3, statMult: 1.05, weight: 250 },
+  epique: { id: 'epique', name: 'Épique', tier: 5, color: '#a335ee', affixCount: 3, statMult: 1.20, weight: 120 },
+  legendaire: { id: 'legendaire', name: 'Légendaire', tier: 6, color: '#ff8000', affixCount: 4, statMult: 1.40, weight: 55 },
+  artefact: { id: 'artefact', name: 'Artefact', tier: 7, color: '#e6cc80', affixCount: 4, statMult: 1.60, weight: 26 },
+  patrimoine: { id: 'patrimoine', name: 'Patrimoine', tier: 8, color: '#00ccff', affixCount: 4, statMult: 1.85, weight: 13 },
+  mythique: { id: 'mythique', name: 'Mythique', tier: 9, color: '#ff2d55', affixCount: 5, statMult: 2.10, weight: 7 },
+  ascendant: { id: 'ascendant', name: 'Ascendant', tier: 10, color: '#ff5ed2', affixCount: 5, statMult: 2.40, weight: 4 },
+  celeste: { id: 'celeste', name: 'Céleste', tier: 11, color: '#1fd9b0', affixCount: 5, statMult: 2.70, weight: 2.2 },
+  eternel: { id: 'eternel', name: 'Éternel', tier: 12, color: '#ffe14d', affixCount: 5, statMult: 3.10, weight: 1.2 },
+  cosmique: { id: 'cosmique', name: 'Cosmique', tier: 13, color: '#7af0ff', affixCount: 6, statMult: 3.50, weight: 0.6 },
+  abyssal: { id: 'abyssal', name: 'Abyssal', tier: 14, color: '#c026d3', affixCount: 6, statMult: 4.00, weight: 0.3 },
+  primordial: { id: 'primordial', name: 'Primordial', tier: 15, color: '#ff3b00', affixCount: 6, statMult: 4.50, weight: 0.15 },
+  transcendant: { id: 'transcendant', name: 'Transcendant', tier: 16, color: '#f5f5ff', affixCount: 6, statMult: 5.10, weight: 0.07 },
 }
 
 /** Liste ordonnée par tier croissant. */

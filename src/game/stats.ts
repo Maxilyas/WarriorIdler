@@ -35,6 +35,7 @@ export const SECONDARY_META: Record<SecondaryStat, StatMeta> = {
   esquive: { key: 'esquive', name: 'Esquive', short: 'ESQ', color: '#63e6be', desc: 'Chance d\'éviter complètement un coup ennemi (tout ou rien).' },
   barriere: { key: 'barriere', name: 'Barrière', short: 'BARR', color: '#4dabf7', desc: 'Bouclier de départ : augmente tes PV effectifs. Excellent contre le burst.' },
   tenacite: { key: 'tenacite', name: 'Ténacité', short: 'TÉN', color: '#a9e34b', desc: 'Réduit la durée des étourdissements et contrôles infligés par les boss.' },
+  purge: { key: 'purge', name: 'Purge', short: 'PURG', color: '#38d9a9', desc: 'Réduit la durée ET l\'intensité des altérations subies (saignement, poison, brûlure, malédiction). Cruciale hors du biome Physique.' },
   // Soutien
   regen: { key: 'regen', name: 'Régénération', short: 'RÉG', color: '#51cf66', desc: 'Augmente la régénération des points de vie (combats longs).' },
   // RARES (apparition très faible, effets puissants)
@@ -49,7 +50,7 @@ export const ALL_STAT_META: Record<StatKey, StatMeta> = { ...PRIMARY_META, ...SE
 export const PRIMARY_STATS: PrimaryStat[] = ['force', 'agilite', 'intelligence', 'endurance']
 export const SECONDARY_STATS: SecondaryStat[] = [
   'critique', 'degatsCrit', 'hate', 'maitrise', 'penetration', 'precision', 'alteration', 'degatsBoss',
-  'reductionDegats', 'esquive', 'barriere', 'tenacite',
+  'reductionDegats', 'esquive', 'barriere', 'tenacite', 'purge',
   'regen',
   'volDeVie', 'surpuissance', 'multifrappe', 'recuperation',
 ]
@@ -108,6 +109,7 @@ export interface DerivedStats {
   alterationMult: number // ≥1 multiplicateur des dégâts sur la durée (DoT)
   bossDamageMult: number // ≥1 multiplicateur de dégâts contre les boss/élites
   tenacity: number // 0..1 réduction de la durée des contrôles ennemis
+  purge: number // 0..1 réduction de la durée/intensité des altérations subies (DoT/debuffs ennemis)
   flatDr: number // 0..1 réduction plate supplémentaire
   dodge: number // 0..1 chance d'esquive
   regenBonus: number // ajouté au taux de régén PV
@@ -183,6 +185,7 @@ export function computeDerived(total: StatBlock): DerivedStats {
     alterationMult: 1 + Math.min(3, (total.alteration ?? 0) / PER_PCT),
     bossDamageMult: 1 + Math.min(2.5, (total.degatsBoss ?? 0) / PER_PCT),
     tenacity: Math.min(0.85, (total.tenacite ?? 0) / PER_PCT),
+    purge: Math.min(0.8, (total.purge ?? 0) / PER_PCT),
     flatDr: Math.min(0.5, (total.reductionDegats ?? 0) / PER_PCT),
     dodge: Math.min(0.4, (total.esquive ?? 0) / PER_PCT),
     regenBonus: (total.regen ?? 0) / PER_PCT,
@@ -245,6 +248,7 @@ export function describeStats(total: StatBlock): { primary: StatEffect[]; second
       case 'esquive': effect = `${pct(d.dodge)} d'esquive`; break
       case 'barriere': effect = `+${Math.round((1 + Math.min(1, rating / PER_PCT)) * 100 - 100)}% PV effectifs`; break
       case 'tenacite': effect = `-${pct(d.tenacity)} de durée des contrôles`; break
+      case 'purge': effect = `-${pct(d.purge)} de durée/intensité des altérations subies`; break
       case 'regen': effect = `+${pct(d.regenBonus)} de régénération`; break
       case 'volDeVie': effect = `${pct(d.leech)} des dégâts rendus en vie`; break
       case 'surpuissance': effect = `+${pct(d.overpower - 1)} de dégâts globaux`; break

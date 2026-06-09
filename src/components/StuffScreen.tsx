@@ -6,10 +6,10 @@ import { ComparePanel } from './ComparePanel'
 import { CreatePanel } from './CreatePanel'
 import { EQUIP_SLOTS, ITEM_TYPES, equipSlotsForType, slotAccepts } from '../game/slots'
 import { RARITIES, RARITY_LIST } from '../game/rarities'
-import { itemScore, itemHasRareStat } from '../game/items'
-import { PRIMARY_META } from '../game/stats'
-import { rarityTextStyle, isPrism } from './rarityStyle'
-import type { EquipSlotId, Equipment, Item, ItemType, OffensiveStat } from '../game/types'
+import { itemScore, itemHasRareStat, itemStatBlock } from '../game/items'
+import { PRIMARY_META, SECONDARY_META, SECONDARY_STATS } from '../game/stats'
+import { rarityTextStyle, rarityNameClass } from './rarityStyle'
+import type { EquipSlotId, Equipment, Item, ItemType, OffensiveStat, SecondaryStat } from '../game/types'
 
 type SortMode = 'recent' | 'score' | 'rarity'
 const PRIMARY_FILTERS: OffensiveStat[] = ['force', 'agilite', 'intelligence']
@@ -46,6 +46,8 @@ export function StuffScreen() {
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
   const [sort, setSort] = useState<SortMode>('score')
   const [primaryFilter, setPrimaryFilter] = useState<OffensiveStat | null>(null)
+  const [statFilter, setStatFilter] = useState<SecondaryStat[]>([])
+  const [showStatFilter, setShowStatFilter] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
 
   const filterType: ItemType | null = selectedSlot
@@ -56,11 +58,13 @@ export function StuffScreen() {
     let arr = inventory
     if (filterType) arr = arr.filter((i) => i.type === filterType)
     if (primaryFilter) arr = arr.filter((i) => i.primary === primaryFilter)
+    // Filtre par stats : l'objet doit porter TOUTES les stats sélectionnées (recherche de build précis).
+    if (statFilter.length) arr = arr.filter((i) => { const b = itemStatBlock(i); return statFilter.every((s) => (b[s] ?? 0) > 0) })
     arr = [...arr]
     if (sort === 'score') arr.sort((a, b) => itemScore(b) - itemScore(a))
     else if (sort === 'rarity') arr.sort((a, b) => RARITIES[b.rarity].tier - RARITIES[a.rarity].tier)
     return arr
-  }, [inventory, filterType, primaryFilter, sort])
+  }, [inventory, filterType, primaryFilter, statFilter, sort])
 
   // L'objet sélectionné peut être dans l'inventaire OU équipé.
   const equippedEntry = (Object.entries(equipment) as [EquipSlotId, Item][]).find(
@@ -160,7 +164,7 @@ export function StuffScreen() {
                   <div className="flex items-center gap-1">
                     <span className="text-xs">{ITEM_TYPES[item.type].icon}</span>
                     <span
-                      className={'min-w-0 flex-1 truncate text-[11px] font-medium ' + (isPrism(item.rarity) ? 'prism' : '')}
+                      className={'min-w-0 flex-1 truncate text-[11px] font-medium ' + rarityNameClass(item.rarity)}
                       style={rarityTextStyle(item.rarity)}
                     >
                       {item.name}
@@ -232,6 +236,35 @@ export function StuffScreen() {
               {PRIMARY_META[p].short}
             </button>
           ))}
+        </div>
+
+        {/* Filtre par stat secondaire (recherche de build précis) */}
+        <div className="mb-1.5 px-1 text-[10px]">
+          <button onClick={() => setShowStatFilter((v) => !v)} className="text-slate-400 hover:text-slate-200">
+            🔍 Filtrer par stat{statFilter.length ? ` (${statFilter.length})` : ''} {showStatFilter ? '▾' : '▸'}
+          </button>
+          {showStatFilter && (
+            <div className="mt-1 flex flex-wrap gap-1">
+              {statFilter.length > 0 && (
+                <button onClick={() => setStatFilter([])} className="rounded bg-slate-700 px-1.5 py-0.5 text-slate-300 hover:bg-slate-600">tout ✕</button>
+              )}
+              {SECONDARY_STATS.map((s) => {
+                const on = statFilter.includes(s)
+                const m = SECONDARY_META[s]
+                return (
+                  <button
+                    key={s}
+                    onClick={() => setStatFilter((f) => (on ? f.filter((x) => x !== s) : [...f, s]))}
+                    title={m.name}
+                    className={'rounded px-1.5 py-0.5 font-medium ' + (on ? 'text-slate-950' : 'bg-slate-800')}
+                    style={on ? { background: m.color } : { color: m.color }}
+                  >
+                    {m.short}
+                  </button>
+                )
+              })}
+            </div>
+          )}
         </div>
 
         <div className="mb-1.5 flex flex-wrap items-center gap-1 px-1 text-[10px]">

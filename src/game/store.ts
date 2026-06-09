@@ -1,15 +1,16 @@
 import { create } from 'zustand'
 import type {
-  Equipment, Item, Affix, PrimaryStat, OffensiveStat, EquipSlotId, ItemType, Enemy, DamageType, RarityId, Character, PowerDef,
+  Equipment, Item, Affix, PrimaryStat, OffensiveStat, EquipSlotId, ItemType, Enemy, DamageType, RarityId, Character, PowerDef, EnemyAbility,
 } from './types'
 import { rollHit, incomingDps, genericMitigation } from './combat'
 import type { DerivedStats } from './stats'
 import {
-  makeCharacter, charDerived, charMaxHp, charDamageProfile, charPassives, charActives,
+  makeCharacter, charDerived, charMaxHp, charDamageProfile, charPassives,
   charResist, charCombatMods, abilityPower, computeUnlockedPowers, setGlobalCombatMods,
   talentPointsForLevel,
 } from './character'
 import { getTalent, canAllocate } from './talents'
+import { getPower } from './powers'
 import { getUpgrade, upgradeCost as accountUpgradeCost, upgradePoussiere, upgradeEclats, isMaxed, computeGlobalMods } from './upgrades'
 import {
   generateItem, rollBoxRarity, sellValue, recycleValue, recyclePoussiere, itemScore,
@@ -17,14 +18,15 @@ import {
   reforgeCost, surillvlCost, ascendCost, createCost, transmuteCost,
 } from './items'
 import { makeEnemy, isBossStage, stageIlvl, stageLuckTier } from './enemies'
+import { BIOME_IDS, biomeUnlocked, getBiomeDef, type BiomeId } from './biomes'
 import { RARITIES, RARITY_LIST } from './rarities'
 import { SECONDARY_STATS } from './stats'
 import { DAMAGE_TYPE_LIST, DAMAGE_TYPES } from './damage'
 import { equipSlotsForType, slotAccepts } from './slots'
 import { essenceGain, upgradeCost, insertCost, getUnique, UNIQUE_MAX_RANK, randomUniqueInstance } from './uniques'
 import {
-  generateDungeon, makeDungeonPack, dungeonIlvl, dungeonLuckTier, dungeonRegen, getDungeonDef,
-  DUNGEONS, type ActiveDungeon, type DungeonId, type DungeonReward,
+  generateDungeon, makeDungeonPack, dungeonIlvl, dungeonRegen, getDungeonDef, butinMinTier, butinMaxTier,
+  DUNGEONS, type ActiveDungeon, type DungeonId,
 } from './dungeons'
 import {
   generateRaid, makeRaidBoss, makeRaidAdd, getRaidDef, raidUnlocked, raidBerserkTime,
@@ -102,11 +104,33 @@ function emptyRaidProgress(): RaidProgress {
   return out
 }
 
+/** Progression par biome (chaque biome monte indépendamment). */
+function emptyBiomeRecord(physiqueValue: number, otherValue: number): Record<BiomeId, number> {
+  const out = {} as Record<BiomeId, number>
+  for (const id of BIOME_IDS) out[id] = id === 'physique' ? physiqueValue : otherValue
+  return out
+}
+
+/** Meilleur palier tous biomes confondus (gate des donjons/raids/persos). */
+function globalBest(biomeBest: Record<BiomeId, number>): number {
+  let best = 1
+  for (const id of BIOME_IDS) best = Math.max(best, biomeBest[id] ?? 0)
+  return best
+}
+
 interface SaveData {
   characters: Character[]
   activeChar: number
+  /** Palier courant DU BIOME ACTIF. */
   stage: number
+  /** Meilleur palier tous biomes confondus (= max sur biomeBest). */
   bestStage: number
+  /** Biome actif (combat classique). */
+  activeBiome: BiomeId
+  /** Palier courant mémorisé par biome (le biome actif reflète `stage`). */
+  biomeStages: Record<BiomeId, number>
+  /** Meilleur palier atteint par biome. */
+  biomeBest: Record<BiomeId, number>
   /** Verrou de farm : fige la progression au palier courant. */
   farmLock: boolean
   gold: number
@@ -138,6 +162,8 @@ interface SaveData {
   autoRecycle: boolean
   /** Horodatage de la dernière sauvegarde (progression hors-ligne). */
   lastSeen: number
+  /** Horodatage de la dernière rotation de l'échoppe (rotation horaire, indépendante du combat). */
+  lastShopRefresh: number
 }
 
 interface GameState extends SaveData {
@@ -148,6 +174,7 @@ interface GameState extends SaveData {
   pendingOffline: OfflineReport | null
   tick: (dt: number) => void
   setStage: (n: number) => void
+  setBiome: (biome: BiomeId) => void
   toggleFarmLock: () => void
   setRecycleThreshold: (tier: number) => void
   toggleAutoRecycle: () => void
@@ -176,6 +203,10 @@ interface GameState extends SaveData {
   setActiveChar: (index: number) => void
   setBias: (p: PrimaryStat) => void
   setPower: (slot: number, powerId: string | null) => void
+  /** Bascule un emplacement de capacité entre AUTO et MANUEL (perso actif). */
+  togglePowerAuto: (slot: number) => void
+  /** Lance MANUELLEMENT la capacité d'un emplacement (perso actif) — strict : ne part qu'au prochain tick si prête. */
+  castPower: (slot: number) => void
   allocateTalent: (nodeId: string) => void
   respecTalents: () => void
   buyUpgrade: (id: string) => void
@@ -195,11 +226,21 @@ function pushLog(log: LogEntry[], text: string, kind: LogKind): LogEntry[] {
 
 function xpForLevel(level: number): number {
   // Courbe nettement plus exigeante : monter de niveau se mérite (le stuff fait l'essentiel du travail).
-  return Math.round(90 * Math.pow(1.42, level - 1))
+  // Premier jet v0.18 : levelling plus lent, surtout au début (à affiner au pass d'équilibrage).
+  return Math.round(120 * Math.pow(1.44, level - 1))
 }
 
 // Cooldowns transitoires des capacités actives (clé `charId:powerId`). Non persistés.
 const cooldowns = new Map<string, number>()
+// Demandes de lancement MANUEL en attente (clé `charId:powerId`) : posées par castPower, consommées au tick.
+const manualFire = new Set<string>()
+
+/** Recharges courantes des capacités d'un perso (pour l'UI : 0 = prête). */
+export function powerCooldowns(char: Character): Record<string, number> {
+  const out: Record<string, number> = {}
+  for (const pid of char.powers) if (pid) out[pid] = Math.max(0, cooldowns.get(`${char.id}:${pid}`) ?? 0)
+  return out
+}
 
 function freshSave(): SaveData {
   return {
@@ -207,6 +248,9 @@ function freshSave(): SaveData {
     activeChar: 0,
     stage: 1,
     bestStage: 1,
+    activeBiome: 'physique',
+    biomeStages: emptyBiomeRecord(1, 1),
+    biomeBest: emptyBiomeRecord(1, 0),
     farmLock: false,
     gold: 0,
     essence: 0,
@@ -229,6 +273,7 @@ function freshSave(): SaveData {
     recycleThreshold: 4,
     autoRecycle: false,
     lastSeen: Date.now(),
+    lastShopRefresh: 0,
   }
 }
 
@@ -295,6 +340,25 @@ function sanitize(save: SaveData): SaveData {
   if (typeof save.recycleThreshold !== 'number') save.recycleThreshold = 4
   if (typeof save.autoRecycle !== 'boolean') save.autoRecycle = false
   if (typeof save.lastSeen !== 'number') save.lastSeen = Date.now()
+  if (typeof save.lastShopRefresh !== 'number') save.lastShopRefresh = 0
+
+  // Biomes (v0.18) : une ancienne save mono-zone devient le biome Physique.
+  if (!save.activeBiome || !BIOME_IDS.includes(save.activeBiome)) save.activeBiome = 'physique'
+  {
+    const stages = emptyBiomeRecord(Math.max(1, save.stage ?? 1), 1)
+    const best = emptyBiomeRecord(Math.max(1, save.bestStage ?? 1), 0)
+    const srcStages = (save.biomeStages ?? {}) as Record<string, number>
+    const srcBest = (save.biomeBest ?? {}) as Record<string, number>
+    for (const id of BIOME_IDS) {
+      if (typeof srcStages[id] === 'number') stages[id] = srcStages[id]
+      if (typeof srcBest[id] === 'number') best[id] = srcBest[id]
+    }
+    save.biomeStages = stages
+    save.biomeBest = best
+    // `stage` = palier courant du biome actif ; `bestStage` = max global.
+    save.stage = Math.max(1, stages[save.activeBiome] ?? 1)
+    save.bestStage = globalBest(best)
+  }
 
   // raidProgress : ancien `number` (raids génériques) → record par raid (refonte). On repart à 0.
   const rp = save.raidProgress as unknown
@@ -359,8 +423,14 @@ function sanitize(save: SaveData): SaveData {
       const p = equipped[i]
       return p && c.unlockedPowers.includes(p) ? p : null
     })
+    // Mode auto/manuel par emplacement (défaut AUTO).
+    c.powerAuto = [0, 1, 2, 3, 4].map((i) => (Array.isArray(c.powerAuto) ? c.powerAuto[i] !== false : true))
     const mh = charMaxHp(c)
     c.hp = c.hp > 0 ? Math.min(c.hp, mh) : mh
+    // Statuts de combat transitoires : ne pas les conserver entre deux sessions.
+    c.stun = 0
+    c.dots = undefined
+    c.weaken = undefined
   }
 
   // Grimoire : amorce les découvertes depuis l'inventaire + l'équipement de l'équipe.
@@ -428,6 +498,10 @@ function persist(s: GameState) {
     activeChar: s.activeChar,
     stage: s.stage,
     bestStage: s.bestStage,
+    activeBiome: s.activeBiome,
+    // Le biome actif reflète `stage` → on le synchronise à la sauvegarde.
+    biomeStages: { ...s.biomeStages, [s.activeBiome]: s.stage },
+    biomeBest: s.biomeBest,
     farmLock: s.farmLock,
     gold: s.gold,
     essence: s.essence,
@@ -450,6 +524,7 @@ function persist(s: GameState) {
     recycleThreshold: s.recycleThreshold,
     autoRecycle: s.autoRecycle,
     lastSeen: Date.now(),
+    lastShopRefresh: s.lastShopRefresh,
   }
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify(data))
@@ -504,6 +579,11 @@ function highestLevel(chars: Character[]): number {
   return chars.reduce((m, c) => Math.max(m, c.level), 1)
 }
 
+/** Soin complet + purge des statuts de combat transitoires (mort, repli, fin de donjon/raid). */
+function fullHeal(c: Character): Character {
+  return { ...c, hp: charMaxHp(c), stun: 0, dots: undefined, weaken: undefined }
+}
+
 /** Met à jour les multiplicateurs globaux (combat, inventaire, régén) depuis les améliorations. */
 function refreshGlobals(upgrades: Record<string, number>) {
   const m = computeGlobalMods(upgrades)
@@ -514,6 +594,8 @@ function refreshGlobals(upgrades: Record<string, number>) {
 
 // ---- Marchand ----
 const SHOP_SIZE = 6
+/** Intervalle de rotation de l'échoppe : 1 h réelle (indépendant du combat). */
+export const SHOP_INTERVAL_MS = 60 * 60 * 1000
 // L'or est désormais rare (le combat classique n'en donne presque plus) → ces taux sont de vrais puits.
 export const EXCHANGE_RATES = { eclatsBatch: 100, eclatGoldCost: 1500, sceauGold: 8000, orbeGold: 25000 }
 export interface MysteryBox {
@@ -643,12 +725,100 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, chars
   }
 }
 
+/** Contexte de combat d'un héros utilisé pour résoudre les techniques ennemies. */
+interface AbilityCtx {
+  derived: DerivedStats
+  resist: Partial<Record<DamageType, number>>
+  passives: { threatMult: number; damageReduction: number }
+  cmods: { flatDr: number }
+}
+
+/** Applique l'effet d'une technique ennemie à un héros cible (déjà atténué par résist + Purge). */
+function applyEnemyAbility(ab: EnemyAbility, enemy: Enemy, t: Character, ctx: AbilityCtx) {
+  const resist = ctx.resist[ab.element] ?? 0
+  const purge = ctx.derived.purge
+  const extra = (1 - ctx.passives.damageReduction) * (1 - ctx.cmods.flatDr)
+  switch (ab.kind) {
+    case 'dot': {
+      // DoT : ignore armure/esquive, mais réduit par la RÉSISTANCE du type et la PURGE (intensité + durée).
+      const dps = Math.max(0, enemy.damage * ab.magnitude * (1 - resist) * (1 - purge))
+      const remaining = (ab.duration ?? 4) * (1 - purge * 0.5)
+      if (dps > 0) t.dots = [...(t.dots ?? []), { dps, type: ab.element, remaining }]
+      break
+    }
+    case 'burst':
+    case 'drain': {
+      // Coup unique télégraphié : atténué comme une attaque (résist + esquive/réduction + barrière via PV).
+      const dmg = incomingDps(enemy.damage * ab.magnitude, ab.element, ctx.derived, ctx.resist, extra)
+      t.hp -= dmg
+      if (ab.kind === 'drain') enemy.hp = Math.min(enemy.maxHp, enemy.hp + dmg * 0.6)
+      break
+    }
+    case 'cc': {
+      // Contrôle : durée réduite par la TÉNACITÉ.
+      t.stun = Math.max(t.stun ?? 0, (ab.duration ?? 1) * (1 - ctx.derived.tenacity))
+      break
+    }
+    case 'debuff': {
+      // Malédiction : −35% de dégâts du héros ; durée réduite par la PURGE.
+      const dur = (ab.duration ?? 5) * (1 - purge)
+      if (dur > 0.3) t.weaken = { mult: 0.65, remaining: Math.max(t.weaken?.remaining ?? 0, dur) }
+      break
+    }
+  }
+}
+
+/** Fait progresser les techniques d'un ennemi (cooldown + télégraphe) et applique celles qui tombent. */
+function tickEnemyAbilities(enemy: Enemy, chars: Character[], info: (AbilityCtx | null)[], dt: number) {
+  if (!enemy.abilities || enemy.abilities.length === 0 || enemy.hp <= 0) return
+  const alive = chars.map((_, i) => i).filter((i) => chars[i].hp > 0 && info[i])
+  if (!alive.length) return
+  // Cible = plus haute menace (même logique que l'auto-attaque).
+  let ti = alive[0]
+  let best = -1
+  for (const i of alive) {
+    const d = info[i]!
+    const dps = d.derived.power * d.derived.attacksPerSecond
+    const score = (dps + 1) * d.passives.threatMult
+    if (score > best) { best = score; ti = i }
+  }
+  const t = chars[ti]
+  const ctx = info[ti]!
+  for (const ab of enemy.abilities) {
+    if ((ab.cast ?? 0) > 0) {
+      ab.cast = (ab.cast ?? 0) - dt
+      if ((ab.cast ?? 0) <= 0) { ab.cast = 0; applyEnemyAbility(ab, enemy, t, ctx); ab.cd = ab.cooldown }
+    } else {
+      ab.cd = (ab.cd ?? ab.cooldown) - dt
+      if (ab.cd <= 0) {
+        if (ab.telegraph && ab.telegraph > 0) ab.cast = ab.telegraph
+        else { applyEnemyAbility(ab, enemy, t, ctx); ab.cd = ab.cooldown }
+      }
+    }
+  }
+}
+
+/** Décompte des statuts transitoires du héros (étourdissement, malédiction, DoT subis). */
+function tickHeroStatuses(chars: Character[], dt: number) {
+  for (const c of chars) {
+    if (c.stun && c.stun > 0) c.stun = Math.max(0, c.stun - dt)
+    if (c.weaken) { c.weaken.remaining -= dt; if (c.weaken.remaining <= 0) c.weaken = undefined }
+    if (c.dots && c.dots.length) {
+      let dmg = 0
+      for (const d of c.dots) { dmg += d.dps * dt; d.remaining -= dt }
+      c.dots = c.dots.filter((d) => d.remaining > 0)
+      if (c.dots.length === 0) c.dots = undefined
+      if (dmg > 0 && c.hp > 0) c.hp = Math.max(0, c.hp - dmg)
+    }
+  }
+}
+
 /** Un pas de combat de l'équipe contre un ennemi. Renvoie l'état mis à jour. */
 function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: CombatMods) {
-  const enemy: Enemy = { ...enemyIn, dot: enemyIn.dot ? { ...enemyIn.dot } : undefined }
-  const chars = input.map((c) => ({ ...c }))
-  // Décompte de l'étourdissement (transitoire) avant d'agir.
-  for (const c of chars) if (c.stun && c.stun > 0) c.stun = Math.max(0, c.stun - dt)
+  const enemy: Enemy = { ...enemyIn, dot: enemyIn.dot ? { ...enemyIn.dot } : undefined, abilities: enemyIn.abilities?.map((a) => ({ ...a })) }
+  const chars: Character[] = input.map((c) => ({ ...c, dots: c.dots?.map((d) => ({ ...d })), weaken: c.weaken ? { ...c.weaken } : undefined }))
+  // Décompte des statuts transitoires (étourdissement, malédiction, DoT subis) avant d'agir.
+  tickHeroStatuses(chars, dt)
   const info = chars.map((c) =>
     c.hp > 0
       ? {
@@ -669,7 +839,9 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
     const hpFrac = c.hp / charMaxHp(c)
     const lowHp = d.cmods.lowHp && hpFrac <= d.cmods.lowHp.threshold ? d.cmods.lowHp.mult : 1
     const highHp = d.cmods.highHp && hpFrac >= d.cmods.highHp.threshold ? d.cmods.highHp.mult : 1
-    const bonusMult = d.cmods.damageMult * lowHp * highHp
+    // Malédiction (debuff ennemi) : réduit les dégâts du héros tant qu'elle est active.
+    const weakenMult = c.weaken ? c.weaken.mult : 1
+    const bonusMult = d.cmods.damageMult * lowHp * highHp * weakenMult
     const multistrikeChance = Math.min(0.85, d.derived.multistrike + d.cmods.multistrike)
     let healed = 0
     for (let h = 0; h < whole && enemy.hp > 0; h++) {
@@ -695,20 +867,27 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
     if (enemy.dot.remaining <= 0) enemy.dot = undefined
   }
 
-  // 3) Capacités actives auto-lancées (cooldown réduit par la Récupération). Étourdi = pas de cast.
+  // 3) Capacités actives (cooldown réduit par la Récupération). AUTO = auto-lancées ; MANUEL = sur tap
+  //    (castPower) uniquement, lancement STRICT (si pas prêt, rien). Étourdi = pas de cast.
   chars.forEach((c, i) => {
     const d = info[i]
     if (!d || (c.stun ?? 0) > 0) return
-    for (const p of charActives(c)) {
-      const key = `${c.id}:${p.id}`
+    c.powers.forEach((pid, slot) => {
+      if (!pid) return
+      const p = getPower(pid)
+      if (!p || p.kind !== 'active') return
+      const key = `${c.id}:${pid}`
       const cd = (cooldowns.get(key) ?? 0) - dt
-      if (cd <= 0) {
+      const auto = c.powerAuto?.[slot] !== false
+      if (cd <= 0 && (auto || manualFire.has(key))) {
         cooldowns.set(key, (p.cooldown ?? 3) * (1 - d.derived.cdr))
+        manualFire.delete(key)
         fireActive(p, c, d.derived, chars, enemy, d.cmods.hot)
       } else {
-        cooldowns.set(key, cd)
+        cooldowns.set(key, Math.max(0, cd))
+        if (!auto) manualFire.delete(key) // cast manuel strict : pas de file d'attente
       }
-    }
+    })
   })
 
   // 4) L'ennemi frappe la plus haute menace (dégâts typés, réduits par la résistance héros).
@@ -748,6 +927,9 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
     if (td.cmods.thorns > 0 && enemy.hp > 0) enemy.hp = Math.max(0, enemy.hp - incoming * td.cmods.thorns)
   }
 
+  // 4b) Techniques signature de l'ennemi (DoT/burst/CC/debuff/drain) sur la plus haute menace.
+  tickEnemyAbilities(enemy, chars, info, dt)
+
   // 5) Régénération de l'ennemi (Vampirique).
   if (mods?.regen && enemy.hp > 0) enemy.hp = Math.min(enemy.maxHp, enemy.hp + enemy.maxHp * mods.regen * dt)
 
@@ -771,9 +953,9 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
  * - CHAQUE ennemi vivant frappe la plus haute menace → un pack met l'équipe sous pression (survie de groupe).
  */
 function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number, mods?: CombatMods) {
-  const enemies: Enemy[] = enemiesIn.map((e) => ({ ...e, dot: e.dot ? { ...e.dot } : undefined }))
-  const chars = input.map((c) => ({ ...c }))
-  for (const c of chars) if (c.stun && c.stun > 0) c.stun = Math.max(0, c.stun - dt)
+  const enemies: Enemy[] = enemiesIn.map((e) => ({ ...e, dot: e.dot ? { ...e.dot } : undefined, abilities: e.abilities?.map((a) => ({ ...a })) }))
+  const chars: Character[] = input.map((c) => ({ ...c, dots: c.dots?.map((d) => ({ ...d })), weaken: c.weaken ? { ...c.weaken } : undefined }))
+  tickHeroStatuses(chars, dt)
   const info = chars.map((c) =>
     c.hp > 0
       ? { derived: charDerived(c), profile: charDamageProfile(c), passives: charPassives(c), resist: charResist(c), cmods: charCombatMods(c) }
@@ -791,7 +973,8 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
     const hpFrac = c.hp / charMaxHp(c)
     const lowHp = d.cmods.lowHp && hpFrac <= d.cmods.lowHp.threshold ? d.cmods.lowHp.mult : 1
     const highHp = d.cmods.highHp && hpFrac >= d.cmods.highHp.threshold ? d.cmods.highHp.mult : 1
-    const bonusMult = d.cmods.damageMult * lowHp * highHp
+    const weakenMult = c.weaken ? c.weaken.mult : 1
+    const bonusMult = d.cmods.damageMult * lowHp * highHp * weakenMult
     const multistrikeChance = Math.min(0.85, d.derived.multistrike + d.cmods.multistrike)
     let healed = 0
     for (let h = 0; h < whole; h++) {
@@ -822,24 +1005,30 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
     }
   }
 
-  // 3) Actives : `cleave` touche TOUS les ennemis, le reste la cible focus. Étourdi = pas de cast.
+  // 3) Actives : `cleave` touche TOUS les ennemis, le reste la cible focus. AUTO auto-lancé ; MANUEL sur tap.
   chars.forEach((c, i) => {
     const d = info[i]
     if (!d || (c.stun ?? 0) > 0) return
-    for (const p of charActives(c)) {
-      const key = `${c.id}:${p.id}`
+    c.powers.forEach((pid, slot) => {
+      if (!pid) return
+      const p = getPower(pid)
+      if (!p || p.kind !== 'active') return
+      const key = `${c.id}:${pid}`
       const cd = (cooldowns.get(key) ?? 0) - dt
-      if (cd <= 0) {
+      const auto = c.powerAuto?.[slot] !== false
+      if (cd <= 0 && (auto || manualFire.has(key))) {
         cooldowns.set(key, (p.cooldown ?? 3) * (1 - d.derived.cdr))
+        manualFire.delete(key)
         if (p.effect === 'cleave') {
           for (const e of enemies) if (e.hp > 0) fireActive(p, c, d.derived, chars, e, d.cmods.hot)
         } else {
           fireActive(p, c, d.derived, chars, focus() ?? enemies[0], d.cmods.hot)
         }
       } else {
-        cooldowns.set(key, cd)
+        cooldowns.set(key, Math.max(0, cd))
+        if (!auto) manualFire.delete(key)
       }
-    }
+    })
   })
 
   // 4) Chaque ennemi vivant frappe la plus haute menace (l'équipe doit survivre au pack).
@@ -874,6 +1063,8 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
     if (mods?.reflect && !reflectApplied) { incoming += totalDealt * mods.reflect; reflectApplied = true }
     t.hp -= incoming
     if (td.cmods.thorns > 0 && enemy.hp > 0) enemy.hp = Math.max(0, enemy.hp - incoming * td.cmods.thorns)
+    // Techniques signature de CET ennemi (sur la plus haute menace).
+    tickEnemyAbilities(enemy, chars, info, dt)
   }
 
   // 5) Régénération ennemie (Vampirique/Sangsue) sur tous les ennemis vivants.
@@ -911,7 +1102,7 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
   let log = s.log
 
   if (!res.anyAlive) {
-    const healed = chars.map((c) => ({ ...c, hp: charMaxHp(c) }))
+    const healed = chars.map(fullHeal)
     log = pushLog(log, `💀 Échec dans ${d.name} ! L'équipe bat en retraite.`, 'death')
     const next = { ...s, characters: healed, dungeon: null, log }
     persist(next)
@@ -925,29 +1116,43 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
       const lv = d.level
       const noGold = d.modifiers.some((m) => m.noGold)
       const rareBonus = d.modifiers.reduce((a, m) => a + (m.rareBonus ?? 0), 0)
-      const isStuff = def.reward === 'stuff'
-      const ilvl = dungeonIlvl(lv)
-      const luck = dungeonLuckTier(lv) + rareBonus + (isStuff ? 3 : 0)
-      const count = (isStuff ? 5 : 3) + Math.floor(lv / 2)
       const bias = pickBias(s.characters)
-      const items: Item[] = []
-      for (let i = 0; i < count; i++) items.push(generateItem({ ilvl, luckTier: luck, primaryBias: bias, ...(isStuff ? { minTier: 5 } : {}) }))
 
-      // Récompenses : base MODESTE + GROS bonus sur la ressource ciblée par CE donjon.
-      const bonus = (r: DungeonReward, amt: number) => (def.reward === r ? amt : 0)
-      const gold = noGold ? 0 : Math.round(80 * lv * (1 + lv * 0.1)) + bonus('gold', Math.round(280 * lv * (1 + lv * 0.28)))
-      const eclats = Math.round(45 * lv) + bonus('eclats', Math.round(170 * lv * (1 + lv * 0.2)))
-      const noyau = 1 + Math.floor(lv / 4) + bonus('noyau', 2 + lv)
-      const poussiere = (lv >= 10 ? Math.floor(lv / 8) : 0) + bonus('poussiere', 1 + Math.floor(lv / 2))
-      const sceaux = bonus('cles', 1 + Math.floor(lv / 4)) || (lv >= 6 ? 1 : 0)
-      const orbes = bonus('cles', Math.floor(lv / 3)) || (lv >= 4 ? 1 : 0)
+      // Coffre MONO-RESSOURCE (refonte v0.18) : un donjon ne donne QUE sa ressource (gros gains),
+      // SAUF 'butin' qui donne des objets (avec rampe de rareté). 'xp' donne de l'XP d'équipe.
+      let items: Item[] = []
+      let gold = 0, eclats = 0, noyau = 0, poussiere = 0, sceaux = 0, orbes = 0, xpAmt = 0
+      switch (def.reward) {
+        case 'gold': gold = noGold ? 0 : Math.round(450 * lv * (1 + lv * 0.15)); break
+        case 'eclats': eclats = Math.round(300 * lv * (1 + lv * 0.13)); break
+        case 'noyau': noyau = Math.round(12 * lv * (1 + lv * 0.1)); break
+        case 'sceaux': sceaux = Math.round(3 + lv * 0.9); break
+        case 'orbes': orbes = Math.round(1 + lv * 0.5); break
+        case 'poussiere': {
+          // N garanti + chance croissante d'avoir +1 à +2 (montée fine d'une ressource rare).
+          const base = 1 + Math.floor(lv / 3)
+          const bonusChance = Math.min(0.9, 0.25 + lv * 0.03)
+          poussiere = base + (Math.random() < bonusChance ? 1 + Math.floor(Math.random() * 2) : 0)
+          break
+        }
+        case 'xp': xpAmt = Math.round(180 * lv * Math.pow(1.1, lv)); break
+        case 'stuff': {
+          const ilvl = dungeonIlvl(lv)
+          const count = 3 + Math.floor(lv / 2)
+          const minTier = Math.min(14, butinMinTier(lv) + rareBonus)
+          const maxTier = Math.min(16, butinMaxTier(lv) + rareBonus)
+          for (let i = 0; i < count; i++) {
+            const rarity = rollBoxRarity(minTier, maxTier, Math.min(0.25, 0.05 + lv * 0.01), 0.6)
+            items.push(generateItem({ ilvl, rarity, primaryBias: bias }))
+          }
+          break
+        }
+      }
       const chest: ChestReward = { dungeonName: d.name, level: lv, items, eclats, noyau, gold, sceaux, orbes, poussiere }
 
-      let healed: Character[] = chars.map((c) => ({ ...c, hp: charMaxHp(c), stun: 0 }))
+      let healed: Character[] = chars.map(fullHeal)
       let log2 = pushLog(log, `🎉 ${d.name} vaincu ! Un coffre t'attend.`, 'kill')
-      // Donjon de Savoir : la récompense, c'est l'XP d'équipe.
-      if (def.reward === 'xp') {
-        const xpAmt = Math.round(120 * lv * Math.pow(1.12, lv))
+      if (def.reward === 'xp' && xpAmt > 0) {
         healed = healed.map((c) => grantXp(c, xpAmt))
         log2 = pushLog(log2, `📚 +${xpAmt.toLocaleString('fr-FR')} XP pour l'équipe !`, 'level')
       }
@@ -1047,7 +1252,7 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
   })
 
   if (!chars.some((c) => c.hp > 0)) {
-    const healed = chars.map((c) => ({ ...c, hp: charMaxHp(c) }))
+    const healed = chars.map(fullHeal)
     const why = mech.includes('berserk') && overtime > 0 ? ' (enrage mortel — il fallait plus de DPS)' : ''
     log = pushLog(log, `💀 Raid échoué : ${r.name}${why}. L'équipe est anéantie.`, 'death')
     const next = { ...s, characters: healed, raid: null, log }
@@ -1090,7 +1295,7 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
         poussiere: Math.floor(tier / 2),
         cosmic,
       }
-      const healed = chars.map((c) => ({ ...c, hp: charMaxHp(c) }))
+      const healed = chars.map(fullHeal)
       const raidProgress = { ...s.raidProgress, [r.raidId]: Math.max(s.raidProgress[r.raidId] ?? 0, tier) }
       log = pushLog(log, `🏆 RAID VAINCU : ${def.name} (Tier ${tier}) !${cosmic ? ` 💫 Éclat cosmique ×${cosmic} !` : ''} Un trésor t'attend.`, 'kill')
       const next = { ...s, characters: healed, raid: null, raidProgress, pendingChest: chest, log }
@@ -1142,13 +1347,20 @@ export const useGame = create<GameState>((set, get) => {
 
   return {
     ...save,
-    enemy: makeEnemy(save.stage),
+    enemy: makeEnemy(save.stage, save.activeBiome),
     log: [{ id: logId++, text: 'Bienvenue, guerrier. Le combat commence.', kind: 'info' }],
     killCount: 0,
     pendingOffline,
 
     tick: (dt) => {
-      const s = get()
+      let s = get()
+      // Échoppe : rotation sur timer réel (1 h), indépendante du combat. Se déclenche aussi
+      // pendant un donjon/raid → on rafraîchit AVANT de déléguer.
+      if (Date.now() - (s.lastShopRefresh ?? 0) >= SHOP_INTERVAL_MS) {
+        const eco = computeGlobalMods(s.upgrades)
+        s = { ...s, shopStock: generateShop(s.bestStage, Math.floor(eco.rarityLuck)), lastShopRefresh: Date.now() }
+        persist(s)
+      }
       if (s.raid) {
         tickRaid(s, dt, set)
         return
@@ -1165,16 +1377,16 @@ export const useGame = create<GameState>((set, get) => {
 
       if (!res.anyAlive) {
         const stage = Math.max(1, s.stage - RETREAT_STAGES)
-        const healed = chars.map((c) => ({ ...c, hp: charMaxHp(c) }))
+        const healed = chars.map(fullHeal)
         log = pushLog(log, `💀 Équipe vaincue ! Repli au palier ${stage}.`, 'death')
-        const next = { ...s, characters: healed, stage, enemy: makeEnemy(stage), log }
+        const next = { ...s, characters: healed, stage, enemy: makeEnemy(stage, s.activeBiome), log }
         persist(next)
         set(next)
         return
       }
 
       if (enemy.hp <= 0) {
-        let { stage, bestStage, gold, noyau, sceaux, inventory, orbes, poussiere, essence } = s
+        let { stage, bestStage, gold, sceaux, inventory, poussiere, essence } = s
         const boss = isBossStage(stage)
         const eco = computeGlobalMods(s.upgrades)
         // Le combat CLASSIQUE n'est plus qu'un filet d'or/butin : la vraie source = donjons & raids.
@@ -1190,24 +1402,11 @@ export const useGame = create<GameState>((set, get) => {
         })
         log = pushLog(log, `${s.enemy.name} vaincu ! +${xpGain} XP, +${goldGain} or.`, 'kill')
 
-        if (boss) {
-          const ng = 1 + Math.floor(stage / 20)
-          noyau += ng
-          log = pushLog(log, `💠 Noyau primordial ×${ng} récupéré !`, 'craft')
-          // Orbe de raid : chute rare sur les boss (plus probable en profondeur).
-          if (Math.random() < Math.min(0.5, 0.15 + stage / 600)) {
-            orbes += 1
-            log = pushLog(log, '🔮 Orbe de raid récupérée !', 'craft')
-          }
-          // Poussière d'étoile : chute rare sur les boss profonds (craft sommital).
-          if (stage >= 100 && Math.random() < Math.min(0.4, stage / 1000)) {
-            poussiere += 1
-            log = pushLog(log, '🌌 Poussière d\'étoile récupérée !', 'craft')
-          }
-        }
-
+        // v0.18 : les ressources rares (Noyaux 💠, Orbes 🔮, Poussière 🌌) ne tombent PLUS sur les
+        // boss/élites de farm — elles se farment en DONJON dédié (mono-ressource). Le farm classique
+        // reste une source de stuff, d'XP et d'un filet d'or.
         const elite = enemy.elite === true
-        if (elite) { noyau += 1; log = pushLog(log, '◆ Élite vaincue : butin supérieur !', 'kill') }
+        if (elite) log = pushLog(log, '◆ Élite vaincue : butin supérieur !', 'kill')
         // Moins d'objets en combat classique (le farm de stuff se fait en donjon/raid).
         const drops = (boss ? 2 : Math.random() < 0.30 + eco.lootChance ? 1 : 0) + (elite ? 1 : 0)
         const bias = pickBias(chars)
@@ -1215,7 +1414,10 @@ export const useGame = create<GameState>((set, get) => {
         let codex = s.codex
         let autoRec = 0
         for (let dd = 0; dd < drops; dd++) {
-          const it = generateItem({ ilvl: stageIlvl(stage), luckTier: luck, primaryBias: bias })
+          // Identité de loot du biome : ~50% dégâts de l'élément, ~25% résistance à l'élément, ~25% neutre.
+          const br = Math.random()
+          const biomeOpts = br < 0.5 ? { forceDmgType: s.activeBiome } : br < 0.75 ? { biasResist: s.activeBiome } : {}
+          const it = generateItem({ ilvl: stageIlvl(stage), luckTier: luck, primaryBias: bias, ...biomeOpts })
           // Recyclage automatique : tout butin commun sous le seuil part directement en éclats (on garde les uniques).
           if (s.autoRecycle && !it.unique && RARITIES[it.rarity].tier < s.recycleThreshold) {
             essence += Math.round(recycleValue(it) * eco.eclatGain)
@@ -1231,8 +1433,10 @@ export const useGame = create<GameState>((set, get) => {
 
         // Le verrou de farm fige la progression au palier courant.
         let characters = chars
+        let biomeBest = s.biomeBest
         if (!s.farmLock) {
           stage += 1
+          biomeBest = { ...biomeBest, [s.activeBiome]: Math.max(biomeBest[s.activeBiome] ?? 0, stage) }
           bestStage = Math.max(bestStage, stage)
           if (stage % 5 === 0) {
             sceaux += 1
@@ -1249,13 +1453,11 @@ export const useGame = create<GameState>((set, get) => {
           }
         }
 
-        // L'échoppe du marchand se renouvelle à chaque boss vaincu.
-        const shopStock = boss ? generateShop(bestStage, Math.floor(eco.rarityLuck)) : s.shopStock
-
-        const enemyNext = makeEnemy(stage)
+        // L'échoppe ne se renouvelle plus au boss : rotation horaire gérée dans `tick`.
+        const enemyNext = makeEnemy(stage, s.activeBiome)
         if (isBossStage(stage)) log = pushLog(log, `⚔ Un boss vous barre la route : ${enemyNext.name} !`, 'info')
 
-        const next = { ...s, characters, stage, bestStage, gold, noyau, sceaux, orbes, poussiere, essence, codex, shopStock, inventory, enemy: enemyNext, log, killCount: s.killCount + 1 }
+        const next = { ...s, characters, stage, bestStage, biomeBest, gold, sceaux, poussiere, essence, codex, inventory, enemy: enemyNext, log, killCount: s.killCount + 1 }
         persist(next)
         set(next)
         return
@@ -1267,8 +1469,27 @@ export const useGame = create<GameState>((set, get) => {
     setStage: (n) => {
       const s = get()
       if (s.dungeon || s.raid) return
-      const stage = Math.max(1, Math.min(s.bestStage, Math.round(n)))
-      const next = { ...s, stage, enemy: makeEnemy(stage) }
+      // On ne peut farmer que jusqu'à son RECORD DANS LE BIOME ACTIF.
+      const cap = Math.max(1, s.biomeBest[s.activeBiome] ?? 1)
+      const stage = Math.max(1, Math.min(cap, Math.round(n)))
+      const next = { ...s, stage, enemy: makeEnemy(stage, s.activeBiome) }
+      persist(next)
+      set(next)
+    },
+
+    setBiome: (biome) => {
+      const s = get()
+      if (s.dungeon || s.raid) return
+      if (!BIOME_IDS.includes(biome) || biome === s.activeBiome) return
+      if (!biomeUnlocked(biome, s.biomeBest.physique ?? 0, s.bestStage)) return
+      // Mémorise le palier du biome quitté, charge celui du biome rejoint.
+      const biomeStages = { ...s.biomeStages, [s.activeBiome]: s.stage }
+      const stage = Math.max(1, biomeStages[biome] ?? 1)
+      const next = {
+        ...s, activeBiome: biome, biomeStages, stage,
+        enemy: makeEnemy(stage, biome),
+        log: pushLog(s.log, `🧭 Tu pars pour : ${getBiomeDef(biome).icon} ${getBiomeDef(biome).name}.`, 'info'),
+      }
       persist(next)
       set(next)
     },
@@ -1456,7 +1677,7 @@ export const useGame = create<GameState>((set, get) => {
       const patch = ascendItem(item)
       if (!patch) return
       const cost = ascendCost(item)
-      if (s.essence < cost.eclats || s.noyau < cost.noyau || s.fragments < (cost.fragments ?? 0) || s.poussiere < (cost.poussiere ?? 0)) return
+      if (s.essence < cost.eclats || s.noyau < cost.noyau || s.fragments < (cost.fragments ?? 0) || s.poussiere < (cost.poussiere ?? 0) || s.cosmic < (cost.cosmic ?? 0)) return
       const upd = applyItemPatch(s, itemId, patch)
       if (!upd) return
       const next = {
@@ -1466,6 +1687,7 @@ export const useGame = create<GameState>((set, get) => {
         noyau: s.noyau - cost.noyau,
         fragments: s.fragments - (cost.fragments ?? 0),
         poussiere: s.poussiere - (cost.poussiere ?? 0),
+        cosmic: s.cosmic - (cost.cosmic ?? 0),
         log: pushLog(s.log, `Ascension : ${item.name} → ${RARITIES[patch.rarity!].name} ! (-${cost.noyau} Noyau)`, 'craft'),
       }
       persist(next)
@@ -1513,7 +1735,7 @@ export const useGame = create<GameState>((set, get) => {
       const tier = RARITIES[opts.rarity].tier
       const ilvl = stageIlvl(s.bestStage)
       const cost = createCost(tier, ilvl)
-      if (s.essence < cost.eclats || s.noyau < cost.noyau || s.fragments < (cost.fragments ?? 0) || s.poussiere < (cost.poussiere ?? 0)) return
+      if (s.essence < cost.eclats || s.noyau < cost.noyau || s.fragments < (cost.fragments ?? 0) || s.poussiere < (cost.poussiere ?? 0) || s.cosmic < (cost.cosmic ?? 0)) return
       const item = generateItem({ ilvl, type: opts.type, rarity: opts.rarity, primary: opts.primary, ...(opts.orientation ? { orientation: opts.orientation } : {}), ...(opts.element ? { element: opts.element } : {}) })
       const inventory = [item, ...s.inventory].slice(0, invMax)
       const next = {
@@ -1522,6 +1744,7 @@ export const useGame = create<GameState>((set, get) => {
         noyau: s.noyau - cost.noyau,
         fragments: s.fragments - (cost.fragments ?? 0),
         poussiere: s.poussiere - (cost.poussiere ?? 0),
+        cosmic: s.cosmic - (cost.cosmic ?? 0),
         inventory,
         codex: discoverFromItems(s.codex, [item]),
         log: pushLog(s.log, `Forgé : ${item.name} (${RARITIES[opts.rarity].name}).`, 'craft'),
@@ -1532,12 +1755,14 @@ export const useGame = create<GameState>((set, get) => {
 
     enterDungeon: (dungeonId, level) => {
       const s = get()
-      if (s.dungeon || s.raid || s.sceaux < 1) return
+      if (s.dungeon || s.raid) return
       const def = getDungeonDef(dungeonId)
       if (!def || s.bestStage < def.unlockStage) return
+      if (s.sceaux < def.sceauCost) return
       if (level < 1 || level > (s.dungeonProgress[dungeonId] ?? 0) + 1) return
       const dungeon = generateDungeon(dungeonId, level)
-      const next = { ...s, sceaux: s.sceaux - 1, dungeon, log: pushLog(s.log, `🏰 Entrée dans ${dungeon.name} (${dungeon.totalFights} combats).`, 'info') }
+      const cost = def.sceauCost
+      const next = { ...s, sceaux: s.sceaux - cost, dungeon, log: pushLog(s.log, `🏰 Entrée dans ${dungeon.name} (${dungeon.totalFights} combats${cost ? `, -${cost} 🔑` : ', gratuit'}).`, 'info') }
       persist(next)
       set(next)
     },
@@ -1719,6 +1944,30 @@ export const useGame = create<GameState>((set, get) => {
       set(next)
     },
 
+    togglePowerAuto: (slot) => {
+      const s = get()
+      const char = s.characters[s.activeChar]
+      if (!char || slot < 0 || slot >= char.powers.length) return
+      const powerAuto = char.powers.map((_, i) => (i === slot ? char.powerAuto?.[i] === false : char.powerAuto?.[i] !== false))
+      const nc = { ...char, powerAuto }
+      const characters = s.characters.map((c, i) => (i === s.activeChar ? nc : c))
+      const next = { ...s, characters }
+      persist(next)
+      set(next)
+    },
+
+    castPower: (slot) => {
+      const s = get()
+      const char = s.characters[s.activeChar]
+      if (!char) return
+      const pid = char.powers[slot]
+      if (!pid || char.powerAuto?.[slot] !== false) return // doit être en MANUEL
+      const p = getPower(pid)
+      if (!p || p.kind !== 'active') return
+      // Posé en attente : le prochain tick le lancera si la recharge est prête (strict, pas de file).
+      manualFire.add(`${char.id}:${pid}`)
+    },
+
     allocateTalent: (nodeId) => {
       const s = get()
       const char = s.characters[s.activeChar]
@@ -1780,7 +2029,7 @@ export const useGame = create<GameState>((set, get) => {
       const cost = shopRefreshCost(s.bestStage)
       if (s.gold < cost) return
       const eco = computeGlobalMods(s.upgrades)
-      const next = { ...s, gold: s.gold - cost, shopStock: generateShop(s.bestStage, Math.floor(eco.rarityLuck)), log: pushLog(s.log, `Échoppe rafraîchie (-${cost} or).`, 'gold') }
+      const next = { ...s, gold: s.gold - cost, shopStock: generateShop(s.bestStage, Math.floor(eco.rarityLuck)), lastShopRefresh: Date.now(), log: pushLog(s.log, `Échoppe rafraîchie (-${cost} or).`, 'gold') }
       persist(next)
       set(next)
     },
@@ -1891,7 +2140,7 @@ export const useGame = create<GameState>((set, get) => {
       refreshGlobals(fresh.upgrades)
       set({
         ...fresh,
-        enemy: makeEnemy(fresh.stage),
+        enemy: makeEnemy(fresh.stage, fresh.activeBiome),
         log: [{ id: logId++, text: 'Nouvelle partie commencée.', kind: 'info' }],
         killCount: 0,
         pendingOffline: null,

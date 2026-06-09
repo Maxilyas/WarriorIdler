@@ -24,6 +24,7 @@ export function CreatePanel({ onClose }: { onClose: () => void }) {
   const noyau = useGame((s) => s.noyau)
   const fragments = useGame((s) => s.fragments)
   const poussiere = useGame((s) => s.poussiere)
+  const cosmic = useGame((s) => s.cosmic)
   const createItem = useGame((s) => s.createItem)
 
   const ilvl = stageIlvl(bestStage)
@@ -39,7 +40,7 @@ export function CreatePanel({ onClose }: { onClose: () => void }) {
   const isWeapon = type === 'armePrincipale'
   const tier = RARITY_LIST.find((r) => r.id === rarity)!.tier
   const cost = createCost(tier, ilvl)
-  const canForge = essence >= cost.eclats && noyau >= cost.noyau && fragments >= (cost.fragments ?? 0) && poussiere >= (cost.poussiere ?? 0)
+  const canForge = essence >= cost.eclats && noyau >= cost.noyau && fragments >= (cost.fragments ?? 0) && poussiere >= (cost.poussiere ?? 0) && cosmic >= (cost.cosmic ?? 0)
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={onClose}>
@@ -165,6 +166,9 @@ export function CreatePanel({ onClose }: { onClose: () => void }) {
             )}
             {(cost.fragments ?? 0) > 0 && (
               <span className={fragments >= (cost.fragments ?? 0) ? 'text-sky-300' : 'text-red-400'}>✨ {cost.fragments}</span>
+            )}
+            {(cost.cosmic ?? 0) > 0 && (
+              <span className={cosmic >= (cost.cosmic ?? 0) ? 'text-violet-300' : 'text-red-400'}>💫 {cost.cosmic}</span>
             )}
           </div>
           {tier >= 7 && <div className="mt-1 text-[10.5px] text-fuchsia-300/80">Rareté Artefact+ : chance d'obtenir un effet unique.</div>}

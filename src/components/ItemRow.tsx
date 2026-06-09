@@ -4,7 +4,7 @@ import { ITEM_TYPES } from '../game/slots'
 import { DAMAGE_TYPES } from '../game/damage'
 import { getUnique } from '../game/uniques'
 import { itemHasRareStat } from '../game/items'
-import { rarityTextStyle, isPrism } from './rarityStyle'
+import { rarityTextStyle, rarityNameClass } from './rarityStyle'
 
 interface Props {
   item: Item
@@ -30,7 +30,7 @@ export function ItemRow({ item, isUpgrade, selected, onClick }: Props) {
       <span className="text-base leading-none">{type.icon}</span>
       <span className="min-w-0 flex-1">
         <span
-          className={'block truncate text-[13px] font-medium leading-tight ' + (isPrism(item.rarity) ? 'prism' : '')}
+          className={'block truncate text-[13px] font-medium leading-tight ' + rarityNameClass(item.rarity)}
           style={rarityTextStyle(item.rarity)}
         >
           {item.name}

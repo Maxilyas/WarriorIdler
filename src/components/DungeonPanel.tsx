@@ -8,8 +8,9 @@ const REWARD_LABEL: Record<DungeonReward, string> = {
   xp: '📚 Expérience',
   eclats: '♦ Éclats d\'arcane',
   noyau: '💠 Noyaux primordiaux',
-  stuff: '🎒 Stuff (haute rareté)',
-  cles: '🔑 Sceaux & 🔮 Orbes',
+  stuff: '🎒 Stuff (rareté croissante)',
+  sceaux: '🔑 Sceaux de faille',
+  orbes: '🔮 Orbes de raid',
   poussiere: '🌌 Poussière d\'étoile',
 }
 
@@ -83,7 +84,8 @@ function DungeonCard({ def, cleared, sceaux, bestStage, busy, onEnter }: {
   const lvl = Math.max(1, Math.min(frontier, level))
   const locked = bestStage < def.unlockStage
   const el = DAMAGE_TYPES[def.element]
-  const canEnter = !busy && sceaux >= 1 && !locked
+  const cost = def.sceauCost
+  const canEnter = !busy && sceaux >= cost && !locked
 
   return (
     <div className="rounded-lg border border-slate-800 bg-[#11151f] p-2.5" style={{ borderColor: def.color + '40' }}>
@@ -99,7 +101,9 @@ function DungeonCard({ def, cleared, sceaux, bestStage, busy, onEnter }: {
       </div>
       <div className="mt-0.5 text-[10px] leading-snug text-slate-400">{def.traitLabel}</div>
       <div className="mt-0.5 text-[10px] text-slate-500">
-        Attaques en <span style={{ color: el.color }}>{el.icon} {el.name}</span> · Niv. {lvl} · {dungeonFights(lvl)} combats · coffre iLvl ~{dungeonIlvl(lvl)}
+        Attaques en <span style={{ color: el.color }}>{el.icon} {el.name}</span> · Niv. {lvl} · {dungeonFights(lvl)} combats
+        {def.reward === 'stuff' ? ` · coffre iLvl ~${dungeonIlvl(lvl)}` : ''}
+        {' · '}{cost === 0 ? <span className="text-emerald-400">gratuit</span> : <span className="text-amber-300">{cost} 🔑</span>}
       </div>
       {locked ? (
         <div className="mt-2 rounded-lg bg-slate-800/60 py-1.5 text-center text-[11px] text-slate-500">
@@ -117,7 +121,7 @@ function DungeonCard({ def, cleared, sceaux, bestStage, busy, onEnter }: {
             onClick={() => onEnter(lvl)}
             className="flex-1 rounded-lg bg-amber-700/80 py-1.5 text-xs font-semibold hover:bg-amber-600 disabled:opacity-40"
           >
-            {busy ? 'Donjon en cours…' : sceaux < 1 ? 'Pas de Sceau' : `Entrer niv. ${lvl} (1 🔑)`}
+            {busy ? 'Donjon en cours…' : sceaux < cost ? `Manque de Sceaux (${cost} 🔑)` : `Entrer niv. ${lvl}${cost === 0 ? ' (gratuit)' : ` (${cost} 🔑)`}`}
           </button>
         </div>
       )}

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, Fragment } from 'react'
 import { useGame } from '../game/store'
 import {
   CONSTELLATIONS, CONSTELLATION_LIST, talentsByConstellation, getTalent, canAllocate, isReachable,
@@ -6,7 +6,51 @@ import {
 } from '../game/talents'
 import { getPower } from '../game/powers'
 import { DAMAGE_TYPES } from '../game/damage'
-import type { DamageType } from '../game/types'
+import { ALL_STAT_META } from '../game/stats'
+import type { DamageType, StatKey } from '../game/types'
+
+interface Branch { head: TalentNode; nodes: TalentNode[] }
+interface Layout { roots: TalentNode[]; branches: Branch[]; gateways: TalentNode[] }
+
+/**
+ * Dispose une constellation en ÉTOILE : un (ou plusieurs) nœud racine = HUB, des AXES qui rayonnent
+ * (colonnes), et les PASSERELLES d'archétype regroupées en bas. Bien plus lisible que des lignes par
+ * tier, et met en avant les directions de build. Les axes sont déduits du graphe de prérequis.
+ */
+function buildLayout(nodes: TalentNode[]): Layout {
+  const byId = new Map(nodes.map((n) => [n.id, n]))
+  const inC = new Set(nodes.map((n) => n.id))
+  const roots = nodes.filter((n) => !n.requires || !n.requires.some((r) => inC.has(r)))
+  const rootIds = new Set(roots.map((n) => n.id))
+  const gateways = nodes.filter((n) => n.kind === 'gateway')
+  const gwIds = new Set(gateways.map((n) => n.id))
+  // Têtes d'axe = enfants directs d'une racine (hors passerelles).
+  const heads = nodes.filter((n) => !rootIds.has(n.id) && !gwIds.has(n.id) && (n.requires ?? []).some((r) => rootIds.has(r)))
+  const headIds = new Set(heads.map((n) => n.id))
+
+  // Remonte le graphe jusqu'à une tête d'axe.
+  const memo = new Map<string, string | null>()
+  const branchOf = (n: TalentNode): string | null => {
+    if (headIds.has(n.id)) return n.id
+    if (memo.has(n.id)) return memo.get(n.id) ?? null
+    memo.set(n.id, null)
+    for (const r of n.requires ?? []) {
+      const parent = byId.get(r)
+      if (parent) { const b = branchOf(parent); if (b) { memo.set(n.id, b); return b } }
+    }
+    return null
+  }
+
+  const branches: Branch[] = heads.map((h) => ({ head: h, nodes: [] }))
+  for (const n of nodes) {
+    if (rootIds.has(n.id) || gwIds.has(n.id) || headIds.has(n.id)) continue
+    const b = branchOf(n)
+    const col = b ? branches.find((c) => c.head.id === b) : undefined
+    if (col) col.nodes.push(n)
+  }
+  for (const c of branches) c.nodes.sort((a, b) => a.tier - b.tier)
+  return { roots, branches, gateways }
+}
 
 /** Types de dégâts mis en avant par un nœud (conversion/éclaboussure de keystone + sort débloqué). */
 function nodeDamageTypes(node: TalentNode): DamageType[] {
@@ -39,7 +83,7 @@ export function TalentTree() {
 
   const meta = CONSTELLATIONS[cid]
   const nodes = talentsByConstellation(cid)
-  const tiers = [...new Set(nodes.map((n) => n.tier))].sort((a, b) => a - b)
+  const layout = buildLayout(nodes)
   const selectedNode = selected ? nodes.find((n) => n.id === selected) ?? null : null
 
   const switchCid = (id: ConstellationId) => { setCid(id); setSelected(null) }
@@ -103,34 +147,49 @@ export function TalentTree() {
         {meta.icon} {meta.name} <span className="text-slate-500">· {meta.role}</span>
       </div>
 
-      {/* Constellation : nœuds par tier (lignes), reliés visuellement */}
+      {/* Constellation en ÉTOILE : hub (racine) → axes (colonnes) → passerelles d'archétype (bas) */}
       <div
-        className="min-h-0 flex-1 overflow-y-auto rounded-xl border border-slate-800 p-2 pr-1"
+        className="min-h-0 flex-1 overflow-auto rounded-xl border border-slate-800 p-2"
         style={{ background: `radial-gradient(ellipse at 50% 0%, ${meta.color}14, transparent 60%)` }}
       >
-        <div className="space-y-1">
-          {tiers.map((tier, ti) => (
-            <div key={tier}>
-              {ti > 0 && (
-                <div
-                  className="mx-auto h-3 w-px"
-                  style={{ background: `linear-gradient(to bottom, transparent, ${meta.color}55, transparent)` }}
-                />
-              )}
-              <div className="flex flex-wrap justify-center gap-1.5">
-                {nodes.filter((n) => n.tier === tier).map((node) => (
-                  <NodeChip
-                    key={node.id}
-                    node={node}
-                    char={char}
-                    selected={selected === node.id}
-                    onSelect={() => setSelected(node.id)}
-                  />
-                ))}
-              </div>
-            </div>
+        {/* Hub */}
+        <div className="flex flex-wrap justify-center gap-1.5">
+          {layout.roots.map((node) => (
+            <NodeChip key={node.id} node={node} char={char} selected={selected === node.id} onSelect={() => setSelected(node.id)} />
           ))}
         </div>
+
+        {/* Axes rayonnants */}
+        {layout.branches.length > 0 && (
+          <>
+            <div className="mx-auto my-1 h-3 w-px" style={{ background: `linear-gradient(to bottom, transparent, ${meta.color}66, transparent)` }} />
+            <div className="flex justify-center gap-2">
+              {layout.branches.map((col) => (
+                <div key={col.head.id} className="flex flex-col items-center gap-1">
+                  <NodeChip node={col.head} char={char} selected={selected === col.head.id} onSelect={() => setSelected(col.head.id)} />
+                  {col.nodes.map((node) => (
+                    <Fragment key={node.id}>
+                      <div className="h-2 w-px" style={{ background: meta.color + '40' }} />
+                      <NodeChip node={node} char={char} selected={selected === node.id} onSelect={() => setSelected(node.id)} />
+                    </Fragment>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* Passerelles d'archétype (axes vers d'autres voies) */}
+        {layout.gateways.length > 0 && (
+          <>
+            <div className="mt-3 text-center text-[9px] font-semibold uppercase tracking-wide text-amber-300/70">⛩ Passerelles d'archétype</div>
+            <div className="mt-1 flex flex-wrap justify-center gap-1.5">
+              {layout.gateways.map((node) => (
+                <NodeChip key={node.id} node={node} char={char} selected={selected === node.id} onSelect={() => setSelected(node.id)} />
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
       {/* Panneau de détail : prévisualiser AVANT de dépenser (confort mobile) */}
@@ -250,6 +309,32 @@ function NodeDetail({
       </div>
 
       <p className="mb-2 text-[11px] leading-snug text-slate-300">{node.description}</p>
+
+      {/* Détail chiffré : stats (cumulé actuel → suivant) + résistances + keystone */}
+      {node.statMods && Object.keys(node.statMods).length > 0 && (
+        <div className="mb-1.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[10px]">
+          {Object.entries(node.statMods).map(([k, v]) => {
+            const m = ALL_STAT_META[k as StatKey]
+            const val = v as number
+            return (
+              <span key={k} style={{ color: m?.color ?? '#cbd5e1' }} title={m?.desc}>
+                +{val} {m?.short ?? k}
+                {node.maxRank > 1 && <span className="text-slate-500"> ({val * rank}→{val * Math.min(node.maxRank, rank + 1)})</span>}
+              </span>
+            )
+          })}
+        </div>
+      )}
+      {node.resistMods && Object.keys(node.resistMods).length > 0 && (
+        <div className="mb-1.5 text-[10px] text-emerald-300/90">
+          🛡 +{Math.round((Object.values(node.resistMods)[0] ?? 0) * 100)}% résistance
+          {Object.keys(node.resistMods).length >= 7 ? ' (tous types)' : ' ' + Object.keys(node.resistMods).map((t) => DAMAGE_TYPES[t as DamageType]?.icon).join('')}
+          {node.maxRank > 1 ? ' / rang' : ''}
+        </div>
+      )}
+      {node.keystone && (
+        <div className="mb-1.5 rounded bg-fuchsia-500/10 px-1.5 py-1 text-[10px] text-fuchsia-200">✦ Effet de build (keystone)</div>
+      )}
 
       {powerName && (
         <p className="mb-1 text-[10px] text-emerald-300">⚡ Débloque : {powerName}</p>

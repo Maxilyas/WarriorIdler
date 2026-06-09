@@ -1,5 +1,40 @@
-import type { Enemy, DamageType } from './types'
+import type { Enemy, DamageType, EnemyAbility } from './types'
 import { DAMAGE_TYPE_LIST } from './damage'
+import type { BiomeId } from './biomes'
+
+/**
+ * Technique SIGNATURE par biome (l'« autre chose » qui s'ajoute aux frappes physiques de base).
+ * Chaque famille mappe sur un contre du kit héros (voir EnemyAbility). magnitude = fraction des
+ * dégâts de base de l'ennemi.
+ */
+const BIOME_SIGNATURE: Record<BiomeId, EnemyAbility> = {
+  physique: { kind: 'dot', element: 'physique', name: 'Saignement', icon: '🩸', cooldown: 5, magnitude: 0.6, duration: 4 },
+  feu: { kind: 'dot', element: 'feu', name: 'Brûlure', icon: '🔥', cooldown: 5, magnitude: 0.8, duration: 4 },
+  froid: { kind: 'cc', element: 'froid', name: 'Gel', icon: '❄️', cooldown: 9, magnitude: 0, duration: 1.2 },
+  foudre: { kind: 'burst', element: 'foudre', name: 'Décharge', icon: '⚡', cooldown: 6, magnitude: 2.0, telegraph: 1.2 },
+  nature: { kind: 'dot', element: 'nature', name: 'Poison', icon: '☠️', cooldown: 4, magnitude: 0.6, duration: 5 },
+  arcane: { kind: 'debuff', element: 'arcane', name: 'Malédiction', icon: '✨', cooldown: 8, magnitude: 0, duration: 5 },
+  ombre: { kind: 'drain', element: 'ombre', name: 'Drain de vie', icon: '🌑', cooldown: 6, magnitude: 1.4 },
+}
+
+/**
+ * Techniques d'un ennemi selon son biome et son rang.
+ * - Physique = biome d'APPRENTISSAGE : seuls élites/boss ont une technique (rien sur les normaux).
+ * - Autres biomes : technique signature élémentaire pour TOUS ; les boss ajoutent un gros burst télégraphié.
+ */
+function biomeAbilities(biome: BiomeId, isBoss: boolean, isElite: boolean): EnemyAbility[] {
+  const out: EnemyAbility[] = []
+  if (biome === 'physique') {
+    if (isBoss || isElite) out.push({ ...BIOME_SIGNATURE.physique })
+    if (isBoss) out.push({ kind: 'burst', element: 'physique', name: 'Charge dévastatrice', icon: '💥', cooldown: 8, magnitude: 2.6, telegraph: 1.5 })
+  } else {
+    out.push({ ...BIOME_SIGNATURE[biome] })
+    if (isBoss) out.push({ kind: 'burst', element: biome, name: 'Cataclysme', icon: '☄️', cooldown: 9, magnitude: 2.8, telegraph: 1.5 })
+  }
+  // Décale les premières incantations (pas de salve à t=0).
+  out.forEach((a, i) => { a.cd = a.cooldown * (0.5 + i * 0.3) })
+  return out
+}
 
 const ENEMY_NAMES = [
   'Gobelin pillard', 'Loup affamé', 'Squelette rouillé', 'Bandit de grand chemin',
@@ -44,8 +79,8 @@ export function stageResistRamp(stage: number): number {
   return Math.min(RESIST_RAMP_CAP, (stage - RESIST_RAMP_FROM) * RESIST_RAMP_PER_STAGE)
 }
 
-/** Crée l'ennemi correspondant à un palier (stage). Boss tous les 10 paliers. */
-export function makeEnemy(stage: number): Enemy {
+/** Crée l'ennemi correspondant à un palier (stage) dans un biome donné. Boss tous les 10 paliers. */
+export function makeEnemy(stage: number, biome: BiomeId = 'physique'): Enemy {
   const isBoss = stage % 10 === 0
   const isElite = !isBoss && stage % ELITE_EVERY === 0 && stage > ELITE_EVERY
   // Trait déterministe sur certains paliers (cycle), hors boss/élite.
@@ -68,21 +103,25 @@ export function makeEnemy(stage: number): Enemy {
   const resist: Partial<Record<DamageType, number>> = {}
   if (ramp > 0) for (const t of DAMAGE_TYPE_LIST) resist[t] = ramp
 
-  // Type d'attaque : cycle déterministe (les résistances héros restent un bonus pur).
-  const damageType: DamageType = DAMAGE_TYPE_LIST[stage % DAMAGE_TYPE_LIST.length]
+  // Auto-attaques TOUJOURS PHYSIQUES (la base). L'élément du biome arrive en plus, via la technique
+  // signature (DoT/burst/CC… typé) → « physique + autre chose ». Donc en biome Feu : frappes physiques
+  // (→ armure / résist physique) + Brûlure de feu (→ résist feu + Purge). Double levier de survie.
+  const damageType: DamageType = 'physique'
 
   return {
     name,
     maxHp,
     hp: maxHp,
     armor: Math.round(stage * 1.5 * armorMult),
-    // Dégâts FRANCHEMENT mordants : sans stuff (EHP/résistances) on plafonne vite → il faut s'équiper.
-    damage: Math.round(3.2 * Math.pow(1.135, stage - 1) * (isBoss ? 1.8 : 1) * dmgMult),
-    // XP plus rare (monter de niveau se mérite).
-    xp: Math.round((isBoss ? 38 : isElite ? 17 : 6) * Math.pow(1.115, stage - 1)),
+    // Dégâts FRANCHEMENT mordants dès les premiers paliers (premier jet — à affiner au pass d'équilibrage) :
+    // sans stuff (EHP/résistances) on plafonne vers le palier ~8-10 → un MUR qui force à s'équiper.
+    damage: Math.round(7 * Math.pow(1.17, stage - 1) * (isBoss ? 1.8 : 1) * dmgMult),
+    // XP rare (monter de niveau se mérite — levelling volontairement lent au début).
+    xp: Math.round((isBoss ? 38 : isElite ? 17 : 4) * Math.pow(1.115, stage - 1)),
     resist,
     damageType,
     ...(trait ? { trait: trait.name } : isElite ? { trait: 'Élite' } : {}),
+    ...(() => { const a = biomeAbilities(biome, isBoss, isElite); return a.length ? { abilities: a } : {} })(),
     ...(isElite ? { elite: true, dodge: 0.1 } : {}),
     // Boss : reçoivent les « Dégâts vs Boss », esquivent (→ Précision) et étourdissent (→ Ténacité).
     ...(isBoss ? { boss: true, dodge: 0.15, ccDur: 1.5, ccCd: 7 } : {}),

@@ -18,8 +18,8 @@ import { DAMAGE_TYPES } from './damage'
  * → réussir les raids (pièces hors-norme).
  */
 
-export type DungeonId = 'or' | 'savoir' | 'eclats' | 'noyau' | 'butin' | 'failles' | 'poussiere'
-export type DungeonReward = 'gold' | 'xp' | 'eclats' | 'noyau' | 'stuff' | 'cles' | 'poussiere'
+export type DungeonId = 'or' | 'savoir' | 'eclats' | 'noyau' | 'butin' | 'sceaux' | 'orbes' | 'poussiere'
+export type DungeonReward = 'gold' | 'xp' | 'eclats' | 'noyau' | 'stuff' | 'sceaux' | 'orbes' | 'poussiere'
 export type DungeonTrait = 'rapide' | 'pack' | 'colosse' | 'armure' | 'elite' | 'regen'
 
 export interface DungeonDef {
@@ -36,56 +36,85 @@ export interface DungeonDef {
   element: DamageType
   /** Palier de farm requis pour débloquer. */
   unlockStage: number
+  /** Coût d'entrée en Sceaux de faille (0 = gratuit). Le donjon de Sceaux est gratuit ; celui d'Orbes coûte cher. */
+  sceauCost: number
 }
 
 export const DUNGEONS: Record<DungeonId, DungeonDef> = {
+  sceaux: {
+    id: 'sceaux', name: 'Antre des Failles', icon: '🔑', color: '#4dd0e1', reward: 'sceaux',
+    lore: 'Un nœud de failles instables où grouillent des entités qui se reforment sans fin. On y récolte les Sceaux qui ouvrent tous les autres donjons.',
+    trait: 'regen', traitLabel: 'Ennemis qui se régénèrent : sans burst, tu ne les tueras jamais.',
+    element: 'froid', unlockStage: 5, sceauCost: 0,
+  },
   or: {
     id: 'or', name: 'Chambre du Trésor', icon: '💰', color: '#ffd43b', reward: 'gold',
     lore: 'Des gardiens d\'or massif veillent sur des montagnes de pièces. Ils frappent sans pitié quiconque convoite le trésor.',
     trait: 'rapide', traitLabel: 'Gardiens avides : frappent vite et fort → il faut de la survie (EHP, résistances).',
-    element: 'physique', unlockStage: 5,
+    element: 'physique', unlockStage: 7, sceauCost: 1,
   },
   savoir: {
     id: 'savoir', name: 'Sanctuaire du Savoir', icon: '⚗️', color: '#51cf66', reward: 'xp',
     lore: 'Une bibliothèque infinie hantée d\'esprits studieux. Les terrasser nourrit ton expérience.',
     trait: 'pack', traitLabel: 'Nuées d\'esprits : beaucoup de cibles → idéal au cleave / capacités de zone.',
-    element: 'nature', unlockStage: 8,
+    element: 'nature', unlockStage: 10, sceauCost: 1,
   },
   eclats: {
     id: 'eclats', name: 'Faille Arcanique', icon: '♦', color: '#22d3ee', reward: 'eclats',
     lore: 'Une déchirure dans la réalité d\'où jaillissent des éclats d\'arcane vivants qui se scindent sans cesse.',
     trait: 'pack', traitLabel: 'Cristaux qui se multiplient : nuées denses → privilégie le cleave.',
-    element: 'arcane', unlockStage: 12,
+    element: 'arcane', unlockStage: 13, sceauCost: 1,
   },
   noyau: {
     id: 'noyau', name: 'Forge du Noyau', icon: '💠', color: '#f783ac', reward: 'noyau',
-    lore: 'Au cœur d\'un volcan, des golems de fonte gardent les noyaux primordiaux. Leur carapace défie l\'acier.',
+    lore: 'Au cœur d\'un volcan, des golems de fonte gardent les Noyaux primordiaux — désormais l\'UNIQUE source de ce matériau de craft.',
     trait: 'armure', traitLabel: 'Golems blindés : sans Pénétration, ton DPS s\'effondre.',
-    element: 'feu', unlockStage: 18,
+    element: 'feu', unlockStage: 18, sceauCost: 1,
   },
   butin: {
     id: 'butin', name: 'Cache du Pilleur', icon: '🎒', color: '#a78bfa', reward: 'stuff',
-    lore: 'Le repaire d\'un seigneur-voleur, gardé par ses lieutenants d\'élite. Le butin y est exceptionnel.',
+    lore: 'Le repaire d\'un seigneur-voleur, gardé par ses lieutenants d\'élite. Le butin y est exceptionnel et monte en rareté avec le niveau.',
     trait: 'elite', traitLabel: 'Lieutenants d\'élite coriaces → DPS soutenu et Dégâts vs Boss.',
-    element: 'ombre', unlockStage: 24,
+    element: 'ombre', unlockStage: 24, sceauCost: 1,
   },
-  failles: {
-    id: 'failles', name: 'Antre des Failles', icon: '🔑', color: '#4dd0e1', reward: 'cles',
-    lore: 'Un nœud de failles instables où grouillent des entités qui se reforment sans fin. On y récolte Sceaux et Orbes.',
-    trait: 'regen', traitLabel: 'Ennemis qui se régénèrent : sans burst, tu ne les tueras jamais.',
-    element: 'froid', unlockStage: 30,
+  orbes: {
+    id: 'orbes', name: 'Vortex des Orbes', icon: '🔮', color: '#e599f7', reward: 'orbes',
+    lore: 'Un maelström où se condensent les Orbes de raid. Y pénétrer exige de sacrifier une poignée de Sceaux.',
+    trait: 'pack', traitLabel: 'Nuées denses → privilégie le cleave.',
+    element: 'arcane', unlockStage: 30, sceauCost: 10,
   },
   poussiere: {
     id: 'poussiere', name: 'Observatoire Stellaire', icon: '🌌', color: '#748ffc', reward: 'poussiere',
     lore: 'Au sommet du monde, un colosse stellaire unique condense la Poussière d\'étoile. Un mur de PV à lui seul.',
     trait: 'colosse', traitLabel: 'Un colosse unique : DPS mono-cible massif (et Dégâts vs Boss).',
-    element: 'foudre', unlockStage: 45,
+    element: 'foudre', unlockStage: 45, sceauCost: 1,
   },
 }
 
 export const DUNGEON_LIST: DungeonDef[] = [
-  DUNGEONS.or, DUNGEONS.savoir, DUNGEONS.eclats, DUNGEONS.noyau, DUNGEONS.butin, DUNGEONS.failles, DUNGEONS.poussiere,
+  DUNGEONS.sceaux, DUNGEONS.or, DUNGEONS.savoir, DUNGEONS.eclats, DUNGEONS.noyau, DUNGEONS.butin, DUNGEONS.orbes, DUNGEONS.poussiere,
 ]
+
+/**
+ * Rampe de rareté FINE du donjon Butin (Cache du Pilleur). Niv 1 = {Médiocre, Commun, Inhabituel} ;
+ * la fenêtre s'élargit et se décale vers le haut avec le niveau (via rollBoxRarity).
+ */
+export function butinMinTier(level: number): number {
+  return Math.max(1, Math.min(14, 1 + Math.floor((level - 1) / 2)))
+}
+export function butinMaxTier(level: number): number {
+  return Math.max(3, Math.min(16, 2 + level))
+}
+
+/**
+ * Repère de RENDEMENT (par run terminé) pour calibrer l'équilibrage — chaque donjon doit rester
+ * la voie LA PLUS RENTABLE pour SA ressource. Un run niv N = (4+N) combats. (Premier jet à affiner.)
+ *   or       ≈ 450·N·(1+0.15N)              noyau   ≈ 12·N·(1+0.10N)
+ *   eclats   ≈ 300·N·(1+0.13N)              sceaux  ≈ 3 + 0.9N
+ *   xp       ≈ 180·N·1.1^N (équipe)         orbes   ≈ 1 + 0.5N (entrée : 10 Sceaux)
+ *   poussiere≈ (1+⌊N/3⌋) garanti + 0..2 bonus (proba croissante)
+ *   butin    ≈ (3+⌊N/2⌋) objets, rareté de butinMinTier(N)→butinMaxTier(N)
+ */
 
 export function getDungeonDef(id: DungeonId): DungeonDef {
   return DUNGEONS[id]

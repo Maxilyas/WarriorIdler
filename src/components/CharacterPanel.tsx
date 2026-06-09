@@ -2,10 +2,26 @@ import { useState } from 'react'
 import { useGame, xpForLevel } from '../game/store'
 import { describeStats, PRIMARY_META } from '../game/stats'
 import type { StatEffect } from '../game/stats'
-import type { PrimaryStat, DamageType, Character } from '../game/types'
+import type { PrimaryStat, DamageType, Character, PowerDef, PowerEffect } from '../game/types'
+import type { DerivedStats } from '../game/stats'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from '../game/damage'
-import { charTotalStats, charDerived, charMaxHp, charDamageProfile, charResist } from '../game/character'
+import { charTotalStats, charDerived, charMaxHp, charDamageProfile, charResist, abilityPower } from '../game/character'
 import { getPower } from '../game/powers'
+
+const EFFECT_LABEL: Record<PowerEffect, string> = {
+  nuke: 'Frappe directe', cleave: 'Zone (tout le pack)', dot: 'Dégâts sur la durée',
+  heal: 'Soin', hot: 'Soin sur la durée', shield: 'Bouclier', buffParty: 'Soin de groupe',
+}
+const DMG_EFFECTS: ReadonlySet<string> = new Set(['nuke', 'cleave', 'dot'])
+
+/** Détail chiffré d'une capacité active : type, cooldown réel, valeur théorique (1 chiffre). */
+function powerDetail(p: PowerDef, derived: DerivedStats) {
+  const value = Math.round((p.magnitude ?? 0) * abilityPower(derived, p.scaleStat))
+  const cd = (p.cooldown ?? 0) * (1 - derived.cdr)
+  const isDmg = DMG_EFFECTS.has(p.effect ?? '')
+  const type: DamageType | undefined = p.damageType ?? (isDmg ? 'physique' : undefined)
+  return { value, cd, type, dmg: isDmg }
+}
 
 const SPEC_INFO: Record<PrimaryStat, string> = {
   force: 'Guerrier de mêlée : la Force devient votre stat de combat.',
@@ -193,28 +209,50 @@ export function CharacterPanel() {
 
 function PowersSection({ char }: { char: Character }) {
   const setPower = useGame((s) => s.setPower)
+  const togglePowerAuto = useGame((s) => s.togglePowerAuto)
+  const derived = charDerived(char)
   const equipped = new Set(char.powers.filter(Boolean) as string[])
   const available = char.unlockedPowers.filter((id) => !equipped.has(id))
 
   return (
     <div className="rounded-xl border border-violet-800/40 bg-violet-950/10 p-4">
-      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-violet-300">Capacités (5 slots)</div>
-      <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-violet-300">Capacités (5 slots) · auto / manuel</div>
+      <div className="grid grid-cols-1 gap-1.5">
         {char.powers.map((pid, slot) => {
           const p = pid ? getPower(pid) : null
+          if (!p) {
+            return <div key={slot} className="rounded-lg border border-slate-800 bg-black/20 px-2 py-1.5 text-[11px] italic text-slate-600">— emplacement {slot + 1} libre —</div>
+          }
+          const active = p.kind === 'active'
+          const auto = char.powerAuto?.[slot] !== false
+          const det = active ? powerDetail(p, derived) : null
           return (
-            <div key={slot} className="flex items-center gap-2 rounded-lg border border-slate-700 bg-black/20 px-2 py-1.5">
-              {p ? (
-                <>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[12px] font-medium text-slate-100">{p.name}</span>
-                    <span className="text-[9px] uppercase tracking-wide text-slate-500">{p.kind === 'active' ? '⚡ Active' : '🛡 Passive'}</span>
-                  </span>
-                  <button onClick={() => setPower(slot, null)} className="rounded px-1 text-[11px] text-slate-500 hover:text-red-400" title="Retirer">✕</button>
-                </>
-              ) : (
-                <span className="text-[11px] italic text-slate-600">— emplacement libre —</span>
+            <div key={slot} className="rounded-lg border border-slate-700 bg-black/20 px-2 py-1.5">
+              <div className="flex items-center gap-2">
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[12px] font-medium text-slate-100">{p.name}</span>
+                  <span className="text-[9px] uppercase tracking-wide text-slate-500">{active ? '⚡ Active' : '🛡 Passive'}</span>
+                </span>
+                {active && (
+                  <button
+                    onClick={() => togglePowerAuto(slot)}
+                    title="Basculer entre lancement automatique et manuel (bouton en combat)"
+                    className={'rounded px-1.5 py-0.5 text-[10px] font-semibold ' + (auto ? 'bg-cyan-600/30 text-cyan-200' : 'bg-amber-600/30 text-amber-200')}
+                  >
+                    {auto ? 'AUTO' : 'MANUEL'}
+                  </button>
+                )}
+                <button onClick={() => setPower(slot, null)} className="rounded px-1 text-[11px] text-slate-500 hover:text-red-400" title="Retirer">✕</button>
+              </div>
+              {det && (
+                <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-slate-400">
+                  {det.type && <span style={{ color: DAMAGE_TYPES[det.type].color }}>{DAMAGE_TYPES[det.type].icon} {DAMAGE_TYPES[det.type].name}</span>}
+                  <span>{EFFECT_LABEL[p.effect ?? 'nuke']}</span>
+                  <span>CD {det.cd.toFixed(1)}s</span>
+                  <span className="text-slate-200">≈ {det.value.toLocaleString('fr-FR')} {det.dmg ? 'dég.' : 'PV'}</span>
+                </div>
               )}
+              <p className="mt-0.5 text-[10px] leading-snug text-slate-500">{p.description}</p>
             </div>
           )
         })}

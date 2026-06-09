@@ -23,6 +23,7 @@ export type SecondaryStat =
   | 'esquive' // chance d'éviter complètement un coup
   | 'barriere' // bouclier de départ : PV effectifs en plus (anti-burst)
   | 'tenacite' // réduit la durée des étourdissements/contrôles ennemis
+  | 'purge' // réduit durée ET intensité des altérations subies (DoT/debuffs ennemis)
   // --- Soutien ---
   | 'regen' // régénération des PV
   // --- RARES (apparition très faible, effets puissants) ---
@@ -239,6 +240,8 @@ export interface Character {
   equipment: Equipment
   /** 5 emplacements de capacité (id ou null). */
   powers: (string | null)[]
+  /** Mode de lancement par emplacement : true/absent = AUTO, false = MANUEL (bouton). */
+  powerAuto?: boolean[]
   /** Capacités débloquées (par niveau + par talents). */
   unlockedPowers: string[]
   /** Points de talent non dépensés. */
@@ -250,6 +253,41 @@ export interface Character {
   hp: number
   /** Étourdissement restant (s) — transitoire, posé par les contrôles ennemis ; n'attaque pas tant que > 0. */
   stun?: number
+  /** Altérations subies (DoT ennemis) — transitoire, dps déjà atténué (résist + Purge). */
+  dots?: { dps: number; type: DamageType; remaining: number }[]
+  /** Affaiblissement (malédiction) — transitoire : multiplie les dégâts du héros tant que remaining > 0. */
+  weaken?: { mult: number; remaining: number }
+}
+
+// ---- Sorts ennemis (techniques télégraphiées, miroir du kit héros) ----
+
+/**
+ * Famille d'effet d'une technique ennemie. Chacune mappe sur un CONTRE du kit héros :
+ * - 'dot'    altération sur la durée  → contrée par RÉSISTANCE du type + PURGE (+ régén/EHP)
+ * - 'burst'  gros coup télégraphié    → contré par BARRIÈRE (EHP) / ESQUIVE / RÉDUCTION + résist
+ * - 'cc'     contrôle (gel/étourdi)   → contré par TÉNACITÉ
+ * - 'debuff' malédiction (−dégâts)    → contrée par PURGE
+ * - 'drain'  vol de vie ennemi        → contré par BURST (le tuer vite) + résist
+ */
+export type EnemyAbilityKind = 'dot' | 'burst' | 'cc' | 'debuff' | 'drain'
+
+export interface EnemyAbility {
+  kind: EnemyAbilityKind
+  element: DamageType
+  name: string
+  icon: string
+  /** Délai (s) entre deux déclenchements. */
+  cooldown: number
+  /** Puissance, en fraction des dégâts de base de l'ennemi (dps pour les DoT, coup pour les burst). */
+  magnitude: number
+  /** Préavis (s) : barre de télégraphe avant impact (gros coups). */
+  telegraph?: number
+  /** Durée (s) des DoT / CC / debuffs. */
+  duration?: number
+  /** Recharge restante (transitoire, runtime). */
+  cd?: number
+  /** Temps de télégraphe restant (transitoire) : > 0 = en cours d'incantation. */
+  cast?: number
 }
 
 // ---- Combat / ennemis ----
@@ -283,4 +321,6 @@ export interface Enemy {
   ccDur?: number
   /** Minuteur de recharge du contrôle (transitoire, décrémenté au tick). */
   ccCd?: number
+  /** Techniques signature (DoT/burst/CC/debuff/drain) selon le biome. Résolues au tick. */
+  abilities?: EnemyAbility[]
 }

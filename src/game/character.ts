@@ -44,6 +44,7 @@ export function makeCharacter(name: string, level: number, bias: PrimaryStat): C
     base,
     equipment: {},
     powers,
+    powerAuto: Array(POWER_SLOTS).fill(true),
     unlockedPowers: unlocked,
     talentPoints: talentPointsForLevel(level),
     talents,

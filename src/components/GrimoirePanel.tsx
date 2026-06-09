@@ -67,7 +67,7 @@ export function GrimoirePanel() {
 
 const SECONDARY_GROUPS: { title: string; color: string; keys: SecondaryStat[] }[] = [
   { title: 'Offensif', color: '#ff8787', keys: ['critique', 'degatsCrit', 'hate', 'maitrise', 'penetration', 'precision', 'alteration', 'degatsBoss'] },
-  { title: 'Défensif', color: '#74c0fc', keys: ['reductionDegats', 'esquive', 'barriere', 'tenacite'] },
+  { title: 'Défensif', color: '#74c0fc', keys: ['reductionDegats', 'esquive', 'barriere', 'tenacite', 'purge'] },
   { title: 'Soutien', color: '#94d82d', keys: ['regen'] },
   { title: 'RARES (très puissantes)', color: '#ffd43b', keys: ['volDeVie', 'surpuissance', 'multifrappe', 'recuperation'] },
 ]

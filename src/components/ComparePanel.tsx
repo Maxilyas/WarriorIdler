@@ -15,7 +15,7 @@ import {
 } from '../game/uniques'
 import type { UniqueRole } from '../game/types'
 import { useGame, FRAGMENT_INFUSE_COST, CHOOSE_UNIQUE_COST } from '../game/store'
-import { rarityTextStyle, rarityCardStyle, isPrism } from './rarityStyle'
+import { rarityTextStyle, rarityCardStyle, rarityNameClass } from './rarityStyle'
 
 /** Libellé/couleur d'affichage d'une ligne d'objet (stat / dégâts / résistance). */
 function affixLabel(a: Affix): { name: string; color: string; pct: boolean } {
@@ -60,7 +60,7 @@ export function ComparePanel({ item, equipped, occupied, onEquip, onSell, onRecy
           <div className="flex items-center gap-1.5">
             <span>{type.icon}</span>
             <span
-              className={'truncate text-sm font-bold ' + (isPrism(item.rarity) ? 'prism' : '')}
+              className={'truncate text-sm font-bold ' + rarityNameClass(item.rarity)}
               style={rarityTextStyle(item.rarity)}
             >
               {item.name}
@@ -82,8 +82,14 @@ export function ComparePanel({ item, equipped, occupied, onEquip, onSell, onRecy
         )}
       </div>
 
-      {/* Objet actuellement équipé (identité complète : rareté, unique, type) pour comparer en un coup d'œil. */}
-      {cmp && <EquippedSummary item={cmp} />}
+      {/* Objet(s) équipé(s) : pour les anneaux/bijoux (2 slots) on montre LES DEUX, avec leur emplacement. */}
+      {!isEquipped && (() => {
+        const occHere = slots
+          .map((s) => ({ slot: s, it: occupied[s.id] }))
+          .filter((x): x is { slot: (typeof slots)[number]; it: Item } => !!x.it)
+        if (occHere.length === 0) return null
+        return <>{occHere.map(({ slot, it }) => <EquippedSummary key={slot.id} item={it} slotName={slots.length > 1 ? slot.name : undefined} />)}</>
+      })()}
 
       {/* Tableau de comparaison */}
       <div className="mt-2 overflow-hidden rounded-lg bg-black/30 text-[12px]">
@@ -164,6 +170,7 @@ export function ComparePanel({ item, equipped, occupied, onEquip, onSell, onRecy
           <>
             {slots.map((slot) => {
               const inPlace = occupied[slot.id]
+              const d = itemScore(item) - (inPlace ? itemScore(inPlace) : 0)
               return (
                 <button
                   key={slot.id}
@@ -172,7 +179,10 @@ export function ComparePanel({ item, equipped, occupied, onEquip, onSell, onRecy
                 >
                   <span>Équiper · {slot.name}</span>
                   {inPlace ? (
-                    <span className="text-[10px] font-normal text-emerald-200/80">remplace {RARITIES[inPlace.rarity].name}</span>
+                    <span className="text-[10px] font-normal text-emerald-200/80">
+                      remplace {RARITIES[inPlace.rarity].name}{' '}
+                      <span className={d >= 0 ? 'text-emerald-300' : 'text-red-300'}>{d >= 0 ? '▲+' : '▼'}{Math.abs(d).toLocaleString('fr-FR')}</span>
+                    </span>
                   ) : (
                     <span className="text-[10px] font-normal text-emerald-200/80">vide</span>
                   )}
@@ -202,6 +212,7 @@ function CraftSection({ item }: { item: Item }) {
   const noyau = useGame((s) => s.noyau)
   const fragments = useGame((s) => s.fragments)
   const poussiere = useGame((s) => s.poussiere)
+  const cosmic = useGame((s) => s.cosmic)
   const reforge = useGame((s) => s.reforge)
   const surillvl = useGame((s) => s.surillvl)
   const ascend = useGame((s) => s.ascend)
@@ -290,12 +301,12 @@ function CraftSection({ item }: { item: Item }) {
 
           {nr ? (
             <button
-              disabled={essence < aCost.eclats || noyau < aCost.noyau || fragments < (aCost.fragments ?? 0) || poussiere < (aCost.poussiere ?? 0)}
+              disabled={essence < aCost.eclats || noyau < aCost.noyau || fragments < (aCost.fragments ?? 0) || poussiere < (aCost.poussiere ?? 0) || cosmic < (aCost.cosmic ?? 0)}
               onClick={() => { ascend(item.id); reset() }}
               className="w-full rounded bg-fuchsia-900/50 py-1.5 text-[11px] font-medium hover:bg-fuchsia-800/60 disabled:opacity-40"
             >
               Ascension → {RARITIES[nr].name} · 💠 {aCost.noyau} + ♦ {aCost.eclats}
-              {aCost.poussiere ? ` + 🌌 ${aCost.poussiere}` : ''}{aCost.fragments ? ` + ✨ ${aCost.fragments}` : ''}
+              {aCost.poussiere ? ` + 🌌 ${aCost.poussiere}` : ''}{aCost.fragments ? ` + ✨ ${aCost.fragments}` : ''}{aCost.cosmic ? ` + 💫 ${aCost.cosmic}` : ''}
             </button>
           ) : (
             <div className="text-center text-[10px] italic text-slate-600">Rareté maximale atteinte.</div>
@@ -457,16 +468,16 @@ function UniqueBlock({ item }: { item: Item }) {
 }
 
 /** Résumé de l'objet ÉQUIPÉ (rareté, unique, type) affiché au-dessus de la comparaison. */
-function EquippedSummary({ item }: { item: Item }) {
+function EquippedSummary({ item, slotName }: { item: Item; slotName?: string }) {
   const rarity = RARITIES[item.rarity]
   const uniqueName = item.unique ? getUnique(item.unique.id)?.name : null
   const typeLines = item.affixes.filter((a) => a.kind !== 'stat')
   return (
     <div className="mt-2 rounded-lg border border-slate-700/60 bg-black/20 p-2">
-      <div className="text-[9px] uppercase tracking-wide text-slate-500">Équipé actuellement</div>
+      <div className="text-[9px] uppercase tracking-wide text-slate-500">{slotName ? `Équipé · ${slotName}` : 'Équipé actuellement'}</div>
       <div className="mt-0.5 flex items-center gap-1.5">
         <span>{ITEM_TYPES[item.type].icon}</span>
-        <span className={'min-w-0 flex-1 truncate text-[12px] font-semibold ' + (isPrism(item.rarity) ? 'prism' : '')} style={rarityTextStyle(item.rarity)}>
+        <span className={'min-w-0 flex-1 truncate text-[12px] font-semibold ' + rarityNameClass(item.rarity)} style={rarityTextStyle(item.rarity)}>
           {item.name}
         </span>
         {itemHasRareStat(item) && <span className="text-[10px]" title="Stat RARE">💎</span>}

@@ -125,10 +125,10 @@ export function raidUnlocked(def: RaidDef, bestStage: number, progress: Record<R
 const RAID_HP_PREMIUM = 2.5       // PV bruts vs un ennemi de farm de palier équivalent
 const RAID_DMG_PREMIUM = 1.95     // dégâts bruts vs farm équivalent
 const FINAL_BOSS_MULT = 2.2       // le dernier boss du raid est un mur (adouci)
-// Pas (en paliers de farm) entre deux tiers — désormais PROGRESSIF : les premiers tiers
-// montent doucement (plus de mur au tier 2), l'écart s'élargit ensuite.
-const TIER_STAGE_BASE = 11        // pas du tier 2
-const TIER_STAGE_GROWTH = 2.4     // +X paliers de pas par tier supplémentaire
+// Pas (en paliers de farm) entre deux tiers — PROGRESSIF et ADOUCI (v0.18) : les premiers tiers
+// montent doucement (pas de mur au tier 2), l'écart s'élargit ensuite. → vrai sentiment de montée linéaire.
+const TIER_STAGE_BASE = 8         // pas du tier 2
+const TIER_STAGE_GROWTH = 2.0     // +X paliers de pas par tier supplémentaire
 const BOSS_STAGE_STEP = 6         // chaque boss suivant est plus dur (modéré : un raid à 4 boss
                                   // n'écrase plus un raid à 3 boss au même palier d'accès)
 
@@ -194,12 +194,12 @@ export function raidBerserkTime(def: RaidDef, tier: number): number {
 }
 
 /**
- * iLvl du butin (les raids sont la meilleure source de stuff du jeu).
- * Calé sur le palier d'accès (`stageIlvl(unlockStage)`) avec une prime de raid (~×1.7 au Tier 1),
- * un léger bonus pour les raids difficiles, et +~30 iLvl par tier supplémentaire.
+ * iLvl du butin (les raids restent la meilleure source de stuff du jeu).
+ * Recalé v0.18 : le Tier 1 est juste UN CRAN au-dessus du farm du palier d'accès (≈ ×1.1), pas un
+ * saut à +130. La progression est ensuite LINÉAIRE (+~18 iLvl par tier), avec un léger bonus de difficulté.
  */
 export function raidIlvl(def: RaidDef, tier: number): number {
-  return Math.round(stageIlvl(def.unlockStage) * 1.5 + def.baseDifficulty * 16 + (tier - 1) * 30)
+  return Math.round(stageIlvl(def.unlockStage) * 1.1 + def.baseDifficulty * 6 + (tier - 1) * 18)
 }
 
 /**

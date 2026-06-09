@@ -49,7 +49,7 @@ type LineSpec =
 const STAT_WEIGHTS: Record<SecondaryStat, number> = {
   critique: 10, degatsCrit: 9, hate: 10, maitrise: 9, penetration: 7,
   precision: 7, alteration: 6, degatsBoss: 6,
-  reductionDegats: 8, esquive: 7, barriere: 7, tenacite: 5,
+  reductionDegats: 8, esquive: 7, barriere: 7, tenacite: 5, purge: 7,
   regen: 6,
   volDeVie: 0.6, surpuissance: 0.3, multifrappe: 0.3, recuperation: 0.3,
 }
@@ -144,6 +144,16 @@ export function generateItem(opts: GenerateOptions): Item {
   const type = opts.type ?? pick(ITEM_TYPE_LIST)
   const typeMeta = ITEM_TYPES[type]
   let rarityId = opts.rarity ?? rollRarity(opts.luckTier ?? 0)
+  // Plancher d'iLvl par rareté (drops ALÉATOIRES uniquement) : une haute rareté ne peut pas
+  // tomber sur un objet de bas iLvl → fini le « ilvl 30 abyssal qui remplace un ilvl 140 ».
+  // Les coffres/raids/craft (rareté forcée) ne sont pas concernés (leur iLvl est déjà calé).
+  if (!opts.rarity) {
+    const capTier = maxRarityTierForIlvl(opts.ilvl)
+    if (RARITIES[rarityId].tier > capTier) {
+      const capped = RARITY_LIST.find((r) => r.tier === capTier)
+      if (capped) rarityId = capped.id
+    }
+  }
   // Rareté plancher garantie (coffres) : remonte si la rareté tirée est trop basse.
   if (opts.minTier && RARITIES[rarityId].tier < opts.minTier) {
     const floor = RARITY_LIST.find((r) => r.tier === Math.min(16, opts.minTier!))
@@ -283,17 +293,62 @@ export function surillvlCost(item: Item): number {
   return Math.round(item.ilvl * 3.5 * RARITIES[item.rarity].tier)
 }
 
-export interface CraftCost { eclats: number; noyau: number; fragments?: number; poussiere?: number }
+export interface CraftCost { eclats: number; noyau: number; fragments?: number; poussiere?: number; cosmic?: number }
 
-/** Coût d'une ascension de rareté (Noyau + éclats + matériaux rares aux hauts crans). */
-export function ascendCost(item: Item): CraftCost {
-  const t = RARITIES[item.rarity].tier
-  const nt = t + 1
+/**
+ * Plancher d'iLvl par rareté : tier de rareté MAX qu'un drop aléatoire de cet iLvl peut atteindre.
+ * Empêche une haute rareté d'apparaître sur un objet de bas iLvl (anti « ilvl 30 transcendant »).
+ * Les coffres/raids/craft à rareté forcée ne passent pas par ici.
+ */
+export function maxRarityTierForIlvl(ilvl: number): number {
+  return Math.max(1, Math.min(16, 6 + Math.floor(ilvl / 16)))
+}
+
+/**
+ * Coûts de MATÉRIAUX RARES de craft par tier de rareté (refonte v0.18). Indexés par tier.
+ * - Noyaux 💠 dès Rare (t4) · Poussière 🌌 dès Légendaire (t6) · Fragments ✨ dès Mythique (t9)
+ *   · Éclat cosmique 💫 dès Cosmique (t13). Les quantités montent FORT (les raids en crachent beaucoup).
+ */
+const CRAFT_NOYAU: Record<number, number> = { 4: 10, 5: 50, 6: 200, 7: 600, 8: 1500, 9: 3500, 10: 7000, 11: 13000, 12: 24000, 13: 42000, 14: 70000, 15: 115000, 16: 180000 }
+const CRAFT_POUSSIERE: Record<number, number> = { 6: 10, 7: 30, 8: 80, 9: 200, 10: 450, 11: 900, 12: 1700, 13: 3000, 14: 5000, 15: 8000, 16: 13000 }
+const CRAFT_FRAGMENTS: Record<number, number> = { 9: 5, 10: 15, 11: 40, 12: 90, 13: 180, 14: 320, 15: 550, 16: 900 }
+const CRAFT_COSMIC: Record<number, number> = { 13: 5, 14: 20, 15: 50, 16: 120 }
+
+/** Multiplicateur d'iLvl appliqué aux matériaux (forger un iLvl élevé coûte plus — doux, ~×1 à 60, ~×3 à 540). */
+function craftIlvlMult(ilvl: number): number {
+  return 1 + Math.max(0, ilvl - 60) / 240
+}
+
+/**
+ * Coût en ÉCLATS d'arcane d'un craft. Les éclats sont la ressource ABONDANTE (recyclage de masse
+ * + achat en or) → c'est un GROS puits qui croît fort avec la rareté et l'iLvl, bien au-dessus
+ * du nombre de noyaux/poussière (matériaux rares farmés en donjon).
+ */
+function craftEclats(tier: number, ilvl: number): number {
+  return Math.round(300 * Math.pow(tier, 2.2) + ilvl * tier * 12)
+}
+
+/** Assemble un coût en matériaux pour un tier cible donné, avec un facteur global (ascension < création). */
+function materialCost(tier: number, ilvl: number, factor: number): Omit<CraftCost, 'eclats'> {
+  const m = craftIlvlMult(ilvl)
+  const noyau = Math.round((CRAFT_NOYAU[tier] ?? 0) * factor * m)
+  const poussiere = Math.round((CRAFT_POUSSIERE[tier] ?? 0) * factor * m)
+  const fragments = Math.round((CRAFT_FRAGMENTS[tier] ?? 0) * factor * m)
+  const cosmic = Math.round((CRAFT_COSMIC[tier] ?? 0) * factor * m)
   return {
-    noyau: Math.max(1, Math.ceil(t / 2)),
-    eclats: Math.round(item.ilvl * 6 * t),
-    ...(nt >= 12 ? { poussiere: nt - 11 } : {}),
-    ...(nt >= 14 ? { fragments: nt - 13 } : {}),
+    noyau,
+    ...(poussiere > 0 ? { poussiere } : {}),
+    ...(fragments > 0 ? { fragments } : {}),
+    ...(cosmic > 0 ? { cosmic } : {}),
+  }
+}
+
+/** Coût d'une ascension de rareté → calé sur le tier CIBLE, à un facteur réduit (l'objet de base existe déjà). */
+export function ascendCost(item: Item): CraftCost {
+  const nt = RARITIES[item.rarity].tier + 1
+  return {
+    eclats: Math.round(craftEclats(nt, item.ilvl) * 0.7),
+    ...materialCost(nt, item.ilvl, 0.55),
   }
 }
 
@@ -304,13 +359,11 @@ export function maxCraftTier(bestStage: number): number {
   return Math.min(16, 8 + Math.floor(bestStage / 8))
 }
 
-/** Coût de création d'un objet d'une rareté/ilvl donnés (matériaux rares aux hauts crans). */
+/** Coût de création d'un objet d'une rareté/ilvl donnés (éclats scalent rareté+iLvl ; matériaux par table). */
 export function createCost(rarityTier: number, ilvl: number): CraftCost {
   return {
-    eclats: Math.round(40 * Math.pow(rarityTier, 1.9) + ilvl * rarityTier * 2.5),
-    noyau: rarityTier >= 9 ? rarityTier - 8 : 0,
-    ...(rarityTier >= 11 ? { poussiere: rarityTier - 10 } : {}),
-    ...(rarityTier >= 13 ? { fragments: rarityTier - 12 } : {}),
+    eclats: craftEclats(rarityTier, ilvl),
+    ...materialCost(rarityTier, ilvl, 1),
   }
 }
 

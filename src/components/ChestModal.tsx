@@ -4,7 +4,7 @@ import { useGame } from '../game/store'
 import { RARITIES } from '../game/rarities'
 import { ITEM_TYPES } from '../game/slots'
 import { getUnique } from '../game/uniques'
-import { rarityTextStyle, isPrism } from './rarityStyle'
+import { rarityTextStyle, rarityNameClass } from './rarityStyle'
 
 export function ChestModal() {
   const chest = useGame((s) => s.pendingChest)
@@ -45,7 +45,7 @@ export function ChestModal() {
                     <span>{t.icon}</span>
                     <span className="min-w-0 flex-1">
                       <span
-                        className={'block truncate text-[13px] font-medium ' + (isPrism(item.rarity) ? 'prism' : '')}
+                        className={'block truncate text-[13px] font-medium ' + rarityNameClass(item.rarity)}
                         style={rarityTextStyle(item.rarity)}
                       >
                         {item.name}

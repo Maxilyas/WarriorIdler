@@ -48,6 +48,15 @@ body {
   0% { background-position: 0% 0; }
   100% { background-position: 300% 0; }
 }
+/* Halo pulsé dans la couleur de la rareté (paliers hauts : Céleste→Primordial). currentColor = couleur du nom. */
+@keyframes rshimmerPulse {
+  0%, 100% { text-shadow: 0 0 2px currentColor; }
+  50% { text-shadow: 0 0 10px currentColor, 0 0 3px currentColor; }
+}
+.rshimmer {
+  font-weight: 700;
+  animation: rshimmerPulse 2.4s ease-in-out infinite;
+}
 
 /* --- Coffre de donjon --- */
 @keyframes chestShake {
