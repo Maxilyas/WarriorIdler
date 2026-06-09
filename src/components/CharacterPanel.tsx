@@ -4,7 +4,7 @@ import { describeStats, PRIMARY_META } from '../game/stats'
 import type { StatEffect } from '../game/stats'
 import type { PrimaryStat, DamageType, Character, PowerDef } from '../game/types'
 import type { DerivedStats } from '../game/stats'
-import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from '../game/damage'
+import { DAMAGE_TYPES, DAMAGE_TYPE_LIST, profileDamageMult } from '../game/damage'
 import { charTotalStats, charDerived, charMaxHp, charDamageProfile, charResist, abilityPower, powerScale } from '../game/character'
 import { getPower, POWER_EFFECT_META, scaleLabel, powerDamageType } from '../game/powers'
 
@@ -141,30 +141,37 @@ export function CharacterPanel() {
       {/* Profil de dégâts */}
       <div className="rounded-xl border border-slate-800 bg-[#11151f] p-4">
         <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Profil de dégâts</div>
-        <div className="mb-2 text-[11.5px] text-slate-400">
+        <div className="mb-1 text-[11.5px] text-slate-400">
           Type principal :{' '}
           <span style={{ color: DAMAGE_TYPES[dmg.mainType].color }}>
             {DAMAGE_TYPES[dmg.mainType].icon} {DAMAGE_TYPES[dmg.mainType].name}
           </span>{' '}
           (défini par l'arme)
         </div>
+        <div className="mb-2 text-[12px] text-slate-300">
+          Multiplicateur de dégâts :{' '}
+          <span className="font-bold text-emerald-300">×{profileDamageMult(dmg).toFixed(2)}</span>
+          <span className="text-slate-500"> · sur toutes tes attaques & sorts</span>
+        </div>
         <div className="space-y-1">
           {dmgTypes.map((t) => {
             const m = DAMAGE_TYPES[t as DamageType]
             const frac = dmg.profile[t as DamageType] ?? 0
             const bonus = dmg.bonus[t as DamageType] ?? 0
-            const eff = frac * (1 + bonus)
             return (
-              <div key={t} className="flex items-center justify-between text-sm">
+              <div key={t} className="flex items-center justify-between text-[12px]">
                 <span style={{ color: m.color }}>{m.icon} {m.name}</span>
-                <span className="text-slate-300">
-                  {frac > 0 && <span>×{eff.toFixed(2)} dégâts</span>}
-                  {bonus > 0 && <span className="ml-2 text-emerald-400">+{Math.round(bonus * 100)}%</span>}
+                <span className="text-slate-400">
+                  {frac > 0 && <span>{Math.round(frac * 100)}% du profil</span>}
+                  {bonus > 0 && <span className="ml-2 text-emerald-400">+{Math.round(bonus * 100)}% dégâts</span>}
                 </span>
               </div>
             )
           })}
         </div>
+        <p className="mt-2 text-[10px] leading-snug text-slate-500">
+          Empile des affixes « +% {DAMAGE_TYPES[dmg.mainType].name} » (ton type principal) pour faire monter le multiplicateur. Investir dans un type minoritaire rapporte peu : sa part du profil est faible.
+        </p>
       </div>
 
       {/* Résistances */}

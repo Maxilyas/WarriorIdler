@@ -37,8 +37,12 @@ export interface DamageProfile {
 const WEAPON_BASE_WEIGHT = 1
 /** Part d'un affixe « +% type » reversée dans la RÉPARTITION du profil (diversification). */
 const AFFIX_PROFILE_SHARE = 0.7
-/** Part d'un affixe « +% type » conservée en bonus multiplicatif brut (+% de dégâts). */
-const AFFIX_BONUS_SHARE = 0.5
+/**
+ * Part d'un affixe « +% type » conservée en bonus multiplicatif brut (+% de dégâts).
+ * À 1.0 : un affixe « +X% Feu » donne réellement +X% de dégâts sur la portion Feu de ton profil
+ * (le profil de dégâts redevient un levier de puissance FORT, surtout quand on empile son type).
+ */
+const AFFIX_BONUS_SHARE = 1.0
 
 /**
  * Calcule le profil de dégâts à partir de TOUT l'équipement (plus seulement l'arme) + des keystones.

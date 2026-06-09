@@ -159,10 +159,10 @@ export function charDamageProfile(char: Character): DamageProfile {
   return computeDamageProfile(char.equipment, charKeystones(char))
 }
 
-/** DPS d'un sort actif (mêmes règles qu'en combat : dégâts directs/DoT, scalent sur le profil de l'arme). */
-function abilityDps(p: PowerDef, derived: DerivedStats, profileMult: number): number {
+/** DPS d'un sort actif (mêmes règles qu'en combat : dégâts directs/DoT, scalent sur le profil + keystones). */
+function abilityDps(p: PowerDef, derived: DerivedStats, profileMult: number, dmgMult: number): number {
   if (p.kind !== 'active' || !p.effect) return 0
-  const value = (p.magnitude ?? 0) * abilityPower(derived, powerScale(p)) * profileMult
+  const value = (p.magnitude ?? 0) * abilityPower(derived, powerScale(p)) * profileMult * dmgMult
   const cd = Math.max(0.5, (p.cooldown ?? 3) * (1 - derived.cdr))
   switch (p.effect) {
     case 'nuke': case 'cleave': case 'megaCleave': case 'lifeNuke': return value / cd
@@ -178,11 +178,14 @@ export function charDps(char: Character): number {
   const derived = charDerived(char)
   const profile = charDamageProfile(char)
   const pm = profileDamageMult(profile)
-  let dps = theoreticalDps(derived, profile)
+  // Multiplicateur de dégâts PERSISTANT issu des keystones (Carnage, Titan…) : appliqué en combat
+  // aux auto-attaques ET aux sorts → il doit l'être ici aussi, sinon le DPS affiché sous-estime.
+  const dmgMult = charCombatMods(char).damageMult
+  let dps = theoreticalDps(derived, profile, dmgMult)
   for (const pid of char.powers) {
     if (!pid) continue
     const p = getPower(pid)
-    if (p) dps += abilityDps(p, derived, pm)
+    if (p) dps += abilityDps(p, derived, pm, dmgMult)
   }
   return dps
 }
