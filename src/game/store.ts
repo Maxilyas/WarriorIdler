@@ -774,8 +774,11 @@ function enemyVuln(enemy: Enemy): number {
  * les auto-attaques — pour qu'un build qui empile un type booste aussi ses sorts.
  */
 function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profile: DamageProfile, chars: Character[], enemy: Enemy, hotBonus: number, dmgMult = 1): number {
-  const base = (p.magnitude ?? 1) * abilityPower(derived, powerScale(p)) // soins / boucliers (sans profil ni keystones)
+  const base = (p.magnitude ?? 1) * abilityPower(derived, powerScale(p)) // soins (sans profil ni keystones)
   const magDmg = base * profileDamageMult(profile) * dmgMult // dégâts : scalent sur le profil de l'arme + keystones (Carnage…)
+  // Boucliers : scalent sur la MEILLEURE de (stat principale, Endurance) → un tank qui empile
+  // l'Endurance obtient un énorme bouclier (levier de survie qui suit l'Endurance).
+  const shieldBase = (p.magnitude ?? 1) * Math.max(abilityPower(derived, powerScale(p)), derived.endurancePower)
   const vm = enemyVuln(enemy)
   const hit = (dmg: number): number => { const before = enemy.hp; enemy.hp = Math.max(0, enemy.hp - dmg); return before - enemy.hp }
   switch (p.effect) {
@@ -822,12 +825,13 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
       for (const a of chars) if (a.hp > 0) a.hp = Math.min(charMaxHp(a), a.hp + base * 0.5 * (1 + hotBonus))
       return 0
     case 'shield':
-      caster.hp = Math.min(charMaxHp(caster), caster.hp + base)
+      // Bouclier runique : absorption sur le porteur (scale stat principale OU Endurance).
+      caster.absorb = (caster.absorb ?? 0) + shieldBase
       return 0
     case 'bigShield':
       // Énorme bouclier d'absorption (soaké avant les PV) + 40% à l'équipe.
-      caster.absorb = (caster.absorb ?? 0) + base
-      for (const a of chars) if (a.hp > 0 && a !== caster) a.absorb = (a.absorb ?? 0) + base * 0.4
+      caster.absorb = (caster.absorb ?? 0) + shieldBase
+      for (const a of chars) if (a.hp > 0 && a !== caster) a.absorb = (a.absorb ?? 0) + shieldBase * 0.4
       return 0
     case 'invuln':
       caster.invuln = Math.max(caster.invuln ?? 0, p.duration ?? 2)

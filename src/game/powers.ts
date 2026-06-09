@@ -65,7 +65,7 @@ export const POWERS: PowerDef[] = [
   },
   {
     id: 'bouclier_runique', name: 'Bouclier runique', kind: 'active',
-    description: 'Érige un bouclier qui absorbe des dégâts sur le porteur. Scale sur ta stat principale.',
+    description: 'Érige un bouclier d\'absorption sur le porteur. Scale sur ta stat principale OU ton Endurance (la meilleure).',
     unlockLevel: 1, cooldown: 6, effect: 'shield', magnitude: 3,
   },
 
@@ -182,7 +182,7 @@ export const POWERS: PowerDef[] = [
   },
   {
     id: 'egide_titanesque', name: 'Égide titanesque', kind: 'active',
-    description: 'Érige un ÉNORME bouclier d\'absorption sur toi (et 40% à l\'équipe), soaké avant tes PV. Long cooldown. Scale sur ta stat principale.',
+    description: 'Érige un ÉNORME bouclier d\'absorption sur toi (et 40% à l\'équipe), soaké avant tes PV. Long cooldown. Scale sur ta stat principale OU ton Endurance (la meilleure).',
     unlockLevel: 1, cooldown: 30, effect: 'bigShield', magnitude: 14,
   },
   {

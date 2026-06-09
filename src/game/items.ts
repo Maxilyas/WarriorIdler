@@ -176,8 +176,9 @@ export function generateItem(opts: GenerateOptions): Item {
 
   const budget = opts.ilvl * typeMeta.weight * rarity.statMult
   const primaryValue = Math.max(1, Math.round(budget * offFrac * (0.85 + Math.random() * 0.3)))
-  // Toute pièce donne de l'Endurance (la survie scale) ; davantage si défensive.
-  const endurance = Math.max(1, Math.round(budget * (1 - offFrac) * 1.4 * (0.85 + Math.random() * 0.3)))
+  // Toute pièce donne de l'Endurance (la survie scale) ; davantage si défensive. Multiplicateur relevé
+  // (1.4 → 1.9) : les PV suivaient mal la montée des dégâts ennemis → le stuff donne plus d'Endurance.
+  const endurance = Math.max(1, Math.round(budget * (1 - offFrac) * 1.9 * (0.85 + Math.random() * 0.3)))
 
   const affixes = rollAffixes(rarity.affixCount, opts.ilvl, rarity.statMult, rarity.tier, opts)
   const unique = rollUnique(rarity.tier)

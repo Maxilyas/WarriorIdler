@@ -256,7 +256,7 @@ chain('intelligence', 'in_a', 'in_entry', 1, [
   { name: 'Embrasement', kind: 'ability', unlockPower: 'embrasement', desc: 'Débloque Embrasement (DoT de feu, scale INT).' },
   { name: 'Combustion', kind: 'keystone', desc: 'Tes coups brûlent (DoT 22% du coup/s, 5 s).', keystone: { dot: { frac: 0.22, duration: 5 } } },
   { name: 'Pouvoir brut', maxRank: 3, statMods: { intelligence: 30, maitrise: 30 } },
-  { name: 'Archimage', kind: 'keystone', desc: '+25% de dégâts, +50 Intelligence.', statMods: { intelligence: 50 }, keystone: { damageMult: 1.25 } },
+  { name: 'Archimage', kind: 'keystone', desc: '+20% de dégâts, +50 Intelligence.', statMods: { intelligence: 50 }, keystone: { damageMult: 1.20 } },
 ])
 chain('intelligence', 'in_b', 'in_entry', 1, [
   { name: 'Faille I', maxRank: 5, statMods: { penetration: 22 } },
@@ -264,7 +264,7 @@ chain('intelligence', 'in_b', 'in_entry', 1, [
   { name: 'Érudition', maxRank: 4, statMods: { intelligence: 22, hate: 14 } },
   { name: 'Conversion ardente', kind: 'keystone', desc: 'Convertit 40% des dégâts Physiques en Feu.', statMods: { maitrise: 30 }, keystone: { convertDamage: { from: 'physique', to: 'feu', frac: 0.4 } } },
   { name: 'Mèche courte', maxRank: 3, statMods: { degatsCrit: 40, intelligence: 18 } },
-  { name: 'Surcharge', kind: 'keystone', desc: '+30% de dégâts, +30 Pénétration.', statMods: { penetration: 30 }, keystone: { damageMult: 1.3 } },
+  { name: 'Surcharge', kind: 'keystone', desc: '+22% de dégâts, +30 Pénétration.', statMods: { penetration: 30 }, keystone: { damageMult: 1.22 } },
 ])
 chain('intelligence', 'in_c', 'in_entry', 1, [
   { name: 'Méditation', maxRank: 5, statMods: { intelligence: 16, regen: 16 } },
@@ -382,9 +382,9 @@ chain('templier', 'tp_b', 'tp_entry', 1, [
 single({ id: 'el_entry', name: 'Affinité élémentaire', constellation: 'elementaliste', kind: 'notable', tier: 0, maxRank: 1, requires: ['in_gw_elem'], description: 'Maîtrise naissante des éléments. +50 Intelligence, +20 Pénétration.', statMods: { intelligence: 50, penetration: 20 } })
 chain('elementaliste', 'el_a', 'el_entry', 1, [
   { name: 'Catalyse', maxRank: 5, statMods: { intelligence: 20, maitrise: 16 } },
-  { name: 'Trinité élémentaire', kind: 'keystone', desc: 'ARCHÉTYPE : +35% de dégâts (tu manies tous les éléments).', statMods: { maitrise: 30 }, keystone: { damageMult: 1.35 } },
+  { name: 'Trinité élémentaire', kind: 'keystone', desc: 'ARCHÉTYPE : +25% de dégâts (tu manies tous les éléments).', statMods: { maitrise: 30 }, keystone: { damageMult: 1.25 } },
   { name: 'Résonance', maxRank: 4, statMods: { penetration: 24, degatsCrit: 20 } },
-  { name: 'Cataclysme', kind: 'keystone', desc: 'Capstone : +90 Intelligence, +40% dégâts, +20 Pénétration.', statMods: { intelligence: 90, penetration: 20 }, keystone: { damageMult: 1.4 } },
+  { name: 'Cataclysme', kind: 'keystone', desc: 'Capstone : +90 Intelligence, +28% dégâts, +20 Pénétration.', statMods: { intelligence: 90, penetration: 20 }, keystone: { damageMult: 1.28 } },
 ])
 chain('elementaliste', 'el_b', 'el_entry', 1, [
   { name: 'Prisme', maxRank: 4, statMods: {}, resistMods: allResist(0.07), desc: '+7% résistance tous types par rang.' },

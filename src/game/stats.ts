@@ -93,6 +93,8 @@ export interface DerivedStats {
   forcePower: number
   agiPower: number
   intPower: number
+  /** Puissance issue de l'Endurance (boucliers défensifs : scalent dessus). */
+  endurancePower: number
   /** Stat primaire qui domine le build. */
   mainStat: PrimaryStat
   hp: number
@@ -171,12 +173,13 @@ export function computeDerived(total: StatBlock): DerivedStats {
   let critMult = 2 + (total.degatsCrit ?? 0) / PER_PCT
   let masteryDr = 0
   if (mainStat === 'force') {
-    masteryMult = 1 + masteryFrac * 0.5
+    masteryMult = 1 + masteryFrac * 0.8 // un peu plus de dégâts bruts (le bruiser n'est pas largué)
     masteryDr = softCap(masteryFrac * 0.85, 0.5, 0.7)
   } else if (mainStat === 'agilite') {
-    critMult += masteryFrac * 3
+    masteryMult = 1 + masteryFrac * 0.45 // ajoute un peu de dégâts plats (plancher relevé)
+    critMult += masteryFrac * 2 // critique toujours fort, mais moins extrême
   } else {
-    masteryMult = 1 + masteryFrac * 1.8
+    masteryMult = 1 + masteryFrac * 0.9 // glass cannon : encore le meilleur, mais ne gonfle plus à l'infini
   }
 
   const shieldPct = softCap((total.barriere ?? 0) / PER_PCT, 1, 1.6)
@@ -187,6 +190,7 @@ export function computeDerived(total: StatBlock): DerivedStats {
     forcePower,
     agiPower,
     intPower,
+    endurancePower: statPower(endurance),
     hp: (100 + endurance * 10) * (1 + shieldPct),
     // Soft caps (style WoW) : plein rendement jusqu'au seuil (= ancien cap), puis dégressif au-delà
     // en approchant une limite haute. Plus aucun rating gaspillé après le seuil.

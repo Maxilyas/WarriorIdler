@@ -123,6 +123,7 @@ export function charDerived(char: Character): DerivedStats {
     forcePower: d.forcePower * GLOBAL.power,
     agiPower: d.agiPower * GLOBAL.power,
     intPower: d.intPower * GLOBAL.power,
+    endurancePower: d.endurancePower * GLOBAL.power,
     attacksPerSecond: d.attacksPerSecond * GLOBAL.attackSpeed,
     hp: d.hp * GLOBAL.vitality,
   }
