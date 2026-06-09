@@ -620,16 +620,17 @@ export function talentKeystones(talents: Record<string, number>): KeystoneEffect
   return out
 }
 
-/** Peut-on allouer un point dans ce nœud ? (adjacence : au moins un prérequis alloué). */
+/** Peut-on allouer un point dans ce nœud ? (TOUS les prérequis doivent être alloués —
+ *  les passerelles d'archétype en ont 2 : il faut les deux branches, pas une seule). */
 export function canAllocate(node: TalentNode, talents: Record<string, number>, points: number): boolean {
   if (points <= 0) return false
   if ((talents[node.id] ?? 0) >= node.maxRank) return false
-  if (node.requires && node.requires.length && !node.requires.some((r) => (talents[r] ?? 0) > 0)) return false
+  if (node.requires && node.requires.length && !node.requires.every((r) => (talents[r] ?? 0) > 0)) return false
   return true
 }
 
-/** Le nœud est-il accessible (prérequis remplis), indépendamment des points ? */
+/** Le nœud est-il accessible (TOUS les prérequis remplis), indépendamment des points ? */
 export function isReachable(node: TalentNode, talents: Record<string, number>): boolean {
   if (!node.requires || node.requires.length === 0) return true
-  return node.requires.some((r) => (talents[r] ?? 0) > 0)
+  return node.requires.every((r) => (talents[r] ?? 0) > 0)
 }
