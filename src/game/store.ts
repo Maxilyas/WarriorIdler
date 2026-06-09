@@ -270,11 +270,18 @@ function pushLog(log: LogEntry[], text: string, kind: LogKind): LogEntry[] {
 }
 
 function xpForLevel(level: number): number {
-  // Soft cap ~100 : on veut atteindre le niveau 100 en quelques heures pour débloquer des builds
-  // élaborés. Montée modérée jusqu'à 25, puis croissance TRÈS DOUCE (quasi-linéaire) au-delà.
-  if (level <= 25) return Math.round(20 * Math.pow(1.28, level - 1))
-  const at25 = 20 * Math.pow(1.28, 24)
-  return Math.round(at25 * (1 + (level - 25) * 0.05))
+  // La courbe DOIT grandir exponentiellement, sinon le revenu d'XP (qui croît en 1.115^stage)
+  // dépasse instantanément le coût d'un niveau → on prend des centaines de niveaux/seconde.
+  //
+  // Phase 1 (1→100) : coût qui suit la croissance du revenu (1.115/niveau, calé sur l'XP des
+  //   ennemis). À progression régulière (~1 niveau par stage), le temps par niveau reste stable :
+  //   1→90 se joue sur quelques heures, le 100 marque la fin de la montée « rapide ».
+  // Phase 2 (100+) : soft cap. Croissance plus rapide que le revenu (1.17 > 1.115) → chaque niveau
+  //   coûte strictement plus que ce qu'un stage de plus rapporte, donc la montée ralentit sans cesse
+  //   (heures, puis jours par niveau en fin de course).
+  if (level <= 100) return Math.round(50 * Math.pow(1.115, level - 1))
+  const at100 = 50 * Math.pow(1.115, 99)
+  return Math.round(at100 * Math.pow(1.17, level - 100))
 }
 
 // Cooldowns transitoires des capacités actives (clé `charId:powerId`). Non persistés.
