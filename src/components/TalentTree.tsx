@@ -144,6 +144,8 @@ function nodeDamageTypes(node: TalentNode): DamageType[] {
   const k = node.keystone
   if (k?.convertDamage) out.add(k.convertDamage.to)
   if (k?.splashType) out.add(k.splashType.to)
+  if (k?.convertFromMain) out.add(k.convertFromMain.to)
+  if (k?.splashFromMain) out.add(k.splashFromMain.to)
   if (node.unlockPower) {
     const p = getPower(node.unlockPower)
     if (p?.damageType && p.damageType !== 'physique') out.add(p.damageType)

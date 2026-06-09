@@ -13,7 +13,7 @@ import type { StatBlock, DamageType, OffensiveStat } from './types'
 export type ConstellationId =
   | 'coeur' | 'force' | 'agilite' | 'intelligence' | 'bastion' | 'soin' | 'conversion'
   | 'templier' | 'elementaliste' | 'faucheur' | 'duelliste' | 'colosse'
-  | 'pestifere' | 'bourreau' | 'spectre' | 'briseur'
+  | 'pestifere' | 'bourreau' | 'spectre' | 'briseur' | 'alchimiste'
 
 export interface ConstellationMeta {
   id: ConstellationId
@@ -42,12 +42,13 @@ export const CONSTELLATIONS: Record<ConstellationId, ConstellationMeta> = {
   bourreau: { id: 'bourreau', name: 'Bourreau', role: 'Anti-boss · Exécution', color: '#c92a2a', icon: '🪓', archetype: true },
   spectre: { id: 'spectre', name: 'Spectre', role: 'Évasion · Précision · Anti-contrôle', color: '#b197fc', icon: '👻', archetype: true },
   briseur: { id: 'briseur', name: 'Briseur', role: 'Multi-cible · Inarrêtable', color: '#e8590c', icon: '🌋', archetype: true },
+  alchimiste: { id: 'alchimiste', name: 'Alchimiste', role: 'Transmutation des éléments', color: '#2dd4bf', icon: '⚗️', archetype: true },
 }
 
 export const CONSTELLATION_LIST: ConstellationId[] = [
   'coeur', 'force', 'agilite', 'intelligence', 'bastion', 'soin', 'conversion',
   'templier', 'elementaliste', 'faucheur', 'duelliste', 'colosse',
-  'pestifere', 'bourreau', 'spectre', 'briseur',
+  'pestifere', 'bourreau', 'spectre', 'briseur', 'alchimiste',
 ]
 
 /** Effet fort d'un keystone, résolu par le moteur de combat (extensible). */
@@ -63,6 +64,12 @@ export interface KeystoneEffect {
    * SANS la retirer de `from` (double appartenance → frappe la meilleure résistance des deux).
    */
   splashType?: { from: DamageType; to: DamageType; frac: number }
+  /** ALCHIMISTE : convertit `frac` du type de l'ARME (déplace) vers `to` — n'importe quel élément. */
+  convertFromMain?: { to: DamageType; frac: number }
+  /** ALCHIMISTE : le type de l'ARME compte AUSSI comme `to` (ajoute sans retirer) — diversifie. */
+  splashFromMain?: { to: DamageType; frac: number }
+  /** ALCHIMISTE (Grand Œuvre) : le type de l'arme compte AUSSI comme TOUS les autres éléments (`frac` chacun). */
+  splashFromMainAll?: number
   /** Les coups appliquent un DoT : fraction des dégâts du coup / seconde, sur N secondes. */
   dot?: { frac: number; duration: number }
   /** Les soins sont amplifiés (HoT) : +X%. */
@@ -501,6 +508,34 @@ chain('briseur', 'br_b', 'br_entry', 1, [
   { name: 'Épines brûlantes', kind: 'keystone', desc: 'Renvoie 30% des dégâts subis à l\'ennemi.', keystone: { thorns: 0.3 } },
   { name: 'Cataclysme vivant', kind: 'keystone', desc: 'Capstone : +200 Endurance, +40 Ténacité, +20% de dégâts au-dessus de 60% PV.', statMods: { endurance: 200, tenacite: 40 }, keystone: { highHpBonus: { threshold: 0.6, mult: 1.2 } } },
 ])
+
+/* ================== ALCHIMISTE (archétype v0.19) : transmutation des éléments ==================
+ * Part du type de l'ARME et le transmute vers N'IMPORTE QUEL élément :
+ *  - Diffusion (splash 50%) : l'arme compte AUSSI comme l'élément → reste sur le type principal mais
+ *    frappe une 2e résistance (diversifie sans rien perdre).
+ *  - Transmutation partielle (50%) / totale (100%) : déplace une part / tout vers l'élément choisi.
+ *  - Grand Œuvre (capstone) : l'arme compte comme TOUS les éléments à la fois.
+ * Toutes les combinaisons sont disponibles (un sous-arbre par élément) — voir le moteur dans damage.ts.
+ */
+single({ id: 'cv_gw_alchimiste', name: '→ Alchimiste', constellation: 'conversion', kind: 'gateway', tier: 3, maxRank: 1, requires: ['cv_entry'], description: 'Passerelle vers l\'Alchimiste (transmutation des éléments). +30 Maîtrise.', statMods: { maitrise: 30 } })
+single({ id: 'al_entry', name: 'Œuvre alchimique', constellation: 'alchimiste', kind: 'notable', tier: 0, maxRank: 1, requires: ['cv_gw_alchimiste'], description: 'L\'art de transmuter les éléments de ton arme. +40 Maîtrise, +20 à chaque stat offensive.', statMods: { maitrise: 40, force: 20, agilite: 20, intelligence: 20 } })
+
+// Un sous-arbre PAR élément cible : Diffusion (splash 50%) → Transmutation partielle (50%) → totale (100%).
+const ALCH_EL: [DamageType, string][] = [
+  ['feu', 'de Feu'], ['froid', 'de Givre'], ['foudre', 'de Foudre'], ['arcane', 'd\'Arcane'],
+  ['ombre', 'd\'Ombre'], ['nature', 'de Nature'], ['physique', 'Physique'],
+]
+for (const [el, label] of ALCH_EL) {
+  single({ id: `al_diff_${el}`, name: `Diffusion ${label}`, constellation: 'alchimiste', kind: 'keystone', tier: 1, maxRank: 1, requires: ['al_entry'],
+    description: `Ton arme compte AUSSI comme ${label} (50%) — sans rien retirer (frappe les 2 résistances).`, statMods: { maitrise: 10 }, keystone: { splashFromMain: { to: el, frac: 0.5 } } })
+  single({ id: `al_half_${el}`, name: `Transmutation partielle ${label}`, constellation: 'alchimiste', kind: 'keystone', tier: 2, maxRank: 1, requires: [`al_diff_${el}`],
+    description: `Convertit 50% du type de ton arme en ${label} (déplace).`, statMods: { maitrise: 12 }, keystone: { convertFromMain: { to: el, frac: 0.5 } } })
+  single({ id: `al_full_${el}`, name: `Transmutation totale ${label}`, constellation: 'alchimiste', kind: 'keystone', tier: 3, maxRank: 1, requires: [`al_half_${el}`],
+    description: `Convertit 100% du type de ton arme en ${label} : l'arme DEVIENT cet élément.`, statMods: { maitrise: 14 }, keystone: { convertFromMain: { to: el, frac: 1 } } })
+}
+// Capstone : l'arme frappe de TOUS les éléments à la fois (le « multi-élément » demandé).
+single({ id: 'al_grand_oeuvre', name: 'Grand Œuvre', constellation: 'alchimiste', kind: 'keystone', tier: 2, maxRank: 1, requires: ['al_entry'],
+  description: 'Capstone : ton arme compte AUSSI comme TOUS les autres éléments (30% chacun). +50 Maîtrise.', statMods: { maitrise: 50 }, keystone: { splashFromMainAll: 0.3 } })
 
 /* ================== ULTIMES : 10 sorts surpuissants (nœuds-capacité profonds) ==================
  * Récompenses fortes à long cooldown, ancrées dans la voie thématique de chaque effet.

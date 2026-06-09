@@ -87,6 +87,27 @@ export function computeDamageProfile(equipment: Equipment, keystones: KeystoneEf
     weight[to] = (weight[to] ?? 0) + added
   }
 
+  // ALCHIMISTE : transmutations basées sur le TYPE DE L'ARME (mainTypeBase) — n'importe quel élément.
+  // Convert (déplace) d'abord, puis splash (ajoute), comme ci-dessus.
+  for (const k of keystones) {
+    if (!k.convertFromMain) continue
+    const { to, frac } = k.convertFromMain
+    const moved = (weight[mainTypeBase] ?? 0) * frac
+    if (moved <= 0 || to === mainTypeBase) continue
+    weight[mainTypeBase] = (weight[mainTypeBase] ?? 0) - moved
+    weight[to] = (weight[to] ?? 0) + moved
+  }
+  for (const k of keystones) {
+    const mainW = weight[mainTypeBase] ?? 0
+    if (k.splashFromMain) {
+      const { to, frac } = k.splashFromMain
+      if (to !== mainTypeBase) weight[to] = (weight[to] ?? 0) + mainW * frac
+    }
+    if (k.splashFromMainAll && k.splashFromMainAll > 0) {
+      for (const t of DAMAGE_TYPE_LIST) if (t !== mainTypeBase) weight[t] = (weight[t] ?? 0) + mainW * k.splashFromMainAll
+    }
+  }
+
   // 3) Normalisation → répartition (somme = 1).
   let total = 0
   for (const t in weight) total += Math.max(0, weight[t as DamageType] ?? 0)
