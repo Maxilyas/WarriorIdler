@@ -1,4 +1,4 @@
-import type { PowerDef } from './types'
+import type { PowerDef, PowerEffect } from './types'
 
 /**
  * Registre des capacités équipables (powers).
@@ -136,3 +136,51 @@ export function getPower(id: string): PowerDef | undefined {
 }
 
 export const POWER_SLOTS = 5
+
+/**
+ * Méta d'affichage par type d'effet : libellé, icône (distincte des types de dégâts),
+ * portée (mono-cible vs zone), et famille (offense / soin / soutien). Sert à présenter
+ * un sort lisiblement dans l'arbre de talents et la fiche de sort.
+ */
+export interface PowerEffectMeta {
+  label: string
+  icon: string
+  /** Nombre de cibles touchées, en clair. */
+  targets: string
+  family: 'offense' | 'soin' | 'soutien'
+}
+
+export const POWER_EFFECT_META: Record<PowerEffect, PowerEffectMeta> = {
+  nuke: { label: 'Frappe directe', icon: '🎯', targets: 'Mono-cible', family: 'offense' },
+  cleave: { label: 'Zone', icon: '💥', targets: 'Tout le pack', family: 'offense' },
+  dot: { label: 'Altération (DoT)', icon: '☣️', targets: 'Mono-cible · sur la durée', family: 'offense' },
+  heal: { label: 'Soin', icon: '💗', targets: 'Allié le plus blessé', family: 'soin' },
+  hot: { label: 'Soin sur la durée', icon: '💞', targets: 'Allié · sur la durée', family: 'soin' },
+  shield: { label: 'Bouclier', icon: '🛡️', targets: 'Porteur', family: 'soutien' },
+  buffParty: { label: 'Soin de groupe', icon: '✳️', targets: 'Tout le groupe', family: 'soin' },
+}
+
+/** Stat de scaling d'un sort, en court (FOR / AGI / INT). */
+export const SCALE_SHORT: Record<NonNullable<PowerDef['scaleStat']>, string> = {
+  force: 'FOR', agilite: 'AGI', intelligence: 'INT',
+}
+
+/** Résumé d'affichage d'un sort actif (null pour les passifs). */
+export interface PowerSummary {
+  cooldown: number
+  effectMeta: PowerEffectMeta
+  scaleShort: string | null
+  damageType: PowerDef['damageType']
+  magnitude: number
+}
+
+export function powerSummary(p: PowerDef): PowerSummary | null {
+  if (p.kind !== 'active' || !p.effect) return null
+  return {
+    cooldown: p.cooldown ?? 0,
+    effectMeta: POWER_EFFECT_META[p.effect],
+    scaleShort: p.scaleStat ? SCALE_SHORT[p.scaleStat] : null,
+    damageType: p.damageType,
+    magnitude: p.magnitude ?? 0,
+  }
+}

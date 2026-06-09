@@ -4,10 +4,10 @@ import {
   CONSTELLATIONS, CONSTELLATION_LIST, talentsByConstellation, getTalent, canAllocate, isReachable,
   type ConstellationId, type TalentNode,
 } from '../game/talents'
-import { getPower } from '../game/powers'
+import { getPower, powerSummary } from '../game/powers'
 import { DAMAGE_TYPES } from '../game/damage'
 import { ALL_STAT_META } from '../game/stats'
-import type { DamageType, StatKey } from '../game/types'
+import type { DamageType, StatKey, PowerDef } from '../game/types'
 
 interface Branch { head: TalentNode; nodes: TalentNode[] }
 interface Layout { roots: TalentNode[]; branches: Branch[]; gateways: TalentNode[] }
@@ -65,8 +65,60 @@ function nodeDamageTypes(node: TalentNode): DamageType[] {
   return [...out]
 }
 
+/** Badge compact de sort dans la tuile : icône d'effet + recharge + stat de scaling. */
+function SpellBadge({ node }: { node: TalentNode }) {
+  if (!node.unlockPower) return null
+  const power = getPower(node.unlockPower)
+  const sum = power && powerSummary(power)
+  if (!sum) return null
+  return (
+    <span className="flex flex-wrap items-center justify-center gap-x-1 gap-y-0.5 text-[8.5px] leading-tight">
+      <span className="text-slate-300" title={sum.effectMeta.label}>{sum.effectMeta.icon}</span>
+      <span className="text-cyan-300/90" title="Temps de recharge">⏱{sum.cooldown}s</span>
+      {sum.scaleShort && <span className="text-amber-300/90" title="Scale sur cette stat">{sum.scaleShort}</span>}
+    </span>
+  )
+}
+
+/** Fiche de sort détaillée dans le panneau de nœud : type, recharge, scaling, cibles, valeur ≈. */
+function SpellCard({ power }: { power: PowerDef }) {
+  const sum = powerSummary(power)
+  const dt = power.damageType ? DAMAGE_TYPES[power.damageType] : null
+  return (
+    <div className="mb-1.5 rounded-lg border border-emerald-700/40 bg-emerald-950/20 p-2">
+      <div className="flex items-center gap-1.5">
+        <span className="text-[11px] font-bold text-emerald-300">✷ {power.name}</span>
+        {sum && (
+          <span className="rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[8.5px] font-semibold uppercase tracking-wide text-emerald-200">
+            {sum.effectMeta.icon} {sum.effectMeta.label}
+          </span>
+        )}
+        {power.kind === 'passive' && (
+          <span className="rounded-full bg-sky-500/15 px-1.5 py-0.5 text-[8.5px] font-semibold uppercase tracking-wide text-sky-200">Passif</span>
+        )}
+      </div>
+      <p className="mt-0.5 text-[10px] leading-snug text-emerald-100/70">{power.description}</p>
+      {sum && (
+        <div className="mt-1 grid grid-cols-2 gap-x-2 gap-y-0.5 text-[10px]">
+          <span className="text-cyan-300/90">⏱ Recharge : <span className="font-semibold tabular-nums">{sum.cooldown}s</span></span>
+          <span className="text-slate-300">🎯 Cibles : <span className="font-semibold">{sum.effectMeta.targets}</span></span>
+          {sum.scaleShort && (
+            <span className="text-amber-300/90">📈 Scale : <span className="font-semibold">{sum.scaleShort}</span></span>
+          )}
+          <span className="text-slate-300">
+            Type : {dt ? <span style={{ color: dt.color }}>{dt.icon} {dt.name}</span> : <span style={{ color: DAMAGE_TYPES.physique.color }}>{DAMAGE_TYPES.physique.icon} Physique</span>}
+          </span>
+          {sum.magnitude > 0 && (
+            <span className="col-span-2 text-slate-400">≈ valeur : <span className="font-semibold tabular-nums">×{sum.magnitude.toFixed(1)}</span> de la puissance de scaling</span>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 const KIND_ICON: Record<TalentNode['kind'], string> = {
-  minor: '•', notable: '◆', keystone: '✦', ability: '⚡', gateway: '⛩',
+  minor: '•', notable: '◆', keystone: '✦', ability: '✷', gateway: '⛩',
 }
 const KIND_LABEL: Record<TalentNode['kind'], string> = {
   minor: 'Passif mineur', notable: 'Passif notable', keystone: 'Keystone', ability: 'Capacité', gateway: 'Passerelle',
@@ -247,6 +299,7 @@ function NodeChip({
           ))}
         </span>
       )}
+      <SpellBadge node={node} />
       {node.maxRank > 1 ? (
         <span className="flex items-center gap-0.5">
           {Array.from({ length: node.maxRank }).map((_, i) => (
@@ -279,7 +332,7 @@ function NodeDetail({
   const maxed = rank >= node.maxRank
   const can = canAllocate(node, char.talents, char.talentPoints)
   const meta = CONSTELLATIONS[node.constellation]
-  const powerName = node.unlockPower ? getPower(node.unlockPower)?.name : null
+  const power = node.unlockPower ? getPower(node.unlockPower) : undefined
   const reqNames = (node.requires ?? []).map((r) => getTalent(r)?.name).filter(Boolean).join(', ')
 
   let btnLabel: string
@@ -336,9 +389,7 @@ function NodeDetail({
         <div className="mb-1.5 rounded bg-fuchsia-500/10 px-1.5 py-1 text-[10px] text-fuchsia-200">✦ Effet de build (keystone)</div>
       )}
 
-      {powerName && (
-        <p className="mb-1 text-[10px] text-emerald-300">⚡ Débloque : {powerName}</p>
-      )}
+      {power && <SpellCard power={power} />}
       {reqNames && !reachable && (
         <p className="mb-1 text-[10px] text-rose-300">🔒 Requiert : {reqNames}</p>
       )}
