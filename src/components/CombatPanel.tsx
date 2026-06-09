@@ -3,7 +3,7 @@ import type { LogKind } from '../game/store'
 import { charDerived, charMaxHp, charDamageProfile, TALENT_START_LEVEL } from '../game/character'
 import { theoreticalDps } from '../game/combat'
 import { isBossStage } from '../game/enemies'
-import { getPower } from '../game/powers'
+import { getPower, powerIcon } from '../game/powers'
 import { DAMAGE_TYPES } from '../game/damage'
 import { RAID_MECHANIC_META } from '../game/raids'
 import { BIOME_LIST, biomeUnlocked, biomeUnlockHint, getBiomeDef } from '../game/biomes'
@@ -35,6 +35,7 @@ export function CombatPanel() {
   const setBiome = useGame((s) => s.setBiome)
   const activeChar = useGame((s) => s.activeChar)
   const castPower = useGame((s) => s.castPower)
+  const togglePowerAuto = useGame((s) => s.togglePowerAuto)
   const farmLock = useGame((s) => s.farmLock)
   const setStage = useGame((s) => s.setStage)
   const toggleFarmLock = useGame((s) => s.toggleFarmLock)
@@ -157,28 +158,35 @@ export function CombatPanel() {
         </div>
       )}
 
-      {/* Sélecteur de biome (farm) */}
+      {/* Sélecteur de biome (farm) — grille de cartes lisibles */}
       {!dungeon && !raid && (
-        <div className="rounded-xl border border-slate-800 bg-[#0d111a] px-2 py-1.5">
-          <div className="flex items-center gap-1.5 overflow-x-auto">
-            <span className="shrink-0 text-[10px] uppercase tracking-wide text-slate-500">Biome</span>
+        <div className="rounded-xl border border-slate-800 bg-[#0d111a] p-2">
+          <div className="mb-1.5 flex items-center justify-between">
+            <span className="text-[10px] uppercase tracking-wide text-slate-500">🧭 Biome</span>
+            <span className="text-[11px] font-semibold" style={{ color: biomeDef.color }}>{biomeDef.icon} {biomeDef.name}</span>
+          </div>
+          <div className="grid grid-cols-4 gap-1.5">
             {BIOME_LIST.map((b) => {
               const unlocked = biomeUnlocked(b.id, physiqueBest, bestStage)
               const active = b.id === activeBiome
+              const rec = biomeBest[b.id] ?? 0
               return (
                 <button
                   key={b.id}
                   disabled={!unlocked}
                   onClick={() => setBiome(b.id)}
-                  title={unlocked ? `${b.name} — record ${biomeBest[b.id] ?? 0}` : `🔒 ${biomeUnlockHint(b.id)}`}
+                  title={unlocked ? `${b.name} — record palier ${rec}` : `🔒 ${biomeUnlockHint(b.id)}`}
                   className={
-                    'flex shrink-0 items-center gap-1 rounded-lg border px-2 py-1 text-[11px] transition-colors ' +
-                    (active ? 'border-current bg-white/5 font-semibold' : unlocked ? 'border-slate-700 text-slate-300 hover:border-slate-500' : 'border-slate-800 text-slate-600')
+                    'flex flex-col items-center gap-0.5 rounded-lg border px-1 py-1.5 transition-colors ' +
+                    (active ? 'border-current bg-white/10' : unlocked ? 'border-slate-700 hover:border-slate-500' : 'border-slate-800 opacity-50')
                   }
                   style={active ? { color: b.color } : undefined}
                 >
-                  <span className="text-sm leading-none">{unlocked ? b.icon : '🔒'}</span>
-                  {active && <span className="whitespace-nowrap">{b.name}</span>}
+                  <span className="text-xl leading-none">{unlocked ? b.icon : '🔒'}</span>
+                  <span className={'w-full truncate text-center text-[9px] font-semibold ' + (active ? '' : 'text-slate-300')}>
+                    {DAMAGE_TYPES[b.id].name}
+                  </span>
+                  <span className="text-[8px] text-slate-500">{unlocked ? (rec > 0 ? `▸ ${rec}` : '—') : '🔒'}</span>
                 </button>
               )
             })}
@@ -342,32 +350,52 @@ export function CombatPanel() {
         </div>
       </div>
 
-      {/* Capacités : boutons de lancement (AUTO = automatique ; MANUEL = tap quand prêt) */}
+      {/* Capacités : icône de sort + bascule AUTO/MANUEL + lancement (tap quand MANUEL & prêt) */}
       {castSlots.length > 0 && (
         <div className="rounded-xl border border-slate-800 bg-[#0d111a] p-2">
-          <div className="mb-1 text-[10px] uppercase tracking-wide text-slate-500">Capacités de {me!.name}</div>
-          <div className="grid grid-cols-5 gap-1">
+          <div className="mb-1.5 flex items-center justify-between">
+            <span className="text-[10px] uppercase tracking-wide text-slate-500">⚔️ Capacités de {me!.name}</span>
+            <span className="text-[8.5px] text-slate-600">AUTO = lancée seule · MANUEL = au tap</span>
+          </div>
+          <div className="grid grid-cols-3 gap-1.5">
             {castSlots.map(({ slot, p }) => {
               const cd = pcd[p.id] ?? 0
               const ready = cd <= 0
               const auto = me!.powerAuto?.[slot] !== false
               const total = p.cooldown ?? 3
               const frac = ready ? 1 : Math.max(0, 1 - cd / total)
+              const canTap = !auto && ready
               return (
-                <button
+                <div
                   key={slot}
-                  disabled={auto || !ready}
-                  onClick={() => castPower(slot)}
-                  title={auto ? `${p.name} — lancement automatique (bascule en Manuel dans l'onglet Perso)` : ready ? `Lancer ${p.name}` : `${p.name} — ${cd.toFixed(1)} s`}
                   className={
-                    'relative flex flex-col items-center gap-0.5 overflow-hidden rounded-lg border py-1.5 ' +
-                    (auto ? 'border-slate-700/70 text-slate-500' : ready ? 'border-cyan-500 bg-cyan-900/30 text-cyan-100 hover:bg-cyan-800/40' : 'border-slate-700 text-slate-500')
+                    'relative overflow-hidden rounded-lg border ' +
+                    (auto ? 'border-cyan-700/50 bg-cyan-950/20' : canTap ? 'border-amber-500 bg-amber-900/20' : 'border-slate-700 bg-black/20')
                   }
                 >
-                  <span className="text-base leading-none">{powerGlyph(p)}</span>
-                  <span className="text-[7.5px] font-semibold leading-none">{auto ? 'AUTO' : ready ? 'PRÊT' : `${cd.toFixed(1)}s`}</span>
+                  {/* Bascule AUTO/MANUEL (coin) */}
+                  <button
+                    onClick={() => togglePowerAuto(slot)}
+                    title="Activer / désactiver le lancement automatique"
+                    className={'absolute right-1 top-1 z-10 rounded px-1 py-px text-[7.5px] font-bold ' + (auto ? 'bg-cyan-600/40 text-cyan-100' : 'bg-amber-600/40 text-amber-100')}
+                  >
+                    {auto ? 'AUTO' : 'MAN'}
+                  </button>
+                  {/* Zone de lancement (active uniquement en MANUEL & prête) */}
+                  <button
+                    disabled={!canTap}
+                    onClick={() => castPower(slot)}
+                    title={auto ? `${p.name} — lancement automatique` : ready ? `Lancer ${p.name}` : `${p.name} — ${cd.toFixed(1)} s`}
+                    className="flex w-full flex-col items-center gap-0.5 px-1 pb-1.5 pt-2"
+                  >
+                    <span className="text-xl leading-none">{powerIcon(p)}</span>
+                    <span className="w-full truncate text-center text-[8px] font-medium text-slate-300">{p.name}</span>
+                    <span className={'text-[8px] font-semibold leading-none ' + (canTap ? 'text-amber-200' : ready ? 'text-slate-500' : 'text-slate-500')}>
+                      {auto ? '⟳ auto' : ready ? '▶ lancer' : `${cd.toFixed(1)}s`}
+                    </span>
+                  </button>
                   {!ready && <div className="absolute bottom-0 left-0 h-0.5 bg-cyan-500" style={{ width: `${frac * 100}%` }} />}
-                </button>
+                </div>
               )
             })}
           </div>
@@ -387,14 +415,6 @@ export function CombatPanel() {
       </div>
     </div>
   )
-}
-
-/** Pictogramme d'une capacité du héros (type de dégât, ou rôle pour soin/bouclier). */
-function powerGlyph(p: PowerDef): string {
-  if (p.damageType) return DAMAGE_TYPES[p.damageType].icon
-  if (p.effect === 'heal' || p.effect === 'hot' || p.effect === 'buffParty') return '✚'
-  if (p.effect === 'shield') return '🛡'
-  return '⚔️'
 }
 
 /** Aide d'une technique ennemie : type + le contre du kit héros à privilégier. */

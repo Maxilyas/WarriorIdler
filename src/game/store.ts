@@ -269,9 +269,9 @@ function pushLog(log: LogEntry[], text: string, kind: LogKind): LogEntry[] {
 }
 
 function xpForLevel(level: number): number {
-  // Courbe nettement plus exigeante : monter de niveau se mérite (le stuff fait l'essentiel du travail).
-  // Premier jet v0.18 : levelling plus lent, surtout au début (à affiner au pass d'équilibrage).
-  return Math.round(120 * Math.pow(1.44, level - 1))
+  // Courbe : monter de niveau se mérite, mais on veut assez de POINTS DE TALENT pour vrai-
+  // ment construire des builds → besoin d'XP divisé par 5 (≈ levelling global ×5).
+  return Math.round(24 * Math.pow(1.44, level - 1))
 }
 
 // Cooldowns transitoires des capacités actives (clé `charId:powerId`). Non persistés.
