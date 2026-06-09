@@ -127,6 +127,13 @@ export const POWERS: PowerDef[] = [
     description: 'Une affliction qui ronge (DoT d\'ombre). Scale INT.',
     unlockLevel: 1, cooldown: 4.5, effect: 'dot', magnitude: 2.6, scaleStat: 'intelligence', damageType: 'ombre',
   },
+
+  // --- Cœur (tronc commun) : capacité polyvalente précoce ---
+  {
+    id: 'onde_de_force', name: 'Onde de force', kind: 'active',
+    description: 'Une déflagration concentrique qui frappe tout le pack. Scale FOR.',
+    unlockLevel: 1, cooldown: 3.2, effect: 'cleave', magnitude: 2.4, scaleStat: 'force',
+  },
 ]
 
 const BY_ID = new Map(POWERS.map((p) => [p.id, p]))

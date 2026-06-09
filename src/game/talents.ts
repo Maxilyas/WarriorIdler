@@ -479,6 +479,27 @@ chain('briseur', 'br_b', 'br_entry', 1, [
   { name: 'Cataclysme vivant', kind: 'keystone', desc: 'Capstone : +200 Endurance, +40 Ténacité, +20% de dégâts au-dessus de 60% PV.', statMods: { endurance: 200, tenacite: 40 }, keystone: { highHpBonus: { threshold: 0.6, mult: 1.2 } } },
 ])
 
+/* ================== CŒUR : passifs supplémentaires & CARREFOURS inter-voies ==================
+ * Les CARREFOURS relient deux voies « cœur » adjacentes (prérequis OR sur les deux entrées) :
+ * ils forment un ANNEAU autour du centre et permettent de tisser un build hybride sans repasser
+ * par le hub. Web stratégique : on navigue d'une voie à l'autre pour ne prendre que ce qu'on veut.
+ */
+single({ id: 'co_focus', name: 'Concentration', constellation: 'coeur', kind: 'minor', tier: 1, maxRank: 5, requires: ['co_start'], description: '+12 Critique, +12 Hâte par rang.', statMods: { critique: 12, hate: 12 } })
+single({ id: 'co_guard', name: 'Instinct de survie', constellation: 'coeur', kind: 'minor', tier: 1, maxRank: 5, requires: ['co_start'], description: '+10 Réduction, +10 Esquive par rang.', statMods: { reductionDegats: 10, esquive: 10 } })
+single({ id: 'co_spell', name: 'Onde de force', constellation: 'coeur', kind: 'ability', tier: 2, maxRank: 1, requires: ['co_pow', 'co_focus'], description: 'Débloque Onde de force (zone précoce, scale FOR).', unlockPower: 'onde_de_force' })
+
+const CARREFOURS: [string, string, string, string, StatBlock][] = [
+  ['xr_for_bas', 'Carrefour du Rempart', 'fo_entry', 'ba_entry', { force: 25, endurance: 40 }],
+  ['xr_for_agi', 'Carrefour du Duel', 'fo_entry', 'ag_entry', { force: 25, agilite: 25 }],
+  ['xr_agi_int', 'Carrefour de l\'Éclat', 'ag_entry', 'in_entry', { agilite: 25, intelligence: 25 }],
+  ['xr_int_soin', 'Carrefour de la Sève', 'in_entry', 'so_entry', { intelligence: 25, regen: 25 }],
+  ['xr_soin_conv', 'Carrefour de l\'Équilibre', 'so_entry', 'cv_entry', { force: 20, agilite: 20, intelligence: 20 }],
+  ['xr_conv_bas', 'Carrefour de la Mue', 'cv_entry', 'ba_entry', { maitrise: 30, endurance: 30 }],
+]
+for (const [id, name, from, to, mods] of CARREFOURS) {
+  single({ id, name, constellation: 'coeur', kind: 'notable', tier: 6, maxRank: 1, requires: [from, to], description: `Pont entre deux voies. ${sd(mods)}.`, statMods: mods })
+}
+
 /* ------------------------------------------------------------------ */
 
 const BY_ID = new Map(TALENTS.map((t) => [t.id, t]))
