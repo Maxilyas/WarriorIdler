@@ -198,6 +198,13 @@ chain('force', 'fo_c', 'fo_entry', 1, [
   { name: 'Titan', kind: 'keystone', desc: 'Capstone : +60 Force/Maîtrise, +15% de dégâts.', statMods: { force: 60, maitrise: 60 }, keystone: { damageMult: 1.15 } },
 ])
 
+// Branche DÉFENSIVE du Berserker (bruiser) : encaisser + drain de vie + posture (-dégâts).
+chain('force', 'fo_d', 'fo_entry', 1, [
+  { name: 'Cuir bouilli', maxRank: 4, statMods: { reductionDegats: 18, endurance: 15 } },
+  { name: 'Soif de sang', kind: 'notable', maxRank: 2, statMods: { volDeVie: 15 }, desc: '+15 Vol de vie par rang.' },
+  { name: 'Posture défensive', kind: 'ability', unlockPower: 'posture_defensive', desc: 'Débloque Posture défensive (passif : -18% dégâts subis, +40 Endurance).' },
+])
+
 /* ---------------- RÔDEUR (Agilité) ---------------- */
 single({ id: 'ag_entry', name: 'Célérité', constellation: 'agilite', kind: 'minor', tier: 0, maxRank: 5, requires: ['co_gw_agi'], description: '+20 Agilité par rang.', statMods: { agilite: 20 } })
 chain('agilite', 'ag_a', 'ag_entry', 1, [
@@ -225,6 +232,13 @@ chain('agilite', 'ag_c', 'ag_entry', 1, [
   { name: 'Maître assassin', kind: 'keystone', desc: 'Capstone : +70 Agilité, +60 Dégâts crit., +15% Pénétration.', statMods: { agilite: 70, degatsCrit: 60, penetration: 750 } },
 ])
 
+// Branche DÉFENSIVE du Rôdeur : esquive + régén/drain + auto-soin (survie en solo).
+chain('agilite', 'ag_d', 'ag_entry', 1, [
+  { name: 'Roulade', maxRank: 4, statMods: { esquive: 22, agilite: 10 } },
+  { name: 'Régénération féline', kind: 'notable', maxRank: 3, statMods: { regen: 26, volDeVie: 8 } },
+  { name: 'Second souffle', kind: 'ability', unlockPower: 'second_souffle', desc: 'Débloque Second souffle (auto-soin, scale stat principale).' },
+])
+
 /* ---------------- ARCANISTE (Intelligence) ---------------- */
 single({ id: 'in_entry', name: 'Sagacité', constellation: 'intelligence', kind: 'minor', tier: 0, maxRank: 5, requires: ['co_gw_int'], description: '+20 Intelligence par rang.', statMods: { intelligence: 20 } })
 chain('intelligence', 'in_a', 'in_entry', 1, [
@@ -250,6 +264,13 @@ chain('intelligence', 'in_c', 'in_entry', 1, [
   { name: 'Salve arcanique', kind: 'ability', unlockPower: 'salve_arcanique', desc: 'Débloque Salve arcanique (cleave).' },
   { name: 'Esprit aiguisé', maxRank: 3, statMods: { intelligence: 28, critique: 24 } },
   { name: 'Omnisavoir', kind: 'keystone', desc: 'Capstone : +90 Intelligence, +40 Maîtrise, +15% de dégâts.', statMods: { intelligence: 90, maitrise: 40 }, keystone: { damageMult: 1.15 } },
+])
+
+// Branche DÉFENSIVE de l'Arcaniste : barrière + régén + bouclier d'absorption (ward).
+chain('intelligence', 'in_d', 'in_entry', 1, [
+  { name: 'Ward arcanique', maxRank: 4, statMods: { barriere: 120, reductionDegats: 10 } },
+  { name: 'Flux vital', kind: 'notable', maxRank: 3, statMods: { regen: 24, intelligence: 12 } },
+  { name: 'Bouclier runique', kind: 'ability', unlockPower: 'bouclier_runique', desc: 'Débloque Bouclier runique (absorption, scale stat principale).' },
 ])
 
 /* ---------------- BASTION (Endurance) ---------------- */

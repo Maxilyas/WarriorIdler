@@ -69,6 +69,18 @@ export const POWERS: PowerDef[] = [
     unlockLevel: 1, cooldown: 6, effect: 'shield', magnitude: 3,
   },
 
+  // --- Défensives TRANSVERSES (accessibles hors Bastion/Oracle, scalent sur la stat principale) ---
+  {
+    id: 'second_souffle', name: 'Second souffle', kind: 'active',
+    description: 'Reprends ton souffle : soigne une grosse part de tes PV. Scale sur ta stat principale.',
+    unlockLevel: 1, cooldown: 9, effect: 'heal', magnitude: 4,
+  },
+  {
+    id: 'posture_defensive', name: 'Posture défensive', kind: 'passive',
+    description: 'Garde haute : -18% de dégâts subis et +40 Endurance tant qu\'elle est équipée.',
+    unlockLevel: 1, damageReduction: 0.18, mods: { endurance: 40 },
+  },
+
   // --- Oracle (soin) ---
   {
     id: 'vague_de_soin', name: 'Vague de soin', kind: 'active',
@@ -207,7 +219,7 @@ const POWER_ICON: Record<string, string> = {
   tir_precis: '🎯', volee_de_fleches: '🏹', poison: '🧪', eviscaration: '🗡️',
   eclair: '🔮', embrasement: '☄️', trait_de_givre: '❄️', salve_arcanique: '🌟', fleau_dombre: '🌑',
   chatiment: '⚜️', decapitation: '🪓', onde_de_force: '💢',
-  provocation: '🚩', bouclier_runique: '🛡️',
+  provocation: '🚩', bouclier_runique: '🛡️', second_souffle: '💨', posture_defensive: '🧱',
   vague_de_soin: '💧', guerison_majeure: '💚', imposition_des_mains: '🙌',
   // Ultimes
   verdict: '⚖️', soif_du_neant: '🦇', deluge_stellaire: '🌠', aube_salvatrice: '🌅', hemorragie_cosmique: '🧨',
