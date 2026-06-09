@@ -165,6 +165,8 @@ export interface ActiveDungeon {
   earnedXp: number
   /** Or accumulé pendant le run (crédité à l'ouverture du coffre). */
   earnedGold: number
+  /** Relances automatiques restantes (auto-farm) : à la fin du run, on relance si > 0 et Sceaux suffisants. */
+  repeatLeft?: number
 }
 
 function pick<T>(arr: T[]): T {

@@ -236,9 +236,9 @@ interface GameState extends SaveData {
   /** Améliore (ou ajoute) la ligne typée (dégâts/résist) d'un objet via une Quintessence du type. */
   enhanceTyped: (itemId: string, type: DamageType, kind: 'dmgType' | 'resist') => void
   createItem: (opts: CreateOptions) => void
-  enterDungeon: (dungeonId: DungeonId, level: number) => void
+  enterDungeon: (dungeonId: DungeonId, level: number, repeat?: number) => void
   abandonDungeon: () => void
-  enterRaid: (raidId: RaidId, tier: number) => void
+  enterRaid: (raidId: RaidId, tier: number, repeat?: number) => void
   abandonRaid: () => void
   infuseUnique: (itemId: string) => void
   chooseUnique: (itemId: string, effectId: string) => void
@@ -1228,8 +1228,25 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
       const chest: ChestReward = { dungeonName: d.name, level: lv, items, eclats, noyau, gold, sceaux, orbes, poussiere, xp: xpTotal }
 
       const healed: Character[] = chars.map(fullHeal)
-      const log2 = pushLog(log, `🎉 ${d.name} vaincu ! Un coffre t'attend (récap des gains du run).`, 'kill')
       const dungeonProgress = { ...s.dungeonProgress, [d.dungeonId]: Math.max(s.dungeonProgress[d.dungeonId] ?? 0, lv) }
+      const repeatLeft = d.repeatLeft ?? 0
+
+      // Auto-farm : s'il reste des relances ET qu'on peut repayer le Sceau, on encaisse le coffre
+      // directement (sans modal) et on relance le même donjon au même niveau.
+      if (repeatLeft > 0) {
+        const credited = applyChestRewards(s, chest)
+        if (credited.sceaux >= def.sceauCost) {
+          const nd = generateDungeon(d.dungeonId, lv)
+          nd.repeatLeft = repeatLeft - 1
+          const log3 = pushLog(log, `🔁 Auto-farm : run encaissé (+${xpTotal.toLocaleString('fr-FR')} XP${gold ? `, +${gold.toLocaleString('fr-FR')} or` : ''}) · ${repeatLeft} relance${repeatLeft > 1 ? 's' : ''} restante${repeatLeft > 1 ? 's' : ''}.`, 'info')
+          const next = { ...s, ...credited, characters: healed, dungeonProgress, sceaux: credited.sceaux - def.sceauCost, dungeon: nd, log: log3 }
+          persist(next)
+          set(next)
+          return
+        }
+      }
+
+      const log2 = pushLog(log, `🎉 ${d.name} vaincu ! Un coffre t'attend (récap des gains du run).`, 'kill')
       const next = { ...s, characters: healed, dungeon: null, dungeonProgress, pendingChest: chest, log: log2 }
       persist(next)
       set(next)
@@ -1371,6 +1388,22 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
       }
       const healed = chars.map(fullHeal)
       const raidProgress = { ...s.raidProgress, [r.raidId]: Math.max(s.raidProgress[r.raidId] ?? 0, tier) }
+      const repeatLeft = r.repeatLeft ?? 0
+
+      // Auto-raid : s'il reste des relances ET assez d'Orbes, on encaisse le trésor et on relance.
+      if (repeatLeft > 0) {
+        const credited = applyChestRewards(s, chest)
+        if (credited.orbes >= def.orbeCost) {
+          const nr = generateRaid(r.raidId, tier)
+          nr.repeatLeft = repeatLeft - 1
+          const log3 = pushLog(log, `🔁 Auto-raid : trésor encaissé${cosmic ? ` (💫 ×${cosmic})` : ''} · ${repeatLeft} relance${repeatLeft > 1 ? 's' : ''} restante${repeatLeft > 1 ? 's' : ''}.`, 'kill')
+          const next = { ...s, ...credited, characters: healed, raidProgress, orbes: credited.orbes - def.orbeCost, raid: nr, log: log3 }
+          persist(next)
+          set(next)
+          return
+        }
+      }
+
       log = pushLog(log, `🏆 RAID VAINCU : ${def.name} (Tier ${tier}) !${cosmic ? ` 💫 Éclat cosmique ×${cosmic} !` : ''} Un trésor t'attend.`, 'kill')
       const next = { ...s, characters: healed, raid: null, raidProgress, pendingChest: chest, log }
       persist(next)
@@ -1398,6 +1431,24 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
   }
 
   set({ ...s, characters: chars, raid: { ...r, enemies, fightTime, novaCd, swarmCd, rotateCd, element, rotateIdx }, log })
+}
+
+/** Deltas d'état d'un coffre (ressources + inventaire + codex). XP exclue (déjà créditée par combat). */
+function applyChestRewards(s: GameState, c: ChestReward): Pick<GameState, 'inventory' | 'codex' | 'essence' | 'noyau' | 'poussiere' | 'cosmic' | 'gold' | 'sceaux' | 'orbes' | 'fragments'> {
+  let inventory = s.inventory
+  for (const it of c.items) inventory = [it, ...inventory].slice(0, invMax)
+  return {
+    inventory,
+    codex: discoverFromItems(s.codex, c.items),
+    essence: s.essence + c.eclats,
+    noyau: s.noyau + c.noyau,
+    poussiere: s.poussiere + (c.poussiere ?? 0),
+    cosmic: s.cosmic + (c.cosmic ?? 0),
+    gold: s.gold + c.gold,
+    sceaux: s.sceaux + c.sceaux,
+    orbes: s.orbes + (c.orbes ?? 0),
+    fragments: s.fragments + (c.fragments ?? 0),
+  }
 }
 
 export const useGame = create<GameState>((set, get) => {
@@ -1870,7 +1921,7 @@ export const useGame = create<GameState>((set, get) => {
       set(next)
     },
 
-    enterDungeon: (dungeonId, level) => {
+    enterDungeon: (dungeonId, level, repeat = 1) => {
       const s = get()
       if (s.dungeon || s.raid) return
       const def = getDungeonDef(dungeonId)
@@ -1878,8 +1929,10 @@ export const useGame = create<GameState>((set, get) => {
       if (s.sceaux < def.sceauCost) return
       if (level < 1 || level > (s.dungeonProgress[dungeonId] ?? 0) + 1) return
       const dungeon = generateDungeon(dungeonId, level)
+      dungeon.repeatLeft = Math.max(0, Math.round(repeat) - 1)
       const cost = def.sceauCost
-      const next = { ...s, sceaux: s.sceaux - cost, dungeon, log: pushLog(s.log, `🏰 Entrée dans ${dungeon.name} (${dungeon.totalFights} combats${cost ? `, -${cost} 🔑` : ', gratuit'}).`, 'info') }
+      const runs = dungeon.repeatLeft > 0 ? ` · auto ×${dungeon.repeatLeft + 1}` : ''
+      const next = { ...s, sceaux: s.sceaux - cost, dungeon, log: pushLog(s.log, `🏰 Entrée dans ${dungeon.name} (${dungeon.totalFights} combats${cost ? `, -${cost} 🔑` : ', gratuit'}${runs}).`, 'info') }
       persist(next)
       set(next)
     },
@@ -1892,7 +1945,7 @@ export const useGame = create<GameState>((set, get) => {
       set(next)
     },
 
-    enterRaid: (raidId, tier) => {
+    enterRaid: (raidId, tier, repeat = 1) => {
       const s = get()
       if (s.raid || s.dungeon) return
       const def = getRaidDef(raidId)
@@ -1901,7 +1954,9 @@ export const useGame = create<GameState>((set, get) => {
       if (tier < 1 || tier > maxTier) return
       if (s.orbes < def.orbeCost) return
       const raid = generateRaid(raidId, tier)
-      const next = { ...s, orbes: s.orbes - def.orbeCost, raid, log: pushLog(s.log, `⚔️ Raid lancé : ${def.name} · Tier ${tier} (${raid.totalBosses} boss).`, 'info') }
+      raid.repeatLeft = Math.max(0, Math.round(repeat) - 1)
+      const runs = raid.repeatLeft > 0 ? ` · auto ×${raid.repeatLeft + 1}` : ''
+      const next = { ...s, orbes: s.orbes - def.orbeCost, raid, log: pushLog(s.log, `⚔️ Raid lancé : ${def.name} · Tier ${tier} (${raid.totalBosses} boss${runs}).`, 'info') }
       persist(next)
       set(next)
     },
@@ -1987,25 +2042,14 @@ export const useGame = create<GameState>((set, get) => {
       const s = get()
       const c = s.pendingChest
       if (!c) return
-      let inventory = s.inventory
-      for (const it of c.items) inventory = [it, ...inventory].slice(0, invMax)
-      const orbeG = c.orbes ?? 0
-      const fragG = c.fragments ?? 0
       const pousG = c.poussiere ?? 0
       const cosmG = c.cosmic ?? 0
+      const orbeG = c.orbes ?? 0
+      const fragG = c.fragments ?? 0
       const next = {
         ...s,
+        ...applyChestRewards(s, c),
         pendingChest: null,
-        inventory,
-        codex: discoverFromItems(s.codex, c.items),
-        essence: s.essence + c.eclats,
-        noyau: s.noyau + c.noyau,
-        poussiere: s.poussiere + pousG,
-        cosmic: s.cosmic + cosmG,
-        gold: s.gold + c.gold,
-        sceaux: s.sceaux + c.sceaux,
-        orbes: s.orbes + orbeG,
-        fragments: s.fragments + fragG,
         log: pushLog(
           s.log,
           `Coffre ouvert : ${c.items.length} objets${c.eclats ? `, +${c.eclats} éclats` : ''}${c.noyau ? `, +${c.noyau} noyaux` : ''}${pousG ? `, +${pousG} poussière` : ''}${cosmG ? `, +${cosmG} 💫` : ''}${c.gold ? `, +${c.gold} or` : ''}${c.sceaux ? `, +${c.sceaux} sceau` : ''}${orbeG ? `, +${orbeG} orbe` : ''}${fragG ? `, +${fragG} fragment` : ''}.`,

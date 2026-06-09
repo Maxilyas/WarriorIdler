@@ -176,6 +176,8 @@ export interface ActiveRaid {
   rotateCd: number
   /** Délai (s) avant l'enrage mortel sur ce boss. */
   berserkAt: number
+  /** Relances automatiques restantes (auto-farm) : à la fin du raid, on relance si > 0 et Orbes suffisantes. */
+  repeatLeft?: number
 }
 
 /** Nombre de boss d'un raid à un tier donné. */

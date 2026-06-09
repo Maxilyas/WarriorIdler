@@ -10,6 +10,10 @@ import { theoreticalDps } from '../game/combat'
 import { DAMAGE_TYPES } from '../game/damage'
 import { RARITY_LIST } from '../game/rarities'
 
+/** Valeur « ∞ » du sélecteur de répétitions (limité en pratique par les Orbes disponibles). */
+const INF = 999
+const REPEAT_PRESETS = [1, 3, 5, INF]
+
 function fmt(n: number): string {
   if (n >= 1e9) return (n / 1e9).toFixed(1) + 'Md'
   if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M'
@@ -82,7 +86,7 @@ export function RaidPanel() {
               busy={!!raid || !!dungeon}
               partyDps={partyDps}
               partyHp={partyHp}
-              onEnter={(tier) => enterRaid(def.id, tier)}
+              onEnter={(tier, rep) => enterRaid(def.id, tier, rep)}
             />
           ))}
         </div>
@@ -100,10 +104,11 @@ function RaidCard({ def, unlocked, cleared, bestStage, orbes, busy, partyDps, pa
   busy: boolean
   partyDps: number
   partyHp: number
-  onEnter: (tier: number) => void
+  onEnter: (tier: number, repeat: number) => void
 }) {
   const frontier = cleared + 1
   const [tier, setTier] = useState(frontier)
+  const [repeat, setRepeat] = useState(1)
   const t = Math.max(1, Math.min(frontier, tier))
 
   if (!unlocked) {
@@ -170,8 +175,23 @@ function RaidCard({ def, unlocked, cleared, bestStage, orbes, busy, partyDps, pa
 
       <RarityRange def={def} tier={t} />
 
+      {/* Auto-raid : nombre de raids enchaînés (consomme les Orbes à la volée) */}
+      <div className="mt-2 flex items-center gap-1 text-[10px]">
+        <span className="text-slate-500" title="Relances automatiques à la fin de chaque raid">🔁 Auto</span>
+        {REPEAT_PRESETS.map((n) => (
+          <button
+            key={n}
+            onClick={() => setRepeat(n)}
+            className={'rounded px-1.5 py-0.5 font-semibold ' + (repeat === n ? 'bg-rose-600 text-slate-950' : 'bg-slate-800 text-slate-400 hover:bg-slate-700')}
+          >
+            {n === INF ? '∞' : '×' + n}
+          </button>
+        ))}
+        <span className="ml-auto text-[8.5px] text-slate-600">{def.orbeCost} 🔮 / raid</span>
+      </div>
+
       {/* Sélecteur de tier + lancement */}
-      <div className="mt-2 flex items-center gap-1.5">
+      <div className="mt-1.5 flex items-center gap-1.5">
         <div className="flex items-center rounded-lg border border-slate-700">
           <button onClick={() => setTier((x) => Math.max(1, Math.min(frontier, x) - 1))} className="px-2 py-1 text-xs text-slate-300 hover:bg-white/5">−</button>
           <span className="w-12 text-center text-xs tabular-nums text-slate-200">Tier {t}{isNew ? ' ★' : ''}</span>
@@ -179,11 +199,11 @@ function RaidCard({ def, unlocked, cleared, bestStage, orbes, busy, partyDps, pa
         </div>
         <button
           disabled={!canEnter}
-          onClick={() => onEnter(t)}
+          onClick={() => onEnter(t, repeat)}
           className="flex-1 rounded-lg py-1.5 text-xs font-semibold text-slate-50 disabled:opacity-40"
           style={{ background: canEnter ? def.color + 'cc' : '#1e2433' }}
         >
-          {busy ? 'Indisponible' : orbes < def.orbeCost ? `Besoin de ${def.orbeCost} 🔮` : `Lancer le tier ${t} (${def.orbeCost} 🔮)`}
+          {busy ? 'Indisponible' : orbes < def.orbeCost ? `Besoin de ${def.orbeCost} 🔮` : `Lancer tier ${t}${repeat > 1 ? (repeat === INF ? ' ∞' : ` ×${repeat}`) : ''} (${def.orbeCost} 🔮)`}
         </button>
       </div>
     </div>

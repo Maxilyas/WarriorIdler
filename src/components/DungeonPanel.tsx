@@ -3,6 +3,10 @@ import { useGame, SCEAU_COST } from '../game/store'
 import { DUNGEON_LIST, dungeonFights, dungeonIlvl, type DungeonDef, type DungeonReward } from '../game/dungeons'
 import { DAMAGE_TYPES } from '../game/damage'
 
+/** Valeur « ∞ » du sélecteur de répétitions (limité en pratique par les Sceaux disponibles). */
+const INF = 999
+const REPEAT_PRESETS = [1, 5, 10, INF]
+
 const REWARD_LABEL: Record<DungeonReward, string> = {
   gold: '💰 Or',
   xp: '📚 Expérience',
@@ -63,7 +67,7 @@ export function DungeonPanel() {
             sceaux={sceaux}
             bestStage={bestStage}
             busy={!!dungeon}
-            onEnter={(lvl) => enterDungeon(def.id, lvl)}
+            onEnter={(lvl, rep) => enterDungeon(def.id, lvl, rep)}
           />
         ))}
       </div>
@@ -77,15 +81,18 @@ function DungeonCard({ def, cleared, sceaux, bestStage, busy, onEnter }: {
   sceaux: number
   bestStage: number
   busy: boolean
-  onEnter: (level: number) => void
+  onEnter: (level: number, repeat: number) => void
 }) {
   const frontier = cleared + 1
   const [level, setLevel] = useState(frontier)
+  const [repeat, setRepeat] = useState(1)
   const lvl = Math.max(1, Math.min(frontier, level))
   const locked = bestStage < def.unlockStage
   const el = DAMAGE_TYPES[def.element]
   const cost = def.sceauCost
   const canEnter = !busy && sceaux >= cost && !locked
+  // Nombre de runs réellement payables d'affilée (∞ = limité par les Sceaux).
+  const affordableRuns = cost === 0 ? (repeat === INF ? 99 : repeat) : Math.min(repeat, Math.floor(sceaux / cost))
 
   return (
     <div className="rounded-lg border border-slate-800 bg-[#11151f] p-2.5" style={{ borderColor: def.color + '40' }}>
@@ -110,20 +117,35 @@ function DungeonCard({ def, cleared, sceaux, bestStage, busy, onEnter }: {
           🔒 Atteins le palier {def.unlockStage} pour débloquer
         </div>
       ) : (
-        <div className="mt-2 flex items-center gap-1.5">
-          <div className="flex items-center rounded-lg border border-slate-700">
-            <button onClick={() => setLevel((l) => Math.max(1, Math.min(frontier, l) - 1))} className="px-2 py-1 text-xs text-slate-300 hover:bg-white/5">−</button>
-            <span className="w-7 text-center text-xs tabular-nums text-slate-200">{lvl}</span>
-            <button onClick={() => setLevel((l) => Math.min(frontier, Math.max(1, l) + 1))} className="px-2 py-1 text-xs text-slate-300 hover:bg-white/5">+</button>
+        <>
+          {/* Auto-farm : nombre de runs enchaînés (consomme les Sceaux à la volée) */}
+          <div className="mt-2 flex items-center gap-1 text-[10px]">
+            <span className="text-slate-500" title="Relances automatiques à la fin de chaque run">🔁 Auto</span>
+            {REPEAT_PRESETS.map((n) => (
+              <button
+                key={n}
+                onClick={() => setRepeat(n)}
+                className={'rounded px-1.5 py-0.5 font-semibold ' + (repeat === n ? 'bg-amber-600 text-slate-950' : 'bg-slate-800 text-slate-400 hover:bg-slate-700')}
+              >
+                {n === INF ? '∞' : '×' + n}
+              </button>
+            ))}
           </div>
-          <button
-            disabled={!canEnter}
-            onClick={() => onEnter(lvl)}
-            className="flex-1 rounded-lg bg-amber-700/80 py-1.5 text-xs font-semibold hover:bg-amber-600 disabled:opacity-40"
-          >
-            {busy ? 'Donjon en cours…' : sceaux < cost ? `Manque de Sceaux (${cost} 🔑)` : `Entrer niv. ${lvl}${cost === 0 ? ' (gratuit)' : ` (${cost} 🔑)`}`}
-          </button>
-        </div>
+          <div className="mt-1.5 flex items-center gap-1.5">
+            <div className="flex items-center rounded-lg border border-slate-700">
+              <button onClick={() => setLevel((l) => Math.max(1, Math.min(frontier, l) - 1))} className="px-2 py-1 text-xs text-slate-300 hover:bg-white/5">−</button>
+              <span className="w-7 text-center text-xs tabular-nums text-slate-200">{lvl}</span>
+              <button onClick={() => setLevel((l) => Math.min(frontier, Math.max(1, l) + 1))} className="px-2 py-1 text-xs text-slate-300 hover:bg-white/5">+</button>
+            </div>
+            <button
+              disabled={!canEnter}
+              onClick={() => onEnter(lvl, repeat)}
+              className="flex-1 rounded-lg bg-amber-700/80 py-1.5 text-xs font-semibold hover:bg-amber-600 disabled:opacity-40"
+            >
+              {busy ? 'Donjon en cours…' : sceaux < cost ? `Manque de Sceaux (${cost} 🔑)` : `Entrer niv. ${lvl}${repeat > 1 ? ` ×${affordableRuns}${repeat === INF ? '' : ''}` : ''}${cost === 0 ? '' : ` (${cost} 🔑/run)`}`}
+            </button>
+          </div>
+        </>
       )}
     </div>
   )

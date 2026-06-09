@@ -118,6 +118,9 @@ export function CombatPanel() {
           </div>
           <div className="mt-1 text-[11px] text-slate-400">
             Combat <span className="text-slate-200">{dungeon.current + 1}/{dungeon.totalFights}</span>
+            {(dungeon.repeatLeft ?? 0) > 0 && (
+              <span className="ml-2 rounded bg-amber-900/40 px-1.5 py-0.5 text-[10px] text-amber-200" title="Relances automatiques restantes">🔁 {dungeon.repeatLeft} run{dungeon.repeatLeft! > 1 ? 's' : ''} en file</span>
+            )}
           </div>
           {dungeon.modifiers.length > 0 && (
             <div className="mt-1.5 flex flex-wrap gap-1">
@@ -141,7 +144,12 @@ export function CombatPanel() {
             </button>
           </div>
           <div className="mt-1 flex items-center justify-between text-[11px] text-slate-400">
-            <span>Boss <span className="text-slate-200">{raid.current + 1}/{raid.totalBosses}</span></span>
+            <span>
+              Boss <span className="text-slate-200">{raid.current + 1}/{raid.totalBosses}</span>
+              {(raid.repeatLeft ?? 0) > 0 && (
+                <span className="ml-2 rounded bg-rose-900/40 px-1.5 py-0.5 text-[10px] text-rose-200" title="Relances automatiques restantes">🔁 {raid.repeatLeft}</span>
+              )}
+            </span>
             {raid.mechanics.includes('berserk') && (
               <span className={raid.fightTime >= raid.berserkAt ? 'font-semibold text-rose-400' : 'text-amber-300'}>
                 ⏱️ {raid.fightTime >= raid.berserkAt ? 'ENRAGE MORTEL !' : `${Math.max(0, Math.ceil(raid.berserkAt - raid.fightTime))}s avant enrage`}
