@@ -63,8 +63,10 @@ export function simulateOffline(
   const sceaux = Math.floor(kills / 50) // ~1 sceau / 50 kills
   const noyau = Math.floor(kills / 80)
 
-  // Quintessence du biome : ~1% des kills (même taux que le drop normal en ligne).
-  const qAmount = Math.floor(kills * 0.01)
+  // Quintessence du biome : ~1% des kills, AUGMENTÉ par le palier (même formule que le store :
+  // QUINT_TIER_BONUS=0.012, plafond ×4) → farmer haut rapporte plus.
+  const qTierMult = Math.min(4, 1 + Math.max(0, stage - 1) * 0.012)
+  const qAmount = Math.floor(kills * 0.01 * qTierMult)
   const quint = qAmount > 0 ? { type: activeBiome, amount: qAmount } : undefined
 
   return { durationMs: capped, kills, gold, xp, items, sceaux, noyau, quint }

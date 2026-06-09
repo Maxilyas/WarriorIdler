@@ -147,8 +147,16 @@ function quintLogSuffix(refund: Partial<Record<DamageType, number>>): string {
   return parts.length ? ` + ${parts.join(' ')}` : ''
 }
 
-/** Chances de drop d'une Quintessence du biome actif selon le rang d'ennemi. */
+/** Chances de drop d'une Quintessence du biome actif selon le rang d'ennemi (au palier 1). */
 const QUINT_DROP = { normal: 0.01, elite: 0.05, boss: 0.1 }
+/** Bonus de drop de Quintessence par palier (multiplicatif, plafonné) → farmer son palier actuel
+ *  rapporte plus que farmer 50 paliers en dessous. */
+const QUINT_TIER_BONUS = 0.012
+const QUINT_TIER_MULT_CAP = 4
+/** Multiplicateur de drop de Quintessence au palier `stage`. */
+function quintTierMult(stage: number): number {
+  return Math.min(QUINT_TIER_MULT_CAP, 1 + Math.max(0, stage - 1) * QUINT_TIER_BONUS)
+}
 
 /**
  * Donjons = voie RENTABLE pour monter de niveau & farmer l'or. À CHAQUE combat gagné, l'équipe
@@ -270,19 +278,14 @@ function pushLog(log: LogEntry[], text: string, kind: LogKind): LogEntry[] {
 }
 
 function xpForLevel(level: number): number {
-  // La courbe DOIT grandir exponentiellement, sinon le revenu d'XP (qui croît en 1.115^stage)
-  // dépasse instantanément le coût d'un niveau → on prend des centaines de niveaux/seconde.
+  // Exponentielle UNIQUE et douce (×1.10/niveau) : pas de cassure/mur (l'ancienne phase 2 à ×2.19
+  // murait dès ~110). Reste exponentielle, donc auto-régulée : à stage fixe le revenu d'XP (1.115^stage)
+  // ne dépasse plus la courbe → fini les centaines de niveaux/seconde.
   //
-  // Phase 1 (1→100) : coût qui suit la croissance du revenu (1.115/niveau, calé sur l'XP des
-  //   ennemis). À progression régulière (~1 niveau par stage), le temps par niveau reste stable :
-  //   1→90 se joue sur quelques heures, le 100 marque la fin de la montée « rapide ».
-  // Phase 2 (100+) : soft cap = MUR très raide. Croissance ×2.19/niveau (= 1.17^5) : chaque niveau
-  //   plus que double le coût. La montée qui s'étalait jusqu'au 150 est compressée sur ~10 niveaux,
-  //   donc le coût d'antan au niveau 150 est désormais atteint dès ~110 → au-delà de 110, plusieurs
-  //   heures puis jours par niveau. (Constante facile à adoucir/durcir : 2.19 → moins raide si besoin.)
-  if (level <= 100) return Math.round(50 * Math.pow(1.115, level - 1))
-  const at100 = 50 * Math.pow(1.115, 99)
-  return Math.round(at100 * Math.pow(2.19, level - 100))
+  // Profil voulu : 1→90 sur quelques heures (« le début, pas trop vite »), montée ÉTALÉE ensuite,
+  //   ~150 = endgame (déblocage du dernier raid), ~200 = plafond atteignable à la sueur.
+  //   Repères (coût d'un niveau) : 90 ≈ 217 k · 100 ≈ 563 k · 150 ≈ 73 M · 200 ≈ 8,5 Md.
+  return Math.round(45 * Math.pow(1.10, level - 1))
 }
 
 // Cooldowns transitoires des capacités actives (clé `charId:powerId`). Non persistés.
@@ -1705,7 +1708,8 @@ export const useGame = create<GameState>((set, get) => {
         // 1% sur un ennemi normal, 5% sur une élite, 10% sur un boss. Farm continu et patient.
         let quint = s.quint
         {
-          const qChance = boss ? QUINT_DROP.boss : elite ? QUINT_DROP.elite : QUINT_DROP.normal
+          const qBase = boss ? QUINT_DROP.boss : elite ? QUINT_DROP.elite : QUINT_DROP.normal
+          const qChance = qBase * quintTierMult(stage)
           if (Math.random() < qChance) {
             const t = s.activeBiome
             quint = { ...quint, [t]: (quint[t] ?? 0) + 1 }
