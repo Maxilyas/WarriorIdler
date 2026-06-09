@@ -191,7 +191,7 @@ export function computeDerived(total: StatBlock): DerivedStats {
     agiPower,
     intPower,
     endurancePower: statPower(endurance),
-    hp: (100 + endurance * 10) * (1 + shieldPct),
+    hp: (100 + endurance * 12) * (1 + shieldPct), // PV/Endurance relevés (survie suit mieux la montée)
     // Soft caps (style WoW) : plein rendement jusqu'au seuil (= ancien cap), puis dégressif au-delà
     // en approchant une limite haute. Plus aucun rating gaspillé après le seuil.
     critChance: softCap(0.05 + (total.critique ?? 0) / PER_PCT, 0.75, 0.92),

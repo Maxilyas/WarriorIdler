@@ -113,9 +113,10 @@ export function makeEnemy(stage: number, biome: BiomeId = 'physique'): Enemy {
     maxHp,
     hp: maxHp,
     armor: Math.round(stage * 1.5 * armorMult),
-    // Dégâts FRANCHEMENT mordants dès les premiers paliers (premier jet — à affiner au pass d'équilibrage) :
-    // sans stuff (EHP/résistances) on plafonne vers le palier ~8-10 → un MUR qui force à s'équiper.
-    damage: Math.round(7 * Math.pow(1.17, stage - 1) * (isBoss ? 1.8 : 1) * dmgMult),
+    // Dégâts : croissance VOLONTAIREMENT plus lente que les PV (1.115 vs 1.17, comme les raids) →
+    // les PV joueur (≈ linéaires) suivent, fini le one-shot exponentiel en fin de course. La menace
+    // vient désormais de la pression soutenue + des techniques télégraphiées (à parer), pas du mur sec.
+    damage: Math.round(7 * Math.pow(1.115, stage - 1) * (isBoss ? 1.8 : 1) * dmgMult),
     // XP rare (monter de niveau se mérite — levelling volontairement lent au début).
     xp: Math.round((isBoss ? 38 : isElite ? 17 : 4) * Math.pow(1.115, stage - 1)),
     resist,
