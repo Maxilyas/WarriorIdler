@@ -1,7 +1,6 @@
 import { useGame, powerCooldowns } from '../game/store'
 import type { LogKind } from '../game/store'
-import { charDerived, charMaxHp, charDamageProfile, TALENT_START_LEVEL } from '../game/character'
-import { theoreticalDps } from '../game/combat'
+import { charMaxHp, charDps, TALENT_START_LEVEL } from '../game/character'
 import { isBossStage } from '../game/enemies'
 import { getPower, powerIcon } from '../game/powers'
 import { DAMAGE_TYPES } from '../game/damage'
@@ -62,7 +61,7 @@ export function CombatPanel() {
   const objective = nextObjective(bestStage, maxLevel, physiqueBest)
   const partyDps = characters
     .filter((c) => c.hp > 0)
-    .reduce((sum, c) => sum + theoreticalDps(charDerived(c), charDamageProfile(c)), 0)
+    .reduce((sum, c) => sum + charDps(c), 0)
   const resistEntries = Object.entries(enemy.resist ?? {}) as [DamageType, number][]
   // Combat classique : résistance globale (les 7 types égaux) ; donjon/raid : résistances typées.
   const resistVals = resistEntries.map(([, v]) => v)
@@ -445,6 +444,7 @@ function nextObjective(bestStage: number, maxLevel: number, physiqueBest: number
   if (maxLevel <= TALENT_START_LEVEL) return `Monte un personnage au niveau ${TALENT_START_LEVEL + 1} (onglet 🛡 Perso) pour débloquer l'arbre de 🌌 Talents.`
   if (physiqueBest < 20) return 'Atteins le palier 20 aux Champs de Bataille pour débloquer 4 nouveaux 🧭 biomes (Feu, Froid, Foudre, Nature) — chacun son butin et ses menaces.'
   if (bestStage < 50) return 'Atteins le palier 50 (n\'importe quel biome) pour débloquer les ☠️ Raids et les biomes Arcane & Ombre.'
+  if (maxLevel < 100) return `Vise le niveau 100 — le soft cap (3-5 h de jeu) qui débloque des builds complets. Farme le 📚 Sanctuaire du Savoir pour l'XP. (Niv. actuel max : ${maxLevel})`
   return null
 }
 

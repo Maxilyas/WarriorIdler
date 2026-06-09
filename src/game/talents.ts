@@ -158,14 +158,8 @@ const allResist = (v: number): Partial<Record<DamageType, number>> =>
 single({ id: 'co_start', name: 'Éveil', constellation: 'coeur', kind: 'ability', tier: 0, maxRank: 1,
   description: '+10 stats primaires, +20 Endurance, et débloque Frappe.',
   statMods: { force: 10, agilite: 10, intelligence: 10, endurance: 20 }, unlockPower: 'frappe_simple' })
-// HUB CŒUR = étoile propre : TOUS ces nœuds partent directement de `co_start` (un seul parent →
-// aucun entrelacement). Quelques passifs fondateurs + l'Onde de force, puis les 6 passerelles.
-single({ id: 'co_vit', name: 'Vitalité', constellation: 'coeur', kind: 'minor', tier: 1, maxRank: 5, requires: ['co_start'], description: '+25 Endurance par rang.', statMods: { endurance: 25 } })
-single({ id: 'co_pow', name: 'Aguerri', constellation: 'coeur', kind: 'minor', tier: 1, maxRank: 5, requires: ['co_start'], description: '+8 à chaque stat offensive par rang.', statMods: { force: 8, agilite: 8, intelligence: 8 } })
-single({ id: 'co_res', name: 'Endurci', constellation: 'coeur', kind: 'notable', tier: 2, maxRank: 3, requires: ['co_start'], description: '+5% de résistance à tous les types par rang.', resistMods: allResist(0.05) })
-single({ id: 'co_spell', name: 'Onde de force', constellation: 'coeur', kind: 'ability', tier: 2, maxRank: 1, requires: ['co_start'], description: 'Débloque Onde de force (zone précoce, scale FOR).', unlockPower: 'onde_de_force' })
-// Les 6 passerelles RAYONNENT directement du centre. Leur ORDRE (tier) place les voies pour que les
-// CARREFOURS relient des voisines : force – agi – int – soin – conv – bastion (boucle).
+// HUB CŒUR ÉPURÉ : SEULE la node Éveil au centre, qui rayonne directement vers les 6 passerelles
+// (aucun autre nœud au Cœur → visibilité maximale). Les 6 passerelles RAYONNENT du centre.
 const coreGw: [string, string, number, StatBlock][] = [
   ['co_gw_force', '→ Berserker', 10, { force: 15 }],
   ['co_gw_agi', '→ Rôdeur', 11, { agilite: 15 }],
@@ -319,11 +313,16 @@ chain('conversion', 'cv_a', 'cv_entry', 1, [
   { name: 'Esprit affûté', kind: 'keystone', desc: '60% de ton Agilité compte aussi comme Intelligence.', keystone: { statAsOther: { from: 'agilite', to: 'intelligence', frac: 0.6 } } },
   { name: 'Magie de guerre', kind: 'keystone', desc: '60% de ton Intelligence compte aussi comme Force.', keystone: { statAsOther: { from: 'intelligence', to: 'force', frac: 0.6 } } },
 ])
+// Voile d'ombre (Physique→Ombre) et Givre éternel (Physique→Froid) sont des conversions ALTERNATIVES
+// (exclusives) → branches SÉPARÉES depuis l'entrée, pas l'une après l'autre.
 chain('conversion', 'cv_b', 'cv_entry', 1, [
   { name: 'Flux', maxRank: 4, statMods: { maitrise: 36 } },
   { name: 'Voile d\'ombre', kind: 'keystone', desc: 'Convertit 50% des dégâts Physiques en Ombre.', statMods: { maitrise: 30 }, keystone: { convertDamage: { from: 'physique', to: 'ombre', frac: 0.5 } } },
-  { name: 'Givre éternel', kind: 'keystone', desc: 'Convertit 50% des dégâts Physiques en Froid.', statMods: { maitrise: 30 }, keystone: { convertDamage: { from: 'physique', to: 'froid', frac: 0.5 } } },
   { name: 'Omniscience', kind: 'keystone', desc: 'Capstone : +50 stats offensives, +20% dégâts, +10% réduction.', statMods: { force: 50, agilite: 50, intelligence: 50 }, keystone: { damageMult: 1.2, flatDr: 0.1 } },
+])
+chain('conversion', 'cv_d', 'cv_entry', 1, [
+  { name: 'Cristallisation', maxRank: 4, statMods: { maitrise: 36 } },
+  { name: 'Givre éternel', kind: 'keystone', desc: 'Convertit 50% des dégâts Physiques en Froid.', statMods: { maitrise: 30 }, keystone: { convertDamage: { from: 'physique', to: 'froid', frac: 0.5 } } },
 ])
 // EMPREINTE — variantes « le Physique compte aussi comme … » vers les types non couverts par
 // l'Élémentaliste (Ombre/Arcane/Nature), pour un build hybride physique-multitype.
@@ -481,22 +480,6 @@ chain('briseur', 'br_b', 'br_entry', 1, [
   { name: 'Épines brûlantes', kind: 'keystone', desc: 'Renvoie 30% des dégâts subis à l\'ennemi.', keystone: { thorns: 0.3 } },
   { name: 'Cataclysme vivant', kind: 'keystone', desc: 'Capstone : +200 Endurance, +40 Ténacité, +20% de dégâts au-dessus de 60% PV.', statMods: { endurance: 200, tenacite: 40 }, keystone: { highHpBonus: { threshold: 0.6, mult: 1.2 } } },
 ])
-
-/* ================== CARREFOURS inter-voies (anneau autour du centre) ==================
- * Chaque carrefour relie deux voies « cœur » ADJACENTES (prérequis OR sur les deux entrées). Grâce
- * à l'ordre des passerelles ci-dessus, ils forment un anneau propre — sans traverser le centre.
- */
-const CARREFOURS: [string, string, string, string, StatBlock][] = [
-  ['xr_for_bas', 'Carrefour du Rempart', 'fo_entry', 'ba_entry', { force: 25, endurance: 40 }],
-  ['xr_for_agi', 'Carrefour du Duel', 'fo_entry', 'ag_entry', { force: 25, agilite: 25 }],
-  ['xr_agi_int', 'Carrefour de l\'Éclat', 'ag_entry', 'in_entry', { agilite: 25, intelligence: 25 }],
-  ['xr_int_soin', 'Carrefour de la Sève', 'in_entry', 'so_entry', { intelligence: 25, regen: 25 }],
-  ['xr_soin_conv', 'Carrefour de l\'Équilibre', 'so_entry', 'cv_entry', { force: 20, agilite: 20, intelligence: 20 }],
-  ['xr_conv_bas', 'Carrefour de la Mue', 'cv_entry', 'ba_entry', { maitrise: 30, endurance: 30 }],
-]
-for (const [id, name, from, to, mods] of CARREFOURS) {
-  single({ id, name, constellation: 'coeur', kind: 'notable', tier: 6, maxRank: 1, requires: [from, to], description: `Pont entre deux voies. ${sd(mods)}.`, statMods: mods })
-}
 
 /* ================== ULTIMES : 10 sorts surpuissants (nœuds-capacité profonds) ==================
  * Récompenses fortes à long cooldown, ancrées dans la voie thématique de chaque effet.

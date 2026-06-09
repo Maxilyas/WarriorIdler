@@ -478,8 +478,8 @@ function SpellCard({ power }: { power: PowerDef }) {
           <span className="text-slate-300">
             Type : {dt ? <span style={{ color: dt.color }}>{dt.icon} {dt.name}</span> : <span style={{ color: DAMAGE_TYPES.physique.color }}>{DAMAGE_TYPES.physique.icon} Physique</span>}
           </span>
-          {sum.magnitude > 0 && (
-            <span className="col-span-2 text-slate-400">≈ valeur : <span className="font-semibold tabular-nums">×{sum.magnitude.toFixed(1)}</span> de la puissance de scaling</span>
+          {sum.magnitude > 0 && !['charge', 'mark', 'frenzy', 'invuln'].includes(power.effect ?? '') && (
+            <span className="col-span-2 text-slate-400">≈ valeur : <span className="font-semibold tabular-nums">×{sum.magnitude.toFixed(1)}</span> de la puissance (scale aussi sur ton profil d'arme)</span>
           )}
         </div>
       )}

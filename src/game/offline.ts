@@ -1,6 +1,5 @@
 import type { Character, Item, DamageType } from './types'
-import { charDerived, charDamageProfile } from './character'
-import { theoreticalDps } from './combat'
+import { charDps } from './character'
 import { makeEnemy, stageIlvl, stageLuckTier } from './enemies'
 import { generateItem } from './items'
 import { computeGlobalMods } from './upgrades'
@@ -41,7 +40,7 @@ export function simulateOffline(
 
   const living = characters.filter((c) => c.hp > 0)
   const pool = living.length ? living : characters
-  const partyDps = pool.reduce((sum, c) => sum + theoreticalDps(charDerived(c), charDamageProfile(c)), 0)
+  const partyDps = pool.reduce((sum, c) => sum + charDps(c), 0)
   if (partyDps <= 0) return null
 
   const enemy = makeEnemy(stage)

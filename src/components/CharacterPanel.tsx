@@ -9,6 +9,12 @@ import { charTotalStats, charDerived, charMaxHp, charDamageProfile, charResist, 
 import { getPower, POWER_EFFECT_META } from '../game/powers'
 
 const DMG_EFFECTS: ReadonlySet<string> = new Set(['nuke', 'cleave', 'dot', 'executeNuke', 'megaCleave', 'lifeNuke', 'rupture'])
+// Effets dont la magnitude est une VALEUR affichable (dégâts/PV). Les autres (charge/marque/frénésie/
+// immunité) ont une magnitude = MULTIPLICATEUR/durée → on n'affiche pas de « ≈ X » trompeur.
+const VALUE_EFFECTS: ReadonlySet<string> = new Set([
+  'nuke', 'cleave', 'dot', 'heal', 'hot', 'shield', 'buffParty',
+  'executeNuke', 'megaCleave', 'lifeNuke', 'rupture', 'bigShield', 'bigHeal',
+])
 
 /** Détail chiffré d'une capacité active : type, cooldown réel, valeur théorique (1 chiffre). */
 function powerDetail(p: PowerDef, derived: DerivedStats) {
@@ -16,7 +22,7 @@ function powerDetail(p: PowerDef, derived: DerivedStats) {
   const cd = (p.cooldown ?? 0) * (1 - derived.cdr)
   const isDmg = DMG_EFFECTS.has(p.effect ?? '')
   const type: DamageType | undefined = p.damageType ?? (isDmg ? 'physique' : undefined)
-  return { value, cd, type, dmg: isDmg }
+  return { value, cd, type, dmg: isDmg, showValue: VALUE_EFFECTS.has(p.effect ?? '') }
 }
 
 const SPEC_INFO: Record<PrimaryStat, string> = {
@@ -245,7 +251,7 @@ function PowersSection({ char }: { char: Character }) {
                   {det.type && <span style={{ color: DAMAGE_TYPES[det.type].color }}>{DAMAGE_TYPES[det.type].icon} {DAMAGE_TYPES[det.type].name}</span>}
                   <span>{POWER_EFFECT_META[p.effect ?? 'nuke'].label}</span>
                   <span>CD {det.cd.toFixed(1)}s</span>
-                  <span className="text-slate-200">≈ {det.value.toLocaleString('fr-FR')} {det.dmg ? 'dég.' : 'PV'}</span>
+                  {det.showValue && <span className="text-slate-200">≈ {det.value.toLocaleString('fr-FR')} {det.dmg ? 'dég.' : 'PV'}</span>}
                 </div>
               )}
               <p className="mt-0.5 text-[10px] leading-snug text-slate-500">{p.description}</p>

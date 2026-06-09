@@ -1,7 +1,8 @@
 import type { Character, StatBlock, StatKey, PrimaryStat, OffensiveStat, PowerDef, DamageType } from './types'
 import { computeTotalStats, computeDerived, type DerivedStats } from './stats'
-import { computeDamageProfile, computeResistProfile, type DamageProfile } from './damage'
+import { computeDamageProfile, computeResistProfile, profileDamageMult, type DamageProfile } from './damage'
 import { getPower, POWER_SLOTS } from './powers'
+import { theoreticalDps } from './combat'
 import {
   talentStatMods, talentResistMods, talentUnlockedPowers, talentKeystones, type KeystoneEffect,
 } from './talents'
@@ -141,6 +142,34 @@ export function abilityPower(d: DerivedStats, scaleStat?: OffensiveStat): number
 
 export function charDamageProfile(char: Character): DamageProfile {
   return computeDamageProfile(char.equipment, charKeystones(char))
+}
+
+/** DPS d'un sort actif (mêmes règles qu'en combat : dégâts directs/DoT, scalent sur le profil de l'arme). */
+function abilityDps(p: PowerDef, derived: DerivedStats, profileMult: number): number {
+  if (p.kind !== 'active' || !p.effect) return 0
+  const value = (p.magnitude ?? 0) * abilityPower(derived, p.scaleStat) * profileMult
+  const cd = Math.max(0.5, (p.cooldown ?? 3) * (1 - derived.cdr))
+  switch (p.effect) {
+    case 'nuke': case 'cleave': case 'megaCleave': case 'lifeNuke': return value / cd
+    case 'executeNuke': return (value * 1.8) / cd // bonus moyen selon les PV manquants de la cible
+    case 'dot': return value * 0.4 * derived.alterationMult // DoT soutenu
+    case 'rupture': return (value * 0.5 + value * 0.5 * derived.alterationMult * (p.duration ?? 8)) / cd
+    default: return 0 // soins / boucliers / buffs / charge / marque : pas un DPS direct
+  }
+}
+
+/** DPS total estimé d'un perso : auto-attaque + CAPACITÉS actives équipées (pour l'affichage). */
+export function charDps(char: Character): number {
+  const derived = charDerived(char)
+  const profile = charDamageProfile(char)
+  const pm = profileDamageMult(profile)
+  let dps = theoreticalDps(derived, profile)
+  for (const pid of char.powers) {
+    if (!pid) continue
+    const p = getPower(pid)
+    if (p) dps += abilityDps(p, derived, pm)
+  }
+  return dps
 }
 
 /** Résistances du héros (équipement + talents), capées. */

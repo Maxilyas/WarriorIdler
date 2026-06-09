@@ -161,10 +161,8 @@ export interface ActiveDungeon {
   /** Le combat courant : un pack d'ennemis. */
   enemies: Enemy[]
   fightTime: number
-  /** XP d'équipe accumulée pendant le run (créditée combat par combat, gardée même en cas d'échec). */
-  earnedXp: number
-  /** Or accumulé pendant le run (crédité à l'ouverture du coffre). */
-  earnedGold: number
+  /** Accumulateur fractionnaire des ressources gagnées PAR COMBAT (crédité en unités entières au fil de l'eau). */
+  earned?: Record<string, number>
   /** Relances automatiques restantes (auto-farm) : à la fin du run, on relance si > 0 et Sceaux suffisants. */
   repeatLeft?: number
 }
@@ -285,9 +283,9 @@ export function generateDungeon(dungeonId: DungeonId, level: number): ActiveDung
   const def = DUNGEONS[dungeonId]
   const totalFights = dungeonFights(level)
 
-  // 1 modificateur, +1 à partir du niveau 4.
+  // 1 modificateur, +1 à partir du niveau 4. Le donjon d'OR exclut « Avare » (sinon zéro or — bug).
   const count = level >= 4 ? 2 : 1
-  const pool = [...DUNGEON_MODIFIERS]
+  const pool = DUNGEON_MODIFIERS.filter((m) => !(def.reward === 'gold' && m.noGold))
   const modifiers: DungeonModifier[] = []
   for (let i = 0; i < count && pool.length; i++) {
     modifiers.push({ ...pool.splice(Math.floor(Math.random() * pool.length), 1)[0] })
@@ -305,7 +303,6 @@ export function generateDungeon(dungeonId: DungeonId, level: number): ActiveDung
     current: 0,
     enemies: makeDungeonPack(def, level, 0, totalFights, modifiers),
     fightTime: 0,
-    earnedXp: 0,
-    earnedGold: 0,
+    earned: {},
   }
 }

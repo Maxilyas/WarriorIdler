@@ -22,11 +22,11 @@ import { makeEnemy, isBossStage, stageIlvl, stageLuckTier } from './enemies'
 import { BIOME_IDS, biomeUnlocked, getBiomeDef, type BiomeId } from './biomes'
 import { RARITIES, RARITY_LIST } from './rarities'
 import { SECONDARY_STATS } from './stats'
-import { DAMAGE_TYPE_LIST, DAMAGE_TYPES } from './damage'
+import { DAMAGE_TYPE_LIST, DAMAGE_TYPES, profileDamageMult, type DamageProfile } from './damage'
 import { equipSlotsForType, slotAccepts } from './slots'
 import { essenceGain, upgradeCost, insertCost, getUnique, UNIQUE_MAX_RANK, randomUniqueInstance } from './uniques'
 import {
-  generateDungeon, makeDungeonPack, dungeonIlvl, dungeonRegen, getDungeonDef, butinMinTier, butinMaxTier,
+  generateDungeon, makeDungeonPack, dungeonIlvl, dungeonLuckTier, dungeonRegen, getDungeonDef, butinMinTier, butinMaxTier,
   DUNGEONS, type ActiveDungeon, type DungeonId,
 } from './dungeons'
 import {
@@ -270,9 +270,11 @@ function pushLog(log: LogEntry[], text: string, kind: LogKind): LogEntry[] {
 }
 
 function xpForLevel(level: number): number {
-  // Courbe : monter de niveau se mérite, mais on veut assez de POINTS DE TALENT pour vrai-
-  // ment construire des builds → besoin d'XP divisé par 5 (≈ levelling global ×5).
-  return Math.round(24 * Math.pow(1.44, level - 1))
+  // Soft cap ~100 : on veut atteindre le niveau 100 en quelques heures pour débloquer des builds
+  // élaborés. Montée modérée jusqu'à 25, puis croissance TRÈS DOUCE (quasi-linéaire) au-delà.
+  if (level <= 25) return Math.round(20 * Math.pow(1.28, level - 1))
+  const at25 = 20 * Math.pow(1.28, 24)
+  return Math.round(at25 * (1 + (level - 25) * 0.05))
 }
 
 // Cooldowns transitoires des capacités actives (clé `charId:powerId`). Non persistés.
@@ -753,75 +755,79 @@ function enemyVuln(enemy: Enemy): number {
   return enemy.vuln && enemy.vuln.remaining > 0 ? enemy.vuln.mult : 1
 }
 
-function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, chars: Character[], enemy: Enemy, hotBonus: number) {
-  const mag = (p.magnitude ?? 1) * abilityPower(derived, p.scaleStat)
+/**
+ * Lance une capacité active. Renvoie les DÉGÂTS infligés à l'ennemi (pour la « Vengeance différée »).
+ * Les dégâts des sorts scalent sur le PROFIL DE DÉGÂTS de l'arme/du stuff (profileDamageMult) — comme
+ * les auto-attaques — pour qu'un build qui empile un type booste aussi ses sorts.
+ */
+function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profile: DamageProfile, chars: Character[], enemy: Enemy, hotBonus: number): number {
+  const base = (p.magnitude ?? 1) * abilityPower(derived, p.scaleStat) // soins / boucliers (sans profil)
+  const magDmg = base * profileDamageMult(profile) // dégâts : scalent sur le profil de l'arme
   const vm = enemyVuln(enemy)
+  const hit = (dmg: number): number => { const before = enemy.hp; enemy.hp = Math.max(0, enemy.hp - dmg); return before - enemy.hp }
   switch (p.effect) {
     case 'nuke':
     case 'cleave':
     case 'megaCleave':
-      enemy.hp = Math.max(0, enemy.hp - mag * vm)
-      break
+      return hit(magDmg * vm)
     case 'executeNuke': {
-      // +250% de dégâts à PV pleins manquants : finisher dévastateur.
+      // +250% de dégâts selon les PV MANQUANTS : finisher dévastateur.
       const missing = 1 - enemy.hp / Math.max(1, enemy.maxHp)
-      enemy.hp = Math.max(0, enemy.hp - mag * (1 + missing * 2.5) * vm)
-      break
+      return hit(magDmg * (1 + missing * 2.5) * vm)
     }
     case 'lifeNuke': {
-      const before = enemy.hp
-      enemy.hp = Math.max(0, enemy.hp - mag * vm)
-      caster.hp = Math.min(charMaxHp(caster), caster.hp + (before - enemy.hp) * 0.6)
-      break
+      const done = hit(magDmg * vm)
+      caster.hp = Math.min(charMaxHp(caster), caster.hp + done * 0.6)
+      return done
     }
     case 'dot':
       // L'Altération amplifie les dégâts sur la durée.
-      enemy.dot = { dps: Math.max(mag * 0.4 * derived.alterationMult, enemy.dot?.dps ?? 0), remaining: 5 }
-      break
+      enemy.dot = { dps: Math.max(magDmg * 0.4 * derived.alterationMult, enemy.dot?.dps ?? 0), remaining: 5 }
+      return 0
     case 'rupture':
       // Brise la régén ennemie + grosse plaie (dégât immédiat + DoT puissant).
       enemy.noRegen = Math.max(enemy.noRegen ?? 0, p.duration ?? 8)
-      enemy.hp = Math.max(0, enemy.hp - mag * 0.5 * vm)
-      enemy.dot = { dps: Math.max(mag * 0.5 * derived.alterationMult, enemy.dot?.dps ?? 0), remaining: p.duration ?? 8 }
-      break
+      enemy.dot = { dps: Math.max(magDmg * 0.5 * derived.alterationMult, enemy.dot?.dps ?? 0), remaining: p.duration ?? 8 }
+      return hit(magDmg * 0.5 * vm)
     case 'mark':
-      enemy.vuln = { mult: p.magnitude ?? 1.4, remaining: p.duration ?? 8 }
-      break
+      enemy.vuln = { mult: p.magnitude ?? 1.4, remaining: p.duration ?? 8 } // magnitude = multiplicateur brut
+      return 0
     case 'heal':
     case 'hot': {
       const allies = chars.filter((c) => c.hp > 0)
       if (allies.length) {
         let low = allies[0]
         for (const a of allies) if (a.hp / charMaxHp(a) < low.hp / charMaxHp(low)) low = a
-        low.hp = Math.min(charMaxHp(low), low.hp + mag * (1 + hotBonus))
+        low.hp = Math.min(charMaxHp(low), low.hp + base * (1 + hotBonus))
       }
-      break
+      return 0
     }
     case 'bigHeal':
-      for (const a of chars) if (a.hp > 0) a.hp = Math.min(charMaxHp(a), a.hp + mag * (1 + hotBonus))
-      break
+      for (const a of chars) if (a.hp > 0) a.hp = Math.min(charMaxHp(a), a.hp + base * (1 + hotBonus))
+      return 0
     case 'buffParty':
-      for (const a of chars) if (a.hp > 0) a.hp = Math.min(charMaxHp(a), a.hp + mag * 0.5 * (1 + hotBonus))
-      break
+      for (const a of chars) if (a.hp > 0) a.hp = Math.min(charMaxHp(a), a.hp + base * 0.5 * (1 + hotBonus))
+      return 0
     case 'shield':
-      caster.hp = Math.min(charMaxHp(caster), caster.hp + mag)
-      break
+      caster.hp = Math.min(charMaxHp(caster), caster.hp + base)
+      return 0
     case 'bigShield':
       // Énorme bouclier d'absorption (soaké avant les PV) + 40% à l'équipe.
-      caster.absorb = (caster.absorb ?? 0) + mag
-      for (const a of chars) if (a.hp > 0 && a !== caster) a.absorb = (a.absorb ?? 0) + mag * 0.4
-      break
+      caster.absorb = (caster.absorb ?? 0) + base
+      for (const a of chars) if (a.hp > 0 && a !== caster) a.absorb = (a.absorb ?? 0) + base * 0.4
+      return 0
     case 'invuln':
       caster.invuln = Math.max(caster.invuln ?? 0, p.duration ?? 2)
-      break
+      return 0
     case 'charge':
-      // Démarre l'accumulation ; la frappe différée est résolue dans le pas de combat.
+      // Démarre l'accumulation ; la frappe différée (×mult le cumul) est résolue dans le pas de combat.
       caster.charge = { dealt: 0, remaining: p.duration ?? 5, mult: p.magnitude ?? 3 }
-      break
+      return 0
     case 'frenzy':
       caster.frenzy = { mult: p.magnitude ?? 2, remaining: p.duration ?? 6 }
-      break
+      return 0
   }
+  return 0
 }
 
 /** Applique des dégâts à un héros via l'immunité puis le bouclier d'absorption. Renvoie les PV réellement perdus. */
@@ -981,17 +987,6 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
     if (healed) c.hp = Math.min(charMaxHp(c), c.hp + healed)
   })
 
-  // 1b) Vengeance différée : à l'expiration de la fenêtre, frappe ×mult le total accumulé.
-  for (const c of chars) {
-    if (!c.charge || c.charge.remaining > 0) continue
-    if (c.hp > 0 && enemy.hp > 0 && c.charge.dealt > 0) {
-      const burst = c.charge.dealt * c.charge.mult * enemyVuln(enemy)
-      enemy.hp = Math.max(0, enemy.hp - burst)
-      totalDealt += burst
-    }
-    c.charge = undefined
-  }
-
   // 2) Dégâts du DoT sur l'ennemi + décompte de ses statuts (vulnérabilité, anti-régén).
   if (enemy.dot && enemy.hp > 0) {
     const dmg = enemy.dot.dps * dt
@@ -1020,13 +1015,26 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
       if (cd <= 0 && !stunned && (auto || manualFire.has(key))) {
         cooldowns.set(key, (p.cooldown ?? 3) * (1 - d.derived.cdr))
         manualFire.delete(key)
-        fireActive(p, c, d.derived, chars, enemy, d.cmods.hot)
+        const dealt = fireActive(p, c, d.derived, d.profile, chars, enemy, d.cmods.hot)
+        // Vengeance différée : compte AUSSI les dégâts des sorts dans le cumul.
+        if (c.charge && dealt > 0) c.charge.dealt += dealt
       } else {
         cooldowns.set(key, Math.max(0, cd))
         if (!auto && !stunned) manualFire.delete(key) // cast manuel strict : pas de file d'attente
       }
     })
   })
+
+  // 3b) Vengeance différée : la fenêtre expirée, déchaîne ×mult TOUT le cumul (auto + sorts).
+  for (const c of chars) {
+    if (!c.charge || c.charge.remaining > 0) continue
+    if (c.hp > 0 && enemy.hp > 0 && c.charge.dealt > 0) {
+      const burst = c.charge.dealt * c.charge.mult * enemyVuln(enemy)
+      enemy.hp = Math.max(0, enemy.hp - burst)
+      totalDealt += burst
+    }
+    c.charge = undefined
+  }
 
   // 4) L'ennemi frappe la plus haute menace (dégâts typés, réduits par la résistance héros).
   const alive = chars.map((_, i) => i).filter((i) => chars[i].hp > 0 && info[i])
@@ -1138,18 +1146,6 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
     if (healed) c.hp = Math.min(charMaxHp(c), c.hp + healed)
   })
 
-  // 1b) Vengeance différée : frappe ×mult le total accumulé, sur la cible focus.
-  for (const c of chars) {
-    if (!c.charge || c.charge.remaining > 0) continue
-    const tg = focus()
-    if (c.hp > 0 && tg && c.charge.dealt > 0) {
-      const burst = c.charge.dealt * c.charge.mult * enemyVuln(tg)
-      tg.hp = Math.max(0, tg.hp - burst)
-      totalDealt += burst
-    }
-    c.charge = undefined
-  }
-
   // 2) DoT par ennemi + décompte de ses statuts (vulnérabilité, anti-régén).
   for (const enemy of enemies) {
     if (enemy.dot && enemy.hp > 0) {
@@ -1179,17 +1175,31 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
       if (cd <= 0 && !stunned && (auto || manualFire.has(key))) {
         cooldowns.set(key, (p.cooldown ?? 3) * (1 - d.derived.cdr))
         manualFire.delete(key)
+        let dealt = 0
         if (p.effect === 'cleave' || p.effect === 'megaCleave') {
-          for (const e of enemies) if (e.hp > 0) fireActive(p, c, d.derived, chars, e, d.cmods.hot)
+          for (const e of enemies) if (e.hp > 0) dealt += fireActive(p, c, d.derived, d.profile, chars, e, d.cmods.hot)
         } else {
-          fireActive(p, c, d.derived, chars, focus() ?? enemies[0], d.cmods.hot)
+          dealt = fireActive(p, c, d.derived, d.profile, chars, focus() ?? enemies[0], d.cmods.hot)
         }
+        if (c.charge && dealt > 0) c.charge.dealt += dealt
       } else {
         cooldowns.set(key, Math.max(0, cd))
         if (!auto && !stunned) manualFire.delete(key)
       }
     })
   })
+
+  // 3b) Vengeance différée : la fenêtre expirée, déchaîne ×mult TOUT le cumul, sur la cible focus.
+  for (const c of chars) {
+    if (!c.charge || c.charge.remaining > 0) continue
+    const tg = focus()
+    if (c.hp > 0 && tg && c.charge.dealt > 0) {
+      const burst = c.charge.dealt * c.charge.mult * enemyVuln(tg)
+      tg.hp = Math.max(0, tg.hp - burst)
+      totalDealt += burst
+    }
+    c.charge = undefined
+  }
 
   // 4) Chaque ennemi vivant frappe la plus haute menace (l'équipe doit survivre au pack).
   let reflectApplied = false
@@ -1273,56 +1283,66 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
 
   if (enemies.every((e) => e.hp <= 0)) {
     const eco = computeGlobalMods(s.upgrades)
-    // MONO-RESSOURCE : chaque donjon ne donne QUE sa ressource (au coffre). Seul le Sanctuaire du
-    // Savoir (reward 'xp') verse de l'XP, créditée PAR COMBAT (levelling incrémental, conservé même
-    // en cas d'échec). Les autres donjons ne donnent NI XP NI or pendant les combats.
-    let earnedXp = d.earnedXp ?? 0
-    if (def.reward === 'xp') {
-      const packXp = enemies.reduce((a, e) => a + (e.xp ?? 0), 0)
-      const fightXp = Math.round(packXp * eco.xpGain * DUNGEON_FIGHT_XP_MULT)
-      let leveled = false
-      chars = chars.map((c) => {
-        if (c.hp <= 0) return c
-        const nc = grantXp(c, fightXp)
-        if (nc.level > c.level) leveled = true
-        return nc
-      })
-      earnedXp += fightXp
-      log = pushLog(log, `📚 Combat ${d.current + 1}/${d.totalFights} · +${fightXp.toLocaleString('fr-FR')} XP.`, 'kill')
-      if (leveled) log = pushLog(log, '⬆ Niveau gagné !', 'level')
+    const lv = d.level
+    const packXp = enemies.reduce((a, e) => a + (e.xp ?? 0), 0)
+    const noGold = d.modifiers.some((m) => m.noGold)
+
+    // --- Récompense PAR COMBAT (chaque combat gagné crédite la ressource du donjon, tout de suite) ---
+    let gold = s.gold, essence = s.essence, noyau = s.noyau, poussiere = s.poussiere, sceaux = s.sceaux, orbes = s.orbes
+    const earned: Record<string, number> = { ...(d.earned ?? {}) }
+    // Accumulateur fractionnaire (ressources rares) → crédite les UNITÉS ENTIÈRES gagnées ce combat.
+    const accrue = (key: string, amt: number): number => {
+      const prev = earned[key] ?? 0
+      earned[key] = prev + amt
+      return Math.floor(earned[key]) - Math.floor(prev)
     }
+    const fightItems: Item[] = []
+    let logBit = ''
+    let leveled = false
+    switch (def.reward) {
+      case 'gold': { if (!noGold) { const g = Math.round(packXp * 8 * eco.goldGain); gold += g; logBit = `+${g.toLocaleString('fr-FR')} or` } break }
+      case 'eclats': { const e2 = Math.round(packXp * 4); essence += e2; logBit = `+${e2.toLocaleString('fr-FR')} éclats` } break
+      case 'noyau': { const n = accrue('noyau', packXp * 0.05); if (n) { noyau += n; logBit = `+${n} 💠` } } break
+      case 'poussiere': { const pq = accrue('poussiere', packXp * 0.015); if (pq) { poussiere += pq; logBit = `+${pq} 🌌` } } break
+      case 'sceaux': { const sc = accrue('sceaux', packXp * 0.025); if (sc) { sceaux += sc; logBit = `+${sc} 🔑` } } break
+      case 'orbes': { const ob = accrue('orbes', packXp * 0.015); if (ob) { orbes += ob; logBit = `+${ob} 🔮` } } break
+      case 'xp': {
+        const xp = Math.round(packXp * DUNGEON_FIGHT_XP_MULT * eco.xpGain)
+        chars = chars.map((c) => { if (c.hp <= 0) return c; const nc = grantXp(c, xp); if (nc.level > c.level) leveled = true; return nc })
+        earned.xp = (earned.xp ?? 0) + xp
+        logBit = `+${xp.toLocaleString('fr-FR')} XP`
+        break
+      }
+      case 'stuff': { if (Math.random() < 0.4) { fightItems.push(generateItem({ ilvl: dungeonIlvl(lv), luckTier: dungeonLuckTier(lv), primaryBias: pickBias(s.characters) })); logBit = '+1 objet' } break }
+    }
+    log = pushLog(log, `⚔️ ${def.icon} Combat ${d.current + 1}/${d.totalFights}${logBit ? ` · ${logBit}` : ''}.`, 'kill')
+    if (leveled) log = pushLog(log, '⬆ Niveau gagné !', 'level')
+
+    let inventory = s.inventory
+    for (const it of fightItems) inventory = [it, ...inventory].slice(0, invMax)
+    const codex = fightItems.length ? discoverFromItems(s.codex, fightItems) : s.codex
 
     const nextIndex = d.current + 1
     if (nextIndex >= d.totalFights) {
-      const lv = d.level
       const rareBonus = d.modifiers.reduce((a, m) => a + (m.rareBonus ?? 0), 0)
-      const noGold = d.modifiers.some((m) => m.noGold)
       const bias = pickBias(s.characters)
 
-      // Coffre MONO-RESSOURCE : uniquement la ressource ciblée par le donjon.
+      // --- Coffre : BONUS de fin (montant ÉLEVÉ) de la ressource du donjon, EN PLUS du par-combat ---
       let items: Item[] = []
-      let gold = 0, eclats = 0, noyau = 0, poussiere = 0, sceaux = 0, orbes = 0
-      let xpTotal = earnedXp
+      let cGold = 0, cEclats = 0, cNoyau = 0, cPous = 0, cSceaux = 0, cOrbes = 0, cXp = earned.xp ?? 0
       switch (def.reward) {
-        case 'gold': gold = noGold ? 0 : Math.round(600 * lv * (1 + lv * 0.15)); break
-        case 'eclats': eclats = Math.round(300 * lv * (1 + lv * 0.13)); break
-        case 'noyau': noyau = Math.round(12 * lv * (1 + lv * 0.1)); break
-        case 'sceaux': sceaux = Math.round(3 + lv * 0.9); break
-        case 'orbes': orbes = Math.round(1 + lv * 0.5); break
-        case 'poussiere': {
-          // N garanti + chance croissante d'avoir +1 à +2 (montée fine d'une ressource rare).
-          const base = 1 + Math.floor(lv / 3)
+        case 'gold': cGold = noGold ? 0 : Math.round(2000 * lv * (1 + lv * 0.15)); break
+        case 'eclats': cEclats = Math.round(1200 * lv * (1 + lv * 0.13)); break
+        case 'noyau': cNoyau = Math.round(48 * lv * (1 + lv * 0.1)); break // ×4
+        case 'orbes': cOrbes = Math.round(1 + lv * 0.5); break
+        case 'sceaux': cSceaux = Math.round(3 + lv * 0.9); break
+        case 'poussiere': { // ×2
+          const base = 2 * (1 + Math.floor(lv / 3))
           const bonusChance = Math.min(0.9, 0.25 + lv * 0.03)
-          poussiere = base + (Math.random() < bonusChance ? 1 + Math.floor(Math.random() * 2) : 0)
+          cPous = base + (Math.random() < bonusChance ? 2 + Math.floor(Math.random() * 3) : 0)
           break
         }
-        case 'xp': {
-          // Sanctuaire du Savoir : LA source d'XP — gros bonus de fin en plus de l'XP par combat.
-          const bonus = Math.round(1200 * lv * Math.pow(1.12, lv))
-          chars = chars.map((c) => (c.hp > 0 ? grantXp(c, bonus) : c))
-          xpTotal += bonus
-          break
-        }
+        case 'xp': { const bonus = Math.round(1200 * lv * Math.pow(1.12, lv)); chars = chars.map((c) => (c.hp > 0 ? grantXp(c, bonus) : c)); cXp += bonus; break }
         case 'stuff': {
           const ilvl = dungeonIlvl(lv)
           const count = 3 + Math.floor(lv / 2)
@@ -1335,41 +1355,44 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
           break
         }
       }
-      const chest: ChestReward = { dungeonName: d.name, level: lv, items, eclats, noyau, gold, sceaux, orbes, poussiere, xp: xpTotal }
+      const chest: ChestReward = { dungeonName: d.name, level: lv, items, eclats: cEclats, noyau: cNoyau, gold: cGold, sceaux: cSceaux, orbes: cOrbes, poussiere: cPous, xp: cXp }
 
       const healed: Character[] = chars.map(fullHeal)
       const dungeonProgress = { ...s.dungeonProgress, [d.dungeonId]: Math.max(s.dungeonProgress[d.dungeonId] ?? 0, lv) }
       const repeatLeft = d.repeatLeft ?? 0
+      // État avec les pools PAR COMBAT déjà crédités (le coffre est un bonus en plus).
+      const base = { ...s, gold, essence, noyau, poussiere, sceaux, orbes, inventory, codex }
 
-      // Auto-farm : s'il reste des relances ET qu'on peut repayer le Sceau, on encaisse le coffre
-      // directement (sans modal) et on relance le même donjon au même niveau.
+      // Auto-farm : on encaisse le coffre directement (sans modal) et on relance.
       if (repeatLeft > 0) {
-        const credited = applyChestRewards(s, chest)
+        const credited = applyChestRewards(base, chest)
         if (credited.sceaux >= def.sceauCost) {
-          const nd = generateDungeon(d.dungeonId, lv)
-          nd.repeatLeft = repeatLeft - 1
+          const ndun = generateDungeon(d.dungeonId, lv)
+          ndun.repeatLeft = repeatLeft - 1
           const log3 = pushLog(log, `🔁 Auto-farm : run encaissé · ${repeatLeft} relance${repeatLeft > 1 ? 's' : ''} restante${repeatLeft > 1 ? 's' : ''}.`, 'info')
-          const next = { ...s, ...credited, characters: healed, dungeonProgress, sceaux: credited.sceaux - def.sceauCost, dungeon: nd, log: log3 }
+          const next = { ...base, ...credited, characters: healed, dungeonProgress, sceaux: credited.sceaux - def.sceauCost, dungeon: ndun, log: log3 }
           persist(next)
           set(next)
           return
         }
       }
 
-      const log2 = pushLog(log, `🎉 ${d.name} vaincu ! Un coffre t'attend (récap des gains du run).`, 'kill')
-      const next = { ...s, characters: healed, dungeon: null, dungeonProgress, pendingChest: chest, log: log2 }
+      const log2 = pushLog(log, `🎉 ${d.name} vaincu ! Un coffre t'attend (bonus de fin).`, 'kill')
+      const next = { ...base, characters: healed, dungeon: null, dungeonProgress, pendingChest: chest, log: log2 }
       persist(next)
       set(next)
       return
     }
+
+    // Avance au combat suivant (pools par-combat crédités + accumulateur conservé).
     const nd: ActiveDungeon = {
       ...d,
       current: nextIndex,
       enemies: makeDungeonPack(def, d.level, nextIndex, d.totalFights, d.modifiers),
       fightTime: 0,
-      earnedXp,
+      earned,
     }
-    const next = { ...s, characters: chars, dungeon: nd, log }
+    const next = { ...s, characters: chars, gold, essence, noyau, poussiere, sceaux, orbes, inventory, codex, dungeon: nd, log }
     persist(next)
     set(next)
     return

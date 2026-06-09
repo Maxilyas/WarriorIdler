@@ -5,8 +5,7 @@ import {
   raidBossCount, raidIlvl, raidBerserkTime, raidFragments, raidCosmicChance,
   raidMinTier, raidMaxTier, recommendedDps, recommendedEhp, type RaidDef,
 } from '../game/raids'
-import { charDerived, charDamageProfile, charMaxHp } from '../game/character'
-import { theoreticalDps } from '../game/combat'
+import { charDps, charMaxHp } from '../game/character'
 import { DAMAGE_TYPES } from '../game/damage'
 import { RARITY_LIST } from '../game/rarities'
 
@@ -32,7 +31,7 @@ export function RaidPanel() {
   const characters = useGame((s) => s.characters)
   const enterRaid = useGame((s) => s.enterRaid)
 
-  const partyDps = characters.filter((c) => c.hp > 0).reduce((a, c) => a + theoreticalDps(charDerived(c), charDamageProfile(c)), 0)
+  const partyDps = characters.filter((c) => c.hp > 0).reduce((a, c) => a + charDps(c), 0)
   const partyHp = characters.reduce((a, c) => a + charMaxHp(c), 0)
 
   const anyUnlocked = bestStage >= RAID_UNLOCK_STAGE

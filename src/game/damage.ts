@@ -129,3 +129,14 @@ export function computeResistProfile(
 export function effectiveTypeMult(p: DamageProfile): number {
   return 1 + (p.bonus[p.mainType] ?? 0)
 }
+
+/**
+ * Multiplicateur de dégâts pondéré par TOUT le profil (répartition × bonus de type). C'est le même
+ * facteur que les auto-attaques : utilisé pour que les SORTS scalent sur le profil de l'arme/du
+ * stuff (un build qui empile du +% Feu booste aussi ses sorts).
+ */
+export function profileDamageMult(p: DamageProfile): number {
+  let m = 0
+  for (const t in p.profile) m += (p.profile[t as DamageType] ?? 0) * (1 + (p.bonus[t as DamageType] ?? 0))
+  return m || 1
+}
