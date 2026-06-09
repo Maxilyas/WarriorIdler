@@ -214,6 +214,8 @@ export interface PowerDef {
   name: string
   kind: PowerKind
   description: string
+  /** Icône propre du sort (affichée en combat & dans l'arbre). À défaut, dérivée du type/effet. */
+  icon?: string
   /** Niveau de personnage qui débloque la capacité (l'arbre de talents reprendra ce rôle). */
   unlockLevel: number
   // --- Passives ---

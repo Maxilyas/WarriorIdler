@@ -4,7 +4,7 @@ import {
   CONSTELLATIONS, CONSTELLATION_LIST, TALENTS, talentsByConstellation, getTalent, canAllocate, isReachable,
   type ConstellationId, type TalentNode,
 } from '../game/talents'
-import { getPower, powerSummary } from '../game/powers'
+import { getPower, powerSummary, powerIcon } from '../game/powers'
 import { DAMAGE_TYPES } from '../game/damage'
 import { ALL_STAT_META } from '../game/stats'
 import type { DamageType, StatKey, PowerDef } from '../game/types'
@@ -14,27 +14,32 @@ import type { DamageType, StatKey, PowerDef } from '../game/types'
 /* Le Cœur est au centre ; les 6 voies rayonnent ; les archétypes sont en périphérie.
 /* Disposition = DENDROGRAMME RADIAL : arbre couvrant (BFS depuis `co_start`),
 /*   rayon = profondeur, angle = répartition des feuilles → web sans recouvrement.
-/* Tous les prérequis sont tracés comme des LIENS (passerelles incluses).
+/* Liens tracés = uniquement les arêtes de l'ARBRE (pas de croisements parasites) + les
+/*   « carrefours » inter-voies, repositionnés entre les deux voies qu'ils relient.
+/* Rendu en coordonnées-écran calculées en JS (pas de gros calque CSS transformé) → pas
+/*   d'écran noir au déplacement, quelle que soit la limite de texture du GPU.
 /* ------------------------------------------------------------------ */
 
-const RING = 58 // px par anneau de profondeur
-const PAD = 70 // marge autour du contenu
+const RING = 56 // px par anneau de profondeur
 
 const CIDX = new Map(CONSTELLATION_LIST.map((c, i) => [c, i]))
 function sortKey(n: TalentNode): number {
   return (CIDX.get(n.constellation) ?? 0) * 1000 + n.tier
 }
 
+const isCarrefour = (id: string) => id.startsWith('xr_')
+
+interface Link { from: string; to: string; bridge?: boolean }
 interface RadialLayout {
   pos: Map<string, { x: number; y: number }>
-  links: { from: string; to: string }[]
+  links: Link[]
   radius: number
 }
 
 /** Construit la disposition radiale globale (mémoïsée : ne dépend que des données statiques). */
 function computeRadialLayout(): RadialLayout {
   const byId = new Map(TALENTS.map((t) => [t.id, t]))
-  // 1) Adjacence non-orientée à partir des prérequis.
+  // 1) Adjacence non-orientée à partir des prérequis (carrefours exclus de l'arbre couvrant).
   const adj = new Map<string, Set<string>>()
   const addEdge = (a: string, b: string) => {
     if (!adj.has(a)) adj.set(a, new Set())
@@ -42,7 +47,10 @@ function computeRadialLayout(): RadialLayout {
     adj.get(a)!.add(b)
     adj.get(b)!.add(a)
   }
-  for (const t of TALENTS) for (const r of t.requires ?? []) if (byId.has(r)) addEdge(r, t.id)
+  for (const t of TALENTS) {
+    if (isCarrefour(t.id)) continue // les carrefours sont posés à part (pont entre voies)
+    for (const r of t.requires ?? []) if (byId.has(r) && !isCarrefour(r)) addEdge(r, t.id)
+  }
 
   // 2) Arbre couvrant par BFS depuis le Cœur → profondeur + parent/enfants.
   const ROOT = 'co_start'
@@ -63,9 +71,9 @@ function computeRadialLayout(): RadialLayout {
       queue.push(nx)
     }
   }
-  // Sécurité : rattache au Cœur tout nœud non atteint.
+  // Sécurité : rattache au Cœur tout nœud non atteint (hors carrefours).
   for (const t of TALENTS) {
-    if (depth.has(t.id)) continue
+    if (depth.has(t.id) || isCarrefour(t.id)) continue
     depth.set(t.id, 1)
     const arr = children.get(ROOT) ?? []
     arr.push(t.id)
@@ -73,7 +81,8 @@ function computeRadialLayout(): RadialLayout {
   }
 
   // 3) Angles : répartition des feuilles (post-ordre), nœud interne = moyenne des enfants.
-  const totalLeaves = TALENTS.filter((t) => !(children.get(t.id)?.length)).length || 1
+  const leafIds = [...depth.keys()].filter((id) => !(children.get(id)?.length))
+  const totalLeaves = leafIds.length || 1
   let leaf = 0
   const angle = new Map<string, number>()
   const assign = (id: string): number => {
@@ -92,29 +101,38 @@ function computeRadialLayout(): RadialLayout {
   }
   assign(ROOT)
 
-  // 4) Coordonnées polaires.
+  // 4) Coordonnées polaires (arbre couvrant).
   const pos = new Map<string, { x: number; y: number }>()
-  let radius = RING
-  for (const t of TALENTS) {
-    const r = (depth.get(t.id) ?? 1) * RING
-    const a = angle.get(t.id) ?? 0
-    const x = Math.cos(a) * r
-    const y = Math.sin(a) * r
-    pos.set(t.id, { x, y })
-    radius = Math.max(radius, Math.hypot(x, y))
+  for (const [id, d] of depth) {
+    const r = d * RING
+    const a = angle.get(id) ?? 0
+    pos.set(id, { x: Math.cos(a) * r, y: Math.sin(a) * r })
   }
 
-  // 5) Liens = tous les prérequis (dédupliqués).
-  const links: { from: string; to: string }[] = []
-  const seen = new Set<string>()
+  // 4b) Carrefours : posés au milieu de leurs deux voies (lien court, sans croisement).
   for (const t of TALENTS) {
-    for (const r of t.requires ?? []) {
-      if (!pos.has(r) || !pos.has(t.id)) continue
-      const key = r < t.id ? `${r}|${t.id}` : `${t.id}|${r}`
-      if (seen.has(key)) continue
-      seen.add(key)
-      links.push({ from: r, to: t.id })
+    if (!isCarrefour(t.id)) continue
+    const reqs = (t.requires ?? []).filter((r) => pos.has(r))
+    if (reqs.length >= 2) {
+      const a = pos.get(reqs[0])!, b = pos.get(reqs[1])!
+      pos.set(t.id, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 })
+    } else if (reqs.length === 1) {
+      const a = pos.get(reqs[0])!
+      pos.set(t.id, { x: a.x * 1.15, y: a.y * 1.15 })
+    } else {
+      pos.set(t.id, { x: 0, y: 0 })
     }
+  }
+
+  let radius = RING
+  for (const { x, y } of pos.values()) radius = Math.max(radius, Math.hypot(x, y))
+
+  // 5) Liens : arêtes de l'arbre (propres) + ponts de carrefours.
+  const links: Link[] = []
+  for (const [p, ch] of children) for (const c of ch) links.push({ from: p, to: c })
+  for (const t of TALENTS) {
+    if (!isCarrefour(t.id)) continue
+    for (const r of t.requires ?? []) if (pos.has(r)) links.push({ from: r, to: t.id, bridge: true })
   }
   return { pos, links, radius }
 }
@@ -138,11 +156,13 @@ const KIND_ICON: Record<TalentNode['kind'], string> = {
 const KIND_LABEL: Record<TalentNode['kind'], string> = {
   minor: 'Passif mineur', notable: 'Passif notable', keystone: 'Keystone', ability: 'Capacité', gateway: 'Passerelle',
 }
-
 /** Diamètre (px) d'un nœud selon son importance. */
 const KIND_SIZE: Record<TalentNode['kind'], number> = {
   minor: 18, notable: 30, ability: 34, keystone: 38, gateway: 34,
 }
+
+const MIN_SCALE = 0.32
+const MAX_SCALE = 1.8
 
 export function TalentTree() {
   const characters = useGame((s) => s.characters)
@@ -153,47 +173,58 @@ export function TalentTree() {
   const [focus, setFocus] = useState<ConstellationId | null>(null)
 
   const layout = useMemo(() => computeRadialLayout(), [])
-  const OFFSET = layout.radius + PAD
-  const contentSize = OFFSET * 2
 
-  // --- Pan / zoom ---
+  // --- Pan / zoom : positions écran calculées en JS (panX/panY = position de `co_start`). ---
   const viewportRef = useRef<HTMLDivElement>(null)
-  const [view, setView] = useState({ tx: 0, ty: 0, scale: 1 })
-  const drag = useRef<{ x: number; y: number; tx: number; ty: number } | null>(null)
+  const [size, setSize] = useState({ w: 600, h: 520 })
+  const [view, setView] = useState({ panX: 300, panY: 260, scale: 0.5 })
+  const drag = useRef<{ x: number; y: number; panX: number; panY: number; moved: boolean } | null>(null)
+  const didInit = useRef(false)
 
-  const center = useCallback(() => {
+  useLayoutEffect(() => {
     const el = viewportRef.current
     if (!el) return
-    const vw = el.clientWidth
-    const vh = el.clientHeight
-    const scale = Math.max(0.32, Math.min(1, Math.min(vw, vh) / (contentSize * 0.62)))
-    // Centre `co_start` (au milieu du contenu) dans le viewport.
-    setView({ scale, tx: vw / 2 - OFFSET * scale, ty: vh / 2 - OFFSET * scale })
-  }, [contentSize, OFFSET])
-
-  useLayoutEffect(() => { center() }, [center])
-
-  const onPointerDown = (e: React.PointerEvent) => {
-    drag.current = { x: e.clientX, y: e.clientY, tx: view.tx, ty: view.ty }
-    ;(e.target as Element).setPointerCapture?.(e.pointerId)
-  }
-  const onPointerMove = (e: React.PointerEvent) => {
-    if (!drag.current) return
-    setView((v) => ({ ...v, tx: drag.current!.tx + (e.clientX - drag.current!.x), ty: drag.current!.ty + (e.clientY - drag.current!.y) }))
-  }
-  const onPointerUp = () => { drag.current = null }
-  const zoomBy = useCallback((f: number) => {
-    const el = viewportRef.current
-    if (!el) return
-    const vw = el.clientWidth, vh = el.clientHeight
-    setView((v) => {
-      const scale = Math.max(0.25, Math.min(2.2, v.scale * f))
-      const k = scale / v.scale
-      return { scale, tx: vw / 2 - (vw / 2 - v.tx) * k, ty: vh / 2 - (vh / 2 - v.ty) * k }
-    })
+    const measure = () => setSize({ w: el.clientWidth, h: el.clientHeight })
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
   }, [])
 
-  // Zoom molette (listener natif non-passif pour pouvoir préventDefault).
+  const center = useCallback(() => {
+    const scale = Math.max(MIN_SCALE, Math.min(1, Math.min(size.w, size.h) / (layout.radius * 2.1)))
+    setView({ scale, panX: size.w / 2, panY: size.h / 2 })
+  }, [size.w, size.h, layout.radius])
+
+  // Centrage initial une fois la taille connue.
+  useLayoutEffect(() => {
+    if (didInit.current || size.w <= 1) return
+    didInit.current = true
+    center()
+  }, [size.w, size.h, center])
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    drag.current = { x: e.clientX, y: e.clientY, panX: view.panX, panY: view.panY, moved: false }
+    ;(e.currentTarget as Element).setPointerCapture?.(e.pointerId)
+  }
+  const onPointerMove = (e: React.PointerEvent) => {
+    const d = drag.current
+    if (!d) return
+    const dx = e.clientX - d.x, dy = e.clientY - d.y
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) d.moved = true
+    setView((v) => ({ ...v, panX: d.panX + dx, panY: d.panY + dy }))
+  }
+  const onPointerUp = () => { drag.current = null }
+
+  const zoomBy = useCallback((f: number) => {
+    setView((v) => {
+      const scale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, v.scale * f))
+      const k = scale / v.scale
+      const cx = size.w / 2, cy = size.h / 2
+      return { scale, panX: cx - (cx - v.panX) * k, panY: cy - (cy - v.panY) * k }
+    })
+  }, [size.w, size.h])
+
   useEffect(() => {
     const el = viewportRef.current
     if (!el) return
@@ -204,6 +235,9 @@ export function TalentTree() {
 
   if (!char) return null
   const selectedNode = selected ? TALENTS.find((n) => n.id === selected) ?? null : null
+  const sx = (id: string) => view.panX + (layout.pos.get(id)?.x ?? 0) * view.scale
+  const sy = (id: string) => view.panY + (layout.pos.get(id)?.y ?? 0) * view.scale
+  const showLabels = view.scale >= 0.55
 
   return (
     <div className="flex h-full flex-col">
@@ -239,7 +273,7 @@ export function TalentTree() {
         </div>
       )}
 
-      {/* Légende des voies (surligne une constellation, ne change pas la vue) */}
+      {/* Légende des voies (surligne une constellation) */}
       <div className="mb-2 flex gap-1 overflow-x-auto pb-1">
         {CONSTELLATION_LIST.map((id) => {
           const m = CONSTELLATIONS[id]
@@ -263,55 +297,50 @@ export function TalentTree() {
       {/* Canevas radial */}
       <div
         ref={viewportRef}
-        className="relative min-h-0 flex-1 touch-none overflow-hidden rounded-xl border border-slate-800"
+        className="relative min-h-0 flex-1 touch-none select-none overflow-hidden rounded-xl border border-slate-800"
         style={{ background: 'radial-gradient(ellipse at 50% 50%, #16213733, #0b1120 75%)', cursor: drag.current ? 'grabbing' : 'grab' }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
-        onPointerLeave={onPointerUp}
+        onPointerCancel={onPointerUp}
       >
-        <div
-          className="absolute left-0 top-0 origin-top-left"
-          style={{ width: contentSize, height: contentSize, transform: `translate(${view.tx}px, ${view.ty}px) scale(${view.scale})` }}
-        >
-          {/* Liens */}
-          <svg width={contentSize} height={contentSize} className="absolute left-0 top-0 overflow-visible">
-            {layout.links.map((l, i) => {
-              const a = layout.pos.get(l.from)!
-              const b = layout.pos.get(l.to)!
-              const toNode = TALENTS.find((n) => n.id === l.to)!
-              const filled = (char.talents[l.from] ?? 0) > 0 && (char.talents[l.to] ?? 0) > 0
-              const reach = filled || isReachable(toNode, char.talents)
-              const dim = focus && toNode.constellation !== focus && getTalent(l.from)?.constellation !== focus
-              const color = filled ? CONSTELLATIONS[toNode.constellation].color : reach ? '#475569' : '#1e293b'
-              return (
-                <line
-                  key={i}
-                  x1={OFFSET + a.x} y1={OFFSET + a.y} x2={OFFSET + b.x} y2={OFFSET + b.y}
-                  stroke={color} strokeWidth={filled ? 3 : 1.5} strokeLinecap="round"
-                  opacity={dim ? 0.12 : filled ? 0.9 : 0.5}
-                />
-              )
-            })}
-          </svg>
-
-          {/* Nœuds */}
-          {TALENTS.map((node) => {
-            const p = layout.pos.get(node.id)!
+        {/* Liens (SVG plein viewport) */}
+        <svg width={size.w} height={size.h} className="pointer-events-none absolute left-0 top-0">
+          {layout.links.map((l, i) => {
+            const toNode = TALENTS.find((n) => n.id === l.to)!
+            const fromCid = getTalent(l.from)?.constellation
+            const filled = (char.talents[l.from] ?? 0) > 0 && (char.talents[l.to] ?? 0) > 0
+            const reach = filled || isReachable(toNode, char.talents)
+            const dim = !!focus && toNode.constellation !== focus && fromCid !== focus
+            const color = filled ? CONSTELLATIONS[toNode.constellation].color : reach ? '#475569' : '#283449'
             return (
-              <CanvasNode
-                key={node.id}
-                node={node}
-                x={OFFSET + p.x}
-                y={OFFSET + p.y}
-                talents={char.talents}
-                selected={selected === node.id}
-                dimmed={!!focus && node.constellation !== focus}
-                onSelect={() => setSelected(node.id)}
+              <line
+                key={i}
+                x1={sx(l.from)} y1={sy(l.from)} x2={sx(l.to)} y2={sy(l.to)}
+                stroke={color}
+                strokeWidth={filled ? 3 : 1.5}
+                strokeDasharray={l.bridge ? '4 4' : undefined}
+                strokeLinecap="round"
+                opacity={dim ? 0.1 : filled ? 0.9 : l.bridge ? 0.45 : 0.55}
               />
             )
           })}
-        </div>
+        </svg>
+
+        {/* Nœuds */}
+        {TALENTS.map((node) => (
+          <CanvasNode
+            key={node.id}
+            node={node}
+            x={sx(node.id)}
+            y={sy(node.id)}
+            talents={char.talents}
+            selected={selected === node.id}
+            dimmed={!!focus && node.constellation !== focus}
+            showLabel={showLabels}
+            onSelect={() => { if (!drag.current?.moved) setSelected(node.id) }}
+          />
+        ))}
 
         {/* Contrôles zoom */}
         <div className="absolute bottom-2 right-2 flex flex-col gap-1">
@@ -320,7 +349,7 @@ export function TalentTree() {
           <CtrlBtn onClick={center} label="⌖" title="Recentrer" />
         </div>
         <div className="pointer-events-none absolute left-2 top-2 rounded bg-black/40 px-1.5 py-0.5 text-[9px] text-slate-400">
-          Glisse pour explorer · molette/+/− pour zoomer
+          Glisse pour explorer · molette / +/− pour zoomer
         </div>
       </div>
 
@@ -346,7 +375,7 @@ function CtrlBtn({ onClick, label, title }: { onClick: () => void; label: string
 
 /** Nœud sur le canevas : pastille colorée + libellé (pour les nœuds marquants / sélectionné). */
 function CanvasNode({
-  node, x, y, talents, selected, dimmed, onSelect,
+  node, x, y, talents, selected, dimmed, showLabel, onSelect,
 }: {
   node: TalentNode
   x: number
@@ -354,6 +383,7 @@ function CanvasNode({
   talents: Record<string, number>
   selected: boolean
   dimmed: boolean
+  showLabel: boolean
   onSelect: () => void
 }) {
   const rank = talents[node.id] ?? 0
@@ -362,13 +392,13 @@ function CanvasNode({
   const meta = CONSTELLATIONS[node.constellation]
   const size = KIND_SIZE[node.kind]
   const emphatic = node.kind !== 'minor'
-  const showLabel = emphatic || selected
+  const labelShown = (emphatic && showLabel) || selected
   const dmg = nodeDamageTypes(node)
   const power = node.unlockPower ? getPower(node.unlockPower) : undefined
   const sum = power ? powerSummary(power) : null
 
   const color = allocated || reachable ? meta.color : '#475569'
-  const glyph = node.kind === 'ability' && sum ? sum.effectMeta.icon : KIND_ICON[node.kind]
+  const glyph = power ? powerIcon(power) : KIND_ICON[node.kind]
 
   return (
     <button
@@ -377,13 +407,13 @@ function CanvasNode({
       className="absolute flex flex-col items-center"
       style={{
         left: x, top: y, transform: 'translate(-50%, -50%)',
-        opacity: dimmed ? 0.22 : 1,
+        opacity: dimmed ? 0.2 : 1,
         zIndex: selected ? 30 : emphatic ? 20 : 10,
       }}
       title={`${node.name} — ${KIND_LABEL[node.kind]}`}
     >
       <span
-        className="flex items-center justify-center rounded-full border transition-all"
+        className="flex items-center justify-center rounded-full border transition-colors"
         style={{
           width: size, height: size,
           fontSize: size * 0.5,
@@ -398,17 +428,17 @@ function CanvasNode({
       >
         {!reachable && !allocated ? '🔒' : glyph}
       </span>
-      {showLabel && (
+      {labelShown && (
         <span
-          className="mt-0.5 max-w-[84px] truncate text-center text-[8.5px] font-semibold leading-tight"
+          className="pointer-events-none mt-0.5 max-w-[88px] truncate text-center text-[8.5px] font-semibold leading-tight"
           style={{ color: allocated || reachable ? meta.color : '#64748b' }}
         >
           {node.name}
           {node.maxRank > 1 && <span className="text-slate-400"> {rank}/{node.maxRank}</span>}
         </span>
       )}
-      {showLabel && (dmg.length > 0 || sum) && (
-        <span className="flex items-center gap-0.5 text-[8px] leading-none">
+      {labelShown && (dmg.length > 0 || sum) && (
+        <span className="pointer-events-none flex items-center gap-0.5 text-[8px] leading-none">
           {dmg.map((t) => <span key={t} style={{ color: DAMAGE_TYPES[t].color }}>{DAMAGE_TYPES[t].icon}</span>)}
           {sum && <span className="text-cyan-300/90">⏱{sum.cooldown}s</span>}
           {sum?.scaleShort && <span className="text-amber-300/90">{sum.scaleShort}</span>}
@@ -425,7 +455,7 @@ function SpellCard({ power }: { power: PowerDef }) {
   return (
     <div className="mb-1.5 rounded-lg border border-emerald-700/40 bg-emerald-950/20 p-2">
       <div className="flex items-center gap-1.5">
-        <span className="text-[11px] font-bold text-emerald-300">✷ {power.name}</span>
+        <span className="text-[11px] font-bold text-emerald-300">{powerIcon(power)} {power.name}</span>
         {sum && (
           <span className="rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[8.5px] font-semibold uppercase tracking-wide text-emerald-200">
             {sum.effectMeta.icon} {sum.effectMeta.label}

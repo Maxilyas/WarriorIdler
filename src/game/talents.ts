@@ -439,7 +439,7 @@ single({ id: 'fo_gw_bourreau', name: '→ Bourreau', constellation: 'force', kin
 single({ id: 'bo_entry', name: 'Sentence de mort', constellation: 'bourreau', kind: 'notable', tier: 0, maxRank: 1, requires: ['fo_gw_bourreau'], description: 'Les colosses tombent sous ta hache. +40 Force, +30 Dégâts boss.', statMods: { force: 40, degatsBoss: 30 } })
 chain('bourreau', 'bo_a', 'bo_entry', 1, [
   { name: 'Marque du bourreau', maxRank: 5, statMods: { degatsBoss: 30 } },
-  { name: 'Décapitation', kind: 'ability', unlockPower: 'eviscaration', desc: 'Débloque Éviscération (nuke puissant).' },
+  { name: 'Décapitation', kind: 'ability', unlockPower: 'decapitation', desc: 'Débloque Décapitation (exécution, scale FOR).' },
   { name: 'Précision létale', maxRank: 4, statMods: { precision: 40 } },
   { name: 'Couperet', kind: 'keystone', desc: 'ARCHÉTYPE : exécute les ennemis sous 25% de PV (×3 dégâts).', statMods: { degatsBoss: 30 }, keystone: { executeBonus: { threshold: 0.25, mult: 3 } } },
 ])

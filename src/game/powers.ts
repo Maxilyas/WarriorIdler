@@ -134,12 +134,38 @@ export const POWERS: PowerDef[] = [
     description: 'Une déflagration concentrique qui frappe tout le pack. Scale FOR.',
     unlockLevel: 1, cooldown: 3.2, effect: 'cleave', magnitude: 2.4, scaleStat: 'force',
   },
+
+  // --- Bourreau (Force / anti-boss & exécution) ---
+  {
+    id: 'decapitation', name: 'Décapitation', kind: 'active',
+    description: 'Un coup de hache fatal qui décapite les cibles affaiblies. Scale FOR.',
+    unlockLevel: 1, cooldown: 3.5, effect: 'nuke', magnitude: 4, scaleStat: 'force',
+  },
 ]
 
 const BY_ID = new Map(POWERS.map((p) => [p.id, p]))
 
 export function getPower(id: string): PowerDef | undefined {
   return BY_ID.get(id)
+}
+
+/** Icône propre à chaque sort (combat + arbre). Distincte des icônes de types de dégâts. */
+const POWER_ICON: Record<string, string> = {
+  frappe_simple: '⚔️', frappe_lourde: '🔨', tourbillon: '🌀', choc_sismique: '🌋', laceration: '🩸',
+  tir_precis: '🎯', volee_de_fleches: '🏹', poison: '🧪', eviscaration: '🗡️',
+  eclair: '🔮', embrasement: '☄️', trait_de_givre: '❄️', salve_arcanique: '🌟', fleau_dombre: '🌑',
+  chatiment: '⚜️', decapitation: '🪓', onde_de_force: '💢',
+  provocation: '🚩', bouclier_runique: '🛡️',
+  vague_de_soin: '💧', guerison_majeure: '💚', imposition_des_mains: '🙌',
+}
+
+/** Icône d'un sort : champ explicite, table, puis repli (rôle/type). */
+export function powerIcon(p: PowerDef): string {
+  if (p.icon) return p.icon
+  if (POWER_ICON[p.id]) return POWER_ICON[p.id]
+  if (p.effect === 'heal' || p.effect === 'hot' || p.effect === 'buffParty') return '✚'
+  if (p.effect === 'shield') return '🛡️'
+  return '⚔️'
 }
 
 export const POWER_SLOTS = 5
