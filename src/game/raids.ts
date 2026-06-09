@@ -1,4 +1,4 @@
-import type { DamageType, Enemy, ItemType } from './types'
+import type { DamageType, Enemy, EnemyAbility, ItemType } from './types'
 import { DAMAGE_TYPE_LIST } from './damage'
 import { stageIlvl } from './enemies'
 
@@ -294,6 +294,52 @@ const BOSS_NAMES: Record<RaidId, string[]> = {
   abysse: ['Le Premier Silence', 'Nul, le Dévoreur', 'L\'Œil du Gouffre', 'Abyssa la Primordiale', 'Ce-Qui-Reste', 'Le Néant Couronné'],
 }
 
+/**
+ * Techniques SIGNATURE TÉLÉGRAPHIÉES par raid (en plus des mécaniques de stat-check) : on les voit
+ * arriver (barre d'incantation) et on les contre — un BURST se pare en activant un bouclier (Bouclier
+ * runique / Égide titanesque) ou une immunité (Phase éthérée) ; un CC par la Ténacité ; un DoT par la
+ * résistance/Purge ; un debuff par la Purge. magnitude = fraction des dégâts du boss.
+ */
+function raidBossAbilities(def: RaidDef, element: DamageType): EnemyAbility[] {
+  let out: EnemyAbility[] = []
+  switch (def.id) {
+    case 'forge': // ⚒️ titans de fonte : on encaisse le grand marteau (bouclier), on résiste à la fonte
+      out = [
+        { kind: 'burst', element: 'physique', name: 'Marteau-pilon', icon: '🔨', cooldown: 11, magnitude: 3.0, telegraph: 1.8 },
+        { kind: 'dot', element: 'feu', name: 'Coulée de fonte', icon: '🌋', cooldown: 8, magnitude: 0.9, duration: 4 },
+      ]
+      break
+    case 'reliquaire': // 💍 crypte noyée : vague à parer, étreinte qui gèle (Ténacité)
+      out = [
+        { kind: 'burst', element: 'froid', name: 'Raz-de-marée abyssal', icon: '🌊', cooldown: 10, magnitude: 2.8, telegraph: 1.6 },
+        { kind: 'cc', element: 'froid', name: 'Étreinte glaçante', icon: '🧊', cooldown: 12, magnitude: 0, duration: 1.6 },
+      ]
+      break
+    case 'citadelle': // 🏰 orages : fracas du ciel (bouclier !) + tonnerre étourdissant
+      out = [
+        { kind: 'burst', element: 'foudre', name: 'Fracas du ciel', icon: '🌩️', cooldown: 11, magnitude: 3.4, telegraph: 2.0 },
+        { kind: 'cc', element: 'foudre', name: 'Tonnerre assourdissant', icon: '🔔', cooldown: 13, magnitude: 0, duration: 1.4 },
+      ]
+      break
+    case 'nexus': // 🌈 prisme : rayon du type courant (bouclier), distorsion qui affaiblit (Purge)
+      out = [
+        { kind: 'burst', element, name: 'Rayon prismatique', icon: '🔆', cooldown: 9, magnitude: 3.0, telegraph: 1.6 },
+        { kind: 'debuff', element: 'arcane', name: 'Distorsion chromatique', icon: '🌀', cooldown: 12, magnitude: 0, duration: 5 },
+      ]
+      break
+    case 'abysse': // 🕳️ l'ultime : Annihilation à parer absolument + corruption + dévoration (soigne le boss)
+      out = [
+        { kind: 'burst', element, name: 'Annihilation', icon: '💥', cooldown: 12, magnitude: 4.0, telegraph: 2.2 },
+        { kind: 'dot', element: 'ombre', name: 'Corruption du néant', icon: '🕳️', cooldown: 8, magnitude: 1.0, duration: 5 },
+        { kind: 'drain', element: 'ombre', name: 'Dévoration', icon: '👄', cooldown: 14, magnitude: 1.8 },
+      ]
+      break
+  }
+  // Décale les premières incantations (pas de salve à t=0).
+  out.forEach((a, i) => { a.cd = a.cooldown * (0.6 + i * 0.35) })
+  return out
+}
+
 /** Construit un boss de raid. `element` = type d'attaque courant (pour les raids 'rotating'). */
 export function makeRaidBoss(def: RaidDef, tier: number, bossIndex: number, element: DamageType): Enemy {
   const totalBosses = raidBossCount(def, tier)
@@ -326,6 +372,8 @@ export function makeRaidBoss(def: RaidDef, tier: number, bossIndex: number, elem
     dodge: 0.2,
     ccDur: 2,
     ccCd: 6,
+    // Techniques signature TÉLÉGRAPHIÉES (barre d'incantation) — à contrer (bouclier/immunité/Ténacité…).
+    abilities: raidBossAbilities(def, element),
   }
 }
 
