@@ -1,6 +1,7 @@
 import type { Enemy, DamageType, EnemyAbility } from './types'
 import { DAMAGE_TYPE_LIST } from './damage'
 import type { BiomeId } from './biomes'
+import { BIOME_VULN, PREDATION_SELF_RESIST, PREDATION_VULN } from './biomeBonus'
 
 /**
  * Technique SIGNATURE par biome (l'« autre chose » qui s'ajoute aux frappes physiques de base).
@@ -102,6 +103,14 @@ export function makeEnemy(stage: number, biome: BiomeId = 'physique'): Enemy {
   const ramp = stageResistRamp(stage)
   const resist: Partial<Record<DamageType, number>> = {}
   if (ramp > 0) for (const t of DAMAGE_TYPE_LIST) resist[t] = ramp
+  // CYCLE DE PRÉDATION (v0.21) : hors Physique, les ennemis résistent à LEUR élément et sont
+  // vulnérables à l'élément prédateur → camper le biome de son propre élément n'est plus optimal
+  // (le butin de ton élément tombe là où les ennemis te résistent — arbitrage voulu).
+  if (biome !== 'physique') {
+    resist[biome] = (resist[biome] ?? 0) + PREDATION_SELF_RESIST
+    const vul = BIOME_VULN[biome]
+    resist[vul] = (resist[vul] ?? 0) + PREDATION_VULN
+  }
 
   // Auto-attaques TOUJOURS PHYSIQUES (la base). L'élément du biome arrive en plus, via la technique
   // signature (DoT/burst/CC… typé) → « physique + autre chose ». Donc en biome Feu : frappes physiques

@@ -21,6 +21,10 @@ import {
 import { forgeMods, forgeMasteryGain, getForgeUpgrade, forgeUpgradeCost, forgeUpgradeMaxed } from './forge'
 import { makeEnemy, isBossStage, stageIlvl, stageLuckTier } from './enemies'
 import { BIOME_IDS, biomeUnlocked, getBiomeDef, type BiomeId } from './biomes'
+import {
+  harmonyBonus, surgeBiome, elanActive,
+  SURGE_GOLD_XP_MULT, SURGE_QUINT_MULT, ELAN_DURATION_MS, ELAN_DMG_MULT, type ElanState,
+} from './biomeBonus'
 import { RARITIES, RARITY_LIST } from './rarities'
 import { SECONDARY_STATS } from './stats'
 import { DAMAGE_TYPE_LIST, DAMAGE_TYPES, profileDamageMult, type DamageProfile } from './damage'
@@ -187,6 +191,8 @@ interface SaveData {
   biomeBest: Record<BiomeId, number>
   /** Verrou de farm : fige la progression au palier courant. */
   farmLock: boolean
+  /** Élan du voyageur : +dégâts temporaires dans le biome fraîchement rejoint. */
+  elan?: ElanState
   gold: number
   essence: number
   noyau: number
@@ -584,6 +590,7 @@ function persist(s: GameState) {
     biomeStages: { ...s.biomeStages, [s.activeBiome]: s.stage },
     biomeBest: s.biomeBest,
     farmLock: s.farmLock,
+    elan: s.elan,
     gold: s.gold,
     essence: s.essence,
     noyau: s.noyau,
@@ -796,6 +803,8 @@ interface CombatMods {
   fightTime?: number
   /** Multiplicateur plat des dégâts ennemis (enrage dur / acharnement de raid). */
   dmgMult?: number
+  /** Multiplicateur plat des dégâts du HÉROS (harmonie des biomes, élan du voyageur). */
+  heroMult?: number
 }
 
 /** Multiplicateur de dégâts SUBIS par un ennemi (vulnérabilité « Sceau de faiblesse »). */
@@ -1018,7 +1027,7 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
     // Malédiction (debuff ennemi) réduit les dégâts ; Frénésie (« Furie sanguinaire ») les amplifie.
     const weakenMult = c.weaken ? c.weaken.mult : 1
     const frenzyMult = c.frenzy && c.frenzy.remaining > 0 ? c.frenzy.mult : 1
-    const bonusMult = d.cmods.damageMult * lowHp * highHp * weakenMult * frenzyMult
+    const bonusMult = d.cmods.damageMult * lowHp * highHp * weakenMult * frenzyMult * (mods?.heroMult ?? 1)
     const multistrikeChance = Math.min(0.85, d.derived.multistrike + d.cmods.multistrike)
     let healed = 0
     let dealtThis = 0
@@ -1174,7 +1183,7 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
     const highHp = d.cmods.highHp && hpFrac >= d.cmods.highHp.threshold ? d.cmods.highHp.mult : 1
     const weakenMult = c.weaken ? c.weaken.mult : 1
     const frenzyMult = c.frenzy && c.frenzy.remaining > 0 ? c.frenzy.mult : 1
-    const bonusMult = d.cmods.damageMult * lowHp * highHp * weakenMult * frenzyMult
+    const bonusMult = d.cmods.damageMult * lowHp * highHp * weakenMult * frenzyMult * (mods?.heroMult ?? 1)
     const multistrikeChance = Math.min(0.85, d.derived.multistrike + d.cmods.multistrike)
     let healed = 0
     let dealtThis = 0
@@ -1319,7 +1328,7 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
     if (m.regenPct) regen += m.regenPct
   }
 
-  const res = partyCombatStepMulti(s.characters, d.enemies, dt, { enrage, reflect, regen, fightTime })
+  const res = partyCombatStepMulti(s.characters, d.enemies, dt, { enrage, reflect, regen, fightTime, heroMult: 1 + harmonyBonus(s.biomeBest) })
   let chars = res.chars
   const enemies = res.enemies
   let log = s.log
@@ -1486,7 +1495,7 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
   const bossIn = r.enemies[0]
   if (mech.includes('execute')) dmgMult *= 1 + (1 - bossIn.hp / Math.max(1, bossIn.maxHp)) * 0.7
 
-  const res = partyCombatStepMulti(s.characters, r.enemies, dt, { enrage, regen: drain, fightTime, dmgMult })
+  const res = partyCombatStepMulti(s.characters, r.enemies, dt, { enrage, regen: drain, fightTime, dmgMult, heroMult: 1 + harmonyBonus(s.biomeBest) })
   let chars = res.chars
   let enemies = res.enemies
   const boss = enemies[0]
@@ -1675,7 +1684,9 @@ export const useGame = create<GameState>((set, get) => {
         return
       }
 
-      const res = partyCombatStep(s.characters, s.enemy, dt)
+      // Bonus de biome : harmonie (plus petit record) partout, élan du voyageur dans le biome rejoint.
+      const heroMult = (1 + harmonyBonus(s.biomeBest)) * (elanActive(s.elan, s.activeBiome) ? ELAN_DMG_MULT : 1)
+      const res = partyCombatStep(s.characters, s.enemy, dt, { heroMult })
       let chars = res.chars
       const enemy = res.enemy
       let log = s.log
@@ -1694,9 +1705,12 @@ export const useGame = create<GameState>((set, get) => {
         let { stage, bestStage, gold, sceaux, inventory, poussiere, essence } = s
         const boss = isBossStage(stage)
         const eco = computeGlobalMods(s.upgrades)
+        // SURCHARGE élémentaire : le biome tournant rapporte +50% or/XP et ×2 quintessence.
+        const surged = surgeBiome() === s.activeBiome
+        const surgeMult = surged ? SURGE_GOLD_XP_MULT : 1
         // Le combat CLASSIQUE n'est plus qu'un filet d'or/butin : la vraie source = donjons & raids.
-        const goldGain = Math.round(enemy.xp * CLASSIC_GOLD_MULT * eco.goldGain)
-        const xpGain = Math.round(enemy.xp * eco.xpGain * CLASSIC_XP_MULT)
+        const goldGain = Math.round(enemy.xp * CLASSIC_GOLD_MULT * eco.goldGain * surgeMult)
+        const xpGain = Math.round(enemy.xp * eco.xpGain * CLASSIC_XP_MULT * surgeMult)
         gold += goldGain
 
         chars = chars.map((c) => {
@@ -1741,7 +1755,7 @@ export const useGame = create<GameState>((set, get) => {
         let quint = s.quint
         {
           const qBase = boss ? QUINT_DROP.boss : elite ? QUINT_DROP.elite : QUINT_DROP.normal
-          const qChance = qBase * quintTierMult(stage)
+          const qChance = qBase * quintTierMult(stage) * (surged ? SURGE_QUINT_MULT : 1)
           if (Math.random() < qChance) {
             const t = s.activeBiome
             quint = { ...quint, [t]: (quint[t] ?? 0) + 1 }
@@ -1803,10 +1817,12 @@ export const useGame = create<GameState>((set, get) => {
       // Mémorise le palier du biome quitté, charge celui du biome rejoint.
       const biomeStages = { ...s.biomeStages, [s.activeBiome]: s.stage }
       const stage = Math.max(1, biomeStages[biome] ?? 1)
+      // ÉLAN DU VOYAGEUR : +20% dégâts pendant 10 min dans le biome fraîchement rejoint.
+      const elan: ElanState = { biome, until: Date.now() + ELAN_DURATION_MS }
       const next = {
-        ...s, activeBiome: biome, biomeStages, stage,
+        ...s, activeBiome: biome, biomeStages, stage, elan,
         enemy: makeEnemy(stage, biome),
-        log: pushLog(s.log, `🧭 Tu pars pour : ${getBiomeDef(biome).icon} ${getBiomeDef(biome).name}.`, 'info'),
+        log: pushLog(s.log, `🧭 Tu pars pour : ${getBiomeDef(biome).icon} ${getBiomeDef(biome).name} — 🌀 Élan du voyageur : +20% dégâts (10 min).`, 'info'),
       }
       persist(next)
       set(next)

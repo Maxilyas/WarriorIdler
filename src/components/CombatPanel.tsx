@@ -8,6 +8,7 @@ import { getPower, powerIcon } from '../game/powers'
 import { DAMAGE_TYPES } from '../game/damage'
 import { RAID_MECHANIC_META } from '../game/raids'
 import { BIOME_LIST, biomeUnlocked, biomeUnlockHint, getBiomeDef } from '../game/biomes'
+import { harmonyBonus, harmonyStage, surgeBiome, surgeRemainingMs, elanActive } from '../game/biomeBonus'
 import type { DamageType, Enemy, EnemyAbility, PowerDef } from '../game/types'
 
 /** Filtres du journal plein écran (catégories de LogKind). */
@@ -46,6 +47,7 @@ export function CombatPanel() {
   const castPower = useGame((s) => s.castPower)
   const togglePowerAuto = useGame((s) => s.togglePowerAuto)
   const farmLock = useGame((s) => s.farmLock)
+  const elan = useGame((s) => s.elan)
   const setStage = useGame((s) => s.setStage)
   const toggleFarmLock = useGame((s) => s.toggleFarmLock)
   const log = useGame((s) => s.log)
@@ -65,6 +67,11 @@ export function CombatPanel() {
   const physiqueBest = biomeBest.physique ?? 0
   // Cap de farm = record DANS LE BIOME ACTIF (pas le record global).
   const activeBiomeBest = Math.max(1, biomeBest[activeBiome] ?? 1)
+  // Bonus de biome (v0.21) : surcharge tournante, élan du voyageur, harmonie.
+  const surge = surgeBiome()
+  const surgeOn = surge === activeBiome
+  const elanOn = elanActive(elan, activeBiome)
+  const harmony = harmonyBonus(biomeBest)
 
   // Donjons/raids = combat à PLUSIEURS adversaires. En combat classique, un seul ennemi.
   const enemies: Enemy[] = raid ? raid.enemies : dungeon ? dungeon.enemies : [normalEnemy]
@@ -79,9 +86,18 @@ export function CombatPanel() {
     .filter((c) => c.hp > 0)
     .reduce((sum, c) => sum + charDps(c), 0)
   const resistEntries = Object.entries(enemy.resist ?? {}) as [DamageType, number][]
-  // Combat classique : résistance globale (les 7 types égaux) ; donjon/raid : résistances typées.
-  const resistVals = resistEntries.map(([, v]) => v)
-  const globalResist = resistVals.length >= 7 && resistVals.every((v) => v === resistVals[0]) ? resistVals[0] : null
+  // Affichage : « résistance globale » = valeur MAJORITAIRE (rampe de palier) ; les écarts
+  // (prédation de biome, thème de boss) s'affichent en exceptions résiste/vulnérable.
+  let globalResist: number | null = null
+  let resistExceptions = resistEntries
+  if (resistEntries.length >= 5) {
+    const counts = new Map<number, number>()
+    for (const [, v] of resistEntries) counts.set(v, (counts.get(v) ?? 0) + 1)
+    let modeV = 0
+    let modeC = 0
+    for (const [v, c] of counts) if (c > modeC) { modeC = c; modeV = v }
+    if (modeC >= 5) { globalResist = modeV; resistExceptions = resistEntries.filter(([, v]) => v !== modeV) }
+  }
   const enemyPct = (enemy.hp / enemy.maxHp) * 100
   const boss = raid ? true : dungeon ? dungeon.current === dungeon.totalFights - 1 : isBossStage(stage)
 
@@ -181,6 +197,23 @@ export function CombatPanel() {
         </div>
       )}
 
+      {/* Bonus de biome actifs (surcharge / élan / harmonie) */}
+      {!dungeon && !raid && (surgeOn || elanOn || harmony > 0) && (
+        <div className="flex flex-wrap gap-1.5 text-[10px]">
+          {surgeOn && (
+            <span className="rounded bg-amber-500/15 px-1.5 py-0.5 font-medium text-amber-300">⚡ Surcharge : +50% or & XP · quintessence ×2</span>
+          )}
+          {elanOn && elan && (
+            <span className="rounded bg-cyan-500/15 px-1.5 py-0.5 font-medium text-cyan-300">
+              🌀 Élan du voyageur : +20% dégâts ({Math.max(1, Math.ceil((elan.until - Date.now()) / 60000))} min)
+            </span>
+          )}
+          {harmony > 0 && (
+            <span className="rounded bg-violet-500/15 px-1.5 py-0.5 font-medium text-violet-300">🎼 Harmonie : +{Math.round(harmony * 100)}% dégâts</span>
+          )}
+        </div>
+      )}
+
       {/* Ligne « zone » : biome + palier + verrou en un seul rail — détail en feuille */}
       {!dungeon && !raid && (
         <button
@@ -213,11 +246,12 @@ export function CombatPanel() {
                   disabled={!unlocked}
                   onClick={() => setBiome(b.id)}
                   className={
-                    'flex flex-col items-center gap-0.5 rounded-lg border px-1 py-2 transition-colors ' +
+                    'relative flex flex-col items-center gap-0.5 rounded-lg border px-1 py-2 transition-colors ' +
                     (active ? 'border-current bg-white/10' : unlocked ? 'border-slate-700 hover:border-slate-500' : 'border-slate-800 opacity-50')
                   }
                   style={active ? { color: b.color } : undefined}
                 >
+                  {surge === b.id && <span className="absolute -right-1 -top-1 rounded-full bg-amber-400 px-1 text-[10px] text-slate-950">⚡</span>}
                   <span className="text-xl leading-none">{unlocked ? b.icon : '🔒'}</span>
                   <span className={'w-full truncate text-center text-[10px] font-semibold ' + (active ? '' : 'text-slate-300')}>
                     {DAMAGE_TYPES[b.id].name}
@@ -233,6 +267,24 @@ export function CombatPanel() {
               <p className="mt-1.5 text-[10px] leading-snug text-slate-500">🔒 {biomeUnlockHint(lockedBiome.id)}</p>
             ) : null
           })()}
+
+          {/* Bonus de biome : surcharge tournante, harmonie, élan */}
+          <div className="mt-3 space-y-1 rounded-lg bg-black/30 p-2 text-[10.5px] leading-snug">
+            <div className="text-amber-300">
+              ⚡ Surcharge : <span style={{ color: getBiomeDef(surge).color }}>{getBiomeDef(surge).icon} {getBiomeDef(surge).name}</span>
+              <span className="text-slate-400"> — +50% or & XP, quintessence ×2 · change dans {Math.max(1, Math.ceil(surgeRemainingMs() / 60000))} min</span>
+            </div>
+            <div className="text-violet-300">
+              🎼 Harmonie : <span className="font-semibold">+{Math.round(harmony * 100)}% dégâts</span>
+              <span className="text-slate-400"> partout (plus petit record : {harmonyStage(biomeBest)} — monte TOUS les biomes)</span>
+            </div>
+            <div className="text-cyan-300">
+              🌀 Élan du voyageur : <span className="text-slate-400">changer de biome donne +20% dégâts pendant 10 min.</span>
+            </div>
+            <div className="text-rose-300">
+              🐺 Prédation : <span className="text-slate-400">hors Physique, les ennemis résistent à LEUR élément et craignent l'élément prédateur.</span>
+            </div>
+          </div>
           <div className="mt-4 flex items-center justify-between gap-2">
             <span className="text-xs text-slate-400">Palier</span>
             <div className="flex items-center rounded-lg border border-slate-700">
@@ -318,27 +370,29 @@ export function CombatPanel() {
           </div>
         </div>
 
-        {globalResist != null ? (
+        {globalResist != null && globalResist > 0 && (
           <div className="mt-2 text-center text-[11px] text-slate-400">
             🛡 Résistance globale <span className="text-red-400">+{Math.round(globalResist * 100)}%</span>
             <span className="text-slate-600"> · contrée par la Pénétration</span>
           </div>
-        ) : resistEntries.length > 0 ? (
+        )}
+        {(globalResist != null ? resistExceptions : resistEntries).length > 0 && (
           <div className="mt-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-0.5 text-[11px]">
-            {resistEntries.map(([type, val]) => {
+            {(globalResist != null ? resistExceptions : resistEntries).map(([type, val]) => {
               const m = DAMAGE_TYPES[type]
-              const resist = val > 0
+              const resist = val > (globalResist ?? 0)
+              const shown = globalResist != null ? val - globalResist : val
               return (
-                <span key={type} title={resist ? 'Résiste' : 'Vulnérable'}>
+                <span key={type}>
                   <span style={{ color: m.color }}>{m.icon} {m.name}</span>{' '}
                   <span className={resist ? 'text-red-400' : 'text-emerald-400'}>
-                    {resist ? `+${Math.round(val * 100)}%` : `${Math.round(val * 100)}%`}
+                    {resist ? `résiste +${Math.round(shown * 100)}%` : `vulnérable ${Math.round(shown * 100)}%`}
                   </span>
                 </span>
               )
             })}
           </div>
-        ) : null}
+        )}
         {enemy.trait && (
           <div className="mt-1 text-center">
             <span className={'rounded px-1.5 py-0.5 text-[10px] font-medium ' + (enemy.elite ? 'bg-amber-600/30 text-amber-200' : 'bg-slate-700/60 text-slate-300')}>
