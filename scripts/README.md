@@ -32,3 +32,8 @@ modeste — utiliser `npm run sim` pour le vrai plafond de DPS.)
 Harnais de progression DONJON : pour des builds FOR/AGI/INT stuffés selon le niveau de perso
 (10/25/50/75/100), affiche le niveau de donjon MAX franchissable (survivre + tuer le boss), sur
 plusieurs traits (rapide / elite / colosse). Sert à garder une COURBE de progression (et pas un mur).
+
+## `eco-sim.mjs` — `npm run eco`
+Harnais ÉCONOMIQUE : rendement par run de donjon (or/éclats/noyau/poussière) vs coût d'un craft à la
+progression correspondante (createCost/ascendCost/reforgeCost). Affiche le ratio « crafts par run »
+— qui doit rester STABLE (~1-3) à tous les niveaux. Sert à mapper donjons ↔ atelier/forge/marché.
