@@ -317,6 +317,11 @@ interface GameState extends SaveData {
   castPower: (slot: number) => void
   allocateTalent: (nodeId: string) => void
   respecTalents: () => void
+  /** Sauvegarde le build courant (talents + capacités + spé) dans un emplacement (0-2). */
+  saveBuildPreset: (slot: number, name?: string) => void
+  /** Applique un préset : respec payant + réallocation validée nœud par nœud. */
+  applyBuildPreset: (slot: number) => void
+  deleteBuildPreset: (slot: number) => void
   buyUpgrade: (id: string) => void
   refreshShop: () => void
   buyShopItem: (itemId: string) => void
@@ -567,6 +572,16 @@ function sanitize(save: SaveData): SaveData {
     })
     // Mode auto/manuel par emplacement (défaut AUTO).
     c.powerAuto = [0, 1, 2, 3, 4].map((i) => (Array.isArray(c.powerAuto) ? c.powerAuto[i] !== false : true))
+    // Présets de build : structure validée (3 emplacements max, entrées bien formées).
+    if (Array.isArray(c.buildPresets)) {
+      c.buildPresets = c.buildPresets.slice(0, 3).map((p) =>
+        p && typeof p === 'object' && p.talents && Array.isArray(p.powers)
+          ? { name: String(p.name ?? 'Build').slice(0, 14), talents: p.talents, powers: p.powers.slice(0, 5), primaryBias: p.primaryBias ?? 'force' }
+          : null,
+      )
+    } else {
+      c.buildPresets = undefined
+    }
     const mh = charMaxHp(c)
     c.hp = c.hp > 0 ? Math.min(c.hp, mh) : mh
     // Statuts de combat transitoires : ne pas les conserver entre deux sessions.
@@ -2667,6 +2682,77 @@ export const useGame = create<GameState>((set, get) => {
       nc.hp = Math.min(nc.hp, charMaxHp(nc))
       const characters = s.characters.map((c, i) => (i === s.activeChar ? nc : c))
       const next = { ...s, gold: s.gold - cost, characters, log: pushLog(s.log, `Talents réinitialisés (-${cost} or).`, 'craft') }
+      persist(next)
+      set(next)
+    },
+
+    saveBuildPreset: (slot, name) => {
+      const s = get()
+      const char = s.characters[s.activeChar]
+      if (!char || slot < 0 || slot > 2) return
+      const presets = [...(char.buildPresets ?? [null, null, null])]
+      presets[slot] = {
+        name: (name ?? presets[slot]?.name ?? `Build ${slot + 1}`).trim().slice(0, 14) || `Build ${slot + 1}`,
+        talents: { ...char.talents },
+        powers: [...char.powers],
+        primaryBias: char.primaryBias,
+      }
+      const characters = s.characters.map((c, i) => (i === s.activeChar ? { ...c, buildPresets: presets } : c))
+      const next = { ...s, characters, log: pushLog(s.log, `🧩 Préset « ${presets[slot]!.name} » sauvegardé.`, 'craft') }
+      persist(next)
+      set(next)
+    },
+
+    applyBuildPreset: (slot) => {
+      const s = get()
+      const char = s.characters[s.activeChar]
+      const preset = char?.buildPresets?.[slot]
+      if (!char || !preset) return
+      // Respec payant (gratuit si rien n'est alloué au-delà de la racine).
+      const refundable = Object.values(char.talents).reduce((a, b) => a + b, 0) - (char.talents.co_start ?? 0)
+      const cost = refundable > 0 ? 200 * char.level : 0
+      if (s.gold < cost) return
+      // Réallocation VALIDÉE nœud par nœud (prérequis + budget de points du niveau actuel) :
+      // un préset sauvegardé à plus haut niveau s'applique au mieux, jamais en triche.
+      const target = preset.talents
+      const talents: Record<string, number> = { co_start: 1 }
+      let points = talentPointsForLevel(char.level)
+      let progressed = true
+      while (progressed) {
+        progressed = false
+        for (const id in target) {
+          if (id === 'co_start') continue
+          const node = getTalent(id)
+          if (!node) continue
+          const want = Math.min(target[id], node.maxRank)
+          while ((talents[id] ?? 0) < want && canAllocate(node, talents, points)) {
+            talents[id] = (talents[id] ?? 0) + 1
+            points--
+            progressed = true
+          }
+        }
+      }
+      const unlockedPowers = computeUnlockedPowers(talents)
+      const powers = preset.powers.map((p) => (p && unlockedPowers.includes(p) ? p : null))
+      const nc = { ...char, talents, talentPoints: points, unlockedPowers, powers, primaryBias: preset.primaryBias }
+      nc.hp = Math.min(nc.hp, charMaxHp(nc))
+      const characters = s.characters.map((c, i) => (i === s.activeChar ? nc : c))
+      const next = {
+        ...s, gold: s.gold - cost, characters,
+        log: pushLog(s.log, `🧩 Préset « ${preset.name} » appliqué${cost ? ` (-${cost.toLocaleString('fr-FR')} or)` : ''}.`, 'craft'),
+      }
+      persist(next)
+      set(next)
+    },
+
+    deleteBuildPreset: (slot) => {
+      const s = get()
+      const char = s.characters[s.activeChar]
+      if (!char || !char.buildPresets?.[slot]) return
+      const presets = [...char.buildPresets]
+      presets[slot] = null
+      const characters = s.characters.map((c, i) => (i === s.activeChar ? { ...c, buildPresets: presets } : c))
+      const next = { ...s, characters }
       persist(next)
       set(next)
     },

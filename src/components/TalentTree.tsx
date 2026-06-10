@@ -419,7 +419,10 @@ export function TalentTree() {
       {/* Panneau de détail */}
       {selectedNode && <NodeDetail node={selectedNode} char={char} weaponType={weaponType} onClose={() => setSelected(null)} />}
 
-      <RespecBar char={char} />
+      <div className="mt-2 flex gap-1.5">
+        <PresetsButton />
+        <RespecBar char={char} />
+      </div>
     </div>
   )
 }
@@ -676,9 +679,85 @@ function RespecBar({ char }: { char: { level: number; talents: Record<string, nu
     <button
       onClick={respecTalents}
       disabled={gold < respecCost}
-      className="mt-2 w-full rounded-lg bg-slate-800 py-1.5 text-[11px] text-slate-300 hover:bg-slate-700 disabled:opacity-40"
+      className="flex-1 rounded-lg bg-slate-800 py-1.5 text-[11px] text-slate-300 hover:bg-slate-700 disabled:opacity-40"
     >
-      Réinitialiser les talents · 💰 {respecCost.toLocaleString('fr-FR')}
+      Réinitialiser · 💰 {respecCost.toLocaleString('fr-FR')}
     </button>
+  )
+}
+
+/**
+ * Présets de build : 3 photos « talents + capacités + spé » par perso, pour TESTER des builds
+ * sans tout reconstruire à la main. Appliquer = respec payant + réallocation validée.
+ */
+function PresetsButton() {
+  const characters = useGame((s) => s.characters)
+  const activeChar = useGame((s) => s.activeChar)
+  const gold = useGame((s) => s.gold)
+  const saveBuildPreset = useGame((s) => s.saveBuildPreset)
+  const applyBuildPreset = useGame((s) => s.applyBuildPreset)
+  const deleteBuildPreset = useGame((s) => s.deleteBuildPreset)
+  const [open, setOpen] = useState(false)
+  const char = characters[activeChar] ?? characters[0]
+  if (!char) return null
+  const presets = char.buildPresets ?? [null, null, null]
+  const refundable = Object.values(char.talents).reduce((a, b) => a + b, 0) - (char.talents.co_start ?? 0)
+  const applyCost = refundable > 0 ? 200 * char.level : 0
+
+  return (
+    <>
+      <button onClick={() => setOpen(true)} className="flex-1 rounded-lg bg-violet-900/40 py-1.5 text-[11px] font-medium text-violet-200 hover:bg-violet-800/50">
+        🧩 Présets de build
+      </button>
+      {open && (
+        <Sheet title="🧩 Présets de build" onClose={() => setOpen(false)}>
+          <p className="mb-2 text-[11px] leading-snug text-slate-500">
+            Photographie ton build (talents + capacités + spécialisation) et bascule de l'un à l'autre.
+            Appliquer coûte le prix d'un respec ({applyCost ? `💰 ${applyCost.toLocaleString('fr-FR')}` : 'gratuit, rien d\'alloué'}).
+          </p>
+          <div className="space-y-1.5">
+            {[0, 1, 2].map((slot) => {
+              const p = presets[slot]
+              if (!p) {
+                return (
+                  <button
+                    key={slot}
+                    onClick={() => saveBuildPreset(slot)}
+                    className="w-full rounded-lg border border-dashed border-slate-700 py-2.5 text-[11px] text-slate-500 hover:border-violet-500 hover:text-violet-300"
+                  >
+                    💾 Sauvegarder le build actuel ici (emplacement {slot + 1})
+                  </button>
+                )
+              }
+              const pts = Object.values(p.talents).reduce((a, b) => a + b, 0) - (p.talents.co_start ?? 0)
+              const nPowers = p.powers.filter(Boolean).length
+              return (
+                <div key={slot} className="rounded-lg border border-slate-700 bg-black/20 p-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[12px] font-semibold text-violet-200">🧩 {p.name}</span>
+                    <span className="text-[9.5px] text-slate-500">{pts} pts · {nPowers} capacité{nPowers > 1 ? 's' : ''} · spé {p.primaryBias}</span>
+                  </div>
+                  <div className="mt-1.5 flex gap-1.5 text-[10px]">
+                    <button
+                      disabled={gold < applyCost}
+                      onClick={() => { applyBuildPreset(slot); setOpen(false) }}
+                      className="flex-1 rounded bg-violet-700/70 py-1.5 font-semibold text-violet-50 hover:bg-violet-600/70 disabled:opacity-40"
+                    >
+                      Appliquer{applyCost ? ` · 💰 ${applyCost.toLocaleString('fr-FR')}` : ''}
+                    </button>
+                    <button onClick={() => saveBuildPreset(slot, p.name)} className="rounded bg-slate-800 px-2.5 py-1.5 text-slate-300 hover:bg-slate-700" title="Écraser avec le build actuel">
+                      💾 Écraser
+                    </button>
+                    <button onClick={() => deleteBuildPreset(slot)} className="rounded bg-slate-800 px-2.5 py-1.5 text-slate-500 hover:text-red-400" title="Supprimer">
+                      🗑
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </Sheet>
+      )}
+    </>
   )
 }

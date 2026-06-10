@@ -273,6 +273,14 @@ export interface PowerDef {
 
 // ---- Personnage ----
 
+/** Photo d'un build : talents + capacités équipées + spécialisation (présets, 3 par perso). */
+export interface BuildPreset {
+  name: string
+  talents: Record<string, number>
+  powers: (string | null)[]
+  primaryBias: PrimaryStat
+}
+
 export interface Character {
   id: string
   name: string
@@ -291,6 +299,8 @@ export interface Character {
   /** Talents alloués : id de nœud → rang. */
   talents: Record<string, number>
   primaryBias: PrimaryStat
+  /** Présets de build (3 emplacements) — application via respec payant. */
+  buildPresets?: (BuildPreset | null)[]
   /** PV courants (les PV max sont dérivés du stuff). */
   hp: number
   /** Étourdissement restant (s) — transitoire, posé par les contrôles ennemis ; n'attaque pas tant que > 0. */
