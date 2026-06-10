@@ -3,8 +3,6 @@ import { createPortal } from 'react-dom'
 import { useGame } from '../game/store'
 import { ItemRow } from './ItemRow'
 import { ComparePanel } from './ComparePanel'
-import { AtelierPanel } from './AtelierPanel'
-import { SubTab } from './ui'
 import { EQUIP_SLOTS, ITEM_TYPES, equipSlotsForType, slotAccepts } from '../game/slots'
 import { RARITIES, RARITY_LIST } from '../game/rarities'
 import { itemScore, itemHasRareStat, itemStatBlock } from '../game/items'
@@ -50,9 +48,6 @@ export function StuffScreen() {
   const setRecycleThreshold = useGame((s) => s.setRecycleThreshold)
   const autoRecycle = useGame((s) => s.autoRecycle)
   const toggleAutoRecycle = useGame((s) => s.toggleAutoRecycle)
-  const bestStage = useGame((s) => s.bestStage)
-  const forgeMastery = useGame((s) => s.forgeMastery)
-  const forgeUpgrades = useGame((s) => s.forgeUpgrades)
 
   const active = characters[activeChar] ?? characters[0]
   const equipment: Equipment = active?.equipment ?? {}
@@ -68,13 +63,8 @@ export function StuffScreen() {
   // Le paper-doll est repliable sur mobile (libère l'inventaire, qui est le vrai centre d'interaction).
   // Toujours affiché sur grand écran (colonne dédiée).
   const [equipOpen, setEquipOpen] = useState(true)
-  // Stuff = Sac · Atelier : la forge est un écran frère du sac, pas une modale à l'étroit.
-  const [sub, setSub] = useState<'sac' | 'atelier'>('sac')
   // Tri & ventes groupées : repliés par défaut (utilisés par à-coups).
   const [bulkOpen, setBulkOpen] = useState(false)
-
-  // L'Atelier se révèle au palier 12 (ou dès qu'on a du Savoir-faire / une amélioration de forge).
-  const atelierUnlocked = bestStage >= 12 || forgeMastery > 0 || Object.values(forgeUpgrades).some((v) => v > 0)
 
   const filterType: ItemType | null = selectedSlot
     ? EQUIP_SLOTS.find((s) => s.id === selectedSlot)!.accepts
@@ -146,19 +136,7 @@ export function StuffScreen() {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {atelierUnlocked && (
-        <div className="mb-2 flex gap-1.5">
-          <SubTab on={sub === 'sac'} onClick={() => setSub('sac')}>🎒 Sac</SubTab>
-          <SubTab on={sub === 'atelier'} onClick={() => setSub('atelier')}>🔨 Atelier</SubTab>
-        </div>
-      )}
-
-      {sub === 'atelier' && atelierUnlocked ? (
-        <div className="min-h-0 flex-1">
-          <AtelierPanel />
-        </div>
-      ) : (
-        <div className="flex min-h-0 flex-1 flex-col gap-3 lg:grid lg:grid-cols-[200px_minmax(0,1fr)] xl:grid-cols-[200px_minmax(0,1fr)_300px]">
+      <div className="flex min-h-0 flex-1 flex-col gap-3 lg:grid lg:grid-cols-[200px_minmax(0,1fr)] xl:grid-cols-[200px_minmax(0,1fr)_300px]">
       {/* Paper-doll */}
       <div className="max-h-[36vh] shrink-0 overflow-y-auto rounded-xl border border-slate-800 bg-[#0d111a] p-2 lg:max-h-none lg:min-h-0 lg:shrink">
         {characters.length > 1 && (
@@ -420,8 +398,7 @@ export function StuffScreen() {
           document.body,
         )}
 
-        </div>
-      )}
+      </div>
     </div>
   )
 }

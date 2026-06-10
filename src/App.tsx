@@ -5,6 +5,7 @@ import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from './game/damage'
 import { TALENT_START_LEVEL } from './game/character'
 import { CombatPanel } from './components/CombatPanel'
 import { StuffScreen } from './components/StuffScreen'
+import { AtelierPanel } from './components/AtelierPanel'
 import { HerosHub } from './components/HerosHub'
 import { ExpedHub } from './components/ExpedHub'
 import { MerchantPanel } from './components/MerchantPanel'
@@ -16,25 +17,27 @@ import { WelcomeBackModal } from './components/WelcomeBackModal'
 
 const TICK_MS = 200
 
-type Tab = 'combat' | 'stuff' | 'heros' | 'exped' | 'marche'
-type DeskTab = 'stuff' | 'heros' | 'exped' | 'marche' | 'grimoire'
+type Tab = 'combat' | 'stuff' | 'atelier' | 'heros' | 'exped' | 'marche'
+type DeskTab = 'stuff' | 'atelier' | 'heros' | 'exped' | 'marche' | 'grimoire'
 
 /** Paliers de déblocage (révélation progressive de l'UI). */
 const MARCHE_STAGE = 10
+const ATELIER_STAGE = 12
 const DONJON_STAGE = 20
 const RAID_STAGE = 50
 
-/** Barre du bas : 5 emplacements maximum — les features futures vivent DANS les hubs. */
+/** Barre du bas : 6 emplacements maximum — les features futures vivent DANS les hubs. */
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'combat', label: 'Combat', icon: '⚔' },
   { id: 'stuff', label: 'Stuff', icon: '🎒' },
+  { id: 'atelier', label: 'Atelier', icon: '🔨' },
   { id: 'heros', label: 'Héros', icon: '🛡' },
   { id: 'exped', label: 'Expéd.', icon: '🏰' },
   { id: 'marche', label: 'Marché', icon: '🏪' },
 ]
 
 const DESK_LABEL: Record<DeskTab, string> = {
-  stuff: '🎒 Équipement', heros: '🛡 Héros', exped: '🏰 Expéditions', marche: '🏪 Marché', grimoire: '📖 Codex',
+  stuff: '🎒 Équipement', atelier: '🔨 Atelier', heros: '🛡 Héros', exped: '🏰 Expéditions', marche: '🏪 Marché', grimoire: '📖 Codex',
 }
 
 /** Format court des grands nombres (en-tête mobile : la place est comptée). */
@@ -82,10 +85,11 @@ export default function App() {
   const raidsUnlocked = orbes > 0 || inRaid || bestStage >= RAID_STAGE
   const expedUnlocked = sceaux > 0 || anyDungeon || inDungeon || bestStage >= DONJON_STAGE || raidsUnlocked
   const marcheUnlocked = bestStage >= MARCHE_STAGE || anyUpgrade
+  const atelierUnlocked = bestStage >= ATELIER_STAGE || forgeMastery > 0
 
-  const unlocked: Record<Tab, boolean> = { combat: true, stuff: true, heros: true, exped: expedUnlocked, marche: marcheUnlocked }
+  const unlocked: Record<Tab, boolean> = { combat: true, stuff: true, atelier: atelierUnlocked, heros: true, exped: expedUnlocked, marche: marcheUnlocked }
   const mobileTabs = TABS.filter((t) => unlocked[t.id])
-  const deskTabs = (['stuff', 'heros', 'exped', 'marche', 'grimoire'] as const).filter((t) => t === 'grimoire' || unlocked[t])
+  const deskTabs = (['stuff', 'atelier', 'heros', 'exped', 'marche', 'grimoire'] as const).filter((t) => t === 'grimoire' || unlocked[t])
   const talentPoints = characters.reduce((a, c) => a + c.talentPoints, 0)
 
   // Monnaies : l'en-tête mobile n'en montre que 2 + un compteur ; le détail vit dans une feuille
@@ -174,6 +178,8 @@ export default function App() {
                   <MerchantPanel />
                 ) : deskTab === 'grimoire' ? (
                   <GrimoirePanel />
+                ) : deskTab === 'atelier' ? (
+                  <AtelierPanel />
                 ) : (
                   <StuffScreen />
                 )}
@@ -185,6 +191,7 @@ export default function App() {
           <div className="h-full">
             {tab === 'combat' && <CombatPanel />}
             {tab === 'stuff' && <StuffScreen />}
+            {tab === 'atelier' && <AtelierPanel />}
             {tab === 'heros' && <HerosHub talentsUnlocked={talentsUnlocked} />}
             {tab === 'exped' && <ExpedHub raidsUnlocked={raidsUnlocked} />}
             {tab === 'marche' && <MerchantPanel />}
