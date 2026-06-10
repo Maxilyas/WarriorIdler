@@ -176,7 +176,7 @@ export function CombatPanel() {
           </div>
           <div className="mt-1 flex items-center justify-between text-[11px] text-slate-400">
             <span>
-              Boss <span className="text-slate-200">{raid.current + 1}/{raid.totalBosses}</span>
+              {raid.totalBosses > 1 && <>Boss <span className="text-slate-200">{raid.current + 1}/{raid.totalBosses}</span></>}
               {(raid.repeatLeft ?? 0) > 0 && (
                 <span className="ml-2 rounded bg-rose-900/40 px-1.5 py-0.5 text-[10px] text-rose-200" title="Relances automatiques restantes">🔁 {raid.repeatLeft}</span>
               )}

@@ -57,10 +57,10 @@ import {
 } from './dungeons'
 import type { GemFamily } from './condGems'
 import {
-  generateRaid, makeRaidEncounter, makeRaidAdd, getRaidDef, raidUnlocked, raidBerserkTime,
+  generateRaid, makeRaidAdd, getRaidDef, raidUnlocked, raidBossVariant,
   raidIlvl, raidMinTier, raidMaxTier, raidRarityDecay, raidRarityJackpot,
   raidLootCount, raidFragments, raidCosmicChance, raidCosmicQty, pickRaidLootType,
-  PAIR_ENRAGE_MULT, RAIDS, type ActiveRaid, type RaidId,
+  PAIR_ENRAGE_MULT, NOVA_MULT, RAIDS, type ActiveRaid, type RaidId,
 } from './raids'
 import { SETS } from './sets'
 import { simulateOffline, type OfflineReport } from './offline'
@@ -708,6 +708,8 @@ function sanitize(save: SaveData): SaveData {
   }
   // Raid en cours au format obsolète (pas de `raidId`) → abandonné par la migration.
   if (save.raid && !(save.raid as { raidId?: string }).raidId) save.raid = null
+  // v0.23 : un raid = UN affrontement. Un raid multi-boss en cours (ancienne save) est abandonné.
+  if (save.raid && (save.raid as ActiveRaid).totalBosses !== 1) save.raid = null
 
   // dungeonProgress : REFONTE v0.17 (clé = id de donjon-ressource, plus le type de dégâts) → reset propre,
   // en conservant uniquement les clés déjà au nouveau format si présentes.
@@ -1927,10 +1929,11 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
     for (const b of aliveBosses) b.damageType = element
     log = pushLog(log, `🌈 ${boss.name} bascule en ${DAMAGE_TYPES[element].name} !`, 'info')
   }
-  // Nova cataclysmique : grosse AoE typée (check d'EHP/mitigation).
+  // Nova cataclysmique : grosse AoE typée (check d'EHP/mitigation). NOVA_MULT plat : la difficulté
+  // du raid est DÉJÀ dans boss.damage (avant, ×4×baseDifficulty la comptait deux fois).
   if (mech.includes('nova') && novaCd <= 0) {
     novaCd = 6
-    chars = applyAoe(chars, boss.damage * 4 * def.baseDifficulty, element)
+    chars = applyAoe(chars, boss.damage * NOVA_MULT, element)
     log = pushLog(log, `☄️ ${boss.name} déchaîne une Nova ${DAMAGE_TYPES[element].name} !`, 'death')
   }
   // Déferlante : fait SURGIR des renforts réels (combat à plusieurs adversaires), plafonnés.
@@ -1967,8 +1970,8 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
     // 📯 Crescendo & 🛡️ Trésorerie : un boss de raid compte comme un kill.
     crescendoAdd(1)
     tresorerieShield(chars, rCond.tresorerieCap)
-    const nextIndex = r.current + 1
-    if (nextIndex >= r.totalBosses) {
+    // v0.23 : un raid = UN affrontement → le boss (ou duo) vaincu, le trésor tombe directement.
+    {
       const tier = r.tier
       const ilvl = raidIlvl(def, tier)
       const minTier = raidMinTier(def, tier)
@@ -2043,24 +2046,6 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
       set(next)
       return
     }
-    const startEl = r.rotateList[0]
-    const nr: ActiveRaid = {
-      ...r,
-      current: nextIndex,
-      enemies: makeRaidEncounter(def, r.tier, nextIndex, startEl),
-      element: startEl,
-      rotateIdx: 0,
-      fightTime: 0,
-      novaCd: 6,
-      swarmCd: 5,
-      rotateCd: 8,
-      berserkAt: raidBerserkTime(def, r.tier),
-    }
-    log = pushLog(log, `${def.name} — boss ${nextIndex + 1}/${r.totalBosses} !`, 'info')
-    const next = { ...s, characters: chars, raid: nr, log }
-    persist(next)
-    set(next)
-    return
   }
 
   set({ ...s, characters: chars, raid: { ...r, enemies, fightTime, novaCd, swarmCd, rotateCd, element, rotateIdx }, log })
@@ -3029,7 +3014,8 @@ export const useGame = create<GameState>((set, get) => {
       // Rune de l'Économe : 15% de chance de préserver l'Orbe.
       const saved = equippedRules(s.characters).has('econome') && Math.random() < (craftMods(s.metiers).loiAmplifiee ? 0.25 : 0.15)
       const runs = raid.repeatLeft > 0 ? ` · auto ×${raid.repeatLeft + 1}` : ''
-      const next = { ...s, orbes: s.orbes - (saved ? 0 : def.orbeCost), raid, log: pushLog(s.log, `⚔️ Raid lancé : ${def.name} · Tier ${tier} (${raid.totalBosses} boss${saved ? ' · 🗝️ Orbe préservée !' : ''}${runs}).`, 'info') }
+      const boss = raidBossVariant(def, tier)
+      const next = { ...s, orbes: s.orbes - (saved ? 0 : def.orbeCost), raid, log: pushLog(s.log, `⚔️ Raid lancé : ${def.name} · Tier ${tier} — ${boss.name}${boss.partnerName ? ` & ${boss.partnerName}` : ''}${saved ? ' · 🗝️ Orbe préservée !' : ''}${runs}.`, 'info') }
       persist(next)
       set(next)
     },

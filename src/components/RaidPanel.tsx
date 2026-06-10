@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useGame } from '../game/store'
 import {
   RAID_LIST, RAID_UNLOCK_STAGE, RAID_MECHANIC_META, getRaidDef, raidUnlocked,
-  raidBossCount, raidIlvl, raidBerserkTime, raidFragments, raidCosmicChance,
+  raidBossVariant, raidIlvl, raidBerserkTime, raidFragments, raidCosmicChance,
   raidMinTier, raidMaxTier, recommendedDps, recommendedEhp, type RaidDef,
 } from '../game/raids'
 import { charDps, charMaxHp } from '../game/character'
@@ -49,9 +49,10 @@ export function RaidPanel() {
 
       <p className="mb-2 text-[11px] leading-snug text-slate-500">
         Cinq sanctuaires <b className="text-slate-300">distincts</b>, chacun ciblant une catégorie de butin et montés
-        en <b className="text-slate-300">tiers indépendants</b>. <b className="text-rose-300">Extrêmement difficiles</b> :
-        chaque raid teste une facette de ton stuff (DPS, PV, résistances, pénétration, burst). Récompenses : butin ciblé
-        de très haut iLvl, Fragments d'éternité et le rarissime <b className="text-violet-300">Éclat cosmique 💫</b>.
+        en <b className="text-slate-300">tiers indépendants</b>. Un raid = <b className="text-slate-300">un seul affrontement</b>,
+        et <b className="text-rose-300">le boss change à chaque tier</b> (mécaniques différentes). Chaque tier vaincu
+        débloque le suivant : butin de plus en plus haut en iLvl et en rareté, Fragments d'éternité et le
+        rarissime <b className="text-violet-300">Éclat cosmique 💫</b>.
       </p>
 
       <div className="mb-2 rounded-lg border border-slate-800 bg-[#0d111a] px-2.5 py-1.5 text-[10.5px]">
@@ -133,6 +134,7 @@ function RaidCard({ def, unlocked, cleared, bestStage, orbes, busy, partyDps, pa
   const ehpOk = partyHp >= recEhp
   const canEnter = !busy && orbes >= def.orbeCost
   const isNew = t === frontier && t > 1
+  const boss = raidBossVariant(def, t)
 
   return (
     <div className="rounded-lg border bg-[#11151f] p-2.5" style={{ borderColor: def.color + '40' }}>
@@ -149,13 +151,20 @@ function RaidCard({ def, unlocked, cleared, bestStage, orbes, busy, partyDps, pa
         </div>
       )}
 
-      <div className="mt-1.5 flex flex-wrap gap-1">
-        <span className="rounded bg-slate-800 px-1.5 py-0.5 text-[9.5px] text-slate-300">🎁 {def.lootLabel}</span>
-        {def.signature.map((m) => (
-          <span key={m} title={RAID_MECHANIC_META[m].desc} className="rounded bg-rose-900/30 px-1.5 py-0.5 text-[9.5px] text-rose-200">
-            {RAID_MECHANIC_META[m].icon} {RAID_MECHANIC_META[m].name}
-          </span>
-        ))}
+      {/* Boss du tier sélectionné : le visage (et les mécaniques) changent à chaque tier */}
+      <div className="mt-1.5 rounded-lg border border-slate-800 bg-black/20 px-2 py-1.5">
+        <div className="text-[11px] font-semibold" style={{ color: boss.awakened ? '#f87171' : def.color }}>
+          ★ {boss.name}{boss.partnerName ? <span className="text-slate-400"> & {boss.partnerName}</span> : null}
+        </div>
+        <div className="mt-0.5 text-[9.5px] leading-snug text-slate-500">{boss.blurb}</div>
+        <div className="mt-1 flex flex-wrap gap-1">
+          <span className="rounded bg-slate-800 px-1.5 py-0.5 text-[9.5px] text-slate-300">🎁 {def.lootLabel}</span>
+          {boss.mechanics.map((m) => (
+            <span key={m} title={RAID_MECHANIC_META[m].desc} className="rounded bg-rose-900/30 px-1.5 py-0.5 text-[9.5px] text-rose-200">
+              {RAID_MECHANIC_META[m].icon} {RAID_MECHANIC_META[m].name}
+            </span>
+          ))}
+        </div>
       </div>
 
       {/* Recommandations (checks de stuff) */}
@@ -168,7 +177,7 @@ function RaidCard({ def, unlocked, cleared, bestStage, orbes, busy, partyDps, pa
         <div className={'rounded px-1.5 py-1 ' + (ehpOk ? 'bg-emerald-900/20' : 'bg-rose-900/20')}>
           <span className="text-slate-500">PV conseillés </span>
           <span className={ehpOk ? 'text-emerald-300' : 'text-rose-300'}>{fmt(recEhp)} {ehpOk ? '✓' : '✗'}</span>
-          <span className="block text-[8.5px] text-slate-600">{raidBossCount(def, t)} boss · butin iLvl ~{raidIlvl(def, t)}</span>
+          <span className="block text-[8.5px] text-slate-600">butin iLvl ~{raidIlvl(def, t)}</span>
         </div>
       </div>
 
