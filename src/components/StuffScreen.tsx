@@ -3,7 +3,8 @@ import { createPortal } from 'react-dom'
 import { useGame } from '../game/store'
 import { ItemRow } from './ItemRow'
 import { ComparePanel } from './ComparePanel'
-import { CreatePanel } from './CreatePanel'
+import { AtelierPanel } from './AtelierPanel'
+import { SubTab } from './ui'
 import { EQUIP_SLOTS, ITEM_TYPES, equipSlotsForType, slotAccepts } from '../game/slots'
 import { RARITIES, RARITY_LIST } from '../game/rarities'
 import { itemScore, itemHasRareStat, itemStatBlock } from '../game/items'
@@ -38,6 +39,9 @@ export function StuffScreen() {
   const setRecycleThreshold = useGame((s) => s.setRecycleThreshold)
   const autoRecycle = useGame((s) => s.autoRecycle)
   const toggleAutoRecycle = useGame((s) => s.toggleAutoRecycle)
+  const bestStage = useGame((s) => s.bestStage)
+  const forgeMastery = useGame((s) => s.forgeMastery)
+  const forgeUpgrades = useGame((s) => s.forgeUpgrades)
 
   const active = characters[activeChar] ?? characters[0]
   const equipment: Equipment = active?.equipment ?? {}
@@ -48,10 +52,16 @@ export function StuffScreen() {
   const [primaryFilter, setPrimaryFilter] = useState<OffensiveStat | null>(null)
   const [statFilter, setStatFilter] = useState<SecondaryStat[]>([])
   const [showStatFilter, setShowStatFilter] = useState(false)
-  const [showCreate, setShowCreate] = useState(false)
   // Le paper-doll est repliable sur mobile (libère l'inventaire, qui est le vrai centre d'interaction).
   // Toujours affiché sur grand écran (colonne dédiée).
   const [equipOpen, setEquipOpen] = useState(true)
+  // Stuff = Sac · Atelier : la forge est un écran frère du sac, pas une modale à l'étroit.
+  const [sub, setSub] = useState<'sac' | 'atelier'>('sac')
+  // Tri & ventes groupées : repliés par défaut (utilisés par à-coups).
+  const [bulkOpen, setBulkOpen] = useState(false)
+
+  // L'Atelier se révèle au palier 12 (ou dès qu'on a du Savoir-faire / une amélioration de forge).
+  const atelierUnlocked = bestStage >= 12 || forgeMastery > 0 || Object.values(forgeUpgrades).some((v) => v > 0)
 
   const filterType: ItemType | null = selectedSlot
     ? EQUIP_SLOTS.find((s) => s.id === selectedSlot)!.accepts
@@ -112,7 +122,20 @@ export function StuffScreen() {
   ) : null
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3 lg:grid lg:grid-cols-[200px_minmax(0,1fr)] xl:grid-cols-[200px_minmax(0,1fr)_300px]">
+    <div className="flex h-full min-h-0 flex-col">
+      {atelierUnlocked && (
+        <div className="mb-2 flex gap-1.5">
+          <SubTab on={sub === 'sac'} onClick={() => setSub('sac')}>🎒 Sac</SubTab>
+          <SubTab on={sub === 'atelier'} onClick={() => setSub('atelier')}>🔨 Atelier</SubTab>
+        </div>
+      )}
+
+      {sub === 'atelier' && atelierUnlocked ? (
+        <div className="min-h-0 flex-1">
+          <AtelierPanel />
+        </div>
+      ) : (
+        <div className="flex min-h-0 flex-1 flex-col gap-3 lg:grid lg:grid-cols-[200px_minmax(0,1fr)] xl:grid-cols-[200px_minmax(0,1fr)_300px]">
       {/* Paper-doll */}
       <div className="max-h-[36vh] shrink-0 overflow-y-auto rounded-xl border border-slate-800 bg-[#0d111a] p-2 lg:max-h-none lg:min-h-0 lg:shrink">
         {characters.length > 1 && (
@@ -274,33 +297,40 @@ export function StuffScreen() {
           )}
         </div>
 
-        <div className="mb-1.5 flex flex-wrap items-center gap-1 px-1 text-[10px]">
-          <button onClick={() => setShowCreate(true)} className="rounded bg-amber-700/70 px-2.5 py-1.5 font-medium text-amber-100 hover:bg-amber-600/70">
-            🔨 Forger
+        {/* Tri & ventes groupées : repliés derrière une ligne (utilisés par à-coups) */}
+        <div className="mb-1.5 px-1 text-[10px]">
+          <button onClick={() => setBulkOpen((v) => !v)} className="inline-flex items-center gap-1.5 py-1 text-slate-400 hover:text-slate-200">
+            ⚙ Tri & ventes
+            {autoRecycle && <span className="text-emerald-400">♻️ auto</span>}
+            <span>{bulkOpen ? '▾' : '▸'}</span>
           </button>
-          <span className="text-slate-500">sous</span>
-          <select
-            value={recycleThreshold}
-            onChange={(e) => setRecycleThreshold(Number(e.target.value))}
-            className="rounded bg-slate-800 px-2 py-1.5 text-slate-200"
-          >
-            {RARITY_LIST.filter((r) => r.tier >= 2 && r.tier <= 14).map((r) => (
-              <option key={r.id} value={r.tier}>{r.name}</option>
-            ))}
-          </select>
-          <button onClick={() => sellAllBelow(recycleThreshold)} className="rounded bg-yellow-900/40 px-2.5 py-1.5 text-yellow-300 hover:bg-yellow-900/60">
-            💰 Vendre
-          </button>
-          <button onClick={() => recycleAllBelow(recycleThreshold)} className="rounded bg-cyan-900/40 px-2.5 py-1.5 text-cyan-300 hover:bg-cyan-900/60">
-            ♻️ Recycler
-          </button>
-          <button
-            onClick={toggleAutoRecycle}
-            title="Recycle automatiquement tout butin (non unique) sous le seuil, directement au drop."
-            className={'rounded px-2.5 py-1.5 font-medium ' + (autoRecycle ? 'bg-emerald-600 text-slate-950' : 'bg-slate-800 text-slate-400 hover:text-slate-200')}
-          >
-            {autoRecycle ? '♻️ Auto ✓' : '♻️ Auto'}
-          </button>
+          {bulkOpen && (
+            <div className="mt-1 flex flex-wrap items-center gap-1">
+              <span className="text-slate-500">sous</span>
+              <select
+                value={recycleThreshold}
+                onChange={(e) => setRecycleThreshold(Number(e.target.value))}
+                className="rounded bg-slate-800 px-2 py-1.5 text-slate-200"
+              >
+                {RARITY_LIST.filter((r) => r.tier >= 2 && r.tier <= 14).map((r) => (
+                  <option key={r.id} value={r.tier}>{r.name}</option>
+                ))}
+              </select>
+              <button onClick={() => sellAllBelow(recycleThreshold)} className="rounded bg-yellow-900/40 px-2.5 py-1.5 text-yellow-300 hover:bg-yellow-900/60">
+                💰 Vendre
+              </button>
+              <button onClick={() => recycleAllBelow(recycleThreshold)} className="rounded bg-cyan-900/40 px-2.5 py-1.5 text-cyan-300 hover:bg-cyan-900/60">
+                ♻️ Recycler
+              </button>
+              <button
+                onClick={toggleAutoRecycle}
+                title="Recycle automatiquement tout butin (non unique) sous le seuil, directement au drop."
+                className={'rounded px-2.5 py-1.5 font-medium ' + (autoRecycle ? 'bg-emerald-600 text-slate-950' : 'bg-slate-800 text-slate-400 hover:text-slate-200')}
+              >
+                {autoRecycle ? '♻️ Auto ✓' : '♻️ Auto'}
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto pr-1">
@@ -345,7 +375,8 @@ export function StuffScreen() {
           document.body,
         )}
 
-      {showCreate && <CreatePanel onClose={() => setShowCreate(false)} />}
+        </div>
+      )}
     </div>
   )
 }
