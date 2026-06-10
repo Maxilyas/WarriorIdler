@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useGame, SCEAU_COST } from '../game/store'
-import { DUNGEON_LIST, dungeonFights, dungeonIlvl, type DungeonDef, type DungeonReward } from '../game/dungeons'
+import { DUNGEON_LIST, dungeonFights, dungeonIlvl, GEODE_WING_ELEMENT, type DungeonDef, type DungeonReward } from '../game/dungeons'
 import { DAMAGE_TYPES } from '../game/damage'
+import { GEM_FAMILIES, type GemFamily } from '../game/condGems'
 
 /** Valeur « ∞ » du sélecteur de répétitions (limité en pratique par les Sceaux disponibles). */
 const INF = 999
@@ -16,6 +17,7 @@ const REWARD_LABEL: Record<DungeonReward, string> = {
   sceaux: '🔑 Sceaux de faille',
   orbes: '🔮 Orbes de raid',
   poussiere: '🌌 Poussière d\'étoile',
+  gemmes: '🔹 Poussière de gemme + 💎 gemme de l\'aile',
 }
 
 export function DungeonPanel() {
@@ -67,7 +69,7 @@ export function DungeonPanel() {
             sceaux={sceaux}
             bestStage={bestStage}
             busy={!!dungeon}
-            onEnter={(lvl, rep) => enterDungeon(def.id, lvl, rep)}
+            onEnter={(lvl, rep, wing) => enterDungeon(def.id, lvl, rep, wing)}
           />
         ))}
       </div>
@@ -81,14 +83,17 @@ function DungeonCard({ def, cleared, sceaux, bestStage, busy, onEnter }: {
   sceaux: number
   bestStage: number
   busy: boolean
-  onEnter: (level: number, repeat: number) => void
+  onEnter: (level: number, repeat: number, wing?: GemFamily) => void
 }) {
   const frontier = cleared + 1
   const [level, setLevel] = useState(frontier)
   const [repeat, setRepeat] = useState(1)
+  // La Géode : aile choisie = famille de gemme farmée (l'élément des golems suit).
+  const isGeode = def.id === 'geode'
+  const [wing, setWing] = useState<GemFamily>('rythme')
   const lvl = Math.max(1, Math.min(frontier, level))
   const locked = bestStage < def.unlockStage
-  const el = DAMAGE_TYPES[def.element]
+  const el = DAMAGE_TYPES[isGeode ? GEODE_WING_ELEMENT[wing] : def.element]
   const cost = def.sceauCost
   const canEnter = !busy && sceaux >= cost && !locked
   // Nombre de runs réellement payables d'affilée (∞ = limité par les Sceaux).
@@ -118,6 +123,21 @@ function DungeonCard({ def, cleared, sceaux, bestStage, busy, onEnter }: {
         </div>
       ) : (
         <>
+          {/* La Géode : choix de l'aile (famille de gemme) */}
+          {isGeode && (
+            <div className="mt-2 flex items-center gap-1 text-[10px]">
+              <span className="text-slate-500" title="L'aile détermine la famille des gemmes du coffre">💎 Aile</span>
+              {(Object.keys(GEM_FAMILIES) as GemFamily[]).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setWing(f)}
+                  className={'rounded px-2 py-1.5 font-semibold ' + (wing === f ? 'bg-sky-600 text-slate-950' : 'bg-slate-800 text-slate-400 hover:bg-slate-700')}
+                >
+                  {GEM_FAMILIES[f].icon} {GEM_FAMILIES[f].name}
+                </button>
+              ))}
+            </div>
+          )}
           {/* Auto-farm : nombre de runs enchaînés (consomme les Sceaux à la volée) */}
           <div className="mt-2 flex items-center gap-1 text-[10px]">
             <span className="text-slate-500" title="Relances automatiques à la fin de chaque run">🔁 Auto</span>
@@ -139,7 +159,7 @@ function DungeonCard({ def, cleared, sceaux, bestStage, busy, onEnter }: {
             </div>
             <button
               disabled={!canEnter}
-              onClick={() => onEnter(lvl, repeat)}
+              onClick={() => onEnter(lvl, repeat, isGeode ? wing : undefined)}
               className="flex-1 rounded-lg bg-amber-700/80 py-2.5 text-xs font-semibold hover:bg-amber-600 disabled:opacity-40"
             >
               {busy ? 'Donjon en cours…' : sceaux < cost ? `Manque de Sceaux (${cost} 🔑)` : `Entrer niv. ${lvl}${repeat > 1 ? ` ×${affordableRuns}${repeat === INF ? '' : ''}` : ''}${cost === 0 ? '' : ` (${cost} 🔑/run)`}`}

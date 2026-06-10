@@ -1,5 +1,6 @@
 import type { DamageType, Enemy } from './types'
 import { DAMAGE_TYPES } from './damage'
+import type { GemFamily } from './condGems'
 
 /**
  * DONJONS « par RESSOURCE » (refonte v0.17).
@@ -18,8 +19,8 @@ import { DAMAGE_TYPES } from './damage'
  * → réussir les raids (pièces hors-norme).
  */
 
-export type DungeonId = 'or' | 'savoir' | 'eclats' | 'noyau' | 'butin' | 'sceaux' | 'orbes' | 'poussiere'
-export type DungeonReward = 'gold' | 'xp' | 'eclats' | 'noyau' | 'stuff' | 'sceaux' | 'orbes' | 'poussiere'
+export type DungeonId = 'or' | 'savoir' | 'eclats' | 'noyau' | 'butin' | 'sceaux' | 'orbes' | 'poussiere' | 'geode'
+export type DungeonReward = 'gold' | 'xp' | 'eclats' | 'noyau' | 'stuff' | 'sceaux' | 'orbes' | 'poussiere' | 'gemmes'
 export type DungeonTrait = 'rapide' | 'pack' | 'colosse' | 'armure' | 'elite' | 'regen'
 
 export interface DungeonDef {
@@ -77,6 +78,12 @@ export const DUNGEONS: Record<DungeonId, DungeonDef> = {
     trait: 'elite', traitLabel: 'Lieutenants d\'élite coriaces → DPS soutenu et Dégâts vs Boss.',
     element: 'ombre', unlockStage: 24, sceauCost: 1,
   },
+  geode: {
+    id: 'geode', name: 'La Géode', icon: '🔹', color: '#38bdf8', reward: 'gemmes',
+    lore: 'Une caverne aux mille facettes, divisée en trois ailes cristallines — une par famille de gemme. Choisis ton aile : la poussière est garantie, la gemme se mérite.',
+    trait: 'armure', traitLabel: 'Golems cristallins blindés : sans Pénétration, ton DPS s\'effondre.',
+    element: 'froid', unlockStage: 30, sceauCost: 2,
+  },
   orbes: {
     id: 'orbes', name: 'Vortex des Orbes', icon: '🔮', color: '#e599f7', reward: 'orbes',
     lore: 'Un maelström où se condensent les Orbes de raid. Y pénétrer exige de sacrifier une poignée de Sceaux.',
@@ -92,8 +99,30 @@ export const DUNGEONS: Record<DungeonId, DungeonDef> = {
 }
 
 export const DUNGEON_LIST: DungeonDef[] = [
-  DUNGEONS.sceaux, DUNGEONS.or, DUNGEONS.savoir, DUNGEONS.eclats, DUNGEONS.noyau, DUNGEONS.butin, DUNGEONS.orbes, DUNGEONS.poussiere,
+  DUNGEONS.sceaux, DUNGEONS.or, DUNGEONS.savoir, DUNGEONS.eclats, DUNGEONS.noyau, DUNGEONS.butin, DUNGEONS.geode, DUNGEONS.orbes, DUNGEONS.poussiere,
 ]
+
+// ---- La Géode : ailes (famille de gemme) + rendements ----
+
+/** Élément des golems de chaque aile (assorti aux biomes de drop de la famille). */
+export const GEODE_WING_ELEMENT: Record<GemFamily, DamageType> = {
+  rythme: 'feu', flux: 'ombre', environnement: 'froid',
+}
+
+/** Poussière de gemme 🔹 par run (par-combat + coffre, avant efficacité d'automate). */
+export function geodeDustYield(level: number): number {
+  return Math.round(30 * Math.pow(1.18, level - 1))
+}
+
+/** Chance qu'une GEMME de l'aile tombe dans le coffre (montée par niveau, capée). */
+export function geodeGemChance(level: number): number {
+  return Math.min(0.8, 0.35 + level * 0.03)
+}
+
+/** Rang de la gemme du coffre (les hauts niveaux donnent des gemmes pré-recoupées). */
+export function geodeGemRank(level: number): number {
+  return level >= 18 ? 3 : level >= 10 ? 2 : 1
+}
 
 /**
  * Rampe de rareté FINE du donjon Butin (Cache du Pilleur). Niv 1 = {Médiocre…Rare} ; la fenêtre
@@ -157,6 +186,8 @@ export interface ActiveDungeon {
   reward: DungeonReward
   /** Type d'attaque des ennemis (flavor). */
   element: DamageType
+  /** La Géode : aile choisie (famille de gemme farmée). */
+  wing?: GemFamily
   modifiers: DungeonModifier[]
   totalFights: number
   current: number
@@ -332,9 +363,11 @@ export function makeDungeonPack(
   return pack
 }
 
-/** Génère un donjon prêt à jouer pour un id de donjon + niveau donnés. */
-export function generateDungeon(dungeonId: DungeonId, level: number): ActiveDungeon {
-  const def = DUNGEONS[dungeonId]
+/** Génère un donjon prêt à jouer. `wing` (La Géode) : aile choisie → famille farmée + élément. */
+export function generateDungeon(dungeonId: DungeonId, level: number, wing?: GemFamily): ActiveDungeon {
+  const def = dungeonId === 'geode' && wing
+    ? { ...DUNGEONS.geode, element: GEODE_WING_ELEMENT[wing] }
+    : DUNGEONS[dungeonId]
   const totalFights = dungeonFights(level)
 
   // 1 modificateur, +1 à partir du niveau 4. Le donjon d'OR exclut « Avare » (sinon zéro or — bug).
@@ -352,6 +385,7 @@ export function generateDungeon(dungeonId: DungeonId, level: number): ActiveDung
     trait: def.trait,
     reward: def.reward,
     element: def.element,
+    ...(dungeonId === 'geode' && wing ? { wing } : {}),
     modifiers,
     totalFights,
     current: 0,

@@ -4,6 +4,7 @@ import { useGame } from '../game/store'
 import { RARITIES } from '../game/rarities'
 import { ITEM_TYPES } from '../game/slots'
 import { getUnique } from '../game/uniques'
+import { getCondGem, gemDesc } from '../game/condGems'
 import { rarityTextStyle, rarityNameClass } from './rarityStyle'
 
 /** Une ligne de récompense (icône + montant formaté + unité). */
@@ -91,10 +92,32 @@ export function ChestModal() {
               })}
             </div>
 
+            {/* 💎 Gemme de la Géode (aile choisie) — mise en avant dédiée */}
+            {chest.gem && (() => {
+              const g = getCondGem(chest.gem.id)
+              if (!g) return null
+              return (
+                <div
+                  className="item-reveal relative mt-2 flex items-center gap-2 overflow-hidden rounded-lg border bg-black/30 px-2 py-1.5 text-left"
+                  style={{ borderColor: g.color + 'cc', boxShadow: `0 0 14px ${g.color}55`, animationDelay: `${chest.items.length * 90 + 150}ms` }}
+                >
+                  <span className="shine-sweep pointer-events-none absolute inset-0" />
+                  <span className="relative text-lg">{g.icon}</span>
+                  <span className="relative min-w-0 flex-1">
+                    <span className="block truncate text-[13px] font-medium" style={{ color: g.color }}>
+                      {g.name}{chest.gem.rank > 1 ? ` · rang ${chest.gem.rank}` : ''}
+                    </span>
+                    <span className="block text-[10px] text-slate-500">{gemDesc(g, chest.gem.rank)}</span>
+                  </span>
+                </div>
+              )
+            })()}
+
             <div
               className="item-reveal mt-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 text-xs"
               style={{ animationDelay: `${chest.items.length * 90 + 200}ms` }}
             >
+              {(chest.gemDust ?? 0) > 0 && <Reward color="text-sky-300" icon="🔹" value={chest.gemDust!} unit="poussière de gemme" />}
               {(chest.xp ?? 0) > 0 && <Reward color="text-violet-300" icon="📚" value={chest.xp!} unit="XP" />}
               {chest.gold > 0 && <Reward color="text-yellow-400" icon="💰" value={chest.gold} unit="or" />}
               {chest.eclats > 0 && <Reward color="text-cyan-300" icon="♦" value={chest.eclats} unit="éclats" />}

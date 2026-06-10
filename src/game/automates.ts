@@ -1,6 +1,6 @@
 import type { DungeonId } from './dungeons'
 import type { RaidId } from './raids'
-import { DUNGEONS, dungeonRunYield, dungeonKeyYield, butinMinTier } from './dungeons'
+import { DUNGEONS, dungeonRunYield, dungeonKeyYield, butinMinTier, geodeDustYield } from './dungeons'
 import { RAIDS, raidFragments } from './raids'
 
 /**
@@ -107,6 +107,8 @@ function runGains(m: AutomateMission): Record<string, number> {
       case 'xp': return { xp: 1200 * N * Math.pow(1.12, N) }
       // Cache du Pilleur : le butin est RECYCLÉ par l'automate (pas de stuff hors jeu actif).
       case 'stuff': return { essence: (3 + N / 2) * 3 * Math.pow(butinMinTier(N) + 1, 1.8) }
+      // La Géode : l'automate ne rapporte QUE la poussière 🔹 — jamais les gemmes (jeu actif).
+      case 'gemmes': return { gemDust: geodeDustYield(N) }
     }
   }
   const def = RAIDS[m.id as RaidId]
@@ -132,6 +134,8 @@ export interface AutomateEconomy {
   sceaux: number
   orbes: number
   fragments: number
+  /** 🔹 Poussière de gemme (La Géode — la seule chose qu'un automate y rapporte). */
+  gemDust: number
 }
 
 export interface AutomateTickResult {
@@ -144,7 +148,7 @@ export interface AutomateTickResult {
 }
 
 const GAIN_LABELS: Record<string, string> = {
-  gold: 'or', essence: '♦', noyau: '💠', poussiere: '🌌', sceaux: '🔑', orbes: '🔮', fragments: '✨', xp: 'XP',
+  gold: 'or', essence: '♦', noyau: '💠', poussiere: '🌌', sceaux: '🔑', orbes: '🔮', fragments: '✨', gemDust: '🔹', xp: 'XP',
 }
 
 /**
@@ -190,14 +194,14 @@ export function tickAutomates(input: AutomateEconomy, dt: number, keySaveChance 
       completed = true
       // Crédite les unités entières accumulées (les fractions restent en banque).
       const parts: string[] = []
-      const credit = (k: 'gold' | 'essence' | 'noyau' | 'poussiere' | 'sceaux' | 'orbes' | 'fragments') => {
+      const credit = (k: 'gold' | 'essence' | 'noyau' | 'poussiere' | 'sceaux' | 'orbes' | 'fragments' | 'gemDust') => {
         const whole = Math.floor(a.bank[k] ?? 0)
         if (whole <= 0) return
         a.bank[k] -= whole
         eco[k] += whole
         parts.push(`+${whole.toLocaleString('fr-FR')} ${GAIN_LABELS[k]}`)
       }
-      credit('gold'); credit('essence'); credit('noyau'); credit('poussiere'); credit('sceaux'); credit('orbes'); credit('fragments')
+      credit('gold'); credit('essence'); credit('noyau'); credit('poussiere'); credit('sceaux'); credit('orbes'); credit('fragments'); credit('gemDust')
       const xpWhole = Math.floor(a.bank.xp ?? 0)
       if (xpWhole > 0) {
         a.bank.xp -= xpWhole

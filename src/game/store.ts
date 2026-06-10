@@ -51,8 +51,10 @@ import { essenceGain, upgradeCost, insertCost, getUnique, UNIQUE_MAX_RANK, rando
 import {
   generateDungeon, makeDungeonPack, dungeonIlvl, dungeonLuckTier, dungeonRegen, getDungeonDef, butinMinTier, butinMaxTier,
   dungeonRunYield, dungeonKeyYield, DUNGEON_YIELD_PERFIGHT_FRAC,
+  geodeDustYield, geodeGemChance, geodeGemRank,
   DUNGEONS, type ActiveDungeon, type DungeonId,
 } from './dungeons'
+import type { GemFamily } from './condGems'
 import {
   generateRaid, makeRaidEncounter, makeRaidAdd, getRaidDef, raidUnlocked, raidBerserkTime,
   raidIlvl, raidMinTier, raidMaxTier, raidRarityDecay, raidRarityJackpot,
@@ -109,6 +111,10 @@ export interface ChestReward {
   cosmic?: number
   /** XP d'équipe gagnée pendant le donjon (déjà créditée combat par combat ; affichage récap). */
   xp?: number
+  /** 🔹 Poussière de gemme (La Géode). */
+  gemDust?: number
+  /** 💎 Gemme de condition trouvée dans le coffre (La Géode — aile choisie). */
+  gem?: { id: CondGemId; rank: number }
 }
 
 export const SCEAU_COST = { noyau: 3, eclats: 600 }
@@ -324,7 +330,7 @@ interface GameState extends SaveData {
   toggleAutomatePause: (id: number) => void
   /** Améliore la vitesse ou le rendement d'un automate (or). */
   upgradeAutomate: (id: number, kind: 'speed' | 'yield') => void
-  enterDungeon: (dungeonId: DungeonId, level: number, repeat?: number) => void
+  enterDungeon: (dungeonId: DungeonId, level: number, repeat?: number, wing?: GemFamily) => void
   abandonDungeon: () => void
   enterRaid: (raidId: RaidId, tier: number, repeat?: number) => void
   abandonRaid: () => void
@@ -1720,7 +1726,7 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
     const noGold = d.modifiers.some((m) => m.noGold)
 
     // --- Récompense PAR COMBAT (chaque combat gagné crédite la ressource du donjon, tout de suite) ---
-    let gold = s.gold, essence = s.essence, noyau = s.noyau, poussiere = s.poussiere, sceaux = s.sceaux, orbes = s.orbes
+    let gold = s.gold, essence = s.essence, noyau = s.noyau, poussiere = s.poussiere, sceaux = s.sceaux, orbes = s.orbes, gemDust = s.gemDust
     const earned: Record<string, number> = { ...(d.earned ?? {}) }
     // Accumulateur fractionnaire (ressources rares) → crédite les UNITÉS ENTIÈRES gagnées ce combat.
     const accrue = (key: string, amt: number): number => {
@@ -1750,6 +1756,8 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
         break
       }
       case 'stuff': { if (Math.random() < 0.4) { fightItems.push(generateItem({ ilvl: dungeonIlvl(lv, s.bestStage), luckTier: dungeonLuckTier(lv), primaryBias: pickBias(s.characters) })); logBit = '+1 objet' } break }
+      // La Géode : la poussière 🔹 coule à chaque combat (la gemme, elle, attend le coffre).
+      case 'gemmes': { const gd = accrue('gemDust', geodeDustYield(lv) * DUNGEON_YIELD_PERFIGHT_FRAC / Math.max(1, d.totalFights)); if (gd) { gemDust += gd; logBit = `+${gd} 🔹` } } break
     }
     log = pushLog(log, `⚔️ ${def.icon} Combat ${d.current + 1}/${d.totalFights}${logBit ? ` · ${logBit}` : ''}.`, 'kill')
     if (leveled) log = pushLog(log, '⬆ Niveau gagné !', 'level')
@@ -1768,6 +1776,8 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
       // --- Coffre : BONUS de fin (montant ÉLEVÉ) de la ressource du donjon, EN PLUS du par-combat ---
       let items: Item[] = []
       let cGold = 0, cEclats = 0, cNoyau = 0, cPous = 0, cSceaux = 0, cOrbes = 0, cXp = earned.xp ?? 0
+      let cDust = 0
+      let cGem: { id: CondGemId; rank: number } | undefined
       const chestFrac = 1 - DUNGEON_YIELD_PERFIGHT_FRAC // 60% du rendement mappé tombe dans le coffre
       switch (def.reward) {
         case 'gold': cGold = noGold ? 0 : Math.round(dungeonRunYield('gold', lv) * chestFrac * eco.goldGain); break
@@ -1788,20 +1798,30 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
           }
           break
         }
+        // La Géode : gros paquet de poussière 🔹 + chance d'une GEMME de l'aile choisie (pré-recoupée
+        // aux hauts niveaux). C'est la seule source de gemme « semi-ciblée » du jeu.
+        case 'gemmes': {
+          cDust = Math.round(geodeDustYield(lv) * chestFrac)
+          if (Math.random() < geodeGemChance(lv)) {
+            const g = rollCondGem(d.wing)
+            cGem = { id: g.id, rank: Math.min(gemMaxRank(g), geodeGemRank(lv)) }
+          }
+          break
+        }
       }
-      const chest: ChestReward = { dungeonName: d.name, level: lv, items, eclats: cEclats, noyau: cNoyau, gold: cGold, sceaux: cSceaux, orbes: cOrbes, poussiere: cPous, xp: cXp }
+      const chest: ChestReward = { dungeonName: d.name, level: lv, items, eclats: cEclats, noyau: cNoyau, gold: cGold, sceaux: cSceaux, orbes: cOrbes, poussiere: cPous, xp: cXp, gemDust: cDust, gem: cGem }
 
       const healed: Character[] = chars.map(fullHeal)
       const dungeonProgress = { ...s.dungeonProgress, [d.dungeonId]: Math.max(s.dungeonProgress[d.dungeonId] ?? 0, lv) }
       const repeatLeft = d.repeatLeft ?? 0
       // État avec les pools PAR COMBAT déjà crédités (le coffre est un bonus en plus).
-      const base = { ...s, gold, essence, noyau, poussiere, sceaux, orbes, inventory, codex }
+      const base = { ...s, gold, essence, noyau, poussiere, sceaux, orbes, gemDust, inventory, codex }
 
       // Auto-farm : on encaisse le coffre directement (sans modal) et on relance.
       if (repeatLeft > 0) {
         const credited = applyChestRewards(base, chest)
         if (credited.sceaux >= def.sceauCost) {
-          const ndun = generateDungeon(d.dungeonId, lv)
+          const ndun = generateDungeon(d.dungeonId, lv, d.wing)
           ndun.repeatLeft = repeatLeft - 1
           const log3 = pushLog(log, `🔁 Auto-farm : run encaissé · ${repeatLeft} relance${repeatLeft > 1 ? 's' : ''} restante${repeatLeft > 1 ? 's' : ''}.`, 'info')
           const next = { ...base, ...credited, characters: healed, dungeonProgress, sceaux: credited.sceaux - def.sceauCost, dungeon: ndun, log: log3 }
@@ -1826,7 +1846,7 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
       fightTime: 0,
       earned,
     }
-    const next = { ...s, characters: chars, gold, essence, noyau, poussiere, sceaux, orbes, inventory, codex, dungeon: nd, log }
+    const next = { ...s, characters: chars, gold, essence, noyau, poussiere, sceaux, orbes, gemDust, inventory, codex, dungeon: nd, log }
     persist(next)
     set(next)
     return
@@ -2042,9 +2062,14 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
 }
 
 /** Deltas d'état d'un coffre (ressources + inventaire + codex). XP exclue (déjà créditée par combat). */
-function applyChestRewards(s: GameState, c: ChestReward): Pick<GameState, 'inventory' | 'codex' | 'essence' | 'noyau' | 'poussiere' | 'cosmic' | 'gold' | 'sceaux' | 'orbes' | 'fragments'> {
+function applyChestRewards(s: GameState, c: ChestReward): Pick<GameState, 'inventory' | 'codex' | 'essence' | 'noyau' | 'poussiere' | 'cosmic' | 'gold' | 'sceaux' | 'orbes' | 'fragments' | 'gemDust' | 'gems'> {
   let inventory = s.inventory
   for (const it of c.items) inventory = [it, ...inventory].slice(0, invMax)
+  let gems = s.gems
+  if (c.gem) {
+    const k = condGemKey(c.gem.id, c.gem.rank)
+    gems = { ...gems, [k]: (gems[k] ?? 0) + 1 }
+  }
   return {
     inventory,
     codex: discoverFromItems(s.codex, c.items),
@@ -2056,6 +2081,8 @@ function applyChestRewards(s: GameState, c: ChestReward): Pick<GameState, 'inven
     sceaux: s.sceaux + c.sceaux,
     orbes: s.orbes + (c.orbes ?? 0),
     fragments: s.fragments + (c.fragments ?? 0),
+    gemDust: s.gemDust + (c.gemDust ?? 0),
+    gems,
   }
 }
 
@@ -2958,14 +2985,14 @@ export const useGame = create<GameState>((set, get) => {
       set(next)
     },
 
-    enterDungeon: (dungeonId, level, repeat = 1) => {
+    enterDungeon: (dungeonId, level, repeat = 1, wing) => {
       const s = get()
       if (s.dungeon || s.raid) return
       const def = getDungeonDef(dungeonId)
       if (!def || s.bestStage < def.unlockStage) return
       if (s.sceaux < def.sceauCost) return
       if (level < 1 || level > (s.dungeonProgress[dungeonId] ?? 0) + 1) return
-      const dungeon = generateDungeon(dungeonId, level)
+      const dungeon = generateDungeon(dungeonId, level, wing)
       dungeon.repeatLeft = Math.max(0, Math.round(repeat) - 1)
       // Rune de l'Économe : 15% de chance de préserver la clé.
       const saved = def.sceauCost > 0 && equippedRules(s.characters).has('econome') && Math.random() < (craftMods(s.metiers).loiAmplifiee ? 0.25 : 0.15)
@@ -3098,13 +3125,14 @@ export const useGame = create<GameState>((set, get) => {
       const cosmG = c.cosmic ?? 0
       const orbeG = c.orbes ?? 0
       const fragG = c.fragments ?? 0
+      const gemG = c.gem ? getCondGem(c.gem.id) : undefined
       const next = {
         ...s,
         ...applyChestRewards(s, c),
         pendingChest: null,
         log: pushLog(
           s.log,
-          `Coffre ouvert : ${c.items.length} objets${c.eclats ? `, +${c.eclats} éclats` : ''}${c.noyau ? `, +${c.noyau} noyaux` : ''}${pousG ? `, +${pousG} poussière` : ''}${cosmG ? `, +${cosmG} 💫` : ''}${c.gold ? `, +${c.gold} or` : ''}${c.sceaux ? `, +${c.sceaux} sceau` : ''}${orbeG ? `, +${orbeG} orbe` : ''}${fragG ? `, +${fragG} fragment` : ''}.`,
+          `Coffre ouvert : ${c.items.length} objets${c.eclats ? `, +${c.eclats} éclats` : ''}${c.noyau ? `, +${c.noyau} noyaux` : ''}${pousG ? `, +${pousG} poussière` : ''}${c.gemDust ? `, +${c.gemDust} 🔹` : ''}${gemG ? `, 💎 ${gemG.name}${(c.gem!.rank ?? 1) > 1 ? ` R${c.gem!.rank}` : ''}` : ''}${cosmG ? `, +${cosmG} 💫` : ''}${c.gold ? `, +${c.gold} or` : ''}${c.sceaux ? `, +${c.sceaux} sceau` : ''}${orbeG ? `, +${orbeG} orbe` : ''}${fragG ? `, +${fragG} fragment` : ''}.`,
           'craft',
         ),
       }
