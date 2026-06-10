@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import type { Item, EquipSlotId, StatKey, Affix, DamageType } from '../game/types'
+import type { Item, EquipSlotId, StatKey, Affix, DamageType, Character } from '../game/types'
+import { equipDelta, type EquipDelta } from '../game/character'
 import { RARITIES } from '../game/rarities'
 import { ALL_STAT_META } from '../game/stats'
 import {
-  sellValue, recycleValue, itemStatBlock, itemScore, itemHasRareStat,
+  sellValue, recycleValue, itemStatBlock, itemHasRareStat,
   reforgeCost, surillvlCost, ascendCost, nextRarity, SURILLVL_STEP, transmuteCost,
   quintCost, QUINT_GAIN,
 } from '../game/items'
@@ -27,8 +28,19 @@ function affixLabel(a: Affix): { name: string; color: string; pct: boolean } {
   return { name: '?', color: '#94a3b8', pct: false }
 }
 
+/** Δ signé compact : +1,2k / −340. */
+function fmtSigned(n: number): string {
+  const a = Math.abs(n)
+  const v = a >= 10000 ? `${Math.round(a / 1000)}k` : a >= 1000 ? `${(a / 1000).toFixed(1).replace('.', ',')}k` : `${Math.round(a)}`
+  return (n >= 0 ? '+' : '−') + v
+}
+
 interface Props {
   item: Item
+  /** Personnage actif : sert au calcul du Δ DPS / Δ PV réel (swap simulé). */
+  char: Character
+  /** Δ pré-calculé pour l'emplacement cible automatique (absent si l'objet est déjà équipé). */
+  previewDelta?: EquipDelta
   equipped?: Item
   /** Emplacements occupés (pour indiquer l'objet déjà en place sur chaque bouton). */
   occupied: Partial<Record<EquipSlotId, Item>>
@@ -41,7 +53,7 @@ interface Props {
   onUnequip?: () => void
 }
 
-export function ComparePanel({ item, equipped, occupied, onEquip, onSell, onRecycle, onClose, equippedSlot, onUnequip }: Props) {
+export function ComparePanel({ item, char, previewDelta, equipped, occupied, onEquip, onSell, onRecycle, onClose, equippedSlot, onUnequip }: Props) {
   const rarity = RARITIES[item.rarity]
   const type = ITEM_TYPES[item.type]
   const slots = equipSlotsForType(item.type)
@@ -52,8 +64,6 @@ export function ComparePanel({ item, equipped, occupied, onEquip, onSell, onRecy
   const cur = itemStatBlock(item)
   const old = cmp ? itemStatBlock(cmp) : {}
   const keys = orderedKeys(cur, old)
-
-  const scoreDelta = itemScore(item) - (cmp ? itemScore(cmp) : 0)
 
   return (
     <div className="flex flex-col rounded-xl border p-3" style={rarityCardStyle(item.rarity)}>
@@ -122,10 +132,15 @@ export function ComparePanel({ item, equipped, occupied, onEquip, onSell, onRecy
         })}
       </div>
 
-      {cmp && (
-        <div className={'mt-1.5 text-center text-[11px] ' + (scoreDelta >= 0 ? 'text-emerald-400' : 'text-red-400')}>
-          {scoreDelta >= 0 ? '▲ Amélioration' : '▼ Régression'} · score {scoreDelta >= 0 ? '+' : ''}
-          {scoreDelta.toLocaleString('fr-FR')}
+      {/* L'IMPACT RÉEL : Δ DPS / Δ PV si on équipe (swap simulé — la vraie métrique d'arbitrage) */}
+      {!isEquipped && previewDelta && (
+        <div className="mt-2 grid grid-cols-2 gap-1.5 text-center">
+          <div className={'rounded-lg py-1.5 text-[13px] font-bold tabular-nums ' + (previewDelta.dps >= 0 ? 'bg-emerald-900/30 text-emerald-300' : 'bg-red-900/30 text-red-300')}>
+            ⚔ {fmtSigned(previewDelta.dps)} DPS
+          </div>
+          <div className={'rounded-lg py-1.5 text-[13px] font-bold tabular-nums ' + (previewDelta.hp >= 0 ? 'bg-emerald-900/30 text-emerald-300' : 'bg-red-900/30 text-red-300')}>
+            ❤️ {fmtSigned(previewDelta.hp)} PV
+          </div>
         </div>
       )}
       {isEquipped && <div className="mt-1.5 text-center text-[11px] text-amber-300">Actuellement équipé</div>}
@@ -180,7 +195,7 @@ export function ComparePanel({ item, equipped, occupied, onEquip, onSell, onRecy
           <>
             {slots.map((slot) => {
               const inPlace = occupied[slot.id]
-              const d = itemScore(item) - (inPlace ? itemScore(inPlace) : 0)
+              const d = equipDelta(char, item, slot.id)
               return (
                 <button
                   key={slot.id}
@@ -188,14 +203,10 @@ export function ComparePanel({ item, equipped, occupied, onEquip, onSell, onRecy
                   className="flex w-full items-center justify-between rounded-lg bg-emerald-700/80 px-3 py-2.5 text-xs font-semibold hover:bg-emerald-600"
                 >
                   <span>Équiper · {slot.name}</span>
-                  {inPlace ? (
-                    <span className="text-[10px] font-normal text-emerald-200/80">
-                      remplace {RARITIES[inPlace.rarity].name}{' '}
-                      <span className={d >= 0 ? 'text-emerald-300' : 'text-red-300'}>{d >= 0 ? '▲+' : '▼'}{Math.abs(d).toLocaleString('fr-FR')}</span>
-                    </span>
-                  ) : (
-                    <span className="text-[10px] font-normal text-emerald-200/80">vide</span>
-                  )}
+                  <span className="text-[10px] font-normal text-emerald-200/80">
+                    {inPlace ? `remplace ${RARITIES[inPlace.rarity].name} ` : 'vide '}
+                    <span className={'font-bold tabular-nums ' + (d.dps >= 0 ? 'text-emerald-300' : 'text-red-300')}>{d.dps >= 0 ? '▲' : '▼'}{fmtSigned(d.dps)} DPS</span>
+                  </span>
                 </button>
               )
             })}

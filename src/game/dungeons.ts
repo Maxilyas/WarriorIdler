@@ -204,7 +204,11 @@ export function dungeonIlvl(level: number): number {
  */
 const DUNGEON_YIELD: Partial<Record<DungeonReward, { base: number; growth: number }>> = {
   gold: { base: 6000, growth: 1.40 },
-  eclats: { base: 40000, growth: 1.13 },
+  // Éclats ÷4 (v0.20) : contrairement aux noyaux/poussière, les éclats arrivent AUSSI en masse par
+  // le recyclage et l'achat à l'or → la Faille seule couvrait tout le craft et l'éclat ne valait
+  // plus rien. Le donjon reste la meilleure source PONCTUELLE (~0.5-0.65 craft/run), le recyclage
+  // fait l'appoint. (Réf : npm run eco.)
+  eclats: { base: 10000, growth: 1.13 },
   noyau: { base: 500, growth: 1.45 },
   poussiere: { base: 25, growth: 1.47 },
 }

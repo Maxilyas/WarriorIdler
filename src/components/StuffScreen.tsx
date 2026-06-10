@@ -9,8 +9,10 @@ import { EQUIP_SLOTS, ITEM_TYPES, equipSlotsForType, slotAccepts } from '../game
 import { RARITIES, RARITY_LIST } from '../game/rarities'
 import { itemScore, itemHasRareStat, itemStatBlock } from '../game/items'
 import { PRIMARY_META, SECONDARY_META, SECONDARY_STATS } from '../game/stats'
+import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from '../game/damage'
+import { equipDelta, type EquipDelta } from '../game/character'
 import { rarityTextStyle, rarityNameClass } from './rarityStyle'
-import type { EquipSlotId, Equipment, Item, ItemType, OffensiveStat, SecondaryStat } from '../game/types'
+import type { DamageType, EquipSlotId, Equipment, Item, ItemType, OffensiveStat, SecondaryStat } from '../game/types'
 
 type SortMode = 'recent' | 'score' | 'rarity'
 const PRIMARY_FILTERS: OffensiveStat[] = ['force', 'agilite', 'intelligence']
@@ -22,6 +24,15 @@ function comparableEquipped(equipment: Equipment, type: ItemType, selectedSlot: 
   const empty = slots.find((s) => !equipment[s.id])
   if (empty) return undefined
   return slots.map((s) => equipment[s.id]!).sort((a, b) => itemScore(a) - itemScore(b))[0]
+}
+
+/** Emplacement où l'objet irait (slot choisi, sinon vide, sinon le plus faible) — pour le Δ DPS. */
+function targetSlotFor(equipment: Equipment, type: ItemType, selectedSlot: EquipSlotId | null): EquipSlotId {
+  if (selectedSlot && slotAccepts(selectedSlot, type)) return selectedSlot
+  const slots = equipSlotsForType(type)
+  const empty = slots.find((s) => !equipment[s.id])
+  if (empty) return empty.id
+  return slots.map((s) => s.id).sort((a, b) => itemScore(equipment[a]!) - itemScore(equipment[b]!))[0]
 }
 
 export function StuffScreen() {
@@ -51,6 +62,8 @@ export function StuffScreen() {
   const [sort, setSort] = useState<SortMode>('score')
   const [primaryFilter, setPrimaryFilter] = useState<OffensiveStat | null>(null)
   const [statFilter, setStatFilter] = useState<SecondaryStat[]>([])
+  // Filtres typés : dégâts / résistance d'un élément (l'objet doit porter TOUTES les lignes cochées).
+  const [typeFilter, setTypeFilter] = useState<{ kind: 'dmgType' | 'resist'; type: DamageType }[]>([])
   const [showStatFilter, setShowStatFilter] = useState(false)
   // Le paper-doll est repliable sur mobile (libère l'inventaire, qui est le vrai centre d'interaction).
   // Toujours affiché sur grand écran (colonne dédiée).
@@ -73,11 +86,24 @@ export function StuffScreen() {
     if (primaryFilter) arr = arr.filter((i) => i.primary === primaryFilter)
     // Filtre par stats : l'objet doit porter TOUTES les stats sélectionnées (recherche de build précis).
     if (statFilter.length) arr = arr.filter((i) => { const b = itemStatBlock(i); return statFilter.every((s) => (b[s] ?? 0) > 0) })
+    // Filtres typés : lignes d'affixe du (kind, type) — une arme du bon élément compte comme dégâts.
+    if (typeFilter.length) arr = arr.filter((i) => typeFilter.every((f) =>
+      i.affixes.some((a) => a.kind === f.kind && a.type === f.type) || (f.kind === 'dmgType' && i.damageType === f.type)))
     arr = [...arr]
     if (sort === 'score') arr.sort((a, b) => itemScore(b) - itemScore(a))
     else if (sort === 'rarity') arr.sort((a, b) => RARITIES[b.rarity].tier - RARITIES[a.rarity].tier)
     return arr
-  }, [inventory, filterType, primaryFilter, statFilter, sort])
+  }, [inventory, filterType, primaryFilter, statFilter, typeFilter, sort])
+
+  // Δ DPS / Δ PV par objet visible (swap simulé sur l'emplacement cible) — mémoïsé sur des
+  // références stables (le tick recrée les persos mais PAS leur équipement/talents).
+  const deltas = useMemo(() => {
+    const m = new Map<string, EquipDelta>()
+    if (!active) return m
+    for (const it of visible) m.set(it.id, equipDelta(active, it, targetSlotFor(equipment, it.type, selectedSlot)))
+    return m
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, equipment, active?.talents, active?.powers, active?.level, selectedSlot])
 
   // L'objet sélectionné peut être dans l'inventaire OU équipé.
   const equippedEntry = (Object.entries(equipment) as [EquipSlotId, Item][]).find(
@@ -86,11 +112,6 @@ export function StuffScreen() {
   const selectedItem = inventory.find((i) => i.id === selectedItemId) ?? equippedEntry?.[1] ?? null
   const selectedEquippedSlot = equippedEntry?.[0]
 
-  const isUpgrade = (item: Item) => {
-    const eq = comparableEquipped(equipment, item.type, selectedSlot)
-    return !eq || itemScore(item) > itemScore(eq)
-  }
-
   const equippedCount = Object.values(equipment).filter(Boolean).length
 
   const handleEquip = (slot: EquipSlotId) => {
@@ -98,9 +119,11 @@ export function StuffScreen() {
     setSelectedItemId(null)
   }
 
-  const compare = selectedItem ? (
+  const compare = selectedItem && active ? (
     <ComparePanel
       item={selectedItem}
+      char={active}
+      previewDelta={selectedEquippedSlot ? undefined : equipDelta(active, selectedItem, targetSlotFor(equipment, selectedItem.type, selectedSlot))}
       equipped={comparableEquipped(equipment, selectedItem.type, selectedSlot)}
       occupied={equipment}
       onEquip={handleEquip}
@@ -271,29 +294,51 @@ export function StuffScreen() {
         {/* Filtre par stat secondaire (recherche de build précis) */}
         <div className="mb-1.5 px-1 text-[10px]">
           <button onClick={() => setShowStatFilter((v) => !v)} className="inline-flex items-center py-1 text-slate-400 hover:text-slate-200">
-            🔍 Filtrer par stat{statFilter.length ? ` (${statFilter.length})` : ''} {showStatFilter ? '▾' : '▸'}
+            🔍 Filtrer par stat{statFilter.length + typeFilter.length ? ` (${statFilter.length + typeFilter.length})` : ''} {showStatFilter ? '▾' : '▸'}
           </button>
           {showStatFilter && (
-            <div className="mt-1 flex flex-wrap gap-1">
-              {statFilter.length > 0 && (
-                <button onClick={() => setStatFilter([])} className="rounded bg-slate-700 px-2 py-1.5 text-slate-300 hover:bg-slate-600">tout ✕</button>
-              )}
-              {SECONDARY_STATS.map((s) => {
-                const on = statFilter.includes(s)
-                const m = SECONDARY_META[s]
-                return (
-                  <button
-                    key={s}
-                    onClick={() => setStatFilter((f) => (on ? f.filter((x) => x !== s) : [...f, s]))}
-                    title={m.name}
-                    className={'rounded px-2 py-1.5 font-medium ' + (on ? 'text-slate-950' : 'bg-slate-800')}
-                    style={on ? { background: m.color } : { color: m.color }}
-                  >
-                    {m.short}
-                  </button>
-                )
-              })}
-            </div>
+            <>
+              <div className="mt-1 flex flex-wrap gap-1">
+                {statFilter.length + typeFilter.length > 0 && (
+                  <button onClick={() => { setStatFilter([]); setTypeFilter([]) }} className="rounded bg-slate-700 px-2 py-1.5 text-slate-300 hover:bg-slate-600">tout ✕</button>
+                )}
+                {SECONDARY_STATS.map((s) => {
+                  const on = statFilter.includes(s)
+                  const m = SECONDARY_META[s]
+                  return (
+                    <button
+                      key={s}
+                      onClick={() => setStatFilter((f) => (on ? f.filter((x) => x !== s) : [...f, s]))}
+                      title={m.name}
+                      className={'rounded px-2 py-1.5 font-medium ' + (on ? 'text-slate-950' : 'bg-slate-800')}
+                      style={on ? { background: m.color } : { color: m.color }}
+                    >
+                      {m.short}
+                    </button>
+                  )
+                })}
+              </div>
+              {/* Lignes typées : dégâts / résistance d'un élément (résistances de Nature incluses !) */}
+              {(['dmgType', 'resist'] as const).map((kind) => (
+                <div key={kind} className="mt-1 flex flex-wrap items-center gap-1">
+                  <span className="text-slate-500">{kind === 'dmgType' ? '⚔ Dégâts :' : '🛡 Résist :'}</span>
+                  {DAMAGE_TYPE_LIST.map((t) => {
+                    const on = typeFilter.some((f) => f.kind === kind && f.type === t)
+                    const m = DAMAGE_TYPES[t]
+                    return (
+                      <button
+                        key={t}
+                        onClick={() => setTypeFilter((f) => (on ? f.filter((x) => !(x.kind === kind && x.type === t)) : [...f, { kind, type: t }]))}
+                        className={'rounded px-2 py-1.5 font-medium ' + (on ? 'text-slate-950' : 'bg-slate-800')}
+                        style={on ? { background: m.color } : { color: m.color }}
+                      >
+                        {m.icon} {m.name}
+                      </button>
+                    )
+                  })}
+                </div>
+              ))}
+            </>
           )}
         </div>
 
@@ -343,7 +388,7 @@ export function StuffScreen() {
               <ItemRow
                 key={item.id}
                 item={item}
-                isUpgrade={isUpgrade(item)}
+                dpsDelta={deltas.get(item.id)?.dps}
                 selected={item.id === selectedItemId}
                 onClick={() => setSelectedItemId(item.id)}
               />

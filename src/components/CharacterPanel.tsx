@@ -41,7 +41,9 @@ export function CharacterPanel({ view = 'apercu' }: { view?: CharacterView }) {
   const characters = useGame((s) => s.characters)
   const activeChar = useGame((s) => s.activeChar)
   const setActiveChar = useGame((s) => s.setActiveChar)
+  const renameCharacter = useGame((s) => s.renameCharacter)
   const setBias = useGame((s) => s.setBias)
+  const [editName, setEditName] = useState<string | null>(null)
   const gold = useGame((s) => s.gold)
   const essence = useGame((s) => s.essence)
   const noyau = useGame((s) => s.noyau)
@@ -86,8 +88,28 @@ export function CharacterPanel({ view = 'apercu' }: { view?: CharacterView }) {
           {/* Identité */}
           <div className="rounded-xl border border-slate-800 bg-gradient-to-br from-[#161c2a] to-[#0d111a] p-4">
             <div className="flex items-center justify-between">
-              <div>
-                <div className="text-lg font-bold text-slate-100">{char.name}</div>
+              <div className="min-w-0">
+                {editName !== null ? (
+                  <form
+                    className="flex items-center gap-1.5"
+                    onSubmit={(e) => { e.preventDefault(); renameCharacter(activeChar, editName); setEditName(null) }}
+                  >
+                    <input
+                      autoFocus
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      maxLength={16}
+                      className="w-36 rounded-lg border border-slate-600 bg-slate-900 px-2 py-1.5 text-sm font-bold text-slate-100 outline-none focus:border-orange-400"
+                    />
+                    <button type="submit" className="rounded-lg bg-emerald-700 px-2.5 py-1.5 text-xs font-semibold text-white">✓</button>
+                    <button type="button" onClick={() => setEditName(null)} className="rounded-lg bg-slate-700 px-2.5 py-1.5 text-xs text-slate-300">✕</button>
+                  </form>
+                ) : (
+                  <button onClick={() => setEditName(char.name)} className="group flex items-center gap-1.5 text-left" title="Renommer">
+                    <span className="truncate text-lg font-bold text-slate-100">{char.name}</span>
+                    <span className="text-xs text-slate-600 group-hover:text-slate-300">✏️</span>
+                  </button>
+                )}
                 <div className="text-xs text-slate-400">
                   Niveau {char.level} · Build <span style={{ color: PRIMARY_META[derived.mainStat].color }}>{buildName}</span>
                 </div>

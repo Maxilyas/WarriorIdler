@@ -1,4 +1,4 @@
-import type { Character, StatBlock, StatKey, PrimaryStat, OffensiveStat, PowerDef, DamageType } from './types'
+import type { Character, StatBlock, StatKey, PrimaryStat, OffensiveStat, PowerDef, DamageType, Item, EquipSlotId } from './types'
 import { computeTotalStats, computeDerived, type DerivedStats } from './stats'
 import { computeDamageProfile, computeResistProfile, profileDamageMult, type DamageProfile } from './damage'
 import { getPower, POWER_SLOTS } from './powers'
@@ -194,6 +194,18 @@ export function charDps(char: Character): number {
 /** Résistances du héros (équipement + talents), capées. */
 export function charResist(char: Character): Partial<Record<DamageType, number>> {
   return computeResistProfile(char.equipment, talentResistMods(char.talents ?? {}))
+}
+
+/** Impact RÉEL d'un équipement : variation de DPS et de PV si on pose `item` dans `slot`.
+ *  Simulation par swap (toute la chaîne : profil de dégâts, conversions, sets…) — c'est LA métrique
+ *  d'arbitrage du joueur, bien plus parlante qu'un score de stats. */
+export interface EquipDelta { dps: number; hp: number }
+export function equipDelta(char: Character, item: Item, slot: EquipSlotId): EquipDelta {
+  const after: Character = { ...char, equipment: { ...char.equipment, [slot]: item } }
+  return {
+    dps: charDps(after) - charDps(char),
+    hp: charMaxHp(after) - charMaxHp(char),
+  }
 }
 
 /** Modificateurs de combat agrégés issus des keystones. */

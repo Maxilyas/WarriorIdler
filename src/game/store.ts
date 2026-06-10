@@ -264,6 +264,8 @@ interface GameState extends SaveData {
   claimChest: () => void
   craftSceau: () => void
   setActiveChar: (index: number) => void
+  /** Renomme un personnage (personnalisation du joueur). */
+  renameCharacter: (index: number, name: string) => void
   setBias: (p: PrimaryStat) => void
   setPower: (slot: number, powerId: string | null) => void
   /** Bascule un emplacement de capacité entre AUTO et MANUEL (perso actif). */
@@ -2297,6 +2299,17 @@ export const useGame = create<GameState>((set, get) => {
       const s = get()
       if (index < 0 || index >= s.characters.length) return
       const next = { ...s, activeChar: index }
+      persist(next)
+      set(next)
+    },
+
+    renameCharacter: (index, name) => {
+      const s = get()
+      const n = name.trim().slice(0, 16)
+      if (!n || index < 0 || index >= s.characters.length || n === s.characters[index].name) return
+      const old = s.characters[index].name
+      const characters = s.characters.map((c, i) => (i === index ? { ...c, name: n } : c))
+      const next = { ...s, characters, log: pushLog(s.log, `✏️ ${old} s'appelle désormais ${n}.`, 'info') }
       persist(next)
       set(next)
     },

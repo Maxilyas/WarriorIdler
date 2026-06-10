@@ -8,15 +8,24 @@ import { rarityTextStyle, rarityNameClass } from './rarityStyle'
 
 interface Props {
   item: Item
-  isUpgrade?: boolean
+  /** Δ DPS si on équipe l'objet (swap simulé) — LA métrique d'arbitrage, affichée en vert/rouge. */
+  dpsDelta?: number
   selected?: boolean
   onClick?: () => void
 }
 
-/** Une ligne compacte d'inventaire : icône · nom · type/rareté · ilvl · badges. */
-export function ItemRow({ item, isUpgrade, selected, onClick }: Props) {
+/** Δ DPS compact : +1,2k / −340 (vide si négligeable). */
+function fmtDelta(n: number): string {
+  const a = Math.abs(n)
+  const v = a >= 10000 ? `${Math.round(a / 1000)}k` : a >= 1000 ? `${(a / 1000).toFixed(1).replace('.', ',')}k` : `${Math.round(a)}`
+  return (n > 0 ? '+' : '−') + v
+}
+
+/** Une ligne compacte d'inventaire : icône · nom · type/rareté · Δ DPS · ilvl · badges. */
+export function ItemRow({ item, dpsDelta, selected, onClick }: Props) {
   const rarity = RARITIES[item.rarity]
   const type = ITEM_TYPES[item.type]
+  const showDelta = dpsDelta != null && Math.abs(dpsDelta) >= 1
 
   return (
     <button
@@ -49,7 +58,11 @@ export function ItemRow({ item, isUpgrade, selected, onClick }: Props) {
         {item.unique && (
           <span className="text-[11px] text-fuchsia-400" title={getUnique(item.unique.id)?.name}>✦</span>
         )}
-        {isUpgrade && <span className="text-[10px] font-bold text-emerald-400">▲</span>}
+        {showDelta && (
+          <span className={'text-[10px] font-bold tabular-nums ' + (dpsDelta! > 0 ? 'text-emerald-400' : 'text-red-400')}>
+            {dpsDelta! > 0 ? '▲' : '▼'}{fmtDelta(dpsDelta!)}
+          </span>
+        )}
         <span className="w-9 text-right text-[11px] tabular-nums text-slate-400">i{item.ilvl}</span>
       </span>
     </button>
