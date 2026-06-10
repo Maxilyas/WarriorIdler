@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useGame, powerCooldowns } from '../game/store'
 import type { LogKind } from '../game/store'
+import { Sheet } from './ui'
 import { charMaxHp, charDps, TALENT_START_LEVEL } from '../game/character'
 import { isBossStage } from '../game/enemies'
 import { getPower, powerIcon } from '../game/powers'
@@ -8,6 +9,14 @@ import { DAMAGE_TYPES } from '../game/damage'
 import { RAID_MECHANIC_META } from '../game/raids'
 import { BIOME_LIST, biomeUnlocked, biomeUnlockHint, getBiomeDef } from '../game/biomes'
 import type { DamageType, Enemy, EnemyAbility, PowerDef } from '../game/types'
+
+/** Filtres du journal plein écran (catégories de LogKind). */
+const LOG_FILTERS: { id: string; label: string; kinds?: LogKind[] }[] = [
+  { id: 'tout', label: 'Tout' },
+  { id: 'butin', label: '🎒 Butin', kinds: ['loot', 'gold', 'craft'] },
+  { id: 'combat', label: '⚔ Combat', kinds: ['hit', 'crit', 'kill', 'death'] },
+  { id: 'progres', label: '⬆ Progrès', kinds: ['level', 'info'] },
+]
 
 const LOG_COLORS: Record<LogKind, string> = {
   hit: 'text-slate-300',
@@ -41,9 +50,11 @@ export function CombatPanel() {
   const toggleFarmLock = useGame((s) => s.toggleFarmLock)
   const log = useGame((s) => s.log)
 
-  // Le sélecteur de biome est replié par défaut sur mobile (rarement changé en combat → gagne de la
-  // place ; le biome courant reste visible dans l'en-tête). Déplié par défaut sur grand écran.
-  const [biomeOpen, setBiomeOpen] = useState(() => typeof window === 'undefined' || window.innerWidth >= 640)
+  // Biome + palier + verrou fusionnés en une ligne « zone » : le détail s'ouvre en feuille
+  // (libère un tiers d'écran pour le journal sur mobile).
+  const [zoneOpen, setZoneOpen] = useState(false)
+  const [journalOpen, setJournalOpen] = useState(false)
+  const [logFilter, setLogFilter] = useState('tout')
 
   const me = characters[activeChar] ?? characters[0]
   // Recharges courantes du perso actif (re-render à chaque tick → barre de cooldown vivante).
@@ -170,22 +181,28 @@ export function CombatPanel() {
         </div>
       )}
 
-      {/* Sélecteur de biome (farm) — repliable (gagne de la place sur mobile) */}
+      {/* Ligne « zone » : biome + palier + verrou en un seul rail — détail en feuille */}
       {!dungeon && !raid && (
-        <div className="rounded-xl border border-slate-800 bg-[#0d111a] p-2">
-          <button
-            onClick={() => setBiomeOpen((o) => !o)}
-            className="flex w-full items-center justify-between py-1"
-            title={biomeOpen ? 'Replier les biomes' : 'Déplier les biomes'}
-          >
-            <span className="text-[10px] uppercase tracking-wide text-slate-500">🧭 Biome</span>
-            <span className="flex items-center gap-1 text-[11px] font-semibold" style={{ color: biomeDef.color }}>
-              {biomeDef.icon} {biomeDef.name}
-              <span className="text-slate-500">{biomeOpen ? '▾' : '▸'}</span>
+        <button
+          onClick={() => setZoneOpen(true)}
+          className="flex w-full items-center justify-between gap-2 rounded-xl border border-slate-800 bg-[#0d111a] px-3 py-2.5 text-xs"
+        >
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span className="shrink-0 text-slate-500">🧭</span>
+            <span className="truncate font-semibold" style={{ color: biomeDef.color }}>{biomeDef.icon} {biomeDef.name}</span>
+            <span className="shrink-0 text-slate-400">
+              · Palier <b className="text-slate-100">{stage}</b><span className="text-slate-600">/{activeBiomeBest}</span>
             </span>
-          </button>
-          {biomeOpen && (
-          <div className="mt-1.5 grid grid-cols-4 gap-1.5">
+            {farmLock && <span className="shrink-0 text-amber-400">🔒</span>}
+          </span>
+          <span className="shrink-0 text-slate-500">▸</span>
+        </button>
+      )}
+
+      {/* Feuille zone : choix du biome, palier, verrou de farm */}
+      {zoneOpen && (
+        <Sheet title="🧭 Zone de chasse" onClose={() => setZoneOpen(false)}>
+          <div className="grid grid-cols-4 gap-1.5">
             {BIOME_LIST.map((b) => {
               const unlocked = biomeUnlocked(b.id, physiqueBest, bestStage)
               const active = b.id === activeBiome
@@ -195,44 +212,43 @@ export function CombatPanel() {
                   key={b.id}
                   disabled={!unlocked}
                   onClick={() => setBiome(b.id)}
-                  title={unlocked ? `${b.name} — record palier ${rec}` : `🔒 ${biomeUnlockHint(b.id)}`}
                   className={
-                    'flex flex-col items-center gap-0.5 rounded-lg border px-1 py-1.5 transition-colors ' +
+                    'flex flex-col items-center gap-0.5 rounded-lg border px-1 py-2 transition-colors ' +
                     (active ? 'border-current bg-white/10' : unlocked ? 'border-slate-700 hover:border-slate-500' : 'border-slate-800 opacity-50')
                   }
                   style={active ? { color: b.color } : undefined}
                 >
                   <span className="text-xl leading-none">{unlocked ? b.icon : '🔒'}</span>
-                  <span className={'w-full truncate text-center text-[9px] font-semibold ' + (active ? '' : 'text-slate-300')}>
+                  <span className={'w-full truncate text-center text-[10px] font-semibold ' + (active ? '' : 'text-slate-300')}>
                     {DAMAGE_TYPES[b.id].name}
                   </span>
-                  <span className="text-[8px] text-slate-500">{unlocked ? (rec > 0 ? `▸ ${rec}` : '—') : '🔒'}</span>
+                  <span className="text-[9px] text-slate-500">{unlocked ? (rec > 0 ? `record ${rec}` : '—') : ''}</span>
                 </button>
               )
             })}
           </div>
-          )}
-        </div>
-      )}
-
-      {/* Verrou de palier (farm) */}
-      {!dungeon && !raid && (
-        <div className="flex items-center gap-2 rounded-xl border border-slate-800 bg-[#0d111a] px-3 py-2 text-xs">
-          <span className="text-slate-400">Palier</span>
-          <div className="flex items-center rounded-lg border border-slate-700">
-            <button onClick={() => setStage(stage - 1)} disabled={stage <= 1} className="px-3 py-2.5 text-slate-300 hover:bg-white/5 disabled:opacity-30">−</button>
-            <span className="w-10 text-center tabular-nums text-slate-100">{stage}</span>
-            <button onClick={() => setStage(stage + 1)} disabled={stage >= activeBiomeBest} className="px-3 py-2.5 text-slate-300 hover:bg-white/5 disabled:opacity-30">+</button>
+          {(() => {
+            const lockedBiome = BIOME_LIST.find((b) => !biomeUnlocked(b.id, physiqueBest, bestStage))
+            return lockedBiome ? (
+              <p className="mt-1.5 text-[10px] leading-snug text-slate-500">🔒 {biomeUnlockHint(lockedBiome.id)}</p>
+            ) : null
+          })()}
+          <div className="mt-4 flex items-center justify-between gap-2">
+            <span className="text-xs text-slate-400">Palier</span>
+            <div className="flex items-center rounded-lg border border-slate-700">
+              <button onClick={() => setStage(stage - 1)} disabled={stage <= 1} className="px-4 py-2 text-base text-slate-300 hover:bg-white/5 disabled:opacity-30">−</button>
+              <span className="w-12 text-center text-sm tabular-nums text-slate-100">{stage}</span>
+              <button onClick={() => setStage(stage + 1)} disabled={stage >= activeBiomeBest} className="px-4 py-2 text-base text-slate-300 hover:bg-white/5 disabled:opacity-30">+</button>
+            </div>
+            <span className="text-xs text-slate-500">record : {activeBiomeBest}</span>
           </div>
-          <span className="text-slate-500" title={`Record en ${biomeDef.name}`}>/ {activeBiomeBest}</span>
           <button
             onClick={toggleFarmLock}
-            title={farmLock ? 'Verrouillé : le combat reste à ce palier' : 'Libre : progression normale'}
-            className={'ml-auto rounded-lg px-3 py-2 text-[11px] font-medium ' + (farmLock ? 'bg-amber-600 text-slate-950' : 'bg-slate-700 text-slate-300 hover:bg-slate-600')}
+            className={'mt-3 w-full rounded-lg py-2.5 text-xs font-medium ' + (farmLock ? 'bg-amber-600 text-slate-950' : 'bg-slate-700 text-slate-300 hover:bg-slate-600')}
           >
-            {farmLock ? '🔒 Verrouillé' : '🔓 Libre'}
+            {farmLock ? '🔒 Verrouillé — le combat reste à ce palier' : '🔓 Libre — progression normale au fil des victoires'}
           </button>
-        </div>
+        </Sheet>
       )}
 
       {/* Ennemi */}
@@ -424,9 +440,18 @@ export function CombatPanel() {
         </div>
       )}
 
-      {/* Journal */}
-      <div className="flex min-h-0 flex-1 flex-col rounded-xl border border-slate-800 bg-[#0d111a] p-3">
-        <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Journal</div>
+      {/* Journal — zone réelle (min-height garanti) + plein écran filtrable au tap */}
+      <div className="flex min-h-[120px] flex-1 flex-col rounded-xl border border-slate-800 bg-[#0d111a] p-3">
+        <div className="mb-1 flex items-center justify-between">
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Journal</span>
+          <button
+            onClick={() => setJournalOpen(true)}
+            className="rounded bg-slate-800/70 px-2.5 py-1 text-[11px] text-slate-400 hover:text-slate-200"
+            aria-label="Agrandir le journal"
+          >
+            ⤢
+          </button>
+        </div>
         <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto pr-1 text-[12.5px] leading-snug">
           {log.map((e) => (
             <div key={e.id} className={LOG_COLORS[e.kind]}>
@@ -435,6 +460,38 @@ export function CombatPanel() {
           ))}
         </div>
       </div>
+
+      {/* Journal plein écran */}
+      {journalOpen && (
+        <Sheet title="Journal de combat" onClose={() => setJournalOpen(false)}>
+          <div className="mb-2 flex flex-wrap gap-1.5">
+            {LOG_FILTERS.map((f) => (
+              <button
+                key={f.id}
+                onClick={() => setLogFilter(f.id)}
+                className={'rounded-lg px-2.5 py-1.5 text-[11px] font-medium ' + (logFilter === f.id ? 'bg-slate-600 text-slate-100' : 'bg-slate-800 text-slate-400')}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+          <div className="h-[58vh] space-y-1 overflow-y-auto pr-1 text-[13px] leading-snug">
+            {(() => {
+              const kinds = LOG_FILTERS.find((f) => f.id === logFilter)?.kinds
+              const entries = kinds ? log.filter((e) => kinds.includes(e.kind)) : log
+              return entries.length === 0 ? (
+                <div className="mt-6 text-center text-xs text-slate-600">Rien dans cette catégorie pour l'instant.</div>
+              ) : (
+                entries.map((e) => (
+                  <div key={e.id} className={LOG_COLORS[e.kind]}>
+                    {e.text}
+                  </div>
+                ))
+              )
+            })()}
+          </div>
+        </Sheet>
+      )}
     </div>
   )
 }
