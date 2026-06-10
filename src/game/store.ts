@@ -18,7 +18,11 @@ import {
   reforgeCost, surillvlCost, ascendCost, createCost, transmuteCost, maxCraftTier,
   enhanceTypedAffixes, quintRefund,
 } from './items'
-import { forgeMods, forgeMasteryGain, getForgeUpgrade, forgeUpgradeCost, forgeUpgradeMaxed } from './forge'
+import {
+  craftMods, metierXpGain, canLearnNode, getMetierNode, respecCost, emptyMetiers, migrateLegacyForge,
+  levelFromXp, METIERS, METIER_LIST, AUTOMATE_FORGERON_LEVELS,
+  type MetierId, type MetiersState,
+} from './metiers'
 import { gemKey, itemSockets, unsocketCost, gemTierName, GEM_DROP, GEM_FUSE_COUNT, GEM_FUSE_GOLD, GEM_MAX_TIER } from './gems'
 import { getEnchant, enchantCost, equippedRules } from './enchants'
 import { condGemFlags, acharneMult, nueeMult, rollCondGem, condGemKey, getCondGem, condGemInstance, type CondGemId } from './condGems'
@@ -240,9 +244,8 @@ interface SaveData {
   codex: string[]
   /** Améliorations permanentes : id → niveau. */
   upgrades: Record<string, number>
-  /** Métier de forgeron : Savoir-faire 🔧 accumulé + niveaux d'améliorations de forge. */
-  forgeMastery: number
-  forgeUpgrades: Record<string, number>
+  /** Métiers de l'Atelier (v0.22) : XP cumulée + nœuds d'arbre appris, par métier. */
+  metiers: MetiersState
   /** Automates de forge : farment en boucle les donjons/raids déjà battus (3 max). */
   automates: Automate[]
   /** Stock de l'échoppe du marchand. */
@@ -298,14 +301,16 @@ interface GameState extends SaveData {
   /** Grave (ou remplace) la rune d'enchantement d'un objet (coût : Savoir-faire + éclats). */
   enchantItem: (itemId: string, enchantId: string) => void
   createItem: (opts: CreateOptions) => void
-  /** Achète/monte une amélioration du métier de forgeron (dépense du Savoir-faire 🔧). */
-  buyForgeUpgrade: (id: string) => void
+  /** Apprend un rang d'un nœud d'arbre de métier (dépense un point gagné par niveau). */
+  learnMetierNode: (metier: MetierId, nodeId: string) => void
+  /** Réinitialise l'arbre d'un métier contre de l'or (XP et niveau conservés). */
+  respecMetier: (metier: MetierId) => void
   /** Construit le prochain automate de forge (3 max, coût croissant brutal). */
   buildAutomate: () => void
   /** Assigne (ou retire) la mission d'un automate — donjon/raid DÉJÀ battu uniquement. */
   assignAutomate: (id: number, mission: AutomateMission | null) => void
   toggleAutomatePause: (id: number) => void
-  /** Améliore la vitesse ou le rendement d'un automate (Savoir-faire 🔧). */
+  /** Améliore la vitesse ou le rendement d'un automate (or). */
   upgradeAutomate: (id: number, kind: 'speed' | 'yield') => void
   enterDungeon: (dungeonId: DungeonId, level: number, repeat?: number) => void
   abandonDungeon: () => void
@@ -344,6 +349,25 @@ interface GameState extends SaveData {
 let logId = 1
 function pushLog(log: LogEntry[], text: string, kind: LogKind): LogEntry[] {
   return [{ id: logId++, text, kind }, ...log].slice(0, MAX_LOG)
+}
+
+/** Crédite de l'XP de métier et journalise les montées de niveau (1 niveau = 1 point d'arbre). */
+function gainMetierXp(
+  s: Pick<GameState, 'metiers' | 'log'>,
+  metier: MetierId,
+  amount: number,
+): { metiers: MetiersState; log: LogEntry[] } {
+  const st = s.metiers[metier]
+  const before = levelFromXp(st.xp)
+  const xp = st.xp + amount
+  const after = levelFromXp(xp)
+  const metiers = { ...s.metiers, [metier]: { ...st, xp } }
+  let log = s.log
+  if (after > before) {
+    const def = METIERS[metier]
+    log = pushLog(log, `${def.icon} ${def.name} niveau ${after} — +${after - before} point${after - before > 1 ? 's' : ''} d'arbre (Atelier) !`, 'level')
+  }
+  return { metiers, log }
 }
 
 function xpForLevel(level: number): number {
@@ -419,8 +443,7 @@ function freshSave(): SaveData {
     raid: null,
     codex: [],
     upgrades: {},
-    forgeMastery: 0,
-    forgeUpgrades: {},
+    metiers: emptyMetiers(),
     automates: [],
     shopStock: [],
     inventory: [],
@@ -514,6 +537,43 @@ function sanitize(save: SaveData): SaveData {
       yieldLvl: Math.max(0, Math.min(AUTOMATE_UPG_MAX, a.yieldLvl ?? 0)),
       bank: a.bank && typeof a.bank === 'object' ? a.bank : {},
     }))
+  // Métiers (v0.22) : migration de l'ancien duo Savoir-faire 🔧 / forgeUpgrades, sinon validation.
+  // ATTENTION : loadSave spreade freshSave() AVANT la vieille sauvegarde — `save.metiers` existe
+  // donc toujours (vide). La présence des champs LEGACY fait foi, pas l'absence de `metiers`.
+  {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const legacy = save as any
+    const hasLegacy = typeof legacy.forgeMastery === 'number' || (legacy.forgeUpgrades && typeof legacy.forgeUpgrades === 'object')
+    const metiersEmpty = !save.metiers || typeof save.metiers !== 'object' || !save.metiers.forgeron ||
+      METIER_LIST.every((m) => {
+        const st = save.metiers[m.id]
+        return !st || ((st.xp ?? 0) === 0 && Object.keys(st.nodes ?? {}).length === 0)
+      })
+    if (hasLegacy && metiersEmpty) {
+      save.metiers = migrateLegacyForge(
+        typeof legacy.forgeMastery === 'number' ? legacy.forgeMastery : 0,
+        legacy.forgeUpgrades && typeof legacy.forgeUpgrades === 'object' ? legacy.forgeUpgrades : {},
+        save.automates.length > 0,
+      )
+    } else {
+      const clean = emptyMetiers()
+      for (const m of METIER_LIST) {
+        const st = save.metiers[m.id]
+        if (st && typeof st === 'object') {
+          clean[m.id].xp = typeof st.xp === 'number' ? Math.max(0, st.xp) : 0
+          if (st.nodes && typeof st.nodes === 'object') {
+            for (const [id, rank] of Object.entries(st.nodes)) {
+              const def = getMetierNode(m.id, id)
+              if (def && typeof rank === 'number' && rank > 0) clean[m.id].nodes[id] = Math.min(def.maxRank, rank)
+            }
+          }
+        }
+      }
+      save.metiers = clean
+    }
+    delete legacy.forgeMastery
+    delete legacy.forgeUpgrades
+  }
   if (typeof save.recycleThreshold !== 'number') save.recycleThreshold = 4
   if (typeof save.autoRecycle !== 'boolean') save.autoRecycle = false
   if (typeof save.killsSinceEpic !== 'number') save.killsSinceEpic = 0
@@ -710,8 +770,7 @@ function persist(s: GameState) {
     raid: s.raid,
     codex: s.codex,
     upgrades: s.upgrades,
-    forgeMastery: s.forgeMastery,
-    forgeUpgrades: s.forgeUpgrades,
+    metiers: s.metiers,
     automates: s.automates,
     shopStock: s.shopStock,
     inventory: s.inventory,
@@ -1838,7 +1897,7 @@ export const useGame = create<GameState>((set, get) => {
   // plein régime — ce sont des machines). Les clés sont consommées run par run.
   const autoLogLines: string[] = []
   if (elapsed > 60_000 && save.automates.length > 0) {
-    const ar = tickAutomates(save, Math.min(elapsed, 12 * 3600 * 1000) / 1000, equippedRules(save.characters).has('econome') ? 0.15 : 0)
+    const ar = tickAutomates(save, Math.min(elapsed, 12 * 3600 * 1000) / 1000, equippedRules(save.characters).has('econome') ? 0.15 : 0, craftMods(save.metiers).automateDurMult)
     if (ar) {
       Object.assign(save, ar.eco)
       if (ar.xpEach > 0) save.characters = save.characters.map((c) => (c.hp > 0 ? grantXp(c, ar.xpEach) : c))
@@ -1860,7 +1919,7 @@ export const useGame = create<GameState>((set, get) => {
       let s = get()
 
       // Automates de forge : avancent en PARALLÈLE de tout le reste (farm, donjon, raid).
-      const ar = tickAutomates(s, dt, equippedRules(s.characters).has('econome') ? 0.15 : 0)
+      const ar = tickAutomates(s, dt, equippedRules(s.characters).has('econome') ? 0.15 : 0, craftMods(s.metiers).automateDurMult)
       if (ar) {
         let log = s.log
         for (const line of ar.lines) log = pushLog(log, line, 'craft')
@@ -1959,12 +2018,15 @@ export const useGame = create<GameState>((set, get) => {
         }
         if (autoRec) log = pushLog(log, `♻️ ${autoRec} butin recyclé automatiquement.`, 'craft')
 
+        // Bonus de métier sur les drops (Condensation de l'Alchimiste, Prospection du Joaillier).
+        const cmods = craftMods(s.metiers)
+
         // Quintessence élémentaire : ressource ultra-rare du biome (type = celui des monstres).
         // 1% sur un ennemi normal, 5% sur une élite, 10% sur un boss. Farm continu et patient.
         let quint = s.quint
         {
           const qBase = boss ? QUINT_DROP.boss : elite ? QUINT_DROP.elite : QUINT_DROP.normal
-          const qChance = qBase * quintTierMult(stage) * (surged ? SURGE_QUINT_MULT : 1) * (transmut ? 2 : 1)
+          const qChance = qBase * quintTierMult(stage) * (surged ? SURGE_QUINT_MULT : 1) * (transmut ? 2 : 1) * cmods.quintDropMult
           if (Math.random() < qChance) {
             const t = s.activeBiome
             quint = { ...quint, [t]: (quint[t] ?? 0) + 1 }
@@ -1975,7 +2037,7 @@ export const useGame = create<GameState>((set, get) => {
         // Gemme élémentaire : drop EXCLUSIF au biome assorti (la gemme de feu ne tombe qu'au Feu).
         let gems = s.gems
         {
-          const gBase = (boss ? GEM_DROP.boss : elite ? GEM_DROP.elite : GEM_DROP.normal) * (transmut ? 2 : 1)
+          const gBase = (boss ? GEM_DROP.boss : elite ? GEM_DROP.elite : GEM_DROP.normal) * (transmut ? 2 : 1) * cmods.gemDropMult
           if (Math.random() < gBase) {
             const k = gemKey(s.activeBiome, 1)
             gems = { ...gems, [k]: (gems[k] ?? 0) + 1 }
@@ -1984,7 +2046,7 @@ export const useGame = create<GameState>((set, get) => {
         }
 
         // Gemme de CONDITION : les champions ✦ en lâchent parfois (12%) — l'autre source : les raids.
-        if (champion && Math.random() < 0.12) {
+        if (champion && Math.random() < 0.12 * cmods.gemDropMult) {
           const cg = rollCondGem()
           gems = { ...gems, [condGemKey(cg.id)]: (gems[condGemKey(cg.id)] ?? 0) + 1 }
           log = pushLog(log, `${cg.icon} GEMME DE CONDITION : ${cg.name} ! (champion)`, 'loot')
@@ -2160,7 +2222,8 @@ export const useGame = create<GameState>((set, get) => {
       const s = get()
       const item = s.inventory.find((i) => i.id === itemId)
       if (!item) return
-      const gain = Math.round(recycleValue(item) * computeGlobalMods(s.upgrades).eclatGain)
+      const mods = craftMods(s.metiers)
+      const gain = Math.round(recycleValue(item) * computeGlobalMods(s.upgrades).eclatGain * mods.recycleMult)
       const pous = recyclePoussiere(item)
       const refund = quintRefund(item)
       const essences = { ...s.essences }
@@ -2171,6 +2234,7 @@ export const useGame = create<GameState>((set, get) => {
         essLog = ` + ${eg} essences de ${getUnique(item.unique.id)?.name ?? 'l\'effet'}`
       }
       const qLog = quintLogSuffix(refund)
+      const g = gainMetierXp(s, 'alchimiste', metierXpGain(RARITIES[item.rarity].tier, 'modify'))
       const next = {
         ...s,
         essence: s.essence + gain,
@@ -2178,8 +2242,9 @@ export const useGame = create<GameState>((set, get) => {
         quint: addQuint(s.quint, refund),
         gems: gemStockAdd(s.gems, item),
         essences,
+        metiers: g.metiers,
         inventory: s.inventory.filter((i) => i.id !== itemId),
-        log: pushLog(s.log, `Recyclé : ${item.name} (+${gain} éclats${pous ? ` + ${pous} 🌌` : ''}${qLog}${essLog}${item.gems?.length ? ', gemmes rendues' : ''}).`, 'craft'),
+        log: pushLog(g.log, `Recyclé : ${item.name} (+${gain} éclats${pous ? ` + ${pous} 🌌` : ''}${qLog}${essLog}${item.gems?.length ? ', gemmes rendues' : ''}).`, 'craft'),
       }
       persist(next)
       set(next)
@@ -2206,25 +2271,29 @@ export const useGame = create<GameState>((set, get) => {
 
     recycleAllBelow: (tier) => {
       const s = get()
+      const mods = craftMods(s.metiers)
       let essence = s.essence
       let poussiere = s.poussiere
       let quint = s.quint
       let gems = s.gems
       let count = 0
+      let xp = 0
       const essences = { ...s.essences }
       const keep: Item[] = []
       for (const item of s.inventory) {
         if (RARITIES[item.rarity].tier < tier) {
-          essence += recycleValue(item)
+          essence += Math.round(recycleValue(item) * mods.recycleMult)
           poussiere += recyclePoussiere(item)
           quint = addQuint(quint, quintRefund(item))
           gems = gemStockAdd(gems, item)
           if (item.unique) essences[item.unique.id] = (essences[item.unique.id] ?? 0) + essenceGain(RARITIES[item.rarity].tier, item.unique.rank)
+          xp += metierXpGain(RARITIES[item.rarity].tier, 'modify')
           count++
         } else keep.push(item)
       }
       const gained = essence - s.essence
-      const next = { ...s, essence, poussiere, quint, gems, essences, inventory: keep, log: count ? pushLog(s.log, `${count} objet(s) recyclé(s) (+${gained} éclats).`, 'craft') : s.log }
+      const g = count ? gainMetierXp(s, 'alchimiste', xp) : { metiers: s.metiers, log: s.log }
+      const next = { ...s, essence, poussiere, quint, gems, essences, metiers: g.metiers, inventory: keep, log: count ? pushLog(g.log, `${count} objet(s) recyclé(s) (+${gained} éclats).`, 'craft') : g.log }
       persist(next)
       set(next)
     },
@@ -2233,7 +2302,7 @@ export const useGame = create<GameState>((set, get) => {
       const s = get()
       const item = findItemById(s, itemId)
       if (!item) return
-      const mods = forgeMods(s.forgeUpgrades)
+      const mods = craftMods(s.metiers)
       const cost = Math.round(reforgeCost(item) * mods.costMult)
       if (s.essence < cost) return
       // Les lignes renforcées à la Quintessence sont protégées (jamais re-tirées).
@@ -2241,32 +2310,34 @@ export const useGame = create<GameState>((set, get) => {
       const allLocked = [...new Set([...locked, ...enhanced])]
       const upd = applyItemPatch(s, itemId, { affixes: reforgeItem(item, allLocked) })
       if (!upd) return
-      const gain = forgeMasteryGain(RARITIES[item.rarity].tier, 'modify', mods.yieldMult)
-      const next = { ...s, ...upd, essence: s.essence - cost, forgeMastery: s.forgeMastery + gain, log: pushLog(s.log, `Reforge : ${item.name} (-${cost} éclats, +${gain} 🔧).`, 'craft') }
+      const gain = metierXpGain(RARITIES[item.rarity].tier, 'modify', mods.forgeronXpMult)
+      const g = gainMetierXp(s, 'forgeron', gain)
+      const next = { ...s, ...upd, metiers: g.metiers, essence: s.essence - cost, log: pushLog(g.log, `Reforge : ${item.name} (-${cost} éclats, +${gain} XP 🔨).`, 'craft') }
       persist(next)
       set(next)
     },
 
     surillvl: (itemId) => {
       const s = get()
-      const mods = forgeMods(s.forgeUpgrades)
-      if (!mods.surillvl) return // débloqué via le métier de forgeron
+      const mods = craftMods(s.metiers)
+      if (!mods.surillvl) return // débloqué via l'arbre du Forgeron
       const item = findItemById(s, itemId)
       if (!item) return
       const cost = Math.round(surillvlCost(item) * mods.costMult)
       if (s.essence < cost) return
-      const upd = applyItemPatch(s, itemId, surillvlItem(item))
+      const upd = applyItemPatch(s, itemId, surillvlItem(item, mods.surillvlStep))
       if (!upd) return
-      const gain = forgeMasteryGain(RARITIES[item.rarity].tier, 'modify', mods.yieldMult)
-      const next = { ...s, ...upd, essence: s.essence - cost, forgeMastery: s.forgeMastery + gain, log: pushLog(s.log, `Surillvl : ${item.name} → iLvl ${item.ilvl + 2} (-${cost} éclats, +${gain} 🔧).`, 'craft') }
+      const gain = metierXpGain(RARITIES[item.rarity].tier, 'modify', mods.forgeronXpMult)
+      const g = gainMetierXp(s, 'forgeron', gain)
+      const next = { ...s, ...upd, metiers: g.metiers, essence: s.essence - cost, log: pushLog(g.log, `Surillvl : ${item.name} → iLvl ${item.ilvl + mods.surillvlStep} (-${cost} éclats, +${gain} XP 🔨).`, 'craft') }
       persist(next)
       set(next)
     },
 
     ascend: (itemId) => {
       const s = get()
-      const mods = forgeMods(s.forgeUpgrades)
-      if (!mods.ascend) return // débloqué via le métier de forgeron
+      const mods = craftMods(s.metiers)
+      if (!mods.ascend) return // débloqué via l'arbre du Forgeron
       const item = findItemById(s, itemId)
       if (!item) return
       const patch = ascendItem(item)
@@ -2277,7 +2348,8 @@ export const useGame = create<GameState>((set, get) => {
       if (s.essence < cost.eclats || s.noyau < cost.noyau || s.fragments < cost.fragments || s.poussiere < cost.poussiere || s.cosmic < cost.cosmic) return
       const upd = applyItemPatch(s, itemId, patch)
       if (!upd) return
-      const gain = forgeMasteryGain(RARITIES[patch.rarity!].tier, 'ascend', mods.yieldMult)
+      const gain = metierXpGain(RARITIES[patch.rarity!].tier, 'ascend', mods.forgeronXpMult)
+      const g = gainMetierXp(s, 'forgeron', gain)
       const next = {
         ...s,
         ...upd,
@@ -2286,8 +2358,8 @@ export const useGame = create<GameState>((set, get) => {
         fragments: s.fragments - cost.fragments,
         poussiere: s.poussiere - cost.poussiere,
         cosmic: s.cosmic - cost.cosmic,
-        forgeMastery: s.forgeMastery + gain,
-        log: pushLog(s.log, `Ascension : ${item.name} → ${RARITIES[patch.rarity!].name} ! (-${cost.noyau} Noyau, +${gain} 🔧)`, 'craft'),
+        metiers: g.metiers,
+        log: pushLog(g.log, `Ascension : ${item.name} → ${RARITIES[patch.rarity!].name} ! (-${cost.noyau} Noyau, +${gain} XP 🔨)`, 'craft'),
       }
       persist(next)
       set(next)
@@ -2305,12 +2377,14 @@ export const useGame = create<GameState>((set, get) => {
       const upd = applyItemPatch(s, itemId, { unique: { id: item.unique.id, rank: rank + 1 } })
       if (!upd) return
       const essences = { ...s.essences, [item.unique.id]: have - cost.essences }
+      const g = gainMetierXp(s, 'alchimiste', metierXpGain(RARITIES[item.rarity].tier, 'modify'))
       const next = {
         ...s,
         ...upd,
         essence: s.essence - cost.eclats,
         essences,
-        log: pushLog(s.log, `Effet amélioré : ${getUnique(item.unique.id)?.name ?? ''} → rang ${rank + 1} !`, 'craft'),
+        metiers: g.metiers,
+        log: pushLog(g.log, `Effet amélioré : ${getUnique(item.unique.id)?.name ?? ''} → rang ${rank + 1} !`, 'craft'),
       }
       persist(next)
       set(next)
@@ -2318,24 +2392,25 @@ export const useGame = create<GameState>((set, get) => {
 
     transmute: (itemId, newPrimary) => {
       const s = get()
-      const mods = forgeMods(s.forgeUpgrades)
-      if (!mods.transmute) return // débloqué via le métier de forgeron
+      const mods = craftMods(s.metiers)
+      if (!mods.transmute) return // débloqué via l'arbre du Forgeron
       const item = findItemById(s, itemId)
       if (!item || item.primary === newPrimary) return
       const cost = Math.round(transmuteCost(item) * mods.costMult)
       if (s.essence < cost) return
       const upd = applyItemPatch(s, itemId, { primary: newPrimary })
       if (!upd) return
-      const gain = forgeMasteryGain(RARITIES[item.rarity].tier, 'modify', mods.yieldMult)
-      const next = { ...s, ...upd, essence: s.essence - cost, forgeMastery: s.forgeMastery + gain, log: pushLog(s.log, `Affinité transmutée : ${item.name} → ${newPrimary} (-${cost} éclats, +${gain} 🔧).`, 'craft') }
+      const gain = metierXpGain(RARITIES[item.rarity].tier, 'modify', mods.forgeronXpMult)
+      const g = gainMetierXp(s, 'forgeron', gain)
+      const next = { ...s, ...upd, metiers: g.metiers, essence: s.essence - cost, log: pushLog(g.log, `Affinité transmutée : ${item.name} → ${newPrimary} (-${cost} éclats, +${gain} XP 🔨).`, 'craft') }
       persist(next)
       set(next)
     },
 
     enhanceTyped: (itemId, type, kind) => {
       const s = get()
-      const mods = forgeMods(s.forgeUpgrades)
-      if (!mods.quint) return // débloqué via le métier de forgeron
+      const mods = craftMods(s.metiers)
+      if (!mods.quint) return // débloqué via l'arbre de l'Alchimiste
       const item = findItemById(s, itemId)
       if (!item) return
       const res = enhanceTypedAffixes(item, type, kind)
@@ -2346,13 +2421,14 @@ export const useGame = create<GameState>((set, get) => {
       if (!upd) return
       const m = DAMAGE_TYPES[type]
       const verb = item.affixes.some((a) => a.kind === kind && a.type === type) ? 'renforcée' : 'ajoutée'
-      const gain = forgeMasteryGain(RARITIES[item.rarity].tier, 'modify', mods.yieldMult)
+      const gain = metierXpGain(RARITIES[item.rarity].tier, 'modify')
+      const g = gainMetierXp(s, 'alchimiste', gain)
       const next = {
         ...s,
         ...upd,
         quint: { ...s.quint, [type]: have - res.cost },
-        forgeMastery: s.forgeMastery + gain,
-        log: pushLog(s.log, `${m.icon} Ligne ${kind === 'resist' ? 'Résist.' : 'Dégâts'} ${m.name} ${verb} (-${res.cost} Quintessence, +${gain} 🔧).`, 'craft'),
+        metiers: g.metiers,
+        log: pushLog(g.log, `${m.icon} Ligne ${kind === 'resist' ? 'Résist.' : 'Dégâts'} ${m.name} ${verb} (-${res.cost} Quintessence, +${gain} XP ⚗️).`, 'craft'),
       }
       persist(next)
       set(next)
@@ -2367,9 +2443,10 @@ export const useGame = create<GameState>((set, get) => {
       if (have < GEM_FUSE_COUNT || s.gold < goldCost) return
       const up = gemKey(type, tier + 1)
       const gems = { ...s.gems, [key]: have - GEM_FUSE_COUNT, [up]: (s.gems[up] ?? 0) + 1 }
+      const g = gainMetierXp(s, 'joaillier', metierXpGain(tier + 2, 'modify'))
       const next = {
-        ...s, gold: s.gold - goldCost, gems,
-        log: pushLog(s.log, `💎 Fusion : 3 ${DAMAGE_TYPES[type].name} ${gemTierName(tier)} → 1 ${gemTierName(tier + 1)} (-${goldCost.toLocaleString('fr-FR')} or).`, 'craft'),
+        ...s, gold: s.gold - goldCost, gems, metiers: g.metiers,
+        log: pushLog(g.log, `💎 Fusion : 3 ${DAMAGE_TYPES[type].name} ${gemTierName(tier)} → 1 ${gemTierName(tier + 1)} (-${goldCost.toLocaleString('fr-FR')} or).`, 'craft'),
       }
       persist(next)
       set(next)
@@ -2377,21 +2454,22 @@ export const useGame = create<GameState>((set, get) => {
 
     socketGem: (itemId, type, tier) => {
       const s = get()
-      const mods = forgeMods(s.forgeUpgrades)
-      if (!mods.gems) return // débloqué via le métier (Sertisseur)
+      const mods = craftMods(s.metiers)
+      if (!mods.gems) return // débloqué via l'arbre du Joaillier (Sertissage)
       const item = findItemById(s, itemId)
       if (!item) return
-      if ((item.gems?.length ?? 0) >= itemSockets(item)) return
+      if ((item.gems?.length ?? 0) >= itemSockets(item, mods.weaponSocketBonus)) return
       const key = gemKey(type, tier)
       if ((s.gems[key] ?? 0) < 1) return
       const upd = applyItemPatch(s, itemId, { gems: [...(item.gems ?? []), { type, tier }] })
       if (!upd) return
-      const gain = forgeMasteryGain(RARITIES[item.rarity].tier, 'modify', mods.yieldMult)
+      const gain = metierXpGain(RARITIES[item.rarity].tier, 'modify')
+      const g = gainMetierXp(s, 'joaillier', gain)
       const next = {
         ...s, ...upd,
         gems: { ...s.gems, [key]: (s.gems[key] ?? 0) - 1 },
-        forgeMastery: s.forgeMastery + gain,
-        log: pushLog(s.log, `💎 Sertie : ${DAMAGE_TYPES[type].name} ${gemTierName(tier)} sur ${item.name} (+${gain} 🔧).`, 'craft'),
+        metiers: g.metiers,
+        log: pushLog(g.log, `💎 Sertie : ${DAMAGE_TYPES[type].name} ${gemTierName(tier)} sur ${item.name} (+${gain} XP 💎).`, 'craft'),
       }
       persist(next)
       set(next)
@@ -2399,22 +2477,23 @@ export const useGame = create<GameState>((set, get) => {
 
     socketCondGem: (itemId, condId) => {
       const s = get()
-      const mods = forgeMods(s.forgeUpgrades)
-      if (!mods.gems) return // même déblocage que le sertissage (Sertisseur)
+      const mods = craftMods(s.metiers)
+      if (!mods.gems) return // même déblocage que le sertissage (Joaillier)
       const def = getCondGem(condId)
       const item = findItemById(s, itemId)
       if (!def || !item) return
-      if ((item.gems?.length ?? 0) >= itemSockets(item)) return
+      if ((item.gems?.length ?? 0) >= itemSockets(item, mods.weaponSocketBonus)) return
       const key = condGemKey(condId)
       if ((s.gems[key] ?? 0) < 1) return
       const upd = applyItemPatch(s, itemId, { gems: [...(item.gems ?? []), condGemInstance(condId)] })
       if (!upd) return
-      const gain = forgeMasteryGain(RARITIES[item.rarity].tier, 'modify', mods.yieldMult)
+      const gain = metierXpGain(RARITIES[item.rarity].tier, 'modify')
+      const g = gainMetierXp(s, 'joaillier', gain)
       const next = {
         ...s, ...upd,
         gems: { ...s.gems, [key]: (s.gems[key] ?? 0) - 1 },
-        forgeMastery: s.forgeMastery + gain,
-        log: pushLog(s.log, `${def.icon} Sertie : ${def.name} sur ${item.name} (+${gain} 🔧).`, 'craft'),
+        metiers: g.metiers,
+        log: pushLog(g.log, `${def.icon} Sertie : ${def.name} sur ${item.name} (+${gain} XP 💎).`, 'craft'),
       }
       persist(next)
       set(next)
@@ -2422,12 +2501,12 @@ export const useGame = create<GameState>((set, get) => {
 
     unsocketGem: (itemId, index) => {
       const s = get()
-      const mods = forgeMods(s.forgeUpgrades)
+      const mods = craftMods(s.metiers)
       if (!mods.gems) return
       const item = findItemById(s, itemId)
       const g = item?.gems?.[index]
       if (!item || !g) return
-      const cost = g.cond ? 2000 : unsocketCost(g)
+      const cost = Math.round((g.cond ? 2000 : unsocketCost(g)) * mods.unsocketCostMult)
       if (s.essence < cost) return
       const upd = applyItemPatch(s, itemId, { gems: item.gems!.filter((_, i) => i !== index) })
       if (!upd) return
@@ -2445,20 +2524,25 @@ export const useGame = create<GameState>((set, get) => {
 
     enchantItem: (itemId, enchantId) => {
       const s = get()
-      const mods = forgeMods(s.forgeUpgrades)
-      if (!mods.enchant) return // débloqué via le métier (Runiste)
+      const mods = craftMods(s.metiers)
+      if (!mods.enchant) return // débloqué via l'arbre du Runiste (Gravure)
       const def = getEnchant(enchantId)
       const item = findItemById(s, itemId)
       if (!def || !item || item.enchant === enchantId) return
-      const cost = enchantCost(def, item)
-      if (s.forgeMastery < cost.mastery || s.essence < cost.eclats) return
+      if (def.rule && !mods.ruleRunes) return // runes de RÈGLE : nœud « Lois du monde »
+      const raw = enchantCost(def, item)
+      const cost = { eclats: Math.round(raw.eclats * mods.enchantCostMult), poussiere: Math.round(raw.poussiere * mods.enchantCostMult) }
+      if (s.essence < cost.eclats || s.poussiere < cost.poussiere) return
       const upd = applyItemPatch(s, itemId, { enchant: enchantId })
       if (!upd) return
+      const gain = metierXpGain(RARITIES[item.rarity].tier, 'modify', mods.runisteXpMult)
+      const g = gainMetierXp(s, 'runiste', gain)
       const next = {
         ...s, ...upd,
-        forgeMastery: s.forgeMastery - cost.mastery,
         essence: s.essence - cost.eclats,
-        log: pushLog(s.log, `🪄 Rune gravée : ${def.icon} ${def.name} sur ${item.name} (-${cost.mastery} 🔧, -${cost.eclats} ♦).`, 'craft'),
+        poussiere: s.poussiere - cost.poussiere,
+        metiers: g.metiers,
+        log: pushLog(g.log, `🪄 Rune gravée : ${def.icon} ${def.name} sur ${item.name} (-${cost.eclats} ♦${cost.poussiere ? `, -${cost.poussiere} 🌌` : ''}, +${gain} XP 🪄).`, 'craft'),
       }
       persist(next)
       set(next)
@@ -2466,7 +2550,7 @@ export const useGame = create<GameState>((set, get) => {
 
     createItem: (opts) => {
       const s = get()
-      const mods = forgeMods(s.forgeUpgrades)
+      const mods = craftMods(s.metiers)
       const tier = RARITIES[opts.rarity].tier
       const ilvl = stageIlvl(s.bestStage)
       // Coût de la rareté CHOISIE, réduit par le métier (Forgeron économe).
@@ -2479,7 +2563,8 @@ export const useGame = create<GameState>((set, get) => {
       const rarityId = RARITY_LIST.find((r) => r.tier === prodTier)?.id ?? opts.rarity
       const item = generateItem({ ilvl, type: opts.type, rarity: rarityId, primary: opts.primary, ...(opts.orientation ? { orientation: opts.orientation } : {}), ...(opts.element ? { element: opts.element } : {}) })
       const inventory = [item, ...s.inventory].slice(0, invMax)
-      const gain = forgeMasteryGain(prodTier, 'create', mods.yieldMult)
+      const gain = metierXpGain(prodTier, 'create', mods.forgeronXpMult)
+      const g = gainMetierXp(s, 'forgeron', gain)
       const next = {
         ...s,
         essence: s.essence - cost.eclats,
@@ -2487,35 +2572,57 @@ export const useGame = create<GameState>((set, get) => {
         fragments: s.fragments - cost.fragments,
         poussiere: s.poussiere - cost.poussiere,
         cosmic: s.cosmic - cost.cosmic,
-        forgeMastery: s.forgeMastery + gain,
+        metiers: g.metiers,
         inventory,
         codex: discoverFromItems(s.codex, [item]),
-        log: pushLog(s.log, `Forgé : ${item.name} (${RARITIES[rarityId].name})${lucky ? ' — 🎲 rareté chanceuse !' : ''} (+${gain} 🔧).`, 'craft'),
+        log: pushLog(g.log, `Forgé : ${item.name} (${RARITIES[rarityId].name})${lucky ? ' — 🎲 rareté chanceuse !' : ''} (+${gain} XP 🔨).`, 'craft'),
       }
       persist(next)
       set(next)
     },
 
-    buyForgeUpgrade: (id) => {
+    learnMetierNode: (metier, nodeId) => {
       const s = get()
-      const u = getForgeUpgrade(id as never)
-      if (!u) return
-      const level = s.forgeUpgrades[id] ?? 0
-      if (forgeUpgradeMaxed(u, level)) return
-      const cost = forgeUpgradeCost(u, level)
-      if (s.forgeMastery < cost) return
-      const forgeUpgrades = { ...s.forgeUpgrades, [id]: level + 1 }
-      const next = { ...s, forgeMastery: s.forgeMastery - cost, forgeUpgrades, log: pushLog(s.log, `🔧 Forgeron amélioré : ${u.name}${u.maxLevel > 1 ? ` niv ${level + 1}` : ''} (-${cost} 🔧).`, 'craft') }
+      const def = getMetierNode(metier, nodeId)
+      if (!def) return
+      if (!canLearnNode(s.metiers, metier, nodeId, s.bestStage).ok) return
+      const st = s.metiers[metier]
+      const rank = (st.nodes[nodeId] ?? 0) + 1
+      const metiers = { ...s.metiers, [metier]: { ...st, nodes: { ...st.nodes, [nodeId]: rank } } }
+      const m = METIERS[metier]
+      const next = {
+        ...s, metiers,
+        log: pushLog(s.log, `${m.icon} ${m.name} : ${def.icon} ${def.name}${def.maxRank > 1 ? ` rang ${rank}` : ''} appris !`, 'craft'),
+      }
+      persist(next)
+      set(next)
+    },
+
+    respecMetier: (metier) => {
+      const s = get()
+      const st = s.metiers[metier]
+      if (Object.keys(st.nodes).length === 0) return
+      const cost = respecCost(st)
+      if (s.gold < cost) return
+      const metiers = { ...s.metiers, [metier]: { ...st, nodes: {} } }
+      const m = METIERS[metier]
+      const next = {
+        ...s, metiers, gold: s.gold - cost,
+        log: pushLog(s.log, `${m.icon} ${m.name} : arbre réinitialisé (-${cost.toLocaleString('fr-FR')} or). Points rendus.`, 'craft'),
+      }
       persist(next)
       set(next)
     },
 
     buildAutomate: () => {
       const s = get()
+      const mods = craftMods(s.metiers)
+      if (!mods.automates) return // nœud « Industrialisation » de l'arbre du Forgeron
       const idx = s.automates.length
       if (idx >= AUTOMATE_MAX) return
+      if (levelFromXp(s.metiers.forgeron.xp) < AUTOMATE_FORGERON_LEVELS[idx]) return
       const c = AUTOMATE_COSTS[idx]
-      if (s.gold < c.gold || s.poussiere < c.poussiere || s.fragments < c.fragments || s.cosmic < c.cosmic || s.forgeMastery < c.mastery) return
+      if (s.gold < c.gold || s.poussiere < c.poussiere || s.fragments < c.fragments || s.cosmic < c.cosmic) return
       const a: Automate = {
         id: idx + 1,
         name: AUTOMATE_NAMES[idx] ?? `Automate ${idx + 1}`,
@@ -2527,7 +2634,6 @@ export const useGame = create<GameState>((set, get) => {
         poussiere: s.poussiere - c.poussiere,
         fragments: s.fragments - c.fragments,
         cosmic: s.cosmic - c.cosmic,
-        forgeMastery: s.forgeMastery - c.mastery,
         automates: [...s.automates, a],
         log: pushLog(s.log, `🤖 Automate construit : ${a.name} ! Assigne-lui un donjon ou un raid déjà battu (Atelier).`, 'craft'),
       }
@@ -2570,13 +2676,13 @@ export const useGame = create<GameState>((set, get) => {
       const lvl = kind === 'speed' ? a.speedLvl : a.yieldLvl
       if (lvl >= AUTOMATE_UPG_MAX) return
       const cost = automateUpgradeCost(kind, lvl)
-      if (s.forgeMastery < cost) return
+      if (s.gold < cost) return
       const automates = s.automates.map((x) =>
         x.id === id ? { ...x, speedLvl: kind === 'speed' ? x.speedLvl + 1 : x.speedLvl, yieldLvl: kind === 'yield' ? x.yieldLvl + 1 : x.yieldLvl } : x,
       )
       const next = {
-        ...s, automates, forgeMastery: s.forgeMastery - cost,
-        log: pushLog(s.log, `🤖 ${a.name} amélioré : ${kind === 'speed' ? 'vitesse' : 'rendement'} niv. ${lvl + 1} (-${cost} 🔧).`, 'craft'),
+        ...s, automates, gold: s.gold - cost,
+        log: pushLog(s.log, `🤖 ${a.name} amélioré : ${kind === 'speed' ? 'vitesse' : 'rendement'} niv. ${lvl + 1} (-${cost.toLocaleString('fr-FR')} or).`, 'craft'),
       }
       persist(next)
       set(next)
@@ -2636,6 +2742,8 @@ export const useGame = create<GameState>((set, get) => {
 
     infuseUnique: (itemId) => {
       const s = get()
+      const mods = craftMods(s.metiers)
+      if (!mods.synth1) return // Synthèse I (arbre de l'Alchimiste)
       if (s.fragments < FRAGMENT_INFUSE_COST) return
       const item = findItemById(s, itemId)
       if (!item) return
@@ -2647,7 +2755,8 @@ export const useGame = create<GameState>((set, get) => {
       if (!upd) return
       const label = item.unique ? `rang ${newUnique.rank}` : `effet ${getUnique(newUnique.id)?.name ?? ''}`
       const codex = s.codex.includes(newUnique.id) ? s.codex : [...s.codex, newUnique.id]
-      const next = { ...s, ...upd, codex, fragments: s.fragments - FRAGMENT_INFUSE_COST, log: pushLog(s.log, `✨ Fragment infusé : ${item.name} (${label}).`, 'craft') }
+      const g = gainMetierXp(s, 'alchimiste', metierXpGain(RARITIES[item.rarity].tier, 'ascend'))
+      const next = { ...s, ...upd, codex, metiers: g.metiers, fragments: s.fragments - FRAGMENT_INFUSE_COST, log: pushLog(g.log, `✨ Fragment infusé : ${item.name} (${label}).`, 'craft') }
       persist(next)
       set(next)
     },
@@ -2655,6 +2764,8 @@ export const useGame = create<GameState>((set, get) => {
     /** Invoque un effet unique AU CHOIX sur un objet (sink d'Éclat cosmique des raids). */
     chooseUnique: (itemId, effectId) => {
       const s = get()
+      const mods = craftMods(s.metiers)
+      if (!mods.synth3) return // Synthèse III (arbre de l'Alchimiste, palier 100)
       const def = getUnique(effectId)
       if (!def) return
       const item = findItemById(s, itemId)
@@ -2665,13 +2776,15 @@ export const useGame = create<GameState>((set, get) => {
       const upd = applyItemPatch(s, itemId, { unique: { id: effectId, rank } })
       if (!upd) return
       const codex = s.codex.includes(effectId) ? s.codex : [...s.codex, effectId]
+      const g = gainMetierXp(s, 'alchimiste', metierXpGain(RARITIES[item.rarity].tier, 'ascend'))
       const next = {
         ...s,
         ...upd,
         codex,
         cosmic: s.cosmic - CHOOSE_UNIQUE_COST.cosmic,
         fragments: s.fragments - CHOOSE_UNIQUE_COST.fragments,
-        log: pushLog(s.log, `💫 Effet invoqué : ${def.name} sur ${item.name} (rang ${rank}).`, 'craft'),
+        metiers: g.metiers,
+        log: pushLog(g.log, `💫 Effet invoqué : ${def.name} sur ${item.name} (rang ${rank}).`, 'craft'),
       }
       persist(next)
       set(next)
@@ -2679,6 +2792,8 @@ export const useGame = create<GameState>((set, get) => {
 
     insertEffect: (itemId, effectId) => {
       const s = get()
+      const mods = craftMods(s.metiers)
+      if (!mods.synth2) return // Synthèse II (arbre de l'Alchimiste)
       const def = getUnique(effectId)
       if (!def) return
       const item = findItemById(s, itemId)
@@ -2691,13 +2806,15 @@ export const useGame = create<GameState>((set, get) => {
       if (!upd) return
       const essences = { ...s.essences, [effectId]: have - cost.essences }
       const codex = s.codex.includes(effectId) ? s.codex : [...s.codex, effectId]
+      const g = gainMetierXp(s, 'alchimiste', metierXpGain(RARITIES[item.rarity].tier, 'modify'))
       const next = {
         ...s,
         ...upd,
         essence: s.essence - cost.eclats,
         essences,
         codex,
-        log: pushLog(s.log, `🧬 Effet inséré : ${def.name} sur ${item.name} (-${cost.essences} essences).`, 'craft'),
+        metiers: g.metiers,
+        log: pushLog(g.log, `🧬 Effet inséré : ${def.name} sur ${item.name} (-${cost.essences} essences).`, 'craft'),
       }
       persist(next)
       set(next)

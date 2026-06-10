@@ -5,10 +5,10 @@ import { RARITIES } from '../game/rarities'
 import { ALL_STAT_META } from '../game/stats'
 import {
   sellValue, recycleValue, itemStatBlock, itemHasRareStat,
-  reforgeCost, surillvlCost, ascendCost, nextRarity, SURILLVL_STEP, transmuteCost,
+  reforgeCost, surillvlCost, ascendCost, nextRarity, transmuteCost,
   quintCost, QUINT_GAIN,
 } from '../game/items'
-import { forgeMods } from '../game/forge'
+import { craftMods } from '../game/metiers'
 import { itemSockets, parseGemKey, unsocketCost, gemTierName, GEM_DMG, GEM_RES } from '../game/gems'
 import { getCondGem, type CondGemId } from '../game/condGems'
 import { getSet } from '../game/sets'
@@ -247,7 +247,7 @@ function CraftSection({ item }: { item: Item }) {
   const ascend = useGame((s) => s.ascend)
   const infuseUnique = useGame((s) => s.infuseUnique)
   const transmute = useGame((s) => s.transmute)
-  const mods = forgeMods(useGame((s) => s.forgeUpgrades))
+  const mods = craftMods(useGame((s) => s.metiers))
   const [open, setOpen] = useState(false)
   const [locked, setLocked] = useState<number[]>([])
   const cm = mods.costMult
@@ -259,8 +259,8 @@ function CraftSection({ item }: { item: Item }) {
   const rawA = ascendCost(item)
   const aCost = { eclats: Math.round(rawA.eclats * cm), noyau: Math.round(rawA.noyau * cm), fragments: Math.round((rawA.fragments ?? 0) * cm), poussiere: Math.round((rawA.poussiere ?? 0) * cm), cosmic: Math.round((rawA.cosmic ?? 0) * cm) }
   const nr = nextRarity(item.rarity)
-  const Locked = ({ label }: { label: string }) => (
-    <div className="rounded border border-slate-800 bg-black/20 py-1.5 text-center text-[10px] text-slate-500">🔒 {label} — débloque-le via le 🔧 métier de forgeron (onglet Forge)</div>
+  const Locked = ({ label, metier }: { label: string; metier: string }) => (
+    <div className="rounded border border-slate-800 bg-black/20 py-1.5 text-center text-[10px] text-slate-500">🔒 {label} — à apprendre dans l'arbre du {metier} (onglet 🔨 Atelier)</div>
   )
 
   const toggle = (i: number) => setLocked((l) => (l.includes(i) ? l.filter((x) => x !== i) : [...l, i]))
@@ -317,9 +317,9 @@ function CraftSection({ item }: { item: Item }) {
               onClick={() => surillvl(item.id)}
               className="w-full rounded bg-amber-800/60 py-2 text-[11px] font-medium hover:bg-amber-700/70 disabled:opacity-40"
             >
-              Surillvl → iLvl {item.ilvl + SURILLVL_STEP} · ♦ {sCost}
+              Surillvl → iLvl {item.ilvl + mods.surillvlStep} · ♦ {sCost}
             </button>
-          ) : <Locked label="Surillvl" />}
+          ) : <Locked label="Surillvl" metier="Forgeron" />}
 
           {/* Transmuter l'affinité (Force/Agi/Int) */}
           {mods.transmute ? (
@@ -343,9 +343,9 @@ function CraftSection({ item }: { item: Item }) {
                 })}
               </div>
             </div>
-          ) : <Locked label="Transmutation" />}
+          ) : <Locked label="Transmutation" metier="Forgeron" />}
 
-          {!mods.ascend ? <Locked label="Ascension" /> : nr ? (
+          {!mods.ascend ? <Locked label="Ascension" metier="Forgeron" /> : nr ? (
             <button
               disabled={essence < aCost.eclats || noyau < aCost.noyau || fragments < aCost.fragments || poussiere < aCost.poussiere || cosmic < aCost.cosmic}
               onClick={() => ascend(item.id)}
@@ -358,25 +358,28 @@ function CraftSection({ item }: { item: Item }) {
             <div className="text-center text-[10px] italic text-slate-600">Rareté maximale atteinte.</div>
           )}
 
-          {mods.quint ? <QuintessenceSection item={item} /> : <Locked label="Craft à la Quintessence" />}
+          {mods.quint ? <QuintessenceSection item={item} /> : <Locked label="Craft à la Quintessence" metier="Alchimiste" />}
 
-          {itemSockets(item) > 0 && (mods.gems ? <GemSection item={item} /> : <Locked label="Sertissage (gemmes)" />)}
+          {itemSockets(item, mods.weaponSocketBonus) > 0 && (mods.gems ? <GemSection item={item} /> : <Locked label="Sertissage (gemmes)" metier="Joaillier" />)}
 
-          {mods.enchant ? <EnchantSection item={item} /> : <Locked label="Enchantement (runes)" />}
+          {mods.enchant ? <EnchantSection item={item} /> : <Locked label="Gravure (runes)" metier="Runiste" />}
 
-          <InsertEffectSection item={item} />
+          {/* Synthèse d'uniques (Alchimiste) : 3 crans de précision, de l'aléatoire au choix exact */}
+          {mods.synth2 ? <InsertEffectSection item={item} /> : null}
 
-          <ChooseUniqueSection item={item} />
+          {mods.synth3 ? <ChooseUniqueSection item={item} /> : <Locked label="Synthèse III — Invocation au choix" metier="Alchimiste (palier 100)" />}
 
-          {/* Craft sommital : infuser un Fragment d'éternité */}
-          <button
-            disabled={fragments < FRAGMENT_INFUSE_COST}
-            onClick={() => infuseUnique(item.id)}
-            className="w-full rounded bg-sky-900/50 py-2 text-[11px] font-medium text-sky-200 hover:bg-sky-800/60 disabled:opacity-40"
-            title="Ajoute un effet unique (ou monte son rang) — récompense de raid"
-          >
-            ✨ {item.unique ? 'Renforcer l\'unique' : 'Infuser un unique'} · {FRAGMENT_INFUSE_COST} fragments
-          </button>
+          {/* Synthèse I : infuser un Fragment d'éternité (effet aléatoire) */}
+          {mods.synth1 ? (
+            <button
+              disabled={fragments < FRAGMENT_INFUSE_COST}
+              onClick={() => infuseUnique(item.id)}
+              className="w-full rounded bg-sky-900/50 py-2 text-[11px] font-medium text-sky-200 hover:bg-sky-800/60 disabled:opacity-40"
+              title="Ajoute un effet unique ALÉATOIRE (ou monte son rang) — récompense de raid"
+            >
+              ✨ {item.unique ? 'Renforcer l\'unique' : 'Infuser un unique'} · {FRAGMENT_INFUSE_COST} fragments
+            </button>
+          ) : <Locked label="Synthèse I — Infusion d'unique" metier="Alchimiste" />}
         </div>
       )}
     </div>
@@ -462,9 +465,10 @@ function GemSection({ item }: { item: Item }) {
   const socketGem = useGame((s) => s.socketGem)
   const socketCondGem = useGame((s) => s.socketCondGem)
   const unsocketGem = useGame((s) => s.unsocketGem)
+  const mods = craftMods(useGame((s) => s.metiers))
   const [open, setOpen] = useState(false)
 
-  const sockets = itemSockets(item)
+  const sockets = itemSockets(item, mods.weaponSocketBonus)
   const filled = item.gems ?? []
   const stock = Object.entries(gems)
     .filter(([k, n]) => n > 0 && !k.startsWith('cond:'))
@@ -486,7 +490,7 @@ function GemSection({ item }: { item: Item }) {
           {filled.map((g, i) => {
             const cond = g.cond ? getCondGem(g.cond) : undefined
             const m = DAMAGE_TYPES[g.type]
-            const cost = cond ? 2000 : unsocketCost(g)
+            const cost = Math.round((cond ? 2000 : unsocketCost(g)) * mods.unsocketCostMult)
             return (
               <div key={i} className="flex items-center gap-2 rounded bg-black/20 px-1.5 py-1 text-[10px]">
                 {cond ? (
@@ -558,8 +562,9 @@ function GemSection({ item }: { item: Item }) {
 /** Rune d'enchantement : grave une stat CHOISIE, qui scale avec l'iLvl. Une rune par pièce. */
 function EnchantSection({ item }: { item: Item }) {
   const essence = useGame((s) => s.essence)
-  const forgeMastery = useGame((s) => s.forgeMastery)
+  const poussiere = useGame((s) => s.poussiere)
   const enchantItem = useGame((s) => s.enchantItem)
+  const mods = craftMods(useGame((s) => s.metiers))
   const [open, setOpen] = useState(false)
   const current = item.enchant ? getEnchant(item.enchant) : undefined
 
@@ -576,15 +581,17 @@ function EnchantSection({ item }: { item: Item }) {
           </div>
           <div className="space-y-0.5">
             {ENCHANTS.map((e) => {
-              const cost = enchantCost(e, item)
+              const raw = enchantCost(e, item)
+              const cost = { eclats: Math.round(raw.eclats * mods.enchantCostMult), poussiere: Math.round(raw.poussiere * mods.enchantCostMult) }
               const on = item.enchant === e.id
-              const can = !on && forgeMastery >= cost.mastery && essence >= cost.eclats
+              const ruleLocked = !!e.rule && !mods.ruleRunes
+              const can = !on && !ruleLocked && essence >= cost.eclats && poussiere >= cost.poussiere
               return (
                 <button
                   key={e.id}
                   disabled={!can}
                   onClick={() => enchantItem(item.id, e.id)}
-                  title={e.description}
+                  title={ruleLocked ? `${e.description}\n— 🔒 nœud « Lois du monde » (arbre du Runiste)` : e.description}
                   className={
                     'flex w-full flex-col gap-0.5 rounded border px-1.5 py-1 text-left text-[10px] disabled:opacity-40 ' +
                     (on ? 'border-amber-400 bg-amber-900/30 text-amber-200' : 'border-slate-700 text-slate-300 enabled:hover:bg-amber-900/20')
@@ -592,10 +599,10 @@ function EnchantSection({ item }: { item: Item }) {
                 >
                   <span className="flex w-full items-center justify-between gap-1">
                     <span className="min-w-0 truncate">
-                      {on ? '✓ ' : ''}{e.icon} {e.name}{e.rare && !e.rule ? ' 💎' : ''}
+                      {on ? '✓ ' : ruleLocked ? '🔒 ' : ''}{e.icon} {e.name}{e.rare && !e.rule ? ' 💎' : ''}
                       <span className="text-slate-500"> · {e.stat ? `+${enchantValue(e, item)} ${ALL_STAT_META[e.stat].short}` : 'RÈGLE'}</span>
                     </span>
-                    {!on && <span className="shrink-0 text-[9px] text-slate-500">🔧{cost.mastery} ♦{cost.eclats}</span>}
+                    {!on && <span className="shrink-0 text-[9px] text-slate-500">♦{cost.eclats}{cost.poussiere ? ` 🌌${cost.poussiere}` : ''}</span>}
                   </span>
                   {e.rule && <span className="text-[8.5px] leading-snug text-slate-500">{e.description}</span>}
                 </button>

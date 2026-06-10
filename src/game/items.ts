@@ -407,8 +407,8 @@ export function reforgeItem(item: Item, locked: number[]): Affix[] {
 }
 
 /** Augmente l'ilvl de l'objet et rescale ses stats (les lignes % ne scalent pas). */
-export function surillvlItem(item: Item): Pick<Item, 'ilvl' | 'primaryValue' | 'endurance' | 'affixes'> {
-  const newIlvl = item.ilvl + SURILLVL_STEP
+export function surillvlItem(item: Item, step = SURILLVL_STEP): Pick<Item, 'ilvl' | 'primaryValue' | 'endurance' | 'affixes'> {
+  const newIlvl = item.ilvl + step
   const ratio = newIlvl / item.ilvl
   return {
     ilvl: newIlvl,

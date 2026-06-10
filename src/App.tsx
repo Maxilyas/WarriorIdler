@@ -3,6 +3,7 @@ import { useGame } from './game/store'
 import { useMediaQuery } from './useMediaQuery'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from './game/damage'
 import { TALENT_START_LEVEL } from './game/character'
+import { METIER_LIST, pointsAvailable } from './game/metiers'
 import { CombatPanel } from './components/CombatPanel'
 import { StuffScreen } from './components/StuffScreen'
 import { AtelierPanel } from './components/AtelierPanel'
@@ -59,7 +60,7 @@ export default function App() {
   const orbes = useGame((s) => s.orbes)
   const fragments = useGame((s) => s.fragments)
   const cosmic = useGame((s) => s.cosmic)
-  const forgeMastery = useGame((s) => s.forgeMastery)
+  const metiers = useGame((s) => s.metiers)
   const sceaux = useGame((s) => s.sceaux)
   const bestStage = useGame((s) => s.bestStage)
   const characters = useGame((s) => s.characters)
@@ -85,7 +86,9 @@ export default function App() {
   const raidsUnlocked = orbes > 0 || inRaid || bestStage >= RAID_STAGE
   const expedUnlocked = sceaux > 0 || anyDungeon || inDungeon || bestStage >= DONJON_STAGE || raidsUnlocked
   const marcheUnlocked = bestStage >= MARCHE_STAGE || anyUpgrade
-  const atelierUnlocked = bestStage >= ATELIER_STAGE || forgeMastery > 0
+  const atelierUnlocked = bestStage >= ATELIER_STAGE || metiers.forgeron.xp > 0
+  // Points d'arbre de métier à dépenser (badge sur l'onglet Atelier).
+  const metierPoints = METIER_LIST.reduce((a, m) => a + (bestStage >= m.unlockStage ? pointsAvailable(metiers[m.id]) : 0), 0)
 
   const unlocked: Record<Tab, boolean> = { combat: true, stuff: true, atelier: atelierUnlocked, heros: true, exped: expedUnlocked, marche: marcheUnlocked }
   const mobileTabs = TABS.filter((t) => unlocked[t.id])
@@ -101,7 +104,6 @@ export default function App() {
     { icon: '💠', name: 'Noyaux primordiaux', value: noyau, cls: 'text-fuchsia-300' },
     { icon: '🌌', name: 'Poussière d\'étoile', value: poussiere, cls: 'text-indigo-300' },
     { icon: '⚗️', name: 'Quintessences élémentaires', value: quintTotal, cls: 'text-emerald-300' },
-    { icon: '🔧', name: 'Savoir-faire de forge', value: forgeMastery, cls: 'text-amber-200' },
     { icon: '🔮', name: 'Orbes de raid', value: orbes, cls: 'text-rose-300' },
     { icon: '✨', name: 'Fragments d\'éternité', value: fragments, cls: 'text-sky-300' },
     { icon: '💫', name: 'Éclats cosmiques', value: cosmic, cls: 'text-violet-300' },
@@ -158,6 +160,9 @@ export default function App() {
                     }
                   >
                     {DESK_LABEL[t]}
+                    {t === 'atelier' && metierPoints > 0 && (
+                      <span className="ml-1.5 rounded-full bg-amber-500 px-1.5 text-[10px] text-slate-950">{metierPoints}</span>
+                    )}
                     {t === 'heros' && talentPoints > 0 && (
                       <span className="ml-1.5 rounded-full bg-amber-500 px-1.5 text-[10px] text-slate-950">{talentPoints}</span>
                     )}
@@ -217,6 +222,9 @@ export default function App() {
                 <span className="absolute right-2 top-1 rounded-full bg-slate-700 px-1 text-[9px] text-slate-200">
                   {inventory.length}
                 </span>
+              )}
+              {t.id === 'atelier' && metierPoints > 0 && (
+                <span className="absolute right-2 top-1 rounded-full bg-amber-500 px-1 text-[9px] text-slate-950">{metierPoints}</span>
               )}
               {t.id === 'heros' && talentPoints > 0 && (
                 <span className="absolute right-2 top-1 rounded-full bg-amber-500 px-1 text-[9px] text-slate-950">{talentPoints}</span>

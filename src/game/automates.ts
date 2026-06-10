@@ -32,7 +32,7 @@ export interface Automate {
   /** Avancement du run en cours (s). */
   progress: number
   paused: boolean
-  /** Améliorations (Savoir-faire 🔧) : vitesse de run / rendement. */
+  /** Améliorations (or) : vitesse de run / rendement. */
   speedLvl: number
   yieldLvl: number
   /** Accumulateurs fractionnaires des ressources discrètes (un run peut rapporter 0,6 noyau). */
@@ -44,11 +44,12 @@ export interface Automate {
 export const AUTOMATE_MAX = 3
 export const AUTOMATE_NAMES = ['Rouage', 'Enclume', 'Vigile']
 
-/** Coûts de construction — croissance brutale assumée (sink de très fin de partie). */
-export const AUTOMATE_COSTS: { gold: number; poussiere: number; fragments: number; cosmic: number; mastery: number }[] = [
-  { gold: 5_000_000, poussiere: 300, fragments: 100, cosmic: 0, mastery: 1_500 },
-  { gold: 25_000_000, poussiere: 1_200, fragments: 400, cosmic: 10, mastery: 4_000 },
-  { gold: 120_000_000, poussiere: 5_000, fragments: 1_500, cosmic: 50, mastery: 10_000 },
+/** Coûts de construction — croissance brutale assumée (sink de très fin de partie).
+ *  L'ex-composante Savoir-faire 🔧 est remplacée par un niveau de Forgeron requis (metiers.ts). */
+export const AUTOMATE_COSTS: { gold: number; poussiere: number; fragments: number; cosmic: number }[] = [
+  { gold: 5_000_000, poussiere: 300, fragments: 100, cosmic: 0 },
+  { gold: 25_000_000, poussiere: 1_200, fragments: 400, cosmic: 10 },
+  { gold: 120_000_000, poussiere: 5_000, fragments: 1_500, cosmic: 50 },
 ]
 
 /** Efficacité de récolte : 60% de base, +5% par niveau de rendement (max 85%). */
@@ -58,19 +59,21 @@ export const AUTOMATE_EFF_PER_YIELD = 0.05
 export const AUTOMATE_SPEED_PER_LVL = 0.07
 export const AUTOMATE_UPG_MAX = 5
 
+/** Coût (or) d'une amélioration d'automate. */
 export function automateUpgradeCost(kind: 'speed' | 'yield', lvl: number): number {
-  return Math.round((kind === 'speed' ? 300 : 400) * Math.pow(2, lvl))
+  return Math.round((kind === 'speed' ? 400_000 : 500_000) * Math.pow(2, lvl))
 }
 
 export function automateEfficiency(a: Automate): number {
   return AUTOMATE_EFF_BASE + AUTOMATE_EFF_PER_YIELD * a.yieldLvl
 }
 
-/** Durée (s) d'un run automatisé — plus lent qu'un joueur actif, accéléré par les améliorations. */
-export function automateRunDuration(a: Automate): number {
+/** Durée (s) d'un run automatisé — plus lent qu'un joueur actif, accéléré par les améliorations.
+ *  `durMult` : bonus du nœud « Chaîne de montage » du Forgeron (≤ 1). */
+export function automateRunDuration(a: Automate, durMult = 1): number {
   if (!a.mission) return Infinity
   const base = a.mission.kind === 'dungeon' ? 45 + 10 * a.mission.level : 90 + 20 * a.mission.level
-  return base * (1 - AUTOMATE_SPEED_PER_LVL * a.speedLvl)
+  return base * (1 - AUTOMATE_SPEED_PER_LVL * a.speedLvl) * durMult
 }
 
 /** Libellé court de la mission. */
@@ -150,7 +153,7 @@ const GAIN_LABELS: Record<string, string> = {
  * assigné à l'Antre des Failles peut donc alimenter les suivants).
  * Renvoie null si aucun automate actif (zéro coût sur le tick).
  */
-export function tickAutomates(input: AutomateEconomy, dt: number, keySaveChance = 0): AutomateTickResult | null {
+export function tickAutomates(input: AutomateEconomy, dt: number, keySaveChance = 0, durMult = 1): AutomateTickResult | null {
   if (!input.automates.some((a) => a.mission && !a.paused)) return null
   const eco: AutomateEconomy = { ...input, automates: input.automates.map((a) => ({ ...a, bank: { ...a.bank } })) }
   const lines: string[] = []
@@ -159,7 +162,7 @@ export function tickAutomates(input: AutomateEconomy, dt: number, keySaveChance 
 
   for (const a of eco.automates) {
     if (!a.mission || a.paused) continue
-    const duration = automateRunDuration(a)
+    const duration = automateRunDuration(a, durMult)
     const key = missionKeyCost(a.mission)
     const eff = automateEfficiency(a)
     a.progress += dt

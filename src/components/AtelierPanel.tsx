@@ -6,7 +6,12 @@ import { PRIMARY_META } from '../game/stats'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from '../game/damage'
 import { RARITY_LIST } from '../game/rarities'
 import { maxCraftTier, createCost } from '../game/items'
-import { FORGE_UPGRADES, forgeMods, forgeUpgradeCost, forgeUpgradeMaxed } from '../game/forge'
+import {
+  METIERS, METIER_LIST, METIER_NODES, METIER_MAX_LEVEL, AUTOMATE_FORGERON_LEVELS,
+  craftMods, levelFromXp, xpTotalForLevel, pointsAvailable, pointsTotal, canLearnNode, nodeRank, respecCost,
+  type MetierId,
+} from '../game/metiers'
+import { ENCHANTS } from '../game/enchants'
 import { gemKey, gemTierName, GEM_MAX_TIER, GEM_FUSE_COUNT, GEM_FUSE_GOLD, GEM_DMG, GEM_RES } from '../game/gems'
 import { getCondGem } from '../game/condGems'
 import {
@@ -28,11 +33,175 @@ const ORIENTATIONS: { id: ItemOrientation; label: string }[] = [
 ]
 
 /**
- * L'Atelier du forgeron — écran complet (sous-onglet de Stuff, ex-modale).
- * Métier (Savoir-faire + améliorations) puis création d'objets sur mesure.
- * Conçu pour grossir : recettes, spécialisations, files de craft…
+ * L'Atelier des MÉTIERS (v0.22) — hub des 4 métiers de craft.
+ * Chaque métier : un niveau monté par la pratique, un arbre (1 point/niveau), son atelier.
+ * Forgeron (création + automates) · Joaillier (gemmes) · Runiste (runes) · Alchimiste (quintessences/uniques).
  */
 export function AtelierPanel() {
+  const bestStage = useGame((s) => s.bestStage)
+  const metiers = useGame((s) => s.metiers)
+  const [metier, setMetier] = useState<MetierId>('forgeron')
+  const def = METIERS[metier]
+  const unlocked = bestStage >= def.unlockStage
+
+  return (
+    <div className="h-full overflow-y-auto pr-1">
+      {/* Barre des métiers */}
+      <div className="mb-3 grid grid-cols-4 gap-1.5">
+        {METIER_LIST.map((m) => {
+          const open = bestStage >= m.unlockStage
+          const st = metiers[m.id]
+          const lvl = levelFromXp(st.xp)
+          const pts = open ? pointsAvailable(st) : 0
+          const active = metier === m.id
+          return (
+            <button
+              key={m.id}
+              onClick={() => setMetier(m.id)}
+              className={
+                'relative flex flex-col items-center gap-0.5 rounded-lg border px-1 py-2 text-[10px] transition-colors ' +
+                (active ? 'border-current bg-white/10' : open ? 'border-slate-700 text-slate-300 hover:border-slate-500' : 'border-slate-800 text-slate-600')
+              }
+              style={active ? { color: m.color } : undefined}
+            >
+              {pts > 0 && <span className="absolute -right-1 -top-1 rounded-full bg-amber-500 px-1 text-[9px] font-bold text-slate-950">{pts}</span>}
+              <span className="text-xl leading-none">{open ? m.icon : '🔒'}</span>
+              <span className="font-semibold">{m.name}</span>
+              <span className="text-[9px] text-slate-500">{open ? `niv. ${lvl}` : `palier ${m.unlockStage}`}</span>
+            </button>
+          )
+        })}
+      </div>
+
+      {!unlocked ? (
+        <div className="rounded-xl border border-slate-800 bg-[#0d111a] p-4 text-center">
+          <div className="text-2xl">🔒</div>
+          <div className="mt-1 text-sm font-semibold text-slate-300">{def.icon} {def.name} — « {def.verb} »</div>
+          <div className="mt-1 text-[11px] text-slate-500">Atteins le palier {def.unlockStage} pour ouvrir ce métier.</div>
+        </div>
+      ) : (
+        <>
+          <MetierHeader metier={metier} />
+          <MetierTree metier={metier} />
+          {metier === 'forgeron' && <ForgeronWorkshop />}
+          {metier === 'joaillier' && <GemWorkshop />}
+          {metier === 'runiste' && <RunisteWorkshop />}
+          {metier === 'alchimiste' && <AlchimisteWorkshop />}
+        </>
+      )}
+    </div>
+  )
+}
+
+/** En-tête de métier : verbe, niveau, barre d'XP, points disponibles, respec. */
+function MetierHeader({ metier }: { metier: MetierId }) {
+  const st = useGame((s) => s.metiers[metier])
+  const gold = useGame((s) => s.gold)
+  const respec = useGame((s) => s.respecMetier)
+  const def = METIERS[metier]
+  const lvl = levelFromXp(st.xp)
+  const pts = pointsAvailable(st)
+  const maxed = lvl >= METIER_MAX_LEVEL
+  const cur = st.xp - xpTotalForLevel(lvl)
+  const need = xpTotalForLevel(lvl + 1) - xpTotalForLevel(lvl)
+  const cost = respecCost(st)
+  const hasNodes = Object.keys(st.nodes).length > 0
+
+  return (
+    <div className="mb-3 rounded-xl border p-2.5" style={{ borderColor: def.color + '44', background: def.color + '0d' }}>
+      <div className="flex items-center justify-between">
+        <span className="text-[12px] font-bold" style={{ color: def.color }}>{def.icon} {def.name} <span className="font-normal text-slate-500">· « {def.verb} »</span></span>
+        <span className="text-[11px] font-semibold text-slate-200">niv. {lvl}<span className="text-slate-500">/{METIER_MAX_LEVEL}</span></span>
+      </div>
+      {!maxed && (
+        <div className="mt-1.5">
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+            <div className="h-full transition-all" style={{ width: `${Math.min(100, (cur / need) * 100)}%`, background: def.color }} />
+          </div>
+          <div className="mt-0.5 text-right text-[9px] text-slate-500">{Math.floor(cur).toLocaleString('fr-FR')} / {need.toLocaleString('fr-FR')} XP — pratique ton métier pour progresser</div>
+        </div>
+      )}
+      <div className="mt-1 flex items-center justify-between text-[10.5px]">
+        <span className={pts > 0 ? 'font-semibold text-amber-300' : 'text-slate-500'}>
+          {pts > 0 ? `★ ${pts} point${pts > 1 ? 's' : ''} d'arbre à dépenser` : `${pointsTotal(st)} point${pointsTotal(st) > 1 ? 's' : ''} d'arbre gagné${pointsTotal(st) > 1 ? 's' : ''}`}
+        </span>
+        {hasNodes && (
+          <button
+            disabled={gold < cost}
+            onClick={() => respec(metier)}
+            title={`Réinitialise l'arbre (XP conservée) — ${cost.toLocaleString('fr-FR')} or`}
+            className="rounded bg-slate-800 px-2 py-1 text-[10px] text-slate-400 hover:text-slate-200 disabled:opacity-40"
+          >
+            ↺ Respec · 💰 {cost.toLocaleString('fr-FR')}
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/** Arbre du métier : nœuds (déblocages + bonus + spécialisations exclusives). */
+function MetierTree({ metier }: { metier: MetierId }) {
+  const metiers = useGame((s) => s.metiers)
+  const bestStage = useGame((s) => s.bestStage)
+  const learn = useGame((s) => s.learnMetierNode)
+  const st = metiers[metier]
+  const pts = pointsAvailable(st)
+  const [open, setOpen] = useState(pts > 0)
+  const def = METIERS[metier]
+
+  return (
+    <div className="mb-3 rounded-xl border border-slate-800 bg-[#0d111a] p-2.5">
+      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center justify-between py-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        <span>🌳 Arbre de compétences {pts > 0 && <span className="ml-1 rounded-full bg-amber-500 px-1.5 text-[9px] text-slate-950">{pts}</span>}</span>
+        <span>{open ? '▾' : '▸'}</span>
+      </button>
+      {open && (
+        <div className="mt-2 grid grid-cols-1 gap-1 sm:grid-cols-2">
+          {METIER_NODES[metier].map((n) => {
+            const rank = nodeRank(metiers, metier, n.id)
+            const owned = rank >= n.maxRank
+            const check = canLearnNode(metiers, metier, n.id, bestStage)
+            const isSpec = !!n.exclusive
+            return (
+              <button
+                key={n.id}
+                disabled={!check.ok}
+                onClick={() => learn(metier, n.id)}
+                title={check.ok ? n.desc : `${n.desc}\n— ${check.reason}`}
+                className={
+                  'flex items-center gap-2 rounded-lg border px-2 py-1.5 text-left disabled:opacity-60 ' +
+                  (owned ? 'border-emerald-700/50 bg-emerald-950/20' : rank > 0 ? 'border-amber-700/50 bg-amber-950/10' : 'border-slate-700 bg-black/20 enabled:hover:border-amber-600/60')
+                }
+                style={isSpec && rank > 0 ? { borderColor: def.color } : undefined}
+              >
+                <span className="text-base">{n.icon}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[11px] font-medium text-slate-200">
+                    {isSpec && <span style={{ color: def.color }}>◈ </span>}{n.name}{n.maxRank > 1 ? <span className="text-slate-500"> {rank}/{n.maxRank}</span> : null}
+                  </span>
+                  <span className="block text-[8.5px] leading-snug text-slate-500">{n.desc}</span>
+                  {!owned && !check.ok && check.reason !== 'Aucun point disponible — pratique ton métier.' && (
+                    <span className="block text-[8.5px] font-medium text-rose-400/80">🔒 {check.reason}</span>
+                  )}
+                </span>
+                <span className="shrink-0 text-[10px] font-semibold">
+                  {owned ? <span className="text-emerald-400">✓</span> : <span className={check.ok ? 'text-amber-300' : 'text-slate-600'}>1 pt</span>}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* 🔨 Forgeron : création d'objets + automates                         */
+/* ------------------------------------------------------------------ */
+
+function ForgeronWorkshop() {
   const bestStage = useGame((s) => s.bestStage)
   const essence = useGame((s) => s.essence)
   const noyau = useGame((s) => s.noyau)
@@ -40,10 +209,8 @@ export function AtelierPanel() {
   const poussiere = useGame((s) => s.poussiere)
   const cosmic = useGame((s) => s.cosmic)
   const createItem = useGame((s) => s.createItem)
-  const forgeMastery = useGame((s) => s.forgeMastery)
-  const forgeUpgrades = useGame((s) => s.forgeUpgrades)
-  const buyForgeUpgrade = useGame((s) => s.buyForgeUpgrade)
-  const mods = forgeMods(forgeUpgrades)
+  const metiers = useGame((s) => s.metiers)
+  const mods = craftMods(metiers)
 
   const ilvl = stageIlvl(bestStage)
   const maxTier = maxCraftTier(bestStage)
@@ -63,52 +230,9 @@ export function AtelierPanel() {
   const canForge = essence >= cost.eclats && noyau >= cost.noyau && fragments >= cost.fragments && poussiere >= cost.poussiere && cosmic >= cost.cosmic
 
   return (
-    <div className="h-full overflow-y-auto pr-1">
-      {/* Métier de forgeron : Savoir-faire 🔧 + améliorations (déblocages + bonus) */}
-      <div className="mb-3 rounded-xl border border-amber-800/40 bg-amber-950/10 p-2.5">
-        <div className="mb-1.5 flex items-center justify-between">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-amber-300">🔧 Métier de forgeron</span>
-          <span className="text-[11px] text-amber-200">🔧 {forgeMastery.toLocaleString('fr-FR')} Savoir-faire</span>
-        </div>
-        <p className="mb-1.5 text-[9.5px] leading-snug text-slate-500">
-          Gagne du Savoir-faire en créant/modifiant des objets, puis débloque & améliore ton atelier.
-        </p>
-        <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
-          {FORGE_UPGRADES.map((u) => {
-            const lvl = forgeUpgrades[u.id] ?? 0
-            const maxed = forgeUpgradeMaxed(u, lvl)
-            const c = forgeUpgradeCost(u, lvl)
-            const isUnlock = u.maxLevel === 1
-            const owned = isUnlock && lvl > 0
-            return (
-              <button
-                key={u.id}
-                disabled={maxed || forgeMastery < c}
-                onClick={() => buyForgeUpgrade(u.id)}
-                title={u.description}
-                className={'flex items-center gap-2 rounded-lg border px-2 py-1.5 text-left disabled:opacity-50 ' + (owned ? 'border-emerald-700/50 bg-emerald-950/20' : 'border-slate-700 bg-black/20 hover:border-amber-600/60')}
-              >
-                <span className="text-base">{u.icon}</span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[11px] font-medium text-slate-200">
-                    {u.name}{u.maxLevel > 1 ? <span className="text-slate-500"> {lvl}/{u.maxLevel}</span> : null}
-                  </span>
-                  <span className="block truncate text-[8.5px] text-slate-500">{u.description}</span>
-                </span>
-                <span className="shrink-0 text-[10px] font-semibold">
-                  {owned ? <span className="text-emerald-400">✓ Débloqué</span> : maxed ? <span className="text-slate-500">Max</span> : <span className={forgeMastery >= c ? 'text-amber-300' : 'text-red-400'}>🔧 {c}</span>}
-                </span>
-              </button>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* Automates de forge : le sommet du métier (farm parallèle des donjons/raids battus) */}
+    <>
+      {/* Automates : la branche Industrialisation du Forgeron */}
       <AutomateWorkshop />
-
-      {/* Taillerie de gemmes (stock + fusion 3 → 1) */}
-      <GemWorkshop unlocked={mods.gems} />
 
       {/* Type d'objet */}
       <Section title="Type d'objet">
@@ -230,7 +354,7 @@ export function AtelierPanel() {
         </div>
         {(mods.costMult < 1 || mods.luckChance > 0) && (
           <div className="mt-1 flex flex-wrap gap-x-3 text-[10.5px] text-amber-300/80">
-            {mods.costMult < 1 && <span>💰 −{Math.round((1 - mods.costMult) * 100)}% coûts (métier)</span>}
+            {mods.costMult < 1 && <span>💰 −{Math.round((1 - mods.costMult) * 100)}% coûts (arbre)</span>}
             {mods.luckChance > 0 && <span>🎲 +{Math.round(mods.luckChance * 100)}% chance de rareté supérieure</span>}
           </div>
         )}
@@ -244,15 +368,14 @@ export function AtelierPanel() {
       >
         Forger {isWeapon ? `${DAMAGE_TYPES[element].icon} ` : ''}{ITEM_TYPES[type].name}
       </button>
-      <p className="mt-1.5 pb-2 text-center text-[10px] text-slate-500">L'objet apparaît dans ton Sac. Tu peux forger en série.</p>
-    </div>
+      <p className="mt-1.5 pb-2 text-center text-[10px] text-slate-500">L'objet apparaît dans ton Sac. Forger donne de l'XP de Forgeron.</p>
+    </>
   )
 }
 
 /**
- * Atelier des automates : construction (3 max, coûts brutaux), assignation de mission
- * (donjon/raid DÉJÀ battu, farmé au niveau record), améliorations vitesse/rendement.
- * L'automate consomme les clés, rapporte les ressources à 60-85% — jamais le stuff ni les 💫.
+ * Atelier des automates : construction (3 max, gated par l'arbre + niveau de Forgeron),
+ * assignation de mission (donjon/raid DÉJÀ battu), améliorations vitesse/rendement (or).
  */
 function AutomateWorkshop() {
   const automates = useGame((s) => s.automates)
@@ -260,7 +383,7 @@ function AutomateWorkshop() {
   const poussiere = useGame((s) => s.poussiere)
   const fragments = useGame((s) => s.fragments)
   const cosmic = useGame((s) => s.cosmic)
-  const forgeMastery = useGame((s) => s.forgeMastery)
+  const metiers = useGame((s) => s.metiers)
   const dungeonProgress = useGame((s) => s.dungeonProgress)
   const raidProgress = useGame((s) => s.raidProgress)
   const buildAutomate = useGame((s) => s.buildAutomate)
@@ -269,29 +392,31 @@ function AutomateWorkshop() {
   const upgradeAutomate = useGame((s) => s.upgradeAutomate)
   const [assigning, setAssigning] = useState<number | null>(null)
 
-  const nextCost = AUTOMATE_COSTS[automates.length]
-  const anyBeaten = Object.values(dungeonProgress).some((v) => v > 0) || Object.values(raidProgress).some((v) => v > 0)
-  // L'atelier des automates ne se révèle qu'une fois du contenu battu (et reste discret avant).
-  if (automates.length === 0 && !anyBeaten) return null
+  const mods = craftMods(metiers)
+  const forgeronLvl = levelFromXp(metiers.forgeron.xp)
+  // L'atelier n'apparaît qu'une fois la branche Industrialisation apprise (ou un automate possédé).
+  if (!mods.automates && automates.length === 0) return null
 
+  const nextCost = AUTOMATE_COSTS[automates.length]
+  const lvlReq = AUTOMATE_FORGERON_LEVELS[automates.length] ?? Infinity
   const beatenDungeons = DUNGEON_LIST.filter((d) => (dungeonProgress[d.id] ?? 0) > 0)
   const beatenRaids = RAID_LIST.filter((r) => (raidProgress[r.id] ?? 0) > 0)
 
   return (
     <div className="mb-3 rounded-xl border border-violet-800/40 bg-violet-950/10 p-2.5">
       <div className="mb-1.5 flex items-center justify-between">
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-violet-300">🤖 Automates de forge</span>
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-violet-300">🤖 Industrialisation — automates</span>
         <span className="text-[10px] text-slate-500">{automates.length}/{AUTOMATE_MAX}</span>
       </div>
       <p className="mb-2 text-[9.5px] leading-snug text-slate-500">
         Une machine refait EN BOUCLE un donjon/raid déjà battu (au niveau record), même hors-ligne.
-        Elle consomme les clés (🔑/🔮) et rapporte les ressources à {Math.round(60)}–85% — jamais le stuff ni les 💫.
+        Elle consomme les clés (🔑/🔮) et rapporte les ressources à 60–85% — jamais le stuff ni les 💫.
         Astuce : un automate sur l'Antre des Failles produit les Sceaux des autres.
       </p>
 
       <div className="space-y-2">
         {automates.map((a) => {
-          const duration = automateRunDuration(a)
+          const duration = automateRunDuration(a, mods.automateDurMult)
           const pct = a.mission ? Math.min(100, (a.progress / duration) * 100) : 0
           return (
             <div key={a.id} className="rounded-lg border border-slate-700 bg-black/20 p-2">
@@ -327,11 +452,11 @@ function AutomateWorkshop() {
                   return (
                     <button
                       key={kind}
-                      disabled={maxed || forgeMastery < cost}
+                      disabled={maxed || gold < cost}
                       onClick={() => upgradeAutomate(a.id, kind)}
                       className="rounded bg-slate-800 px-2 py-1 text-slate-300 hover:bg-slate-700 disabled:opacity-40"
                     >
-                      {kind === 'speed' ? '⚡ Vitesse' : '📈 Rendement'} {lvl}/{AUTOMATE_UPG_MAX}{maxed ? '' : ` · 🔧${cost}`}
+                      {kind === 'speed' ? '⚡ Vitesse' : '📈 Rendement'} {lvl}/{AUTOMATE_UPG_MAX}{maxed ? '' : ` · 💰${(cost / 1000).toLocaleString('fr-FR')}k`}
                     </button>
                   )
                 })}
@@ -340,15 +465,21 @@ function AutomateWorkshop() {
           )
         })}
 
-        {nextCost && (
-          <button
-            onClick={buildAutomate}
-            disabled={gold < nextCost.gold || poussiere < nextCost.poussiere || fragments < nextCost.fragments || cosmic < nextCost.cosmic || forgeMastery < nextCost.mastery}
-            className="w-full rounded-lg border border-violet-700/50 bg-violet-900/20 py-2 text-[11px] font-medium text-violet-200 hover:bg-violet-800/30 disabled:opacity-40"
-          >
-            🛠 Construire « {['Rouage', 'Enclume', 'Vigile'][automates.length]} » · 💰 {nextCost.gold.toLocaleString('fr-FR')} + 🌌 {nextCost.poussiere}
-            {' '}+ ✨ {nextCost.fragments}{nextCost.cosmic ? ` + 💫 ${nextCost.cosmic}` : ''} + 🔧 {nextCost.mastery.toLocaleString('fr-FR')}
-          </button>
+        {nextCost && mods.automates && (
+          forgeronLvl < lvlReq ? (
+            <div className="rounded-lg border border-slate-800 bg-black/20 py-2 text-center text-[10px] text-slate-500">
+              🔒 Prochain automate « {['Rouage', 'Enclume', 'Vigile'][automates.length]} » : Forgeron niveau {lvlReq} requis (actuel : {forgeronLvl}).
+            </div>
+          ) : (
+            <button
+              onClick={buildAutomate}
+              disabled={gold < nextCost.gold || poussiere < nextCost.poussiere || fragments < nextCost.fragments || cosmic < nextCost.cosmic}
+              className="w-full rounded-lg border border-violet-700/50 bg-violet-900/20 py-2 text-[11px] font-medium text-violet-200 hover:bg-violet-800/30 disabled:opacity-40"
+            >
+              🛠 Construire « {['Rouage', 'Enclume', 'Vigile'][automates.length]} » · 💰 {nextCost.gold.toLocaleString('fr-FR')} + 🌌 {nextCost.poussiere}
+              {' '}+ ✨ {nextCost.fragments}{nextCost.cosmic ? ` + 💫 ${nextCost.cosmic}` : ''}
+            </button>
+          )
         )}
       </div>
 
@@ -403,16 +534,17 @@ function AutomateWorkshop() {
   )
 }
 
-/**
- * Taillerie : stock de gemmes par élément/qualité + fusion 3 → 1 (puits d'or).
- * Les gemmes tombent chacune dans le biome de LEUR élément → farmer tous les biomes.
- */
-function GemWorkshop({ unlocked }: { unlocked: boolean }) {
+/* ------------------------------------------------------------------ */
+/* 💎 Joaillier : taillerie (stock + fusion)                           */
+/* ------------------------------------------------------------------ */
+
+function GemWorkshop() {
   const gems = useGame((s) => s.gems)
   const gold = useGame((s) => s.gold)
   const fuseGems = useGame((s) => s.fuseGems)
+  const metiers = useGame((s) => s.metiers)
+  const mods = craftMods(metiers)
   const total = Object.values(gems).reduce((a, b) => a + b, 0)
-  if (total === 0 && !unlocked) return null
 
   return (
     <div className="mb-3 rounded-xl border border-sky-800/40 bg-sky-950/10 p-2.5">
@@ -422,7 +554,7 @@ function GemWorkshop({ unlocked }: { unlocked: boolean }) {
       </div>
       <p className="mb-1.5 text-[9.5px] leading-snug text-slate-500">
         Chaque gemme tombe dans le biome de SON élément. Sertis-les sur ton stuff (fiche objet, Rare+),
-        fusionne 3 gemmes en 1 de qualité supérieure.{!unlocked && ' 🔒 Sertissage : débloque « Sertisseur » ci-dessus.'}
+        fusionne 3 gemmes en 1 de qualité supérieure.{!mods.gems && ' 🔒 Sertissage : apprends le nœud « Sertissage » ci-dessus.'}
       </p>
       {/* Gemmes de CONDITION en stock (champions ✦ & raids) — se sertissent via la fiche objet */}
       {(() => {
@@ -476,6 +608,103 @@ function GemWorkshop({ unlocked }: { unlocked: boolean }) {
           })}
         </div>
       )}
+      <p className="mt-2 text-[9px] italic text-slate-600">
+        À venir : broyage en poussière, taille au choix, recoupe des paramètres — la refonte « gemmes de condition » arrive.
+      </p>
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* 🪄 Runiste : aperçu des runes                                       */
+/* ------------------------------------------------------------------ */
+
+function RunisteWorkshop() {
+  const metiers = useGame((s) => s.metiers)
+  const mods = craftMods(metiers)
+  const statRunes = ENCHANTS.filter((e) => !e.rule)
+  const ruleRunes = ENCHANTS.filter((e) => e.rule)
+
+  return (
+    <div className="mb-3 rounded-xl border border-purple-800/40 bg-purple-950/10 p-2.5">
+      <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-purple-300">🪄 Répertoire des runes</div>
+      <p className="mb-2 text-[9.5px] leading-snug text-slate-500">
+        Les runes se gravent depuis la FICHE D'UN OBJET (une par pièce, remplaçable). Coût : ♦ éclats + 🌌 poussière d'étoile.
+        {!mods.enchant && ' 🔒 Apprends « Gravure » ci-dessus pour commencer.'}
+      </p>
+      <div className="space-y-0.5">
+        {statRunes.map((e) => (
+          <div key={e.id} className="flex items-center gap-1.5 rounded bg-black/20 px-1.5 py-1 text-[10px]">
+            <span className="shrink-0 font-medium text-slate-200">{e.icon} {e.name}{e.rare ? ' 💎' : ''}</span>
+            <span className="min-w-0 flex-1 truncate text-slate-500">{e.description}</span>
+          </div>
+        ))}
+      </div>
+      <div className="mt-2 mb-1 text-[10px] font-semibold text-purple-300/80">⚖️ Runes de RÈGLE {!mods.ruleRunes && <span className="font-normal text-slate-500">— 🔒 nœud « Lois du monde »</span>}</div>
+      <div className={'space-y-0.5 ' + (mods.ruleRunes ? '' : 'opacity-50')}>
+        {ruleRunes.map((e) => (
+          <div key={e.id} className="flex items-center gap-1.5 rounded bg-black/20 px-1.5 py-1 text-[10px]">
+            <span className="shrink-0 font-medium text-slate-200">{e.icon} {e.name}</span>
+            <span className="min-w-0 flex-1 truncate text-slate-500">{e.description}</span>
+          </div>
+        ))}
+      </div>
+      <p className="mt-2 text-[9px] italic text-slate-600">
+        À venir : les runes de TEMPS (manipulation des recharges, des télégraphes, des débuts de combat) — la refonte Runiste arrive.
+      </p>
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* ⚗️ Alchimiste : quintessences + synthèse d'uniques                  */
+/* ------------------------------------------------------------------ */
+
+function AlchimisteWorkshop() {
+  const quint = useGame((s) => s.quint)
+  const metiers = useGame((s) => s.metiers)
+  const mods = craftMods(metiers)
+  const totalQuint = DAMAGE_TYPE_LIST.reduce((a, t) => a + (quint[t] ?? 0), 0)
+
+  return (
+    <div className="mb-3 rounded-xl border border-emerald-800/40 bg-emerald-950/10 p-2.5">
+      <div className="mb-1.5 flex items-center justify-between">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-emerald-300">⚗️ Laboratoire</span>
+        <span className="text-[10px] text-slate-500">⚗️ {totalQuint} quintessence{totalQuint > 1 ? 's' : ''}</span>
+      </div>
+      <p className="mb-2 text-[9.5px] leading-snug text-slate-500">
+        Les quintessences s'appliquent depuis la FICHE D'UN OBJET (lignes typées choisies).
+        {!mods.quint && ' 🔒 Apprends « Quintessence » ci-dessus pour commencer.'}
+      </p>
+      {totalQuint > 0 && (
+        <div className="mb-2 flex flex-wrap gap-x-3 gap-y-1 rounded bg-black/20 px-2 py-1.5 text-[10px]">
+          {DAMAGE_TYPE_LIST.filter((t) => (quint[t] ?? 0) > 0).map((t) => (
+            <span key={t} style={{ color: DAMAGE_TYPES[t].color }}>{DAMAGE_TYPES[t].icon} {DAMAGE_TYPES[t].name} ×{quint[t]}</span>
+          ))}
+        </div>
+      )}
+      {/* La synthèse d'uniques : 3 crans de précision, de l'aléatoire au choix exact */}
+      <div className="mb-1 text-[10px] font-semibold text-emerald-300/80">🧬 Synthèse d'uniques — 3 crans de précision (fiche objet)</div>
+      <div className="space-y-0.5 text-[10px]">
+        <div className={'flex items-center gap-1.5 rounded bg-black/20 px-1.5 py-1 ' + (mods.synth1 ? '' : 'opacity-50')}>
+          <span className="shrink-0 font-medium text-slate-200">✨ I — Infusion</span>
+          <span className="min-w-0 flex-1 truncate text-slate-500">Fragment d'éternité → effet ALÉATOIRE (ou +1 rang).</span>
+          {!mods.synth1 && <span className="shrink-0 text-slate-500">🔒</span>}
+        </div>
+        <div className={'flex items-center gap-1.5 rounded bg-black/20 px-1.5 py-1 ' + (mods.synth2 ? '' : 'opacity-50')}>
+          <span className="shrink-0 font-medium text-slate-200">🧬 II — Essence</span>
+          <span className="min-w-0 flex-1 truncate text-slate-500">Essences d'uniques recyclés → l'effet de l'essence (semi-ciblé).</span>
+          {!mods.synth2 && <span className="shrink-0 text-slate-500">🔒</span>}
+        </div>
+        <div className={'flex items-center gap-1.5 rounded bg-black/20 px-1.5 py-1 ' + (mods.synth3 ? '' : 'opacity-50')}>
+          <span className="shrink-0 font-medium text-slate-200">💫 III — Invocation</span>
+          <span className="min-w-0 flex-1 truncate text-slate-500">Éclats cosmiques → l'effet de ton CHOIX. L'acte final du craft.</span>
+          {!mods.synth3 && <span className="shrink-0 text-slate-500">🔒</span>}
+        </div>
+      </div>
+      <p className="mt-2 text-[9px] italic text-slate-600">
+        Le recyclage d'objets nourrit l'XP d'Alchimiste — la Distillation le rend plus rentable.
+      </p>
     </div>
   )
 }

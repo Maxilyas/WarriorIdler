@@ -38,12 +38,14 @@ export function parseGemKey(key: string): GemInstance {
   return { type: type as DamageType, tier: Number(tier) }
 }
 
-/** Nombre de châsses d'un objet selon sa rareté (Rare=1, Patrimoine=2, Éternel=3). */
-export function itemSockets(item: Item): number {
+/** Nombre de châsses d'un objet selon sa rareté (Rare=1, Patrimoine=2, Éternel=3).
+ *  `weaponBonus` : châsse(s) supplémentaire(s) sur les armes (nœud « Châsse forcée » du Joaillier). */
+export function itemSockets(item: Item, weaponBonus = 0): number {
   const t = RARITIES[item.rarity].tier
-  if (t >= 12) return 3
-  if (t >= 8) return 2
-  if (t >= 4) return 1
+  const bonus = item.type === 'armePrincipale' ? weaponBonus : 0
+  if (t >= 12) return 3 + bonus
+  if (t >= 8) return 2 + bonus
+  if (t >= 4) return 1 + bonus
   return 0
 }
 

@@ -81,12 +81,12 @@ export function equippedRules(characters: Character[]): Set<RuleId> {
   return out
 }
 
-/** Coût de gravure : Savoir-faire 🔧 (le métier est le vrai puits) + éclats. */
-export function enchantCost(def: EnchantDef, item: Item): { mastery: number; eclats: number } {
+/** Coût de gravure : éclats + 🌌 poussière d'étoile (l'encre du Runiste — thème temps/astres). */
+export function enchantCost(def: EnchantDef, item: Item): { eclats: number; poussiere: number } {
   const tier = RARITIES[item.rarity].tier
   const rareMult = def.rare ? 3 : 1
   return {
-    mastery: Math.round(25 * tier * rareMult),
-    eclats: Math.round(item.ilvl * 3 * tier * rareMult),
+    eclats: Math.round(item.ilvl * 4 * tier * rareMult),
+    poussiere: Math.round(tier * rareMult),
   }
 }
