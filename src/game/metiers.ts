@@ -179,13 +179,17 @@ export const METIER_NODES: Record<MetierId, MetierNode[]> = {
   ],
   runiste: [
     { id: 'gravure', name: 'Gravure', icon: '🪄', maxRank: 1,
-      desc: 'Débloque la GRAVURE : une rune par pièce d\'équipement.' },
+      desc: 'Débloque la GRAVURE : une rune par pièce d\'équipement (runes de TEMPS).' },
     { id: 'palimpseste', name: 'Palimpseste', icon: '📜', maxRank: 3, requires: 'gravure',
       desc: '−15% du coût de gravure par rang.' },
     { id: 'calligraphie', name: 'Calligraphie', icon: '✒️', maxRank: 3, minLevel: 5,
       desc: '+20% d\'XP de Runiste par rang.' },
     { id: 'regles', name: 'Lois du monde', icon: '⚖️', maxRank: 1, minLevel: 8, minStage: 50, requires: 'gravure',
       desc: 'Débloque les runes de RÈGLE : elles tordent le fonctionnement du jeu (loot, clés, biomes).' },
+    { id: 'specChrono', name: 'Chronomancien', icon: '⏳', maxRank: 1, minLevel: 15, exclusive: 'runiste-spec', requires: 'gravure',
+      desc: 'SPÉCIALISATION : les runes de TEMPS sont +50% efficaces (élan +75%, Boucle 30 s, Sursis 40 s, Dilatation +75%). Exclusif avec Législateur.' },
+    { id: 'specLegislateur', name: 'Législateur', icon: '⚖️', maxRank: 1, minLevel: 15, exclusive: 'runiste-spec', requires: 'regles',
+      desc: 'SPÉCIALISATION : les runes de RÈGLE sont amplifiées (Karma /25 kills, Économe 25%, Transmutation ×3, Vagabond +40% / 30 min). Exclusif avec Chronomancien.' },
   ],
   alchimiste: [
     { id: 'quintessence', name: 'Quintessence', icon: '⚗️', maxRank: 1,
@@ -282,6 +286,10 @@ export interface CraftMods {
   ruleRunes: boolean
   enchantCostMult: number
   runisteXpMult: number
+  /** ◈ Chronomancien : efficacité des runes de TEMPS (1 ou 1.5). */
+  runisteTempo: number
+  /** ◈ Législateur : runes de RÈGLE amplifiées. */
+  loiAmplifiee: boolean
   /* Alchimiste */
   quint: boolean
   /** Bonus multiplicatif d'éclats au recyclage (1 = aucun). */
@@ -316,6 +324,8 @@ export function craftMods(metiers: MetiersState): CraftMods {
     ruleRunes: r('runiste', 'regles') > 0,
     enchantCostMult: Math.max(0.4, 1 - r('runiste', 'palimpseste') * 0.15),
     runisteXpMult: 1 + r('runiste', 'calligraphie') * 0.2,
+    runisteTempo: r('runiste', 'specChrono') > 0 ? 1.5 : 1,
+    loiAmplifiee: r('runiste', 'specLegislateur') > 0,
     quint: r('alchimiste', 'quintessence') > 0,
     recycleMult: 1 + r('alchimiste', 'distillation') * 0.1,
     quintDropMult: 1 + r('alchimiste', 'condensation') * 0.2,

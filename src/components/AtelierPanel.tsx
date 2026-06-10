@@ -651,25 +651,31 @@ function GemWorkshop() {
 function RunisteWorkshop() {
   const metiers = useGame((s) => s.metiers)
   const mods = craftMods(metiers)
-  const statRunes = ENCHANTS.filter((e) => !e.rule)
+  const timeRunes = ENCHANTS.filter((e) => e.time)
   const ruleRunes = ENCHANTS.filter((e) => e.rule)
 
   return (
     <div className="mb-3 rounded-xl border border-purple-800/40 bg-purple-950/10 p-2.5">
       <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-purple-300">🪄 Répertoire des runes</div>
       <p className="mb-2 text-[9.5px] leading-snug text-slate-500">
-        Les runes se gravent depuis la FICHE D'UN OBJET (une par pièce, remplaçable). Coût : ♦ éclats + 🌌 poussière d'étoile.
+        Les runes se gravent depuis la FICHE D'UN OBJET (une par pièce, remplaçable, effets d'ÉQUIPE).
+        Coût : ♦ éclats + 🌌 poussière d'étoile.
         {!mods.enchant && ' 🔒 Apprends « Gravure » ci-dessus pour commencer.'}
       </p>
+      <div className="mb-1 text-[10px] font-semibold text-purple-300/80">
+        ⏳ Runes de TEMPS {mods.runisteTempo > 1 && <span className="font-normal text-emerald-400">— ◈ Chronomancien : +50% d'efficacité</span>}
+      </div>
       <div className="space-y-0.5">
-        {statRunes.map((e) => (
+        {timeRunes.map((e) => (
           <div key={e.id} className="flex items-center gap-1.5 rounded bg-black/20 px-1.5 py-1 text-[10px]">
-            <span className="shrink-0 font-medium text-slate-200">{e.icon} {e.name}{e.rare ? ' 💎' : ''}</span>
+            <span className="shrink-0 font-medium text-slate-200">{e.icon} {e.name}</span>
             <span className="min-w-0 flex-1 truncate text-slate-500">{e.description}</span>
           </div>
         ))}
       </div>
-      <div className="mt-2 mb-1 text-[10px] font-semibold text-purple-300/80">⚖️ Runes de RÈGLE {!mods.ruleRunes && <span className="font-normal text-slate-500">— 🔒 nœud « Lois du monde »</span>}</div>
+      <div className="mt-2 mb-1 text-[10px] font-semibold text-purple-300/80">
+        ⚖️ Runes de RÈGLE {!mods.ruleRunes ? <span className="font-normal text-slate-500">— 🔒 nœud « Lois du monde »</span> : mods.loiAmplifiee ? <span className="font-normal text-emerald-400">— ◈ Législateur : amplifiées</span> : null}
+      </div>
       <div className={'space-y-0.5 ' + (mods.ruleRunes ? '' : 'opacity-50')}>
         {ruleRunes.map((e) => (
           <div key={e.id} className="flex items-center gap-1.5 rounded bg-black/20 px-1.5 py-1 text-[10px]">
@@ -678,9 +684,6 @@ function RunisteWorkshop() {
           </div>
         ))}
       </div>
-      <p className="mt-2 text-[9px] italic text-slate-600">
-        À venir : les runes de TEMPS (manipulation des recharges, des télégraphes, des débuts de combat) — la refonte Runiste arrive.
-      </p>
     </div>
   )
 }

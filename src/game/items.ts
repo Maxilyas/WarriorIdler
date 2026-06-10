@@ -4,7 +4,6 @@ import { RARE_STATS } from './stats'
 import { ITEM_TYPES } from './slots'
 import { rollUnique, instanceMods } from './uniques'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from './damage'
-import { enchantMods } from './enchants'
 
 const ITEM_TYPE_LIST: ItemType[] = Object.keys(ITEM_TYPES) as ItemType[]
 
@@ -249,10 +248,7 @@ export function itemStatBlock(item: Item): Record<string, number> {
     const mods = instanceMods(item.unique, item)
     for (const k in mods) block[k] = (block[k] ?? 0) + (mods[k as keyof typeof mods] ?? 0)
   }
-  if (item.enchant) {
-    const em = enchantMods(item)
-    for (const k in em) block[k] = (block[k] ?? 0) + (em[k as keyof typeof em] ?? 0)
-  }
+  // (v0.22 : les runes ne portent plus de stats — temps & règles uniquement.)
   return block
 }
 

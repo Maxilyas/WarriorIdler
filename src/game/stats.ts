@@ -1,6 +1,5 @@
 import type { PrimaryStat, SecondaryStat, StatKey, StatBlock, Equipment } from './types'
 import { instanceMods } from './uniques'
-import { enchantMods } from './enchants'
 
 export interface StatMeta {
   key: StatKey
@@ -77,14 +76,7 @@ function addItemStats(acc: StatBlock, equipment: Equipment) {
         acc[key] = (acc[key] ?? 0) + (mods[key] ?? 0)
       }
     }
-    // Rune d'enchantement (stat gravée, scale avec l'iLvl de la pièce).
-    if (item.enchant) {
-      const em = enchantMods(item)
-      for (const k in em) {
-        const key = k as StatKey
-        acc[key] = (acc[key] ?? 0) + (em[key] ?? 0)
-      }
-    }
+    // (v0.22 : les runes ne gravent plus de stats — temps & règles uniquement, voir enchants.ts.)
   }
 }
 

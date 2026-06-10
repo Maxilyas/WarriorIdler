@@ -12,7 +12,7 @@ import { craftMods } from '../game/metiers'
 import { itemSockets, unsocketCost } from '../game/gems'
 import { getCondGem, parseCondKey, gemDesc, gemValue, gemMaxRank, recutCost, GEM_FAMILIES } from '../game/condGems'
 import { getSet } from '../game/sets'
-import { ENCHANTS, getEnchant, enchantCost, enchantValue } from '../game/enchants'
+import { ENCHANTS, getEnchant, enchantCost } from '../game/enchants'
 import type { OffensiveStat } from '../game/types'
 import { ITEM_TYPES, equipSlotsForType } from '../game/slots'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from '../game/damage'
@@ -566,7 +566,7 @@ function EnchantSection({ item }: { item: Item }) {
       {open && (
         <div className="mt-1.5">
           <div className="mb-1 text-[9.5px] leading-snug text-slate-500">
-            Grave une stat choisie (scale avec l'iLvl — un surillvl l'améliore aussi). Une rune par pièce, remplaçable.
+            ⏳ TEMPS (horloges du combat) ou ⚖️ RÈGLE (lois du jeu) — une rune par pièce, remplaçable, effets d'équipe.
           </div>
           <div className="space-y-0.5">
             {ENCHANTS.map((e) => {
@@ -588,12 +588,12 @@ function EnchantSection({ item }: { item: Item }) {
                 >
                   <span className="flex w-full items-center justify-between gap-1">
                     <span className="min-w-0 truncate">
-                      {on ? '✓ ' : ruleLocked ? '🔒 ' : ''}{e.icon} {e.name}{e.rare && !e.rule ? ' 💎' : ''}
-                      <span className="text-slate-500"> · {e.stat ? `+${enchantValue(e, item)} ${ALL_STAT_META[e.stat].short}` : 'RÈGLE'}</span>
+                      {on ? '✓ ' : ruleLocked ? '🔒 ' : ''}{e.icon} {e.name}
+                      <span className="text-slate-500"> · {e.rule ? '⚖️ RÈGLE' : '⏳ TEMPS'}</span>
                     </span>
                     {!on && <span className="shrink-0 text-[9px] text-slate-500">♦{cost.eclats}{cost.poussiere ? ` 🌌${cost.poussiere}` : ''}</span>}
                   </span>
-                  {e.rule && <span className="text-[8.5px] leading-snug text-slate-500">{e.description}</span>}
+                  <span className="text-[8.5px] leading-snug text-slate-500">{e.description}</span>
                 </button>
               )
             })}
