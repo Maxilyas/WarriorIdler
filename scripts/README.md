@@ -33,6 +33,13 @@ Harnais de progression DONJON : pour des builds FOR/AGI/INT stuffés selon le ni
 (10/25/50/75/100), affiche le niveau de donjon MAX franchissable (survivre + tuer le boss), sur
 plusieurs traits (rapide / elite / colosse). Sert à garder une COURBE de progression (et pas un mur).
 
+## `stat-weights.mjs` — `npm run weights`
+Harnais des POIDS DE STATS : valeur marginale (ΔDPS%) d'UNE ligne d'affixe de chaque famille
+(secondaires offensives vs « +% type »), par build × niveau × rareté, plus la courbe d'EMPILEMENT
+des lignes de type (0→16 lignes). C'est lui qui a mesuré la domination des dégâts de type
+(+28-51%/ligne, ×5-6 en stack) et calibré le correctif v0.22 (soft cap TYPE_BONUS dans damage.ts,
+constantes DMG_LINE_* dans items.ts). Cibles : ~2-3× la meilleure secondaire à l'unité, stack ≤ ×2.
+
 ## `eco-sim.mjs` — `npm run eco`
 Harnais ÉCONOMIQUE : rendement par run de donjon (or/éclats/noyau/poussière) vs coût d'un craft à la
 progression correspondante (createCost/ascendCost/reforgeCost). Affiche le ratio « crafts par run »

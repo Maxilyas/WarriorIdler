@@ -12,7 +12,8 @@
     "sim": "node scripts/build-sim.mjs",
     "survival": "node scripts/survival-sim.mjs",
     "dungeon": "node scripts/dungeon-sim.mjs",
-    "eco": "node scripts/eco-sim.mjs"
+    "eco": "node scripts/eco-sim.mjs",
+    "weights": "node scripts/stat-weights.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",

@@ -143,8 +143,9 @@ function statPower(value: number): number {
  * La pente vaut 1 au passage du seuil (continuité, aucun nerf sous l'ancien cap) puis décroît,
  * en s'approchant asymptotiquement de `hard` sans jamais l'atteindre. Plus de mur sec : continuer
  * d'empiler la stat reste utile, simplement de moins en moins (le surplus n'est plus gaspillé).
+ * (Exportée : sert aussi au bonus des lignes « +% type » dans damage.ts.)
  */
-function softCap(value: number, soft: number, hard: number): number {
+export function softCap(value: number, soft: number, hard: number): number {
   if (value <= soft) return value
   const head = hard - soft
   if (head <= 0) return soft

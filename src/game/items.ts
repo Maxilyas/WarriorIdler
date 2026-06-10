@@ -74,13 +74,20 @@ function affixKey(a: Affix): string {
   return a.kind === 'stat' ? `stat:${a.stat}` : `${a.kind}:${a.type}`
 }
 
+/** Valeur d'une ligne « +% dégâts du type » : base aléatoire × croissance par tier de rareté.
+ *  Exportées pour le harnais d'équilibrage (scripts/stat-weights.mjs).
+ *  v0.22 : 10..25 ×(1+0.12·tier) → 8..20 ×(1+0.07·tier) — couplé au soft cap de damage.ts. */
+export const DMG_LINE_BASE = 8
+export const DMG_LINE_RANGE = 12
+export const DMG_LINE_TIER_GROWTH = 0.07
+
 function rollLineValue(spec: LineSpec, ilvl: number, statMult: number, tier: number): number {
   if (spec.kind === 'stat') {
     const soft = RARE_STATS.includes(spec.stat) ? 0.5 : 1 // stats rares modérées (rares mais fortes)
     const base = ilvl * 0.8 * statMult * soft
     return Math.max(1, Math.round(base * (0.7 + Math.random() * 0.6)))
   }
-  if (spec.kind === 'dmgType') return Math.round((10 + Math.random() * 15) * (1 + tier * 0.12))
+  if (spec.kind === 'dmgType') return Math.round((DMG_LINE_BASE + Math.random() * DMG_LINE_RANGE) * (1 + tier * DMG_LINE_TIER_GROWTH))
   return Math.min(30, Math.round((5 + Math.random() * 8) * (1 + tier * 0.06))) // résistance %
 }
 

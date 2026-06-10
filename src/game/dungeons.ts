@@ -105,7 +105,7 @@ export function butinMinTier(level: number): number {
   return Math.max(1, Math.min(11, 1 + Math.floor(level / 4)))
 }
 export function butinMaxTier(level: number): number {
-  return Math.max(3, Math.min(16, 3 + Math.floor(level * 0.35)))
+  return Math.max(3, Math.min(16, 3 + Math.floor(level * 0.45))) // tier 16 vers le niv 29 (le mur pratique est ~24-28)
 }
 
 /**

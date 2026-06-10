@@ -1,6 +1,7 @@
 import type { DamageType, Equipment } from './types'
 import type { KeystoneEffect } from './talents'
 import { instanceResist } from './uniques'
+import { softCap } from './stats'
 
 export interface DamageTypeMeta {
   id: DamageType
@@ -39,10 +40,15 @@ const WEAPON_BASE_WEIGHT = 1
 const AFFIX_PROFILE_SHARE = 0.7
 /**
  * Part d'un affixe « +% type » conservée en bonus multiplicatif brut (+% de dégâts).
- * À 1.0 : un affixe « +X% Feu » donne réellement +X% de dégâts sur la portion Feu de ton profil
- * (le profil de dégâts redevient un levier de puissance FORT, surtout quand on empile son type).
+ * v0.22 : 1.0 → 0.5, et le bonus CUMULÉ par type est SOFT-CAPÉ (voir TYPE_BONUS_SOFT/HARD).
+ * Avant : seule famille de stats SANS cap → ×5-6 de DPS en empilant 16 lignes quand la meilleure
+ * ligne secondaire valait ~5% (cf. scripts/stat-weights.mjs). Une ligne de type reste le levier
+ * d'identité le plus fort À L'UNITÉ (~2-3× une secondaire), mais l'empilement plafonne (~×2).
  */
-const AFFIX_BONUS_SHARE = 1.0
+const AFFIX_BONUS_SHARE = 0.5
+/** Soft cap du bonus multiplicatif CUMULÉ par type (plein rendement → 60%, asymptote 120%). */
+const TYPE_BONUS_SOFT = 0.6
+const TYPE_BONUS_HARD = 1.2
 
 /**
  * Calcule le profil de dégâts à partir de TOUT l'équipement (plus seulement l'arme) + des keystones.
@@ -107,6 +113,12 @@ export function computeDamageProfile(equipment: Equipment, keystones: KeystoneEf
     if (k.splashFromMainAll && k.splashFromMainAll > 0) {
       for (const t of DAMAGE_TYPE_LIST) if (t !== mainTypeBase) weight[t] = (weight[t] ?? 0) + mainW * k.splashFromMainAll
     }
+  }
+
+  // 2b) Soft cap du bonus cumulé par type : empiler son élément garde du rendement, mais plafonne.
+  for (const t in bonus) {
+    const type = t as DamageType
+    bonus[type] = softCap(bonus[type] ?? 0, TYPE_BONUS_SOFT, TYPE_BONUS_HARD)
   }
 
   // 3) Normalisation → répartition (somme = 1).

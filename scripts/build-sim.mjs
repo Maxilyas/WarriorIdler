@@ -11,13 +11,15 @@ const M = await load(`
   export { RARITIES } from './src/game/rarities.ts'
   export { ITEM_TYPES, EQUIP_SLOTS } from './src/game/slots.ts'
   export { profileDamageMult } from './src/game/damage.ts'
+  export { DMG_LINE_BASE, DMG_LINE_RANGE, DMG_LINE_TIER_GROWTH } from './src/game/items.ts'
 `)
 const { makeCharacter, charDerived, charDamageProfile, charDps, charMaxHp, charCombatMods, charResist, setGlobalCombatMods, RARITIES, ITEM_TYPES, EQUIP_SLOTS } = M
 setGlobalCombatMods({ power: 1, attackSpeed: 1, vitality: 1 }) // pas d'upgrades marchand (comparaison pure)
 
 // Affixe stat à la valeur MAX (gear optimisé) : même formule que rollLineValue (max roll 1.3).
 const statAffix = (stat, ilvl, statMult, rare = false) => ({ kind: 'stat', stat, value: Math.max(1, Math.round(ilvl * 0.8 * statMult * (rare ? 0.5 : 1) * 1.3)) })
-const dmgAffix = (type, tier) => ({ kind: 'dmgType', type, value: Math.round(25 * (1 + tier * 0.12)) })
+// Ligne de type au roll max — mêmes constantes que rollLineValue (plus de copie qui dérive).
+const dmgAffix = (type, tier) => ({ kind: 'dmgType', type, value: Math.round((M.DMG_LINE_BASE + M.DMG_LINE_RANGE) * (1 + tier * M.DMG_LINE_TIER_GROWTH)) })
 
 // Affixes offensifs prioritaires (mêmes pour tous → comparaison contrôlée), + dmgType de l'arme.
 function affixesFor(elem, ilvl, statMult, tier, count) {
