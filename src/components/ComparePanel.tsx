@@ -10,6 +10,7 @@ import {
 } from '../game/items'
 import { forgeMods } from '../game/forge'
 import { itemSockets, parseGemKey, unsocketCost, gemTierName, GEM_DMG, GEM_RES } from '../game/gems'
+import { getCondGem, type CondGemId } from '../game/condGems'
 import { getSet } from '../game/sets'
 import { ENCHANTS, getEnchant, enchantCost, enchantValue } from '../game/enchants'
 import type { OffensiveStat } from '../game/types'
@@ -451,15 +452,20 @@ function GemSection({ item }: { item: Item }) {
   const gems = useGame((s) => s.gems)
   const essence = useGame((s) => s.essence)
   const socketGem = useGame((s) => s.socketGem)
+  const socketCondGem = useGame((s) => s.socketCondGem)
   const unsocketGem = useGame((s) => s.unsocketGem)
   const [open, setOpen] = useState(false)
 
   const sockets = itemSockets(item)
   const filled = item.gems ?? []
   const stock = Object.entries(gems)
-    .filter(([, n]) => n > 0)
+    .filter(([k, n]) => n > 0 && !k.startsWith('cond:'))
     .map(([k, n]) => ({ ...parseGemKey(k), n }))
     .sort((a, b) => b.tier - a.tier || a.type.localeCompare(b.type))
+  const condStock = Object.entries(gems)
+    .filter(([k, n]) => n > 0 && k.startsWith('cond:'))
+    .map(([k, n]) => ({ def: getCondGem(k.slice(5))!, n }))
+    .filter((x) => x.def)
 
   return (
     <div className="rounded border border-sky-800/40 bg-sky-950/10 p-2">
@@ -470,14 +476,24 @@ function GemSection({ item }: { item: Item }) {
       {open && (
         <div className="mt-1.5 space-y-1.5">
           {filled.map((g, i) => {
+            const cond = g.cond ? getCondGem(g.cond) : undefined
             const m = DAMAGE_TYPES[g.type]
-            const cost = unsocketCost(g)
+            const cost = cond ? 2000 : unsocketCost(g)
             return (
               <div key={i} className="flex items-center gap-2 rounded bg-black/20 px-1.5 py-1 text-[10px]">
-                <span className="min-w-0 flex-1 truncate font-medium" style={{ color: m.color }}>
-                  {m.icon} {m.name} {gemTierName(g.tier)}
-                </span>
-                <span className="shrink-0 text-slate-400">+{GEM_DMG[g.tier - 1]}% dég. · +{GEM_RES[g.tier - 1]}% rés.</span>
+                {cond ? (
+                  <span className="min-w-0 flex-1" style={{ color: cond.color }}>
+                    <span className="block truncate font-medium">{cond.icon} {cond.name}</span>
+                    <span className="block text-[9px] leading-snug text-slate-400">{cond.desc}</span>
+                  </span>
+                ) : (
+                  <>
+                    <span className="min-w-0 flex-1 truncate font-medium" style={{ color: m.color }}>
+                      {m.icon} {m.name} {gemTierName(g.tier)}
+                    </span>
+                    <span className="shrink-0 text-slate-400">+{GEM_DMG[g.tier - 1]}% dég. · +{GEM_RES[g.tier - 1]}% rés.</span>
+                  </>
+                )}
                 <button
                   disabled={essence < cost}
                   onClick={() => unsocketGem(item.id, i)}
@@ -490,9 +506,10 @@ function GemSection({ item }: { item: Item }) {
             )
           })}
           {filled.length < sockets && (
-            stock.length === 0 ? (
+            stock.length === 0 && condStock.length === 0 ? (
               <div className="text-[10px] italic text-slate-500">
-                Aucune gemme en stock — chaque gemme tombe dans le biome de SON élément (~1,5% par kill).
+                Aucune gemme en stock — les élémentaires tombent dans le biome de LEUR élément, les
+                gemmes de condition sur les champions ✦ et en raid.
               </div>
             ) : (
               <div className="flex flex-wrap gap-1">
@@ -510,6 +527,17 @@ function GemSection({ item }: { item: Item }) {
                     </button>
                   )
                 })}
+                {condStock.map(({ def, n }) => (
+                  <button
+                    key={def.id}
+                    onClick={() => socketCondGem(item.id, def.id as CondGemId)}
+                    title={def.desc}
+                    className="rounded border px-2 py-1 text-[10px] font-medium hover:bg-white/5"
+                    style={{ color: def.color, borderColor: def.color + '66' }}
+                  >
+                    {def.icon} {def.name} ×{n}
+                  </button>
+                ))}
               </div>
             )
           )}
@@ -550,15 +578,18 @@ function EnchantSection({ item }: { item: Item }) {
                   onClick={() => enchantItem(item.id, e.id)}
                   title={e.description}
                   className={
-                    'flex w-full items-center justify-between gap-1 rounded border px-1.5 py-1 text-left text-[10px] disabled:opacity-40 ' +
+                    'flex w-full flex-col gap-0.5 rounded border px-1.5 py-1 text-left text-[10px] disabled:opacity-40 ' +
                     (on ? 'border-amber-400 bg-amber-900/30 text-amber-200' : 'border-slate-700 text-slate-300 enabled:hover:bg-amber-900/20')
                   }
                 >
-                  <span className="min-w-0 truncate">
-                    {on ? '✓ ' : ''}{e.icon} {e.name}{e.rare ? ' 💎' : ''}
-                    <span className="text-slate-500"> · +{enchantValue(e, item)} {ALL_STAT_META[e.stat].short}</span>
+                  <span className="flex w-full items-center justify-between gap-1">
+                    <span className="min-w-0 truncate">
+                      {on ? '✓ ' : ''}{e.icon} {e.name}{e.rare && !e.rule ? ' 💎' : ''}
+                      <span className="text-slate-500"> · {e.stat ? `+${enchantValue(e, item)} ${ALL_STAT_META[e.stat].short}` : 'RÈGLE'}</span>
+                    </span>
+                    {!on && <span className="shrink-0 text-[9px] text-slate-500">🔧{cost.mastery} ♦{cost.eclats}</span>}
                   </span>
-                  {!on && <span className="shrink-0 text-[9px] text-slate-500">🔧{cost.mastery} ♦{cost.eclats}</span>}
+                  {e.rule && <span className="text-[8.5px] leading-snug text-slate-500">{e.description}</span>}
                 </button>
               )
             })}

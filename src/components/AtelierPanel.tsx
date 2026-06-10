@@ -8,6 +8,7 @@ import { RARITY_LIST } from '../game/rarities'
 import { maxCraftTier, createCost } from '../game/items'
 import { FORGE_UPGRADES, forgeMods, forgeUpgradeCost, forgeUpgradeMaxed } from '../game/forge'
 import { gemKey, gemTierName, GEM_MAX_TIER, GEM_FUSE_COUNT, GEM_FUSE_GOLD, GEM_DMG, GEM_RES } from '../game/gems'
+import { getCondGem } from '../game/condGems'
 import {
   missionLabel, automateRunDuration, automateEfficiency, automateUpgradeCost,
   AUTOMATE_MAX, AUTOMATE_COSTS, AUTOMATE_UPG_MAX, type AutomateMission,
@@ -423,6 +424,24 @@ function GemWorkshop({ unlocked }: { unlocked: boolean }) {
         Chaque gemme tombe dans le biome de SON élément. Sertis-les sur ton stuff (fiche objet, Rare+),
         fusionne 3 gemmes en 1 de qualité supérieure.{!unlocked && ' 🔒 Sertissage : débloque « Sertisseur » ci-dessus.'}
       </p>
+      {/* Gemmes de CONDITION en stock (champions ✦ & raids) — se sertissent via la fiche objet */}
+      {(() => {
+        const conds = Object.entries(gems)
+          .filter(([k, n]) => n > 0 && k.startsWith('cond:'))
+          .map(([k, n]) => ({ def: getCondGem(k.slice(5))!, n }))
+          .filter((x) => x.def)
+        if (!conds.length) return null
+        return (
+          <div className="mb-1.5 space-y-1">
+            {conds.map(({ def, n }) => (
+              <div key={def.id} className="flex items-center gap-1.5 rounded bg-black/20 px-1.5 py-1 text-[10px]">
+                <span className="shrink-0 font-medium" style={{ color: def.color }}>{def.icon} {def.name} ×{n}</span>
+                <span className="min-w-0 flex-1 truncate text-slate-500">{def.desc}</span>
+              </div>
+            ))}
+          </div>
+        )
+      })()}
       {total === 0 ? (
         <div className="text-[10px] italic text-slate-500">Aucune gemme — farme les biomes (~1,5% par kill, plus sur élites/boss).</div>
       ) : (

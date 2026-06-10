@@ -20,7 +20,8 @@ import {
 } from './items'
 import { forgeMods, forgeMasteryGain, getForgeUpgrade, forgeUpgradeCost, forgeUpgradeMaxed } from './forge'
 import { gemKey, itemSockets, unsocketCost, gemTierName, GEM_DROP, GEM_FUSE_COUNT, GEM_FUSE_GOLD, GEM_MAX_TIER } from './gems'
-import { getEnchant, enchantCost } from './enchants'
+import { getEnchant, enchantCost, equippedRules } from './enchants'
+import { condGemFlags, acharneMult, nueeMult, rollCondGem, condGemKey, getCondGem, condGemInstance, type CondGemId } from './condGems'
 import {
   tickAutomates, missionLabel, automateUpgradeCost,
   AUTOMATE_MAX, AUTOMATE_COSTS, AUTOMATE_NAMES, AUTOMATE_UPG_MAX,
@@ -30,7 +31,8 @@ import { makeEnemy, isBossStage, stageIlvl, stageLuckTier } from './enemies'
 import { BIOME_IDS, biomeUnlocked, getBiomeDef, type BiomeId } from './biomes'
 import {
   harmonyBonus, surgeBiome, elanActive,
-  SURGE_GOLD_XP_MULT, SURGE_QUINT_MULT, ELAN_DURATION_MS, ELAN_DMG_MULT, type ElanState,
+  SURGE_GOLD_XP_MULT, SURGE_QUINT_MULT, ELAN_DURATION_MS, ELAN_DMG_MULT,
+  ELAN_VAGABOND_DURATION_MS, ELAN_VAGABOND_MULT, type ElanState,
 } from './biomeBonus'
 import { RARITIES, RARITY_LIST } from './rarities'
 import { SECONDARY_STATS } from './stats'
@@ -250,6 +252,8 @@ interface SaveData {
   recycleThreshold: number
   /** Recyclage automatique : tout butin sous le seuil est recyclé directement au drop. */
   autoRecycle: boolean
+  /** Rune du Karma (pity) : kills depuis le dernier drop Épique+ (compté en permanence). */
+  killsSinceEpic: number
   /** Horodatage de la dernière sauvegarde (progression hors-ligne). */
   lastSeen: number
   /** Horodatage de la dernière rotation de l'échoppe (rotation horaire, indépendante du combat). */
@@ -287,6 +291,8 @@ interface GameState extends SaveData {
   fuseGems: (type: DamageType, tier: number) => void
   /** Sertit une gemme du stock dans une châsse libre de l'objet. */
   socketGem: (itemId: string, type: DamageType, tier: number) => void
+  /** Sertit une gemme de CONDITION (trigger de combat) dans une châsse libre. */
+  socketCondGem: (itemId: string, condId: CondGemId) => void
   /** Désertit la gemme à l'index donné (coût en éclats, gemme rendue au stock). */
   unsocketGem: (itemId: string, index: number) => void
   /** Grave (ou remplace) la rune d'enchantement d'un objet (coût : Savoir-faire + éclats). */
@@ -365,6 +371,26 @@ export function powerCooldowns(char: Character): Record<string, number> {
   return out
 }
 
+/** 🏆 Fragment de Conquête : remet à zéro la PLUS LONGUE recharge de chaque héros. */
+function resetLongestCooldown(chars: Character[]) {
+  for (const c of chars) {
+    let bestKey = ''
+    let best = 0
+    for (const pid of c.powers) {
+      if (!pid) continue
+      const k = `${c.id}:${pid}`
+      const cd = cooldowns.get(k) ?? 0
+      if (cd > best) { best = cd; bestKey = k }
+    }
+    if (bestKey) cooldowns.set(bestKey, 0)
+  }
+}
+
+/** Drapeaux des gemmes de condition pour le pas de combat. */
+function condModsOf(flags: Set<CondGemId>) {
+  return { overkill: flags.has('overkill'), acharne: flags.has('acharne'), nuee: flags.has('nuee') }
+}
+
 function freshSave(): SaveData {
   return {
     characters: [makeCharacter('Héros', 1, 'force')],
@@ -400,6 +426,7 @@ function freshSave(): SaveData {
     inventory: [],
     recycleThreshold: 4,
     autoRecycle: false,
+    killsSinceEpic: 0,
     lastSeen: Date.now(),
     lastShopRefresh: 0,
   }
@@ -489,6 +516,7 @@ function sanitize(save: SaveData): SaveData {
     }))
   if (typeof save.recycleThreshold !== 'number') save.recycleThreshold = 4
   if (typeof save.autoRecycle !== 'boolean') save.autoRecycle = false
+  if (typeof save.killsSinceEpic !== 'number') save.killsSinceEpic = 0
   if (typeof save.lastSeen !== 'number') save.lastSeen = Date.now()
   if (typeof save.lastShopRefresh !== 'number') save.lastShopRefresh = 0
 
@@ -689,6 +717,7 @@ function persist(s: GameState) {
     inventory: s.inventory,
     recycleThreshold: s.recycleThreshold,
     autoRecycle: s.autoRecycle,
+    killsSinceEpic: s.killsSinceEpic,
     lastSeen: Date.now(),
     lastShopRefresh: s.lastShopRefresh,
   }
@@ -880,6 +909,8 @@ interface CombatMods {
   dmgMult?: number
   /** Multiplicateur plat des dégâts du HÉROS (harmonie des biomes, élan du voyageur). */
   heroMult?: number
+  /** Gemmes de condition actives sur l'équipe (triggers de combat — voir condGems.ts). */
+  cond?: { overkill?: boolean; acharne?: boolean; nuee?: boolean }
 }
 
 /** Multiplicateur de dégâts SUBIS par un ennemi (vulnérabilité « Sceau de faiblesse »). */
@@ -1077,6 +1108,10 @@ function tickHeroStatuses(chars: Character[], dt: number) {
 function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: CombatMods) {
   const enemy: Enemy = { ...enemyIn, dot: enemyIn.dot ? { ...enemyIn.dot } : undefined, abilities: enemyIn.abilities?.map((a) => ({ ...a })) }
   const chars: Character[] = input.map((c) => ({ ...c, dots: c.dots?.map((d) => ({ ...d })), weaken: c.weaken ? { ...c.weaken } : undefined }))
+  // Sablier de l'Acharné : l'âge du combat contre CET ennemi nourrit un bonus croissant.
+  if (mods?.cond?.acharne) enemy.age = (enemy.age ?? 0) + dt
+  // Étoile d'Overkill : excédent du coup fatal, reporté sur l'ennemi suivant par l'appelant.
+  let overkill = 0
   // Décompte des statuts transitoires (étourdissement, malédiction, DoT subis) avant d'agir.
   tickHeroStatuses(chars, dt)
   const info = chars.map((c) =>
@@ -1102,7 +1137,8 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
     // Malédiction (debuff ennemi) réduit les dégâts ; Frénésie (« Furie sanguinaire ») les amplifie.
     const weakenMult = c.weaken ? c.weaken.mult : 1
     const frenzyMult = c.frenzy && c.frenzy.remaining > 0 ? c.frenzy.mult : 1
-    const bonusMult = d.cmods.damageMult * lowHp * highHp * weakenMult * frenzyMult * (mods?.heroMult ?? 1)
+    const acharne = mods?.cond?.acharne ? acharneMult(enemy.age ?? 0) : 1
+    const bonusMult = d.cmods.damageMult * lowHp * highHp * weakenMult * frenzyMult * (mods?.heroMult ?? 1) * acharne
     const multistrikeChance = Math.min(0.85, d.derived.multistrike + d.cmods.multistrike)
     let healed = 0
     let dealtThis = 0
@@ -1112,6 +1148,7 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
       for (let s = 0; s < strikes && enemy.hp > 0; s++) {
         const hit = rollHit(d.derived, d.profile, enemy, { bonusMult, execute: d.cmods.execute })
         const dmg = hit.damage * enemyVuln(enemy) // Sceau de faiblesse amplifie aussi les auto-attaques
+        if (mods?.cond?.overkill && dmg > enemy.hp) overkill += dmg - enemy.hp
         enemy.hp = Math.max(0, enemy.hp - dmg)
         totalDealt += dmg
         dealtThis += dmg
@@ -1228,7 +1265,7 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
     if (c.hp < 0) c.hp = 0
   })
 
-  return { chars, enemy, anyAlive: chars.some((c) => c.hp > 0), totalDealt }
+  return { chars, enemy, anyAlive: chars.some((c) => c.hp > 0), totalDealt, overkill }
 }
 
 /**
@@ -1240,6 +1277,10 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
 function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number, mods?: CombatMods) {
   const enemies: Enemy[] = enemiesIn.map((e) => ({ ...e, dot: e.dot ? { ...e.dot } : undefined, abilities: e.abilities?.map((a) => ({ ...a })) }))
   const chars: Character[] = input.map((c) => ({ ...c, dots: c.dots?.map((d) => ({ ...d })), weaken: c.weaken ? { ...c.weaken } : undefined }))
+  // Gemmes de condition : Cœur de Nuée (packs) + Sablier de l'Acharné (âge de la cible focus).
+  const aliveAtStart = enemies.filter((e) => e.hp > 0).length
+  const nuee = mods?.cond?.nuee ? nueeMult(aliveAtStart) : 1
+  if (mods?.cond?.acharne) for (const e of enemies) if (e.hp > 0) e.age = (e.age ?? 0) + dt
   tickHeroStatuses(chars, dt)
   const info = chars.map((c) =>
     c.hp > 0
@@ -1260,7 +1301,8 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
     const highHp = d.cmods.highHp && hpFrac >= d.cmods.highHp.threshold ? d.cmods.highHp.mult : 1
     const weakenMult = c.weaken ? c.weaken.mult : 1
     const frenzyMult = c.frenzy && c.frenzy.remaining > 0 ? c.frenzy.mult : 1
-    const bonusMult = d.cmods.damageMult * lowHp * highHp * weakenMult * frenzyMult * (mods?.heroMult ?? 1)
+    const acharne = mods?.cond?.acharne ? acharneMult(focus()?.age ?? 0) : 1
+    const bonusMult = d.cmods.damageMult * lowHp * highHp * weakenMult * frenzyMult * (mods?.heroMult ?? 1) * nuee * acharne
     const multistrikeChance = Math.min(0.85, d.derived.multistrike + d.cmods.multistrike)
     let healed = 0
     let dealtThis = 0
@@ -1273,6 +1315,19 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
         if (!t2) break
         const hit = rollHit(d.derived, d.profile, t2, { bonusMult, execute: d.cmods.execute })
         const dmg = hit.damage * enemyVuln(t2)
+        // Étoile d'Overkill : l'excédent du coup fatal déborde sur les ennemis suivants du pack
+        // (hors totalDealt → n'alimente pas le Réfléchissant).
+        if (mods?.cond?.overkill && dmg > t2.hp) {
+          let left = dmg - t2.hp
+          t2.hp = 0
+          while (left > 0) {
+            const nx = focus()
+            if (!nx) break
+            const absorbed = Math.min(left, nx.hp)
+            nx.hp -= absorbed
+            left -= absorbed
+          }
+        }
         t2.hp = Math.max(0, t2.hp - dmg)
         totalDealt += dmg
         dealtThis += dmg
@@ -1406,7 +1461,8 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
     if (m.regenPct) regen += m.regenPct
   }
 
-  const res = partyCombatStepMulti(s.characters, d.enemies, dt, { enrage, reflect, regen, fightTime, heroMult: 1 + harmonyBonus(s.biomeBest) })
+  const dFlags = condGemFlags(s.characters)
+  const res = partyCombatStepMulti(s.characters, d.enemies, dt, { enrage, reflect, regen, fightTime, heroMult: 1 + harmonyBonus(s.biomeBest), cond: condModsOf(dFlags) })
   let chars = res.chars
   const enemies = res.enemies
   let log = s.log
@@ -1467,6 +1523,8 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
 
     const nextIndex = d.current + 1
     if (nextIndex >= d.totalFights) {
+      // 🏆 Fragment de Conquête : le boss final du donjon réinitialise les plus longues recharges.
+      if (dFlags.has('conquete')) resetLongestCooldown(chars)
       const rareBonus = d.modifiers.reduce((a, m) => a + (m.rareBonus ?? 0), 0)
       const bias = pickBias(s.characters)
 
@@ -1575,7 +1633,8 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
   const bossIn = r.enemies.find((e) => e.boss && e.hp > 0) ?? r.enemies[0]
   if (mech.includes('execute')) dmgMult *= 1 + (1 - bossIn.hp / Math.max(1, bossIn.maxHp)) * 0.7
 
-  const res = partyCombatStepMulti(s.characters, r.enemies, dt, { enrage, regen: drain, fightTime, dmgMult, heroMult: 1 + harmonyBonus(s.biomeBest) })
+  const rFlags = condGemFlags(s.characters)
+  const res = partyCombatStepMulti(s.characters, r.enemies, dt, { enrage, regen: drain, fightTime, dmgMult, heroMult: 1 + harmonyBonus(s.biomeBest), cond: condModsOf(rFlags) })
   let chars = res.chars
   let enemies = res.enemies
   const aliveBosses = enemies.filter((e) => e.boss && e.hp > 0)
@@ -1636,6 +1695,8 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
   }
 
   if (boss.hp <= 0) {
+    // 🏆 Fragment de Conquête : chaque rencontre de boss vaincue réinitialise les longues recharges.
+    if (rFlags.has('conquete')) resetLongestCooldown(chars)
     const nextIndex = r.current + 1
     if (nextIndex >= r.totalBosses) {
       const tier = r.tier
@@ -1684,6 +1745,14 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
       const raidProgress = { ...s.raidProgress, [r.raidId]: Math.max(s.raidProgress[r.raidId] ?? 0, tier) }
       const repeatLeft = r.repeatLeft ?? 0
 
+      // Gemme de CONDITION (25% par raid vaincu) — l'autre source est le champion ✦ de farm.
+      let gems = s.gems
+      if (Math.random() < 0.25) {
+        const cg = rollCondGem()
+        gems = { ...gems, [condGemKey(cg.id)]: (gems[condGemKey(cg.id)] ?? 0) + 1 }
+        log = pushLog(log, `${cg.icon} GEMME DE CONDITION : ${cg.name} !`, 'loot')
+      }
+
       // Auto-raid : s'il reste des relances ET assez d'Orbes, on encaisse le trésor et on relance.
       if (repeatLeft > 0) {
         const credited = applyChestRewards(s, chest)
@@ -1691,7 +1760,7 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
           const nr = generateRaid(r.raidId, tier)
           nr.repeatLeft = repeatLeft - 1
           const log3 = pushLog(log, `🔁 Auto-raid : trésor encaissé${cosmic ? ` (💫 ×${cosmic})` : ''} · ${repeatLeft} relance${repeatLeft > 1 ? 's' : ''} restante${repeatLeft > 1 ? 's' : ''}.`, 'kill')
-          const next = { ...s, ...credited, characters: healed, raidProgress, orbes: credited.orbes - def.orbeCost, raid: nr, log: log3 }
+          const next = { ...s, ...credited, gems, characters: healed, raidProgress, orbes: credited.orbes - def.orbeCost, raid: nr, log: log3 }
           persist(next)
           set(next)
           return
@@ -1699,7 +1768,7 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
       }
 
       log = pushLog(log, `🏆 RAID VAINCU : ${def.name} (Tier ${tier}) !${cosmic ? ` 💫 Éclat cosmique ×${cosmic} !` : ''} Un trésor t'attend.`, 'kill')
-      const next = { ...s, characters: healed, raid: null, raidProgress, pendingChest: chest, log }
+      const next = { ...s, gems, characters: healed, raid: null, raidProgress, pendingChest: chest, log }
       persist(next)
       set(next)
       return
@@ -1769,7 +1838,7 @@ export const useGame = create<GameState>((set, get) => {
   // plein régime — ce sont des machines). Les clés sont consommées run par run.
   const autoLogLines: string[] = []
   if (elapsed > 60_000 && save.automates.length > 0) {
-    const ar = tickAutomates(save, Math.min(elapsed, 12 * 3600 * 1000) / 1000)
+    const ar = tickAutomates(save, Math.min(elapsed, 12 * 3600 * 1000) / 1000, equippedRules(save.characters).has('econome') ? 0.15 : 0)
     if (ar) {
       Object.assign(save, ar.eco)
       if (ar.xpEach > 0) save.characters = save.characters.map((c) => (c.hp > 0 ? grantXp(c, ar.xpEach) : c))
@@ -1791,7 +1860,7 @@ export const useGame = create<GameState>((set, get) => {
       let s = get()
 
       // Automates de forge : avancent en PARALLÈLE de tout le reste (farm, donjon, raid).
-      const ar = tickAutomates(s, dt)
+      const ar = tickAutomates(s, dt, equippedRules(s.characters).has('econome') ? 0.15 : 0)
       if (ar) {
         let log = s.log
         for (const line of ar.lines) log = pushLog(log, line, 'craft')
@@ -1811,8 +1880,9 @@ export const useGame = create<GameState>((set, get) => {
       }
 
       // Bonus de biome : harmonie (plus petit record) partout, élan du voyageur dans le biome rejoint.
-      const heroMult = (1 + harmonyBonus(s.biomeBest)) * (elanActive(s.elan, s.activeBiome) ? ELAN_DMG_MULT : 1)
-      const res = partyCombatStep(s.characters, s.enemy, dt, { heroMult })
+      const heroMult = (1 + harmonyBonus(s.biomeBest)) * (elanActive(s.elan, s.activeBiome) ? s.elan?.mult ?? ELAN_DMG_MULT : 1)
+      const cFlags = condGemFlags(s.characters)
+      const res = partyCombatStep(s.characters, s.enemy, dt, { heroMult, cond: condModsOf(cFlags) })
       let chars = res.chars
       const enemy = res.enemy
       let log = s.log
@@ -1854,17 +1924,28 @@ export const useGame = create<GameState>((set, get) => {
         const champion = enemy.champion === true
         if (champion) log = pushLog(log, '✦ CHAMPION vaincu : butin exceptionnel !', 'kill')
         else if (elite) log = pushLog(log, '◆ Élite vaincue : butin supérieur !', 'kill')
+        // Runes de RÈGLE portées par l'équipe (Karma, Transmutation brute…).
+        const rules = equippedRules(s.characters)
+        // Rune du Karma : la malchance s'accumule en chance (+1 cran de rareté / 40 kills sans Épique+).
+        const karmaBonus = rules.has('karma') ? Math.min(8, Math.floor(s.killsSinceEpic / 40)) : 0
+        // Rune de Transmutation brute : les monstres NORMAUX ne droppent plus d'objets.
+        const transmut = rules.has('transmutation')
         // Moins d'objets en combat classique (le farm de stuff se fait en donjon/raid).
-        const drops = (boss ? 2 : Math.random() < 0.30 + eco.lootChance ? 1 : 0) + (elite ? 1 : 0) + (champion ? 1 : 0)
+        const drops = transmut && !boss && !elite
+          ? 0
+          : (boss ? 2 : Math.random() < 0.30 + eco.lootChance ? 1 : 0) + (elite ? 1 : 0) + (champion ? 1 : 0)
         const bias = pickBias(chars)
-        const luck = stageLuckTier(stage) + (boss ? 1 : 0) + (elite ? 3 : 0) + (champion ? 5 : 0) + Math.floor(eco.rarityLuck)
+        const luck = stageLuckTier(stage) + (boss ? 1 : 0) + (elite ? 3 : 0) + (champion ? 5 : 0) + Math.floor(eco.rarityLuck) + karmaBonus
         let codex = s.codex
         let autoRec = 0
+        let killsSinceEpic = s.killsSinceEpic + 1
         for (let dd = 0; dd < drops; dd++) {
           // Identité de loot du biome : ~50% dégâts de l'élément, ~25% résistance à l'élément, ~25% neutre.
           const br = Math.random()
           const biomeOpts = br < 0.5 ? { forceDmgType: s.activeBiome } : br < 0.75 ? { biasResist: s.activeBiome } : {}
           const it = generateItem({ ilvl: stageIlvl(stage), luckTier: luck, primaryBias: bias, ...biomeOpts })
+          // Rune du Karma : un drop Épique+ remet le compteur de pitié à zéro.
+          if (RARITIES[it.rarity].tier >= 5) killsSinceEpic = 0
           // Recyclage automatique : tout butin commun sous le seuil part directement en éclats (on garde les uniques).
           if (s.autoRecycle && !it.unique && RARITIES[it.rarity].tier < s.recycleThreshold) {
             essence += Math.round(recycleValue(it) * eco.eclatGain)
@@ -1883,7 +1964,7 @@ export const useGame = create<GameState>((set, get) => {
         let quint = s.quint
         {
           const qBase = boss ? QUINT_DROP.boss : elite ? QUINT_DROP.elite : QUINT_DROP.normal
-          const qChance = qBase * quintTierMult(stage) * (surged ? SURGE_QUINT_MULT : 1)
+          const qChance = qBase * quintTierMult(stage) * (surged ? SURGE_QUINT_MULT : 1) * (transmut ? 2 : 1)
           if (Math.random() < qChance) {
             const t = s.activeBiome
             quint = { ...quint, [t]: (quint[t] ?? 0) + 1 }
@@ -1894,12 +1975,25 @@ export const useGame = create<GameState>((set, get) => {
         // Gemme élémentaire : drop EXCLUSIF au biome assorti (la gemme de feu ne tombe qu'au Feu).
         let gems = s.gems
         {
-          const gBase = boss ? GEM_DROP.boss : elite ? GEM_DROP.elite : GEM_DROP.normal
+          const gBase = (boss ? GEM_DROP.boss : elite ? GEM_DROP.elite : GEM_DROP.normal) * (transmut ? 2 : 1)
           if (Math.random() < gBase) {
             const k = gemKey(s.activeBiome, 1)
             gems = { ...gems, [k]: (gems[k] ?? 0) + 1 }
             log = pushLog(log, `💎 Gemme de ${DAMAGE_TYPES[s.activeBiome].name} (Éclatée) trouvée — exclusive à ce biome !`, 'loot')
           }
+        }
+
+        // Gemme de CONDITION : les champions ✦ en lâchent parfois (12%) — l'autre source : les raids.
+        if (champion && Math.random() < 0.12) {
+          const cg = rollCondGem()
+          gems = { ...gems, [condGemKey(cg.id)]: (gems[condGemKey(cg.id)] ?? 0) + 1 }
+          log = pushLog(log, `${cg.icon} GEMME DE CONDITION : ${cg.name} ! (champion)`, 'loot')
+        }
+
+        // 🏆 Fragment de Conquête : boss/élite vaincu → la plus longue recharge de chacun tombe à zéro.
+        if (cFlags.has('conquete') && (boss || elite)) {
+          resetLongestCooldown(chars)
+          if (boss) log = pushLog(log, '🏆 Fragment de Conquête : recharges réinitialisées !', 'info')
         }
 
         // Le verrou de farm fige la progression au palier courant.
@@ -1926,9 +2020,11 @@ export const useGame = create<GameState>((set, get) => {
 
         // L'échoppe ne se renouvelle plus au boss : rotation horaire gérée dans `tick`.
         const enemyNext = makeEnemy(stage, s.activeBiome)
+        // 🌠 Étoile d'Overkill : l'excédent du coup fatal entame l'ennemi suivant.
+        if (res.overkill > 0) enemyNext.hp = Math.max(1, enemyNext.maxHp - res.overkill)
         if (isBossStage(stage)) log = pushLog(log, `⚔ Un boss vous barre la route : ${enemyNext.name} !`, 'info')
 
-        const next = { ...s, characters, stage, bestStage, biomeBest, gold, sceaux, poussiere, quint, gems, essence, codex, inventory, enemy: enemyNext, log, killCount: s.killCount + 1 }
+        const next = { ...s, characters, stage, bestStage, biomeBest, gold, sceaux, poussiere, quint, gems, essence, codex, inventory, killsSinceEpic, enemy: enemyNext, log, killCount: s.killCount + 1 }
         persist(next)
         set(next)
         return
@@ -1956,12 +2052,17 @@ export const useGame = create<GameState>((set, get) => {
       // Mémorise le palier du biome quitté, charge celui du biome rejoint.
       const biomeStages = { ...s.biomeStages, [s.activeBiome]: s.stage }
       const stage = Math.max(1, biomeStages[biome] ?? 1)
-      // ÉLAN DU VOYAGEUR : +20% dégâts pendant 10 min dans le biome fraîchement rejoint.
-      const elan: ElanState = { biome, until: Date.now() + ELAN_DURATION_MS }
+      // ÉLAN DU VOYAGEUR : +20% dégâts 10 min dans le biome rejoint (Rune du Vagabond : +30%, 20 min).
+      const vagabond = equippedRules(s.characters).has('vagabond')
+      const elan: ElanState = {
+        biome,
+        until: Date.now() + (vagabond ? ELAN_VAGABOND_DURATION_MS : ELAN_DURATION_MS),
+        mult: vagabond ? ELAN_VAGABOND_MULT : ELAN_DMG_MULT,
+      }
       const next = {
         ...s, activeBiome: biome, biomeStages, stage, elan,
         enemy: makeEnemy(stage, biome),
-        log: pushLog(s.log, `🧭 Tu pars pour : ${getBiomeDef(biome).icon} ${getBiomeDef(biome).name} — 🌀 Élan du voyageur : +20% dégâts (10 min).`, 'info'),
+        log: pushLog(s.log, `🧭 Tu pars pour : ${getBiomeDef(biome).icon} ${getBiomeDef(biome).name} — 🌀 Élan du voyageur : +${Math.round(((elan.mult ?? 1.2) - 1) * 100)}% dégâts (${vagabond ? 20 : 10} min).`, 'info'),
       }
       persist(next)
       set(next)
@@ -2296,6 +2397,29 @@ export const useGame = create<GameState>((set, get) => {
       set(next)
     },
 
+    socketCondGem: (itemId, condId) => {
+      const s = get()
+      const mods = forgeMods(s.forgeUpgrades)
+      if (!mods.gems) return // même déblocage que le sertissage (Sertisseur)
+      const def = getCondGem(condId)
+      const item = findItemById(s, itemId)
+      if (!def || !item) return
+      if ((item.gems?.length ?? 0) >= itemSockets(item)) return
+      const key = condGemKey(condId)
+      if ((s.gems[key] ?? 0) < 1) return
+      const upd = applyItemPatch(s, itemId, { gems: [...(item.gems ?? []), condGemInstance(condId)] })
+      if (!upd) return
+      const gain = forgeMasteryGain(RARITIES[item.rarity].tier, 'modify', mods.yieldMult)
+      const next = {
+        ...s, ...upd,
+        gems: { ...s.gems, [key]: (s.gems[key] ?? 0) - 1 },
+        forgeMastery: s.forgeMastery + gain,
+        log: pushLog(s.log, `${def.icon} Sertie : ${def.name} sur ${item.name} (+${gain} 🔧).`, 'craft'),
+      }
+      persist(next)
+      set(next)
+    },
+
     unsocketGem: (itemId, index) => {
       const s = get()
       const mods = forgeMods(s.forgeUpgrades)
@@ -2303,16 +2427,17 @@ export const useGame = create<GameState>((set, get) => {
       const item = findItemById(s, itemId)
       const g = item?.gems?.[index]
       if (!item || !g) return
-      const cost = unsocketCost(g)
+      const cost = g.cond ? 2000 : unsocketCost(g)
       if (s.essence < cost) return
       const upd = applyItemPatch(s, itemId, { gems: item.gems!.filter((_, i) => i !== index) })
       if (!upd) return
-      const key = gemKey(g.type, g.tier)
+      const key = g.cond ? condGemKey(g.cond as CondGemId) : gemKey(g.type, g.tier)
+      const label = g.cond ? getCondGem(g.cond)?.name ?? 'gemme de condition' : `${DAMAGE_TYPES[g.type].name} ${gemTierName(g.tier)}`
       const next = {
         ...s, ...upd,
         essence: s.essence - cost,
         gems: { ...s.gems, [key]: (s.gems[key] ?? 0) + 1 },
-        log: pushLog(s.log, `💎 Désertie : ${DAMAGE_TYPES[g.type].name} ${gemTierName(g.tier)} (-${cost} éclats, gemme rendue).`, 'craft'),
+        log: pushLog(s.log, `💎 Désertie : ${label} (-${cost} éclats, gemme rendue).`, 'craft'),
       }
       persist(next)
       set(next)
@@ -2466,9 +2591,11 @@ export const useGame = create<GameState>((set, get) => {
       if (level < 1 || level > (s.dungeonProgress[dungeonId] ?? 0) + 1) return
       const dungeon = generateDungeon(dungeonId, level)
       dungeon.repeatLeft = Math.max(0, Math.round(repeat) - 1)
-      const cost = def.sceauCost
+      // Rune de l'Économe : 15% de chance de préserver la clé.
+      const saved = def.sceauCost > 0 && equippedRules(s.characters).has('econome') && Math.random() < 0.15
+      const cost = saved ? 0 : def.sceauCost
       const runs = dungeon.repeatLeft > 0 ? ` · auto ×${dungeon.repeatLeft + 1}` : ''
-      const next = { ...s, sceaux: s.sceaux - cost, dungeon, log: pushLog(s.log, `🏰 Entrée dans ${dungeon.name} (${dungeon.totalFights} combats${cost ? `, -${cost} 🔑` : ', gratuit'}${runs}).`, 'info') }
+      const next = { ...s, sceaux: s.sceaux - cost, dungeon, log: pushLog(s.log, `🏰 Entrée dans ${dungeon.name} (${dungeon.totalFights} combats${saved ? ', 🗝️ clé préservée !' : cost ? `, -${cost} 🔑` : ', gratuit'}${runs}).`, 'info') }
       persist(next)
       set(next)
     },
@@ -2491,8 +2618,10 @@ export const useGame = create<GameState>((set, get) => {
       if (s.orbes < def.orbeCost) return
       const raid = generateRaid(raidId, tier)
       raid.repeatLeft = Math.max(0, Math.round(repeat) - 1)
+      // Rune de l'Économe : 15% de chance de préserver l'Orbe.
+      const saved = equippedRules(s.characters).has('econome') && Math.random() < 0.15
       const runs = raid.repeatLeft > 0 ? ` · auto ×${raid.repeatLeft + 1}` : ''
-      const next = { ...s, orbes: s.orbes - def.orbeCost, raid, log: pushLog(s.log, `⚔️ Raid lancé : ${def.name} · Tier ${tier} (${raid.totalBosses} boss${runs}).`, 'info') }
+      const next = { ...s, orbes: s.orbes - (saved ? 0 : def.orbeCost), raid, log: pushLog(s.log, `⚔️ Raid lancé : ${def.name} · Tier ${tier} (${raid.totalBosses} boss${saved ? ' · 🗝️ Orbe préservée !' : ''}${runs}).`, 'info') }
       persist(next)
       set(next)
     },

@@ -130,10 +130,13 @@ export interface UniqueInstance {
 
 // ---- Gemmes (sertissage) ----
 
-/** Une gemme sertie dans une châsse d'objet : élément + qualité (1=Éclatée, 2=Polie, 3=Parfaite). */
+/** Une gemme sertie dans une châsse d'objet : élément + qualité (1=Éclatée, 2=Polie, 3=Parfaite).
+ *  Si `cond` est renseigné, c'est une GEMME DE CONDITION (trigger de combat — voir condGems.ts) :
+ *  type/tier sont alors neutres (tier 0) et n'apportent aucune stat plate. */
 export interface GemInstance {
   type: DamageType
   tier: number
+  cond?: string
 }
 
 // ---- Équipement ----
@@ -393,4 +396,6 @@ export interface Enemy {
   vuln?: { mult: number; remaining: number }
   /** Furie du survivant (duo de boss) : déjà enragé, ne se redéclenche pas. */
   enraged?: boolean
+  /** Âge du combat (s) contre cet ennemi — transitoire, pour le Sablier de l'Acharné. */
+  age?: number
 }

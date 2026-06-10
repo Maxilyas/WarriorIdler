@@ -60,10 +60,15 @@ export function surgeRemainingMs(now = Date.now()): number {
 
 export const ELAN_DURATION_MS = 10 * 60 * 1000
 export const ELAN_DMG_MULT = 1.2
+/** Rune du Vagabond : élan prolongé et renforcé. */
+export const ELAN_VAGABOND_DURATION_MS = 20 * 60 * 1000
+export const ELAN_VAGABOND_MULT = 1.3
 
 export interface ElanState {
   biome: BiomeId
   until: number
+  /** Multiplicateur effectif (1.2 de base, 1.3 avec la Rune du Vagabond). */
+  mult?: number
 }
 
 /** L'élan est-il actif (bon biome + fenêtre temporelle) ? */

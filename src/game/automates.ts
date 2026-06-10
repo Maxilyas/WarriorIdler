@@ -150,7 +150,7 @@ const GAIN_LABELS: Record<string, string> = {
  * assigné à l'Antre des Failles peut donc alimenter les suivants).
  * Renvoie null si aucun automate actif (zéro coût sur le tick).
  */
-export function tickAutomates(input: AutomateEconomy, dt: number): AutomateTickResult | null {
+export function tickAutomates(input: AutomateEconomy, dt: number, keySaveChance = 0): AutomateTickResult | null {
   if (!input.automates.some((a) => a.mission && !a.paused)) return null
   const eco: AutomateEconomy = { ...input, automates: input.automates.map((a) => ({ ...a, bank: { ...a.bank } })) }
   const lines: string[] = []
@@ -171,8 +171,11 @@ export function tickAutomates(input: AutomateEconomy, dt: number): AutomateTickR
         break
       }
       a.waiting = false
-      eco.sceaux -= key.sceaux
-      eco.orbes -= key.orbes
+      // Rune de l'Économe : chance de préserver la clé (s'applique aussi aux machines).
+      if (!(keySaveChance > 0 && Math.random() < keySaveChance)) {
+        eco.sceaux -= key.sceaux
+        eco.orbes -= key.orbes
+      }
       a.progress -= duration
       runs++
       const gains = runGains(a.mission)
