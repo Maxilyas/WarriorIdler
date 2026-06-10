@@ -214,22 +214,42 @@ export function CombatPanel() {
         </div>
       )}
 
-      {/* Ligne « zone » : biome + palier + verrou en un seul rail — détail en feuille */}
+      {/* Ligne « zone » : biome (→ feuille) + stepper de palier + cadenas, le tout inline */}
       {!dungeon && !raid && (
-        <button
-          onClick={() => setZoneOpen(true)}
-          className="flex w-full items-center justify-between gap-2 rounded-xl border border-slate-800 bg-[#0d111a] px-3 py-2.5 text-xs"
-        >
-          <span className="flex min-w-0 items-center gap-1.5">
+        <div className="flex w-full items-center gap-1 rounded-xl border border-slate-800 bg-[#0d111a] px-2 py-1.5 text-xs">
+          <button onClick={() => setZoneOpen(true)} className="flex min-w-0 flex-1 items-center gap-1.5 rounded-lg px-1 py-1.5 hover:bg-white/5">
             <span className="shrink-0 text-slate-500">🧭</span>
             <span className="truncate font-semibold" style={{ color: biomeDef.color }}>{biomeDef.icon} {biomeDef.name}</span>
-            <span className="shrink-0 text-slate-400">
-              · Palier <b className="text-slate-100">{stage}</b><span className="text-slate-600">/{activeBiomeBest}</span>
-            </span>
-            {farmLock && <span className="shrink-0 text-amber-400">🔒</span>}
+            <span className="shrink-0 text-slate-500">▸</span>
+          </button>
+          <button
+            onClick={() => setStage(stage - 1)}
+            disabled={stage <= 1}
+            aria-label="Palier précédent"
+            className="shrink-0 rounded-lg border border-slate-700 px-2.5 py-1.5 text-sm text-slate-300 hover:bg-white/5 disabled:opacity-30"
+          >
+            −
+          </button>
+          <span className="shrink-0 px-0.5 tabular-nums text-slate-400">
+            <b className="text-slate-100">{stage}</b><span className="text-slate-600">/{activeBiomeBest}</span>
           </span>
-          <span className="shrink-0 text-slate-500">▸</span>
-        </button>
+          <button
+            onClick={() => setStage(stage + 1)}
+            disabled={stage >= activeBiomeBest}
+            aria-label="Palier suivant"
+            className="shrink-0 rounded-lg border border-slate-700 px-2.5 py-1.5 text-sm text-slate-300 hover:bg-white/5 disabled:opacity-30"
+          >
+            +
+          </button>
+          <button
+            onClick={toggleFarmLock}
+            title={farmLock ? 'Verrouillé — le combat reste à ce palier' : 'Libre — progression normale au fil des victoires'}
+            aria-label="Verrou de farm"
+            className={'shrink-0 rounded-lg px-2 py-1.5 text-sm ' + (farmLock ? 'bg-amber-600/30 text-amber-300' : 'text-slate-500 hover:bg-white/5')}
+          >
+            {farmLock ? '🔒' : '🔓'}
+          </button>
+        </div>
       )}
 
       {/* Feuille zone : choix du biome, palier, verrou de farm */}
@@ -566,7 +586,7 @@ function abilityHint(a: EnemyAbility): string {
 function nextObjective(bestStage: number, maxLevel: number, physiqueBest: number): string | null {
   if (bestStage < 3) return 'Frappe ! Tue des ennemis pour ramasser du butin, puis équipe tes meilleures pièces dans l\'onglet 🎒 Stuff.'
   if (bestStage < 10) return 'Les ennemis frappent de plus en plus fort : équipe-toi (Endurance, résistances). Le palier 10 débloque le 🏪 Marché — un boss t\'y attend.'
-  if (bestStage < 12) return 'Palier 12 : l\'🔨 Atelier de forge ouvre dans l\'onglet Stuff. Recycle ton butin pour des ♦ éclats en attendant.'
+  if (bestStage < 12) return 'Palier 12 : l\'onglet 🔨 Atelier ouvre (forge, métiers). Recycle ton butin pour des ♦ éclats en attendant.'
   if (maxLevel <= TALENT_START_LEVEL) return `Monte un personnage au niveau ${TALENT_START_LEVEL + 1} (hub 🛡 Héros) pour débloquer l'arbre de 🌌 Talents.`
   if (physiqueBest < 20) return 'Atteins le palier 20 aux Champs de Bataille pour débloquer 4 nouveaux 🧭 biomes (Feu, Froid, Foudre, Nature) et les 🏰 Expéditions (donjons).'
   if (bestStage < 50) return 'Atteins le palier 50 (n\'importe quel biome) pour débloquer les ☠️ Raids (hub Expéditions) et les biomes Arcane & Ombre.'
