@@ -23,9 +23,13 @@ import {
   levelFromXp, METIERS, METIER_LIST, AUTOMATE_FORGERON_LEVELS,
   type MetierId, type MetiersState,
 } from './metiers'
-import { gemKey, itemSockets, unsocketCost, gemTierName, GEM_DROP, GEM_FUSE_COUNT, GEM_FUSE_GOLD, GEM_MAX_TIER } from './gems'
+import { itemSockets, unsocketCost, parseGemKey } from './gems'
 import { getEnchant, enchantCost, equippedRules } from './enchants'
-import { condGemFlags, acharneMult, nueeMult, rollCondGem, condGemKey, getCondGem, condGemInstance, type CondGemId } from './condGems'
+import {
+  condGemMods, acharneMult, nueeMult, rollCondGem, condGemKey, parseCondKey, getCondGem, condGemInstance,
+  gemMaxRank, grindDust, legacyGemDust, recutCost, BIOME_GEM_FAMILY, COND_GEM_DROP, GEM_DUST_DROP, GEM_CUT_COST,
+  type CondGemId, type CondMods,
+} from './condGems'
 import {
   tickAutomates, missionLabel, automateUpgradeCost,
   AUTOMATE_MAX, AUTOMATE_COSTS, AUTOMATE_NAMES, AUTOMATE_UPG_MAX,
@@ -162,7 +166,8 @@ function gemStockAdd(stock: Record<string, number>, item: Item): Record<string, 
   if (!item.gems?.length) return stock
   const out = { ...stock }
   for (const g of item.gems) {
-    const k = gemKey(g.type, g.tier)
+    if (!g.cond) continue // vestige élémentaire (ne devrait plus exister après migration)
+    const k = condGemKey(g.cond as CondGemId, g.rank ?? 1)
     out[k] = (out[k] ?? 0) + 1
   }
   return out
@@ -227,8 +232,10 @@ interface SaveData {
   poussiere: number
   /** Quintessences élémentaires : 1 par type de dégâts (drop ~1% par biome). Craft typé sur le stuff. */
   quint: Record<DamageType, number>
-  /** Stock de gemmes élémentaires (clé `${type}:${tier}`) — drop exclusif au biome assorti. */
+  /** Stock de gemmes de CONDITION (clé `cond:id[:rang]`) — drop par famille de biome. */
   gems: Record<string, number>
+  /** Poussière de gemme 🔹 : broyage → taille (gemme au choix) & recoupe (rangs). Joaillier. */
+  gemDust: number
   essences: Record<string, number>
   sceaux: number
   dungeonProgress: DungeonProgress
@@ -290,14 +297,16 @@ interface GameState extends SaveData {
   transmute: (itemId: string, newPrimary: OffensiveStat) => void
   /** Améliore (ou ajoute) la ligne typée (dégâts/résist) d'un objet via une Quintessence du type. */
   enhanceTyped: (itemId: string, type: DamageType, kind: 'dmgType' | 'resist') => void
-  /** Fusionne 3 gemmes d'une qualité en 1 de la qualité supérieure (coût en or). */
-  fuseGems: (type: DamageType, tier: number) => void
-  /** Sertit une gemme du stock dans une châsse libre de l'objet. */
-  socketGem: (itemId: string, type: DamageType, tier: number) => void
-  /** Sertit une gemme de CONDITION (trigger de combat) dans une châsse libre. */
-  socketCondGem: (itemId: string, condId: CondGemId) => void
-  /** Désertit la gemme à l'index donné (coût en éclats, gemme rendue au stock). */
+  /** Sertit une gemme de CONDITION du stock (trigger de combat) dans une châsse libre. */
+  socketCondGem: (itemId: string, condId: CondGemId, rank?: number) => void
+  /** Désertit la gemme à l'index donné (coût en éclats, gemme rendue au stock avec son rang). */
   unsocketGem: (itemId: string, index: number) => void
+  /** BROYAGE (Joaillier) : réduit une gemme du stock en poussière 🔹. */
+  grindGem: (key: string) => void
+  /** TAILLE (Joaillier) : façonne la gemme de son CHOIX (rang 1) contre de la poussière 🔹. */
+  cutGem: (condId: CondGemId) => void
+  /** RECOUPE (Joaillier) : monte d'un rang le paramètre d'une gemme SERTIE (poussière 🔹). */
+  recutGem: (itemId: string, index: number) => void
   /** Grave (ou remplace) la rune d'enchantement d'un objet (coût : Savoir-faire + éclats). */
   enchantItem: (itemId: string, enchantId: string) => void
   createItem: (opts: CreateOptions) => void
@@ -411,8 +420,30 @@ function resetLongestCooldown(chars: Character[]) {
 }
 
 /** Drapeaux des gemmes de condition pour le pas de combat. */
-function condModsOf(flags: Set<CondGemId>) {
-  return { overkill: flags.has('overkill'), acharne: flags.has('acharne'), nuee: flags.has('nuee') }
+// État transitoire des gemmes de condition (compteurs de rythme). Non persisté, comme les cooldowns.
+// Clés : `metronome:<charId>` (attaques), `echo` (sorts d'équipe), `crescendo` (kills d'équipe).
+const gemCounters = new Map<string, number>()
+
+/** Bonus du Crescendo : +1% de dégâts par kill, capé — remis à zéro quand l'équipe tombe. */
+function crescendoBonus(cap?: number): number {
+  return cap ? Math.min(cap, 0.01 * (gemCounters.get('crescendo') ?? 0)) : 0
+}
+function crescendoAdd(kills: number) {
+  gemCounters.set('crescendo', (gemCounters.get('crescendo') ?? 0) + kills)
+}
+function crescendoReset() {
+  gemCounters.delete('crescendo')
+}
+
+/** Trésorerie de guerre : chaque kill blinde un bouclier (2% PV max, cumul capé). */
+function tresorerieShield(chars: Character[], cap?: number) {
+  if (!cap) return
+  for (const c of chars) {
+    if (c.hp <= 0) continue
+    const mh = charMaxHp(c)
+    const capV = cap * mh
+    if ((c.absorb ?? 0) < capV) c.absorb = Math.min(capV, (c.absorb ?? 0) + 0.02 * mh)
+  }
 }
 
 function freshSave(): SaveData {
@@ -431,6 +462,7 @@ function freshSave(): SaveData {
     poussiere: 0,
     quint: emptyQuint(),
     gems: {},
+    gemDust: 0,
     essences: {},
     sceaux: 0,
     dungeonProgress: emptyDungeonProgress(),
@@ -522,6 +554,32 @@ function sanitize(save: SaveData): SaveData {
   }
   if (typeof save.farmLock !== 'boolean') save.farmLock = false
   if (!save.gems || typeof save.gems !== 'object') save.gems = {}
+  if (typeof save.gemDust !== 'number') save.gemDust = 0
+  // Migration gemmes (v0.22) : les ÉLÉMENTAIRES sont broyées en poussière 🔹, les gemmes de
+  // condition gagnent un rang (clé `cond:id[:rang]`). S'applique au stock ET aux gemmes serties.
+  {
+    for (const k of Object.keys(save.gems)) {
+      if (k.startsWith('cond:')) {
+        if (!parseCondKey(k)) delete save.gems[k] // gemme disparue du registre
+        continue
+      }
+      const g = parseGemKey(k)
+      save.gemDust += (save.gems[k] ?? 0) * legacyGemDust(g.tier || 1)
+      delete save.gems[k]
+    }
+    const migrateItemGems = (it: Item) => {
+      if (!it.gems?.length) return
+      const keep: typeof it.gems = []
+      for (const g of it.gems) {
+        if (g.cond && getCondGem(g.cond)) keep.push({ ...g, rank: g.rank ?? 1 })
+        else save.gemDust += legacyGemDust(g.tier || 1)
+      }
+      it.gems = keep.length ? keep : undefined
+    }
+    for (const it of save.inventory) migrateItemGems(it)
+    for (const it of save.shopStock ?? []) migrateItemGems(it)
+    for (const c of save.characters) for (const slot in c.equipment) { const it = c.equipment[slot as EquipSlotId]; if (it) migrateItemGems(it) }
+  }
   // Automates : valide la structure (mission, bornes d'amélioration, banque).
   if (!Array.isArray(save.automates)) save.automates = []
   save.automates = save.automates
@@ -758,6 +816,7 @@ function persist(s: GameState) {
     poussiere: s.poussiere,
     quint: s.quint,
     gems: s.gems,
+    gemDust: s.gemDust,
     essences: s.essences,
     sceaux: s.sceaux,
     dungeonProgress: s.dungeonProgress,
@@ -966,10 +1025,10 @@ interface CombatMods {
   fightTime?: number
   /** Multiplicateur plat des dégâts ennemis (enrage dur / acharnement de raid). */
   dmgMult?: number
-  /** Multiplicateur plat des dégâts du HÉROS (harmonie des biomes, élan du voyageur). */
+  /** Multiplicateur plat des dégâts du HÉROS (harmonie des biomes, élan, crescendo, environnement). */
   heroMult?: number
   /** Gemmes de condition actives sur l'équipe (triggers de combat — voir condGems.ts). */
-  cond?: { overkill?: boolean; acharne?: boolean; nuee?: boolean }
+  cond?: CondMods
 }
 
 /** Multiplicateur de dégâts SUBIS par un ennemi (vulnérabilité « Sceau de faiblesse »). */
@@ -1168,9 +1227,13 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
   const enemy: Enemy = { ...enemyIn, dot: enemyIn.dot ? { ...enemyIn.dot } : undefined, abilities: enemyIn.abilities?.map((a) => ({ ...a })) }
   const chars: Character[] = input.map((c) => ({ ...c, dots: c.dots?.map((d) => ({ ...d })), weaken: c.weaken ? { ...c.weaken } : undefined }))
   // Sablier de l'Acharné : l'âge du combat contre CET ennemi nourrit un bonus croissant.
-  if (mods?.cond?.acharne) enemy.age = (enemy.age ?? 0) + dt
+  if (mods?.cond?.acharneCap) enemy.age = (enemy.age ?? 0) + dt
   // Étoile d'Overkill : excédent du coup fatal, reporté sur l'ennemi suivant par l'appelant.
   let overkill = 0
+  // Œil de l'Opportuniste : bonus pendant qu'une technique ennemie INCANTE (télégraphe visible).
+  const opportunisteMult = mods?.cond?.opportuniste && enemy.abilities?.some((a) => (a.cast ?? 0) > 0)
+    ? 1 + mods.cond.opportuniste
+    : 1
   // Décompte des statuts transitoires (étourdissement, malédiction, DoT subis) avant d'agir.
   tickHeroStatuses(chars, dt)
   const info = chars.map((c) =>
@@ -1196,16 +1259,26 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
     // Malédiction (debuff ennemi) réduit les dégâts ; Frénésie (« Furie sanguinaire ») les amplifie.
     const weakenMult = c.weaken ? c.weaken.mult : 1
     const frenzyMult = c.frenzy && c.frenzy.remaining > 0 ? c.frenzy.mult : 1
-    const acharne = mods?.cond?.acharne ? acharneMult(enemy.age ?? 0) : 1
-    const bonusMult = d.cmods.damageMult * lowHp * highHp * weakenMult * frenzyMult * (mods?.heroMult ?? 1) * acharne
+    const acharne = mods?.cond?.acharneCap ? acharneMult(enemy.age ?? 0, mods.cond.acharneCap) : 1
+    // 🫁 Second Souffle : le dos au mur (sous 30% PV) rend féroce.
+    const souffle = mods?.cond?.souffle && hpFrac <= 0.3 ? 1 + mods.cond.souffle : 1
+    const bonusMult = d.cmods.damageMult * lowHp * highHp * weakenMult * frenzyMult * (mods?.heroMult ?? 1) * acharne * souffle * opportunisteMult
     const multistrikeChance = Math.min(0.85, d.derived.multistrike + d.cmods.multistrike)
+    const metroN = mods?.cond?.metronomeN
     let healed = 0
     let dealtThis = 0
     for (let h = 0; h < whole && enemy.hp > 0; h++) {
+      // 🎼 Métronome : toutes les N attaques auto, la suivante est un CRITIQUE garanti.
+      let forceCrit = false
+      if (metroN) {
+        const mk = `metronome:${c.id}`
+        const n = (gemCounters.get(mk) ?? 0) + 1
+        if (n >= metroN) { forceCrit = true; gemCounters.set(mk, 0) } else gemCounters.set(mk, n)
+      }
       // Multifrappe : chance de déclencher un coup supplémentaire.
       const strikes = 1 + (Math.random() < multistrikeChance ? 1 : 0)
       for (let s = 0; s < strikes && enemy.hp > 0; s++) {
-        const hit = rollHit(d.derived, d.profile, enemy, { bonusMult, execute: d.cmods.execute })
+        const hit = rollHit(d.derived, d.profile, enemy, { bonusMult, execute: d.cmods.execute, forceCrit: forceCrit && s === 0 })
         const dmg = hit.damage * enemyVuln(enemy) // Sceau de faiblesse amplifie aussi les auto-attaques
         if (mods?.cond?.overkill && dmg > enemy.hp) overkill += dmg - enemy.hp
         enemy.hp = Math.max(0, enemy.hp - dmg)
@@ -1245,11 +1318,24 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
       const cd = (cooldowns.get(key) ?? 0) - dt
       const auto = c.powerAuto?.[slot] !== false
       if (cd <= 0 && !stunned && (auto || manualFire.has(key))) {
-        cooldowns.set(key, (p.cooldown ?? 3) * (1 - d.derived.cdr))
+        // 🩸 Pacte sanglant : recharges raccourcies, mais chaque lancement coûte 2% des PV max.
+        const pacte = mods?.cond?.pacteCdr ?? 0
+        cooldowns.set(key, (p.cooldown ?? 3) * (1 - d.derived.cdr) * (1 - pacte))
+        if (pacte > 0) c.hp = Math.max(1, c.hp - 0.02 * charMaxHp(c))
         manualFire.delete(key)
         const dealt = fireActive(p, c, d.derived, d.profile, chars, enemy, d.cmods.hot)
         // Vengeance différée : compte AUSSI les dégâts des sorts dans le cumul.
         if (c.charge && dealt > 0) c.charge.dealt += dealt
+        // 🔔 Pierre d'Écho : tous les N sorts de l'équipe, le suivant résonne une 2e fois (50%).
+        const echoN = mods?.cond?.echoN
+        if (echoN) {
+          const n = (gemCounters.get('echo') ?? 0) + 1
+          if (n >= echoN) {
+            gemCounters.set('echo', 0)
+            const echoDealt = fireActive(p, c, d.derived, d.profile, chars, enemy, d.cmods.hot, 0.5)
+            if (c.charge && echoDealt > 0) c.charge.dealt += echoDealt
+          } else gemCounters.set('echo', n)
+        }
       } else {
         cooldowns.set(key, Math.max(0, cd))
         if (!auto && !stunned) manualFire.delete(key) // cast manuel strict : pas de file d'attente
@@ -1338,8 +1424,12 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
   const chars: Character[] = input.map((c) => ({ ...c, dots: c.dots?.map((d) => ({ ...d })), weaken: c.weaken ? { ...c.weaken } : undefined }))
   // Gemmes de condition : Cœur de Nuée (packs) + Sablier de l'Acharné (âge de la cible focus).
   const aliveAtStart = enemies.filter((e) => e.hp > 0).length
-  const nuee = mods?.cond?.nuee ? nueeMult(aliveAtStart) : 1
-  if (mods?.cond?.acharne) for (const e of enemies) if (e.hp > 0) e.age = (e.age ?? 0) + dt
+  const nuee = mods?.cond?.nueePer ? nueeMult(aliveAtStart, mods.cond.nueePer) : 1
+  if (mods?.cond?.acharneCap) for (const e of enemies) if (e.hp > 0) e.age = (e.age ?? 0) + dt
+  // Œil de l'Opportuniste : bonus tant qu'au moins un ennemi du pack INCANTE (télégraphe).
+  const opportunisteMult = mods?.cond?.opportuniste && enemies.some((e) => e.hp > 0 && e.abilities?.some((a) => (a.cast ?? 0) > 0))
+    ? 1 + mods.cond.opportuniste
+    : 1
   tickHeroStatuses(chars, dt)
   const info = chars.map((c) =>
     c.hp > 0
@@ -1360,19 +1450,29 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
     const highHp = d.cmods.highHp && hpFrac >= d.cmods.highHp.threshold ? d.cmods.highHp.mult : 1
     const weakenMult = c.weaken ? c.weaken.mult : 1
     const frenzyMult = c.frenzy && c.frenzy.remaining > 0 ? c.frenzy.mult : 1
-    const acharne = mods?.cond?.acharne ? acharneMult(focus()?.age ?? 0) : 1
-    const bonusMult = d.cmods.damageMult * lowHp * highHp * weakenMult * frenzyMult * (mods?.heroMult ?? 1) * nuee * acharne
+    const acharne = mods?.cond?.acharneCap ? acharneMult(focus()?.age ?? 0, mods.cond.acharneCap) : 1
+    // 🫁 Second Souffle : sous 30% PV, le héros frappe plus fort.
+    const souffle = mods?.cond?.souffle && hpFrac <= 0.3 ? 1 + mods.cond.souffle : 1
+    const bonusMult = d.cmods.damageMult * lowHp * highHp * weakenMult * frenzyMult * (mods?.heroMult ?? 1) * nuee * acharne * souffle * opportunisteMult
     const multistrikeChance = Math.min(0.85, d.derived.multistrike + d.cmods.multistrike)
+    const metroN = mods?.cond?.metronomeN
     let healed = 0
     let dealtThis = 0
     for (let h = 0; h < whole; h++) {
       const target = focus()
       if (!target) break
+      // 🎼 Métronome : critique garanti toutes les N attaques auto.
+      let forceCrit = false
+      if (metroN) {
+        const mk = `metronome:${c.id}`
+        const n = (gemCounters.get(mk) ?? 0) + 1
+        if (n >= metroN) { forceCrit = true; gemCounters.set(mk, 0) } else gemCounters.set(mk, n)
+      }
       const strikes = 1 + (Math.random() < multistrikeChance ? 1 : 0)
       for (let st = 0; st < strikes; st++) {
         const t2 = focus()
         if (!t2) break
-        const hit = rollHit(d.derived, d.profile, t2, { bonusMult, execute: d.cmods.execute })
+        const hit = rollHit(d.derived, d.profile, t2, { bonusMult, execute: d.cmods.execute, forceCrit: forceCrit && st === 0 })
         const dmg = hit.damage * enemyVuln(t2)
         // Étoile d'Overkill : l'excédent du coup fatal déborde sur les ennemis suivants du pack
         // (hors totalDealt → n'alimente pas le Réfléchissant).
@@ -1425,13 +1525,26 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
       const cd = (cooldowns.get(key) ?? 0) - dt
       const auto = c.powerAuto?.[slot] !== false
       if (cd <= 0 && !stunned && (auto || manualFire.has(key))) {
-        cooldowns.set(key, (p.cooldown ?? 3) * (1 - d.derived.cdr))
+        // 🩸 Pacte sanglant : recharges raccourcies contre 2% des PV max par lancement.
+        const pacte = mods?.cond?.pacteCdr ?? 0
+        cooldowns.set(key, (p.cooldown ?? 3) * (1 - d.derived.cdr) * (1 - pacte))
+        if (pacte > 0) c.hp = Math.max(1, c.hp - 0.02 * charMaxHp(c))
         manualFire.delete(key)
-        let dealt = 0
-        if (p.effect === 'cleave' || p.effect === 'megaCleave') {
-          for (const e of enemies) if (e.hp > 0) dealt += fireActive(p, c, d.derived, d.profile, chars, e, d.cmods.hot, d.cmods.damageMult)
-        } else {
-          dealt = fireActive(p, c, d.derived, d.profile, chars, focus() ?? enemies[0], d.cmods.hot, d.cmods.damageMult)
+        const cast = (mult: number): number => {
+          let dd = 0
+          if (p.effect === 'cleave' || p.effect === 'megaCleave') {
+            for (const e of enemies) if (e.hp > 0) dd += fireActive(p, c, d.derived, d.profile, chars, e, d.cmods.hot, d.cmods.damageMult * mult)
+          } else {
+            dd = fireActive(p, c, d.derived, d.profile, chars, focus() ?? enemies[0], d.cmods.hot, d.cmods.damageMult * mult)
+          }
+          return dd
+        }
+        let dealt = cast(1)
+        // 🔔 Pierre d'Écho : tous les N sorts de l'équipe, le suivant résonne une 2e fois (50%).
+        const echoN = mods?.cond?.echoN
+        if (echoN) {
+          const n = (gemCounters.get('echo') ?? 0) + 1
+          if (n >= echoN) { gemCounters.set('echo', 0); dealt += cast(0.5) } else gemCounters.set('echo', n)
         }
         if (c.charge && dealt > 0) c.charge.dealt += dealt
       } else {
@@ -1520,13 +1633,15 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
     if (m.regenPct) regen += m.regenPct
   }
 
-  const dFlags = condGemFlags(s.characters)
-  const res = partyCombatStepMulti(s.characters, d.enemies, dt, { enrage, reflect, regen, fightTime, heroMult: 1 + harmonyBonus(s.biomeBest), cond: condModsOf(dFlags) })
+  const dCond = condGemMods(s.characters)
+  const dHeroMult = (1 + harmonyBonus(s.biomeBest)) * (1 + crescendoBonus(dCond.crescendoCap))
+  const res = partyCombatStepMulti(s.characters, d.enemies, dt, { enrage, reflect, regen, fightTime, heroMult: dHeroMult, cond: dCond })
   let chars = res.chars
   const enemies = res.enemies
   let log = s.log
 
   if (!res.anyAlive) {
+    crescendoReset() // 📯 Crescendo : l'équipe tombe, le cumul retombe
     const healed = chars.map(fullHeal)
     log = pushLog(log, `💀 Échec dans ${d.name} ! L'équipe bat en retraite.`, 'death')
     const next = { ...s, characters: healed, dungeon: null, log }
@@ -1536,6 +1651,9 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
   }
 
   if (enemies.every((e) => e.hp <= 0)) {
+    // 📯 Crescendo & 🛡️ Trésorerie : chaque combat de pack nettoyé compte ses kills.
+    crescendoAdd(enemies.length)
+    tresorerieShield(chars, dCond.tresorerieCap)
     const eco = computeGlobalMods(s.upgrades)
     const lv = d.level
     const packXp = enemies.reduce((a, e) => a + (e.xp ?? 0), 0)
@@ -1583,7 +1701,7 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
     const nextIndex = d.current + 1
     if (nextIndex >= d.totalFights) {
       // 🏆 Fragment de Conquête : le boss final du donjon réinitialise les plus longues recharges.
-      if (dFlags.has('conquete')) resetLongestCooldown(chars)
+      if (dCond.conquete) resetLongestCooldown(chars)
       const rareBonus = d.modifiers.reduce((a, m) => a + (m.rareBonus ?? 0), 0)
       const bias = pickBias(s.characters)
 
@@ -1692,8 +1810,9 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
   const bossIn = r.enemies.find((e) => e.boss && e.hp > 0) ?? r.enemies[0]
   if (mech.includes('execute')) dmgMult *= 1 + (1 - bossIn.hp / Math.max(1, bossIn.maxHp)) * 0.7
 
-  const rFlags = condGemFlags(s.characters)
-  const res = partyCombatStepMulti(s.characters, r.enemies, dt, { enrage, regen: drain, fightTime, dmgMult, heroMult: 1 + harmonyBonus(s.biomeBest), cond: condModsOf(rFlags) })
+  const rCond = condGemMods(s.characters)
+  const rHeroMult = (1 + harmonyBonus(s.biomeBest)) * (1 + crescendoBonus(rCond.crescendoCap))
+  const res = partyCombatStepMulti(s.characters, r.enemies, dt, { enrage, regen: drain, fightTime, dmgMult, heroMult: rHeroMult, cond: rCond })
   let chars = res.chars
   let enemies = res.enemies
   const aliveBosses = enemies.filter((e) => e.boss && e.hp > 0)
@@ -1744,6 +1863,7 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
   })
 
   if (!chars.some((c) => c.hp > 0)) {
+    crescendoReset() // 📯 Crescendo : l'équipe tombe, le cumul retombe
     const healed = chars.map(fullHeal)
     const why = mech.includes('berserk') && overtime > 0 ? ' (enrage mortel — il fallait plus de DPS)' : ''
     log = pushLog(log, `💀 Raid échoué : ${r.name}${why}. L'équipe est anéantie.`, 'death')
@@ -1755,7 +1875,10 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
 
   if (boss.hp <= 0) {
     // 🏆 Fragment de Conquête : chaque rencontre de boss vaincue réinitialise les longues recharges.
-    if (rFlags.has('conquete')) resetLongestCooldown(chars)
+    if (rCond.conquete) resetLongestCooldown(chars)
+    // 📯 Crescendo & 🛡️ Trésorerie : un boss de raid compte comme un kill.
+    crescendoAdd(1)
+    tresorerieShield(chars, rCond.tresorerieCap)
     const nextIndex = r.current + 1
     if (nextIndex >= r.totalBosses) {
       const tier = r.tier
@@ -1939,14 +2062,22 @@ export const useGame = create<GameState>((set, get) => {
       }
 
       // Bonus de biome : harmonie (plus petit record) partout, élan du voyageur dans le biome rejoint.
-      const heroMult = (1 + harmonyBonus(s.biomeBest)) * (elanActive(s.elan, s.activeBiome) ? s.elan?.mult ?? ELAN_DMG_MULT : 1)
-      const cFlags = condGemFlags(s.characters)
-      const res = partyCombatStep(s.characters, s.enemy, dt, { heroMult, cond: condModsOf(cFlags) })
+      // + gemmes d'ENVIRONNEMENT (🌩️ Orage en Surcharge, 👣 Nomade pendant l'Élan) et 📯 Crescendo.
+      const cond = condGemMods(s.characters)
+      const surgedNow = surgeBiome() === s.activeBiome
+      const elanOn = elanActive(s.elan, s.activeBiome)
+      const heroMult = (1 + harmonyBonus(s.biomeBest))
+        * (elanOn ? s.elan?.mult ?? ELAN_DMG_MULT : 1)
+        * (1 + crescendoBonus(cond.crescendoCap))
+        * (surgedNow && cond.orage ? 1 + cond.orage : 1)
+        * (elanOn && cond.nomade ? 1 + cond.nomade : 1)
+      const res = partyCombatStep(s.characters, s.enemy, dt, { heroMult, cond })
       let chars = res.chars
       const enemy = res.enemy
       let log = s.log
 
       if (!res.anyAlive) {
+        crescendoReset() // 📯 Crescendo : l'équipe tombe, le cumul retombe
         const stage = Math.max(1, s.stage - RETREAT_STAGES)
         const healed = chars.map(fullHeal)
         log = pushLog(log, `💀 Équipe vaincue ! Repli au palier ${stage}.`, 'death')
@@ -1959,6 +2090,9 @@ export const useGame = create<GameState>((set, get) => {
       if (enemy.hp <= 0) {
         let { stage, bestStage, gold, sceaux, inventory, poussiere, essence } = s
         const boss = isBossStage(stage)
+        // 📯 Crescendo & 🛡️ Trésorerie : chaque kill nourrit le cumul / blinde le bouclier.
+        crescendoAdd(1)
+        tresorerieShield(chars, cond.tresorerieCap)
         const eco = computeGlobalMods(s.upgrades)
         // SURCHARGE élémentaire : le biome tournant rapporte +50% or/XP et ×2 quintessence.
         const surged = surgeBiome() === s.activeBiome
@@ -2034,26 +2168,38 @@ export const useGame = create<GameState>((set, get) => {
           }
         }
 
-        // Gemme élémentaire : drop EXCLUSIF au biome assorti (la gemme de feu ne tombe qu'au Feu).
+        // 🔹 Poussière de gemme : matière première du Joaillier (taille & recoupe).
         let gems = s.gems
+        let gemDust = s.gemDust
         {
-          const gBase = (boss ? GEM_DROP.boss : elite ? GEM_DROP.elite : GEM_DROP.normal) * (transmut ? 2 : 1) * cmods.gemDropMult
-          if (Math.random() < gBase) {
-            const k = gemKey(s.activeBiome, 1)
+          const rank2 = boss ? 'boss' : elite ? 'elite' : 'normal'
+          const dustC = GEM_DUST_DROP.chance[rank2] * (transmut ? 2 : 1) * cmods.gemDropMult
+          if (Math.random() < dustC) {
+            const amt = GEM_DUST_DROP.amount[rank2]
+            gemDust += amt
+            log = pushLog(log, `🔹 +${amt} poussière de gemme.`, 'loot')
+          }
+          // Gemme de CONDITION : drop par FAMILLE selon le biome (Feu/Foudre → Rythme,
+          // Ombre/Nature → Flux, Arcane/Froid → Environnement, Physique → au hasard).
+          const gemC = COND_GEM_DROP[rank2] * (transmut ? 2 : 1) * cmods.gemDropMult
+          if (Math.random() < gemC) {
+            const cg = rollCondGem(BIOME_GEM_FAMILY[s.activeBiome])
+            const k = condGemKey(cg.id)
             gems = { ...gems, [k]: (gems[k] ?? 0) + 1 }
-            log = pushLog(log, `💎 Gemme de ${DAMAGE_TYPES[s.activeBiome].name} (Éclatée) trouvée — exclusive à ce biome !`, 'loot')
+            log = pushLog(log, `${cg.icon} GEMME : ${cg.name} (${cg.family}) — drop de biome !`, 'loot')
           }
         }
 
-        // Gemme de CONDITION : les champions ✦ en lâchent parfois (12%) — l'autre source : les raids.
+        // Gemme de CONDITION : les champions ✦ en lâchent parfois (12%, toutes familles).
         if (champion && Math.random() < 0.12 * cmods.gemDropMult) {
           const cg = rollCondGem()
-          gems = { ...gems, [condGemKey(cg.id)]: (gems[condGemKey(cg.id)] ?? 0) + 1 }
+          const k = condGemKey(cg.id)
+          gems = { ...gems, [k]: (gems[k] ?? 0) + 1 }
           log = pushLog(log, `${cg.icon} GEMME DE CONDITION : ${cg.name} ! (champion)`, 'loot')
         }
 
         // 🏆 Fragment de Conquête : boss/élite vaincu → la plus longue recharge de chacun tombe à zéro.
-        if (cFlags.has('conquete') && (boss || elite)) {
+        if (cond.conquete && (boss || elite)) {
           resetLongestCooldown(chars)
           if (boss) log = pushLog(log, '🏆 Fragment de Conquête : recharges réinitialisées !', 'info')
         }
@@ -2086,7 +2232,7 @@ export const useGame = create<GameState>((set, get) => {
         if (res.overkill > 0) enemyNext.hp = Math.max(1, enemyNext.maxHp - res.overkill)
         if (isBossStage(stage)) log = pushLog(log, `⚔ Un boss vous barre la route : ${enemyNext.name} !`, 'info')
 
-        const next = { ...s, characters, stage, bestStage, biomeBest, gold, sceaux, poussiere, quint, gems, essence, codex, inventory, killsSinceEpic, enemy: enemyNext, log, killCount: s.killCount + 1 }
+        const next = { ...s, characters, stage, bestStage, biomeBest, gold, sceaux, poussiere, quint, gems, gemDust, essence, codex, inventory, killsSinceEpic, enemy: enemyNext, log, killCount: s.killCount + 1 }
         persist(next)
         set(next)
         return
@@ -2434,58 +2580,17 @@ export const useGame = create<GameState>((set, get) => {
       set(next)
     },
 
-    fuseGems: (type, tier) => {
-      const s = get()
-      if (tier < 1 || tier >= GEM_MAX_TIER) return
-      const key = gemKey(type, tier)
-      const have = s.gems[key] ?? 0
-      const goldCost = GEM_FUSE_GOLD[tier - 1]
-      if (have < GEM_FUSE_COUNT || s.gold < goldCost) return
-      const up = gemKey(type, tier + 1)
-      const gems = { ...s.gems, [key]: have - GEM_FUSE_COUNT, [up]: (s.gems[up] ?? 0) + 1 }
-      const g = gainMetierXp(s, 'joaillier', metierXpGain(tier + 2, 'modify'))
-      const next = {
-        ...s, gold: s.gold - goldCost, gems, metiers: g.metiers,
-        log: pushLog(g.log, `💎 Fusion : 3 ${DAMAGE_TYPES[type].name} ${gemTierName(tier)} → 1 ${gemTierName(tier + 1)} (-${goldCost.toLocaleString('fr-FR')} or).`, 'craft'),
-      }
-      persist(next)
-      set(next)
-    },
-
-    socketGem: (itemId, type, tier) => {
+    socketCondGem: (itemId, condId, rank = 1) => {
       const s = get()
       const mods = craftMods(s.metiers)
       if (!mods.gems) return // débloqué via l'arbre du Joaillier (Sertissage)
-      const item = findItemById(s, itemId)
-      if (!item) return
-      if ((item.gems?.length ?? 0) >= itemSockets(item, mods.weaponSocketBonus)) return
-      const key = gemKey(type, tier)
-      if ((s.gems[key] ?? 0) < 1) return
-      const upd = applyItemPatch(s, itemId, { gems: [...(item.gems ?? []), { type, tier }] })
-      if (!upd) return
-      const gain = metierXpGain(RARITIES[item.rarity].tier, 'modify')
-      const g = gainMetierXp(s, 'joaillier', gain)
-      const next = {
-        ...s, ...upd,
-        gems: { ...s.gems, [key]: (s.gems[key] ?? 0) - 1 },
-        metiers: g.metiers,
-        log: pushLog(g.log, `💎 Sertie : ${DAMAGE_TYPES[type].name} ${gemTierName(tier)} sur ${item.name} (+${gain} XP 💎).`, 'craft'),
-      }
-      persist(next)
-      set(next)
-    },
-
-    socketCondGem: (itemId, condId) => {
-      const s = get()
-      const mods = craftMods(s.metiers)
-      if (!mods.gems) return // même déblocage que le sertissage (Joaillier)
       const def = getCondGem(condId)
       const item = findItemById(s, itemId)
       if (!def || !item) return
       if ((item.gems?.length ?? 0) >= itemSockets(item, mods.weaponSocketBonus)) return
-      const key = condGemKey(condId)
+      const key = condGemKey(condId, rank)
       if ((s.gems[key] ?? 0) < 1) return
-      const upd = applyItemPatch(s, itemId, { gems: [...(item.gems ?? []), condGemInstance(condId)] })
+      const upd = applyItemPatch(s, itemId, { gems: [...(item.gems ?? []), condGemInstance(condId, rank)] })
       if (!upd) return
       const gain = metierXpGain(RARITIES[item.rarity].tier, 'modify')
       const g = gainMetierXp(s, 'joaillier', gain)
@@ -2493,7 +2598,7 @@ export const useGame = create<GameState>((set, get) => {
         ...s, ...upd,
         gems: { ...s.gems, [key]: (s.gems[key] ?? 0) - 1 },
         metiers: g.metiers,
-        log: pushLog(g.log, `${def.icon} Sertie : ${def.name} sur ${item.name} (+${gain} XP 💎).`, 'craft'),
+        log: pushLog(g.log, `${def.icon} Sertie : ${def.name}${rank > 1 ? ` (rang ${rank})` : ''} sur ${item.name} (+${gain} XP 💎).`, 'craft'),
       }
       persist(next)
       set(next)
@@ -2504,19 +2609,84 @@ export const useGame = create<GameState>((set, get) => {
       const mods = craftMods(s.metiers)
       if (!mods.gems) return
       const item = findItemById(s, itemId)
-      const g = item?.gems?.[index]
-      if (!item || !g) return
-      const cost = Math.round((g.cond ? 2000 : unsocketCost(g)) * mods.unsocketCostMult)
+      const gem = item?.gems?.[index]
+      if (!item || !gem?.cond) return
+      const cost = Math.round(unsocketCost() * mods.unsocketCostMult)
       if (s.essence < cost) return
       const upd = applyItemPatch(s, itemId, { gems: item.gems!.filter((_, i) => i !== index) })
       if (!upd) return
-      const key = g.cond ? condGemKey(g.cond as CondGemId) : gemKey(g.type, g.tier)
-      const label = g.cond ? getCondGem(g.cond)?.name ?? 'gemme de condition' : `${DAMAGE_TYPES[g.type].name} ${gemTierName(g.tier)}`
+      const key = condGemKey(gem.cond as CondGemId, gem.rank ?? 1)
+      const label = getCondGem(gem.cond)?.name ?? 'gemme'
       const next = {
         ...s, ...upd,
         essence: s.essence - cost,
         gems: { ...s.gems, [key]: (s.gems[key] ?? 0) + 1 },
-        log: pushLog(s.log, `💎 Désertie : ${label} (-${cost} éclats, gemme rendue).`, 'craft'),
+        log: pushLog(s.log, `💎 Désertie : ${label} (-${cost} éclats, gemme rendue avec son rang).`, 'craft'),
+      }
+      persist(next)
+      set(next)
+    },
+
+    grindGem: (key) => {
+      const s = get()
+      const mods = craftMods(s.metiers)
+      if (!mods.broyage) return // nœud « Broyage » de l'arbre du Joaillier
+      const parsed = parseCondKey(key)
+      if (!parsed || (s.gems[key] ?? 0) < 1) return
+      const dust = grindDust(parsed.rank)
+      const gems = { ...s.gems, [key]: (s.gems[key] ?? 0) - 1 }
+      if (gems[key] <= 0) delete gems[key]
+      const g = gainMetierXp(s, 'joaillier', metierXpGain(2 + parsed.rank, 'modify'))
+      const next = {
+        ...s, gems, gemDust: s.gemDust + dust, metiers: g.metiers,
+        log: pushLog(g.log, `⚒️ Broyée : ${parsed.def.name} → +${dust} 🔹 poussière.`, 'craft'),
+      }
+      persist(next)
+      set(next)
+    },
+
+    cutGem: (condId) => {
+      const s = get()
+      const mods = craftMods(s.metiers)
+      if (!mods.taille) return // nœud « Taille » de l'arbre du Joaillier
+      const def = getCondGem(condId)
+      if (!def || s.gemDust < GEM_CUT_COST) return
+      const key = condGemKey(condId)
+      const g = gainMetierXp(s, 'joaillier', metierXpGain(5, 'create'))
+      const next = {
+        ...s,
+        gemDust: s.gemDust - GEM_CUT_COST,
+        gems: { ...s.gems, [key]: (s.gems[key] ?? 0) + 1 },
+        metiers: g.metiers,
+        log: pushLog(g.log, `✂️ Taillée : ${def.icon} ${def.name} (-${GEM_CUT_COST} 🔹).`, 'craft'),
+      }
+      persist(next)
+      set(next)
+    },
+
+    recutGem: (itemId, index) => {
+      const s = get()
+      const mods = craftMods(s.metiers)
+      if (!mods.recoupe) return // nœud « Recoupe » de l'arbre du Joaillier
+      const item = findItemById(s, itemId)
+      const gem = item?.gems?.[index]
+      if (!item || !gem?.cond) return
+      const def = getCondGem(gem.cond)
+      if (!def) return
+      const rank = gem.rank ?? 1
+      if (rank >= gemMaxRank(def)) return
+      const cost = recutCost(rank)
+      if (s.gemDust < cost) return
+      const gemsArr = item.gems!.map((x, i) => (i === index ? { ...x, rank: rank + 1 } : x))
+      const upd = applyItemPatch(s, itemId, { gems: gemsArr })
+      if (!upd) return
+      const gain = metierXpGain(4 + rank, 'ascend')
+      const g = gainMetierXp(s, 'joaillier', gain)
+      const next = {
+        ...s, ...upd,
+        gemDust: s.gemDust - cost,
+        metiers: g.metiers,
+        log: pushLog(g.log, `🔬 Recoupe : ${def.name} → rang ${rank + 1} (-${cost} 🔹, +${gain} XP 💎).`, 'craft'),
       }
       persist(next)
       set(next)

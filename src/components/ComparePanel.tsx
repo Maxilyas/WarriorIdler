@@ -9,8 +9,8 @@ import {
   quintCost, QUINT_GAIN,
 } from '../game/items'
 import { craftMods } from '../game/metiers'
-import { itemSockets, parseGemKey, unsocketCost, gemTierName, GEM_DMG, GEM_RES } from '../game/gems'
-import { getCondGem, type CondGemId } from '../game/condGems'
+import { itemSockets, unsocketCost } from '../game/gems'
+import { getCondGem, parseCondKey, gemDesc, gemValue, gemMaxRank, recutCost, GEM_FAMILIES } from '../game/condGems'
 import { getSet } from '../game/sets'
 import { ENCHANTS, getEnchant, enchantCost, enchantValue } from '../game/enchants'
 import type { OffensiveStat } from '../game/types'
@@ -456,28 +456,26 @@ function QuintessenceSection({ item }: { item: Item }) {
 }
 
 /**
- * Châsses & gemmes : sertir une gemme élémentaire du stock, désertir contre des éclats.
- * Les gemmes tombent CHACUNE dans le biome de leur élément (5e mécanique de biome).
+ * Châsses & gemmes de CONDITION : sertir depuis le stock, désertir (rang conservé),
+ * RECOUPER une gemme sertie (monte son paramètre d'un rang, contre de la poussière 🔹).
  */
 function GemSection({ item }: { item: Item }) {
   const gems = useGame((s) => s.gems)
+  const gemDust = useGame((s) => s.gemDust)
   const essence = useGame((s) => s.essence)
-  const socketGem = useGame((s) => s.socketGem)
   const socketCondGem = useGame((s) => s.socketCondGem)
   const unsocketGem = useGame((s) => s.unsocketGem)
+  const recutGem = useGame((s) => s.recutGem)
   const mods = craftMods(useGame((s) => s.metiers))
   const [open, setOpen] = useState(false)
 
   const sockets = itemSockets(item, mods.weaponSocketBonus)
   const filled = item.gems ?? []
-  const stock = Object.entries(gems)
-    .filter(([k, n]) => n > 0 && !k.startsWith('cond:'))
-    .map(([k, n]) => ({ ...parseGemKey(k), n }))
-    .sort((a, b) => b.tier - a.tier || a.type.localeCompare(b.type))
+  const unsocket = Math.round(unsocketCost() * mods.unsocketCostMult)
   const condStock = Object.entries(gems)
-    .filter(([k, n]) => n > 0 && k.startsWith('cond:'))
-    .map(([k, n]) => ({ def: getCondGem(k.slice(5))!, n }))
-    .filter((x) => x.def)
+    .filter(([, n]) => n > 0)
+    .map(([k, n]) => ({ key: k, parsed: parseCondKey(k), n }))
+    .filter((x): x is { key: string; parsed: NonNullable<ReturnType<typeof parseCondKey>>; n: number } => !!x.parsed)
 
   return (
     <div className="rounded border border-sky-800/40 bg-sky-950/10 p-2">
@@ -489,65 +487,56 @@ function GemSection({ item }: { item: Item }) {
         <div className="mt-1.5 space-y-1.5">
           {filled.map((g, i) => {
             const cond = g.cond ? getCondGem(g.cond) : undefined
-            const m = DAMAGE_TYPES[g.type]
-            const cost = Math.round((cond ? 2000 : unsocketCost(g)) * mods.unsocketCostMult)
+            if (!cond) return null
+            const rank = g.rank ?? 1
+            const maxR = gemMaxRank(cond)
+            const rCost = recutCost(rank)
             return (
               <div key={i} className="flex items-center gap-2 rounded bg-black/20 px-1.5 py-1 text-[10px]">
-                {cond ? (
-                  <span className="min-w-0 flex-1" style={{ color: cond.color }}>
-                    <span className="block truncate font-medium">{cond.icon} {cond.name}</span>
-                    <span className="block text-[9px] leading-snug text-slate-400">{cond.desc}</span>
+                <span className="min-w-0 flex-1" style={{ color: cond.color }}>
+                  <span className="block truncate font-medium">
+                    {GEM_FAMILIES[cond.family].icon} {cond.icon} {cond.name}
+                    {maxR > 1 && <span className="text-slate-400"> · rang {rank}/{maxR}</span>}
                   </span>
-                ) : (
-                  <>
-                    <span className="min-w-0 flex-1 truncate font-medium" style={{ color: m.color }}>
-                      {m.icon} {m.name} {gemTierName(g.tier)}
-                    </span>
-                    <span className="shrink-0 text-slate-400">+{GEM_DMG[g.tier - 1]}% dég. · +{GEM_RES[g.tier - 1]}% rés.</span>
-                  </>
+                  <span className="block text-[9px] leading-snug text-slate-400">{gemDesc(cond, rank)}</span>
+                </span>
+                {mods.recoupe && rank < maxR && (
+                  <button
+                    disabled={gemDust < rCost}
+                    onClick={() => recutGem(item.id, i)}
+                    title={`Recoupe → rang ${rank + 1} : ${gemDesc(cond, rank + 1)} (-${rCost} 🔹)`}
+                    className="shrink-0 rounded border border-sky-700/40 px-1.5 py-1 font-medium text-sky-200 hover:bg-sky-900/30 disabled:opacity-40"
+                  >
+                    🔬 {gemValue(cond, rank + 1)} · {rCost} 🔹
+                  </button>
                 )}
                 <button
-                  disabled={essence < cost}
+                  disabled={essence < unsocket}
                   onClick={() => unsocketGem(item.id, i)}
-                  title={`Désertir (-${cost} éclats, gemme rendue)`}
+                  title={`Désertir (-${unsocket} éclats, gemme rendue avec son rang)`}
                   className="shrink-0 rounded bg-slate-800 px-1.5 py-1 text-slate-400 hover:text-red-400 disabled:opacity-40"
                 >
-                  ✕ ♦{cost}
+                  ✕ ♦{unsocket}
                 </button>
               </div>
             )
           })}
           {filled.length < sockets && (
-            stock.length === 0 && condStock.length === 0 ? (
+            condStock.length === 0 ? (
               <div className="text-[10px] italic text-slate-500">
-                Aucune gemme en stock — les élémentaires tombent dans le biome de LEUR élément, les
-                gemmes de condition sur les champions ✦ et en raid.
+                Aucune gemme en stock — drops par famille de biome, champions ✦, raids, ou la ✂️ Taille (Atelier · Joaillier).
               </div>
             ) : (
               <div className="flex flex-wrap gap-1">
-                {stock.map((g) => {
-                  const m = DAMAGE_TYPES[g.type]
-                  return (
-                    <button
-                      key={`${g.type}:${g.tier}`}
-                      onClick={() => socketGem(item.id, g.type, g.tier)}
-                      title={`+${GEM_DMG[g.tier - 1]}% dégâts ${m.name} · +${GEM_RES[g.tier - 1]}% résistance`}
-                      className="rounded border border-sky-700/40 px-2 py-1 text-[10px] font-medium hover:bg-sky-900/30"
-                      style={{ color: m.color }}
-                    >
-                      {m.icon} {gemTierName(g.tier)} ×{g.n}
-                    </button>
-                  )
-                })}
-                {condStock.map(({ def, n }) => (
+                {condStock.map(({ key, parsed, n }) => (
                   <button
-                    key={def.id}
-                    onClick={() => socketCondGem(item.id, def.id as CondGemId)}
-                    title={def.desc}
+                    key={key}
+                    onClick={() => socketCondGem(item.id, parsed.def.id, parsed.rank)}
+                    title={gemDesc(parsed.def, parsed.rank)}
                     className="rounded border px-2 py-1 text-[10px] font-medium hover:bg-white/5"
-                    style={{ color: def.color, borderColor: def.color + '66' }}
+                    style={{ color: parsed.def.color, borderColor: parsed.def.color + '66' }}
                   >
-                    {def.icon} {def.name} ×{n}
+                    {parsed.def.icon} {parsed.def.name}{parsed.rank > 1 ? ` R${parsed.rank}` : ''} ×{n}
                   </button>
                 ))}
               </div>

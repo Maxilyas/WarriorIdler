@@ -21,6 +21,8 @@ export interface HitOpts {
   bonusMult?: number
   /** Exécution : ×mult si les PV de l'ennemi sont sous threshold. */
   execute?: { threshold: number; mult: number }
+  /** 🎼 Métronome : critique GARANTI sur ce coup (ignore l'esquive ennemie aussi). */
+  forceCrit?: boolean
 }
 
 /**
@@ -33,9 +35,9 @@ export interface HitOpts {
 export function rollHit(derived: DerivedStats, profile: DamageProfile, enemy: Enemy, opts: HitOpts = {}): HitResult {
   // Esquive ennemie (annulée par la Précision) : le coup peut être totalement manqué.
   const effDodge = Math.max(0, (enemy.dodge ?? 0) - derived.precision)
-  if (effDodge > 0 && Math.random() < effDodge) return { damage: 0, crit: false, heal: 0, miss: true }
+  if (!opts.forceCrit && effDodge > 0 && Math.random() < effDodge) return { damage: 0, crit: false, heal: 0, miss: true }
 
-  const crit = Math.random() < derived.critChance
+  const crit = opts.forceCrit || Math.random() < derived.critChance
   const critMult = crit ? derived.critMult : 1
   let raw = derived.power * derived.masteryMult * derived.overpower * critMult * (opts.bonusMult ?? 1)
   // Dégâts vs Boss : bonus contre boss & élites uniquement.

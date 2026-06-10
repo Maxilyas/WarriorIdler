@@ -56,6 +56,7 @@ export default function App() {
   const essence = useGame((s) => s.essence)
   const noyau = useGame((s) => s.noyau)
   const poussiere = useGame((s) => s.poussiere)
+  const gemDust = useGame((s) => s.gemDust)
   const quint = useGame((s) => s.quint)
   const orbes = useGame((s) => s.orbes)
   const fragments = useGame((s) => s.fragments)
@@ -103,6 +104,7 @@ export default function App() {
     { icon: '♦', name: 'Éclats d\'arcane', value: essence, cls: 'text-cyan-300' },
     { icon: '💠', name: 'Noyaux primordiaux', value: noyau, cls: 'text-fuchsia-300' },
     { icon: '🌌', name: 'Poussière d\'étoile', value: poussiere, cls: 'text-indigo-300' },
+    { icon: '🔹', name: 'Poussière de gemme', value: gemDust, cls: 'text-sky-300' },
     { icon: '⚗️', name: 'Quintessences élémentaires', value: quintTotal, cls: 'text-emerald-300' },
     { icon: '🔮', name: 'Orbes de raid', value: orbes, cls: 'text-rose-300' },
     { icon: '✨', name: 'Fragments d\'éternité', value: fragments, cls: 'text-sky-300' },

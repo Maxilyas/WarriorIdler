@@ -130,13 +130,14 @@ export interface UniqueInstance {
 
 // ---- Gemmes (sertissage) ----
 
-/** Une gemme sertie dans une châsse d'objet : élément + qualité (1=Éclatée, 2=Polie, 3=Parfaite).
- *  Si `cond` est renseigné, c'est une GEMME DE CONDITION (trigger de combat — voir condGems.ts) :
- *  type/tier sont alors neutres (tier 0) et n'apportent aucune stat plate. */
+/** Une gemme sertie dans une châsse. v0.22 : TOUTES les gemmes vivantes sont des gemmes de
+ *  CONDITION (`cond` renseigné, voir condGems.ts) — type/tier sont des vestiges du format
+ *  élémentaire (migré en poussière). `rank` = rang de recoupe du Joaillier. */
 export interface GemInstance {
   type: DamageType
   tier: number
   cond?: string
+  rank?: number
 }
 
 // ---- Équipement ----

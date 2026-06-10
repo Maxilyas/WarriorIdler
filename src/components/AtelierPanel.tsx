@@ -12,8 +12,10 @@ import {
   type MetierId,
 } from '../game/metiers'
 import { ENCHANTS } from '../game/enchants'
-import { gemKey, gemTierName, GEM_MAX_TIER, GEM_FUSE_COUNT, GEM_FUSE_GOLD, GEM_DMG, GEM_RES } from '../game/gems'
-import { getCondGem } from '../game/condGems'
+import {
+  COND_GEM_LIST, GEM_FAMILIES, GEM_CUT_COST, parseCondKey, gemDesc, gemMaxRank, grindDust,
+  type GemFamily, type CondGemId,
+} from '../game/condGems'
 import {
   missionLabel, automateRunDuration, automateEfficiency, automateUpgradeCost,
   AUTOMATE_MAX, AUTOMATE_COSTS, AUTOMATE_UPG_MAX, type AutomateMission,
@@ -540,77 +542,104 @@ function AutomateWorkshop() {
 
 function GemWorkshop() {
   const gems = useGame((s) => s.gems)
-  const gold = useGame((s) => s.gold)
-  const fuseGems = useGame((s) => s.fuseGems)
+  const gemDust = useGame((s) => s.gemDust)
+  const grindGem = useGame((s) => s.grindGem)
+  const cutGem = useGame((s) => s.cutGem)
   const metiers = useGame((s) => s.metiers)
   const mods = craftMods(metiers)
-  const total = Object.values(gems).reduce((a, b) => a + b, 0)
+  const [cutOpen, setCutOpen] = useState(false)
+  const [cutFamily, setCutFamily] = useState<GemFamily | 'all'>('all')
+
+  // Stock : entrées `cond:id[:rang]` décodées, groupées par famille.
+  const stock = Object.entries(gems)
+    .filter(([, n]) => n > 0)
+    .map(([k, n]) => ({ key: k, parsed: parseCondKey(k), n }))
+    .filter((x): x is { key: string; parsed: NonNullable<ReturnType<typeof parseCondKey>>; n: number } => !!x.parsed)
+    .sort((a, b) => a.parsed.def.family.localeCompare(b.parsed.def.family) || a.parsed.def.name.localeCompare(b.parsed.def.name))
+  const total = stock.reduce((a, x) => a + x.n, 0)
+  const cutList = COND_GEM_LIST.filter((g) => cutFamily === 'all' || g.family === cutFamily)
 
   return (
     <div className="mb-3 rounded-xl border border-sky-800/40 bg-sky-950/10 p-2.5">
       <div className="mb-1.5 flex items-center justify-between">
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-sky-300">💎 Taillerie de gemmes</span>
-        <span className="text-[10px] text-slate-500">{total} en stock</span>
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-sky-300">💎 Taillerie</span>
+        <span className="text-[10px] text-slate-400">🔹 {gemDust.toLocaleString('fr-FR')} poussière · {total} gemme{total > 1 ? 's' : ''}</span>
       </div>
       <p className="mb-1.5 text-[9.5px] leading-snug text-slate-500">
-        Chaque gemme tombe dans le biome de SON élément. Sertis-les sur ton stuff (fiche objet, Rare+),
-        fusionne 3 gemmes en 1 de qualité supérieure.{!mods.gems && ' 🔒 Sertissage : apprends le nœud « Sertissage » ci-dessus.'}
+        Les gemmes de CONDITION programment le combat (3 familles : 🥁 Rythme, 🌊 Flux, 🌍 Environnement).
+        Elles droppent par famille selon le biome ; sertis-les via la fiche d'un objet (Rare+).
+        La RECOUPE (paramètres) se fait sur les gemmes SERTIES, depuis la fiche de l'objet.
+        {!mods.gems && ' 🔒 Sertissage : apprends le nœud ci-dessus.'}
       </p>
-      {/* Gemmes de CONDITION en stock (champions ✦ & raids) — se sertissent via la fiche objet */}
-      {(() => {
-        const conds = Object.entries(gems)
-          .filter(([k, n]) => n > 0 && k.startsWith('cond:'))
-          .map(([k, n]) => ({ def: getCondGem(k.slice(5))!, n }))
-          .filter((x) => x.def)
-        if (!conds.length) return null
-        return (
-          <div className="mb-1.5 space-y-1">
-            {conds.map(({ def, n }) => (
-              <div key={def.id} className="flex items-center gap-1.5 rounded bg-black/20 px-1.5 py-1 text-[10px]">
-                <span className="shrink-0 font-medium" style={{ color: def.color }}>{def.icon} {def.name} ×{n}</span>
-                <span className="min-w-0 flex-1 truncate text-slate-500">{def.desc}</span>
-              </div>
-            ))}
-          </div>
-        )
-      })()}
+
+      {/* Stock */}
       {total === 0 ? (
-        <div className="text-[10px] italic text-slate-500">Aucune gemme — farme les biomes (~1,5% par kill, plus sur élites/boss).</div>
+        <div className="text-[10px] italic text-slate-500">
+          Aucune gemme — drops de biome (rare), champions ✦ (12%), raids… ou la TAILLE ci-dessous.
+        </div>
       ) : (
         <div className="space-y-1">
-          {DAMAGE_TYPE_LIST.map((t) => {
-            const counts = [1, 2, 3].map((tier) => gems[gemKey(t, tier)] ?? 0)
-            if (counts.every((c) => c === 0)) return null
-            const m = DAMAGE_TYPES[t]
+          {stock.map(({ key, parsed, n }) => {
+            const fam = GEM_FAMILIES[parsed.def.family]
             return (
-              <div key={t} className="flex items-center gap-1.5 rounded bg-black/20 px-1.5 py-1 text-[10px]">
-                <span className="w-16 shrink-0 truncate font-medium" style={{ color: m.color }}>{m.icon} {m.name}</span>
-                <span className="flex flex-1 flex-wrap items-center gap-x-2 gap-y-0.5 text-slate-300">
-                  {counts.map((c, i) => (c > 0 ? <span key={i} title={`+${GEM_DMG[i]}% dég. · +${GEM_RES[i]}% rés.`}>{gemTierName(i + 1)} ×{c}</span> : null))}
+              <div key={key} className="flex items-center gap-1.5 rounded bg-black/20 px-1.5 py-1 text-[10px]">
+                <span className="shrink-0 font-medium" style={{ color: parsed.def.color }} title={fam.name}>
+                  {fam.icon} {parsed.def.icon} {parsed.def.name}{parsed.rank > 1 ? ` R${parsed.rank}` : ''} ×{n}
                 </span>
-                <span className="flex shrink-0 gap-1">
-                  {[1, 2].map((tier) =>
-                    tier < GEM_MAX_TIER && (gems[gemKey(t, tier)] ?? 0) >= GEM_FUSE_COUNT ? (
-                      <button
-                        key={tier}
-                        disabled={gold < GEM_FUSE_GOLD[tier - 1]}
-                        onClick={() => fuseGems(t, tier)}
-                        title={`3 ${gemTierName(tier)} → 1 ${gemTierName(tier + 1)} · ${GEM_FUSE_GOLD[tier - 1].toLocaleString('fr-FR')} or`}
-                        className="rounded border border-sky-700/40 px-1.5 py-1 font-medium text-sky-200 hover:bg-sky-900/30 disabled:opacity-40"
-                      >
-                        ⏫ {gemTierName(tier + 1)}
-                      </button>
-                    ) : null,
-                  )}
-                </span>
+                <span className="min-w-0 flex-1 truncate text-slate-500">{gemDesc(parsed.def, parsed.rank)}</span>
+                {mods.broyage && (
+                  <button
+                    onClick={() => grindGem(key)}
+                    title={`Broyer → +${grindDust(parsed.rank)} 🔹`}
+                    className="shrink-0 rounded bg-slate-800 px-1.5 py-1 text-slate-400 hover:text-sky-200"
+                  >
+                    ⚒️ +{grindDust(parsed.rank)} 🔹
+                  </button>
+                )}
               </div>
             )
           })}
         </div>
       )}
-      <p className="mt-2 text-[9px] italic text-slate-600">
-        À venir : broyage en poussière, taille au choix, recoupe des paramètres — la refonte « gemmes de condition » arrive.
-      </p>
+
+      {/* Taille : façonner la gemme de son choix (déblocage par l'arbre) */}
+      {mods.taille ? (
+        <div className="mt-2">
+          <button onClick={() => setCutOpen((o) => !o)} className="flex w-full items-center justify-between py-1 text-[11px] font-semibold text-sky-200">
+            <span>✂️ Tailler une gemme au choix · {GEM_CUT_COST} 🔹</span>
+            <span>{cutOpen ? '▾' : '▸'}</span>
+          </button>
+          {cutOpen && (
+            <>
+              <div className="mb-1 mt-1 flex flex-wrap gap-1 text-[9px]">
+                <button onClick={() => setCutFamily('all')} className={'rounded px-2 py-1 ' + (cutFamily === 'all' ? 'bg-sky-600 text-slate-50' : 'bg-slate-800 text-slate-400')}>Toutes</button>
+                {(Object.keys(GEM_FAMILIES) as GemFamily[]).map((f) => (
+                  <button key={f} onClick={() => setCutFamily(f)} className={'rounded px-2 py-1 ' + (cutFamily === f ? 'bg-sky-600 text-slate-50' : 'bg-slate-800 text-slate-400')}>
+                    {GEM_FAMILIES[f].icon} {GEM_FAMILIES[f].name}
+                  </button>
+                ))}
+              </div>
+              <div className="space-y-0.5">
+                {cutList.map((def) => (
+                  <button
+                    key={def.id}
+                    disabled={gemDust < GEM_CUT_COST}
+                    onClick={() => cutGem(def.id as CondGemId)}
+                    title={gemDesc(def, 1)}
+                    className="flex w-full items-center gap-1.5 rounded border border-slate-700 px-1.5 py-1 text-left text-[10px] enabled:hover:border-sky-500 disabled:opacity-40"
+                  >
+                    <span className="shrink-0 font-medium" style={{ color: def.color }}>{def.icon} {def.name}</span>
+                    <span className="min-w-0 flex-1 truncate text-slate-500">{gemDesc(def, 1)}</span>
+                    <span className="shrink-0 text-[9px] text-slate-500">rangs : {gemMaxRank(def)}</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      ) : (
+        <p className="mt-2 text-[9px] italic text-slate-600">✂️ Taille (gemme au choix) et 🔬 Recoupe (rangs) : nœuds de l'arbre ci-dessus.</p>
+      )}
     </div>
   )
 }
