@@ -22,37 +22,59 @@ export function ChestModal() {
 
   if (!chest) return null
 
+  // Rareté la plus haute du coffre → couleur d'aura / mise en avant du meilleur objet.
+  const bestIdx = chest.items.reduce((bi, it, i, arr) => (RARITIES[it.rarity].tier > RARITIES[arr[bi].rarity].tier ? i : bi), 0)
+  const bestColor = chest.items.length ? RARITIES[chest.items[bestIdx].rarity].color : '#ffd966'
+
   return createPortal(
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-2xl border border-amber-600/50 bg-gradient-to-b from-[#1a160d] to-[#0d111a] p-5 text-center shadow-2xl">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm">
+      <div
+        className="relative w-full max-w-md overflow-hidden rounded-2xl border bg-gradient-to-b from-[#1a160d] to-[#0d111a] p-5 text-center shadow-2xl"
+        style={{ borderColor: bestColor + '66' }}
+      >
         {!open ? (
           <button onClick={() => setOpen(true)} className="flex w-full flex-col items-center gap-3 py-4">
             <div className="text-xs uppercase tracking-wide text-amber-300/80">{chest.dungeonName} — réussi !</div>
-            <div className="chest-shake chest-glow text-[88px] leading-none">🧰</div>
-            <div className="rounded-full bg-amber-600 px-4 py-1.5 text-sm font-bold text-slate-950">
+            {/* Coffre + rayons rotatifs + étincelles */}
+            <div className="relative flex h-32 w-32 items-center justify-center">
+              <div className="chest-rays absolute inset-[-30%] rounded-full opacity-70" />
+              <div className="chest-shake chest-glow relative text-[88px] leading-none">🧰</div>
+              <span className="sparkle absolute left-3 top-4 text-lg" style={{ animationDelay: '0s' }}>✨</span>
+              <span className="sparkle absolute right-4 top-8 text-base" style={{ animationDelay: '0.5s' }}>✦</span>
+              <span className="sparkle absolute bottom-5 left-8 text-sm" style={{ animationDelay: '0.9s' }}>✨</span>
+            </div>
+            <div className="animate-pulse rounded-full bg-amber-600 px-5 py-1.5 text-sm font-bold text-slate-950 shadow-lg">
               Cliquer pour ouvrir
             </div>
           </button>
         ) : (
           <div>
-            <div className="relative mx-auto mb-1 h-16 w-16">
-              <div className="burst absolute inset-0 rounded-full bg-amber-400/40" />
+            {/* Flash blanc + halo coloré de la meilleure rareté */}
+            <div className="chest-flash pointer-events-none absolute inset-0 z-10 bg-white" />
+            <div className="relative mx-auto mb-2 h-16 w-16">
+              <div className="burst absolute inset-[-40%] rounded-full" style={{ background: `radial-gradient(circle, ${bestColor}66, transparent 70%)` }} />
               <div className="relative text-5xl">🎉</div>
             </div>
-            <div className="mb-2 text-sm font-bold text-amber-300">Butin du coffre</div>
+            <div className="mb-2 text-sm font-bold" style={{ color: bestColor }}>Butin du coffre</div>
 
-            <div className="max-h-[40vh] space-y-1 overflow-y-auto pr-1 text-left">
+            <div className="max-h-[42vh] space-y-1 overflow-y-auto pr-1 text-left">
               {chest.items.map((item, i) => {
                 const r = RARITIES[item.rarity]
                 const t = ITEM_TYPES[item.type]
+                const isBest = i === bestIdx
                 return (
                   <div
                     key={item.id}
-                    className="pop-in flex items-center gap-2 rounded-lg border bg-black/30 px-2 py-1.5"
-                    style={{ borderColor: r.color + '55', animationDelay: `${i * 80}ms` }}
+                    className="item-reveal relative flex items-center gap-2 overflow-hidden rounded-lg border bg-black/30 px-2 py-1.5"
+                    style={{
+                      borderColor: r.color + (isBest ? 'cc' : '55'),
+                      boxShadow: isBest ? `0 0 14px ${r.color}55` : RARITIES[item.rarity].tier >= 6 ? `0 0 8px ${r.color}33` : undefined,
+                      animationDelay: `${i * 90 + 120}ms`,
+                    }}
                   >
-                    <span>{t.icon}</span>
-                    <span className="min-w-0 flex-1">
+                    {isBest && <span className="shine-sweep pointer-events-none absolute inset-0" />}
+                    <span className="relative text-lg">{t.icon}</span>
+                    <span className="relative min-w-0 flex-1">
                       <span
                         className={'block truncate text-[13px] font-medium ' + rarityNameClass(item.rarity)}
                         style={rarityTextStyle(item.rarity)}
@@ -70,8 +92,8 @@ export function ChestModal() {
             </div>
 
             <div
-              className="pop-in mt-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 text-xs"
-              style={{ animationDelay: `${chest.items.length * 80 + 100}ms` }}
+              className="item-reveal mt-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 text-xs"
+              style={{ animationDelay: `${chest.items.length * 90 + 200}ms` }}
             >
               {(chest.xp ?? 0) > 0 && <Reward color="text-violet-300" icon="📚" value={chest.xp!} unit="XP" />}
               {chest.gold > 0 && <Reward color="text-yellow-400" icon="💰" value={chest.gold} unit="or" />}
@@ -89,8 +111,8 @@ export function ChestModal() {
                 claim()
                 setOpen(false)
               }}
-              className="pop-in mt-4 w-full rounded-lg bg-amber-600 py-2.5 text-sm font-semibold text-slate-950 hover:bg-amber-500"
-              style={{ animationDelay: `${chest.items.length * 80 + 200}ms` }}
+              className="item-reveal mt-4 w-full rounded-lg bg-amber-600 py-2.5 text-sm font-semibold text-slate-950 hover:bg-amber-500"
+              style={{ animationDelay: `${chest.items.length * 90 + 300}ms` }}
             >
               Tout récupérer
             </button>

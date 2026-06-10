@@ -1,9 +1,20 @@
-import { useState, useEffect, type ReactNode } from 'react'
-import { useGame, MYSTERY_BOXES, EXCHANGE_RATES, RECRUIT_COST, RECRUIT_POUSSIERE, shopBuyPrice, shopRefreshCost, SHOP_INTERVAL_MS } from '../game/store'
+import { useState, type ReactNode } from 'react'
+import { useGame, MYSTERY_BOXES, EXCHANGE_RATES, RECRUIT_COST, RECRUIT_POUSSIERE, type MysteryBox } from '../game/store'
 import { UPGRADES, UPGRADE_CATEGORIES, upgradeCost, upgradePoussiere, upgradeEclats, isMaxed, type UpgradeCategory } from '../game/upgrades'
-import { RARITIES, RARITY_LIST } from '../game/rarities'
-import { ITEM_TYPES } from '../game/slots'
-import { rarityTextStyle, rarityNameClass } from './rarityStyle'
+import { RARITY_LIST } from '../game/rarities'
+
+/** Badge de « promesse » du coffre (build / slot / affixe / défense / matériaux). */
+function boxTag(b: MysteryBox): { label: string; cls: string } | null {
+  if (b.primary) return { label: b.primary === 'force' ? '⚔ FORCE' : b.primary === 'agilite' ? '🏹 AGILITÉ' : '🔮 INTEL', cls: 'bg-orange-500/20 text-orange-200' }
+  if (b.guaranteeAffix) return { label: '🎯 Crit garanti', cls: 'bg-rose-500/20 text-rose-200' }
+  if (b.biasResist) return { label: '🛡 Défense', cls: 'bg-sky-500/20 text-sky-200' }
+  if (b.types?.includes('armePrincipale')) return { label: '⚔ Armes', cls: 'bg-amber-500/20 text-amber-200' }
+  if (b.types?.includes('tete')) return { label: '🥋 Armures', cls: 'bg-amber-500/20 text-amber-200' }
+  if (b.types?.includes('anneau')) return { label: '💍 Bijoux', cls: 'bg-amber-500/20 text-amber-200' }
+  if ((b.noyau ?? 0) > 0 && b.count <= 1) return { label: '🔨 Matériaux', cls: 'bg-emerald-500/20 text-emerald-200' }
+  if (b.guaranteeUnique) return { label: '✦ Unique garanti', cls: 'bg-fuchsia-500/20 text-fuchsia-200' }
+  return null
+}
 
 export function MerchantPanel() {
   const gold = useGame((s) => s.gold)
@@ -11,14 +22,9 @@ export function MerchantPanel() {
   const poussiere = useGame((s) => s.poussiere)
   const fragments = useGame((s) => s.fragments)
   const cosmic = useGame((s) => s.cosmic)
-  const shopStock = useGame((s) => s.shopStock)
-  const lastShopRefresh = useGame((s) => s.lastShopRefresh)
   const upgrades = useGame((s) => s.upgrades)
-  const bestStage = useGame((s) => s.bestStage)
   const characters = useGame((s) => s.characters)
   const mysteryBox = useGame((s) => s.mysteryBox)
-  const buyShopItem = useGame((s) => s.buyShopItem)
-  const refreshShop = useGame((s) => s.refreshShop)
   const buyEclats = useGame((s) => s.buyEclats)
   const buyResource = useGame((s) => s.buyResource)
   const buyUpgrade = useGame((s) => s.buyUpgrade)
@@ -26,19 +32,6 @@ export function MerchantPanel() {
 
   const [qty, setQty] = useState(1)
 
-  // Compte à rebours de la rotation horaire (re-render chaque seconde).
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000)
-    return () => clearInterval(id)
-  }, [])
-  const remaining = Math.max(0, SHOP_INTERVAL_MS - (now - (lastShopRefresh || 0)))
-  const rh = Math.floor(remaining / 3_600_000)
-  const rm = Math.floor((remaining % 3_600_000) / 60_000)
-  const rs = Math.floor((remaining % 60_000) / 1000)
-  const countdown = rh > 0 ? `${rh} h ${rm} min` : rm > 0 ? `${rm} min ${rs} s` : `${rs} s`
-
-  const refreshCost = shopRefreshCost(bestStage)
   const recruitIdx = characters.length - 1
   const recruitCost = RECRUIT_COST[recruitIdx] ?? 250000
   const recruitPoussiere = RECRUIT_POUSSIERE[recruitIdx] ?? 0
@@ -72,7 +65,10 @@ export function MerchantPanel() {
                 >
                   <span className="text-2xl">{b.icon}</span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[12px] font-semibold text-fuchsia-200">{b.name}</span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="truncate text-[12px] font-semibold text-fuchsia-200">{b.name}</span>
+                      {(() => { const t = boxTag(b); return t ? <span className={'shrink-0 rounded px-1 py-px text-[8px] font-bold uppercase tracking-wide ' + t.cls}>{t.label}</span> : null })()}
+                    </span>
                     <span className="block truncate text-[9px]">
                       <span style={{ color: minName?.color }}>{minName?.name}</span>
                       <span className="text-slate-600"> → </span>
@@ -89,47 +85,6 @@ export function MerchantPanel() {
               )
             })}
           </div>
-        </Section>
-
-        {/* Échoppe */}
-        <Section
-          title="🛒 Échoppe"
-          accent="text-amber-300"
-          action={
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] text-slate-500" title="Rotation automatique toutes les heures">🕐 {countdown}</span>
-              <button onClick={refreshShop} disabled={gold < refreshCost} className="rounded bg-slate-700 px-2 py-0.5 text-[10px] text-slate-200 hover:bg-slate-600 disabled:opacity-40">
-                ↻ Rafraîchir · 💰 {refreshCost}
-              </button>
-            </div>
-          }
-        >
-          {shopStock.length === 0 ? (
-            <div className="py-2 text-center text-[11px] text-slate-500">Stock vide — rotation horaire ou rafraîchis.</div>
-          ) : (
-            <div className="space-y-1">
-              {shopStock.map((item) => {
-                const r = RARITIES[item.rarity]
-                const price = shopBuyPrice(item)
-                return (
-                  <div key={item.id} className="flex items-center gap-2 rounded-lg border border-slate-800 bg-black/20 py-1 pl-1.5 pr-1" style={{ borderLeft: `3px solid ${r.color}` }}>
-                    <span>{ITEM_TYPES[item.type].icon}</span>
-                    <span className="min-w-0 flex-1">
-                      <span className={'block truncate text-[12px] font-medium ' + rarityNameClass(item.rarity)} style={rarityTextStyle(item.rarity)}>
-                        {item.name}
-                      </span>
-                      <span className="block text-[9px] text-slate-500">
-                        <span style={{ color: r.color }}>{r.name}</span> · iLvl {item.ilvl}{item.unique ? ' · ✦' : ''}
-                      </span>
-                    </span>
-                    <button onClick={() => buyShopItem(item.id)} disabled={gold < price} className="shrink-0 rounded bg-yellow-700/70 px-2 py-1 text-[10px] font-medium hover:bg-yellow-600 disabled:opacity-40">
-                      💰 {price}
-                    </button>
-                  </div>
-                )
-              })}
-            </div>
-          )}
         </Section>
 
         {/* Comptoir d'échange */}

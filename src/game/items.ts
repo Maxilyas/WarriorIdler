@@ -98,7 +98,8 @@ function rollAffixes(count: number, ilvl: number, statMult: number, tier: number
     used.add(lineKey(spec))
     out.push(specToAffix(spec, rollLineValue(spec, ilvl, statMult, tier)))
   }
-  // Lignes ciblées (donjons par type) en priorité.
+  // Lignes ciblées (donjons par type / coffres ciblés) en priorité.
+  if (opts.forceStat) force({ kind: 'stat', stat: opts.forceStat, weight: 0 })
   if (opts.forceDmgType) force({ kind: 'dmgType', type: opts.forceDmgType, weight: 0 })
   if (opts.biasResist) force({ kind: 'resist', type: opts.biasResist, weight: 0 })
 
@@ -131,6 +132,8 @@ export interface GenerateOptions {
   forceDmgType?: DamageType
   /** Garantit une ligne de résistance à ce type (donjon ciblé). */
   biasResist?: DamageType
+  /** Garantit une LIGNE DE STAT secondaire (coffres ciblés : crit, etc.). */
+  forceStat?: SecondaryStat
   /** Rareté minimale garantie (coffres) : remonte la rareté tirée si trop basse. */
   minTier?: number
 }

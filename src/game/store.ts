@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type {
-  Equipment, Item, Affix, PrimaryStat, OffensiveStat, EquipSlotId, ItemType, Enemy, DamageType, RarityId, Character, PowerDef, EnemyAbility,
+  Equipment, Item, Affix, PrimaryStat, OffensiveStat, SecondaryStat, EquipSlotId, ItemType, Enemy, DamageType, RarityId, Character, PowerDef, EnemyAbility,
 } from './types'
 import { rollHit, incomingDps, genericMitigation } from './combat'
 import type { DerivedStats } from './stats'
@@ -681,6 +681,12 @@ export interface MysteryBox {
   jackpot: number
   /** Cible un type d'objet précis. */
   type?: ItemType
+  /** Cible une CATÉGORIE d'objets (tire un type au hasard dedans : armes / armures / bijoux). */
+  types?: ItemType[]
+  /** GARANTIT la stat primaire des objets (coffre de build : Guerrier/Rôdeur/Mage). */
+  primary?: OffensiveStat
+  /** GARANTIT une ligne de stat secondaire sur chaque objet (coffre à affixe : Critique…). */
+  guaranteeAffix?: SecondaryStat
   /** Biaise vers des résistances (stuff défensif). */
   biasResist?: boolean
   /** Garantit au moins un effet unique. */
@@ -695,22 +701,35 @@ export interface MysteryBox {
   desc: string
 }
 
+// Catégories d'objets pour les coffres ciblés par slot.
+const BOX_WEAPONS: ItemType[] = ['armePrincipale', 'armeSecondaire']
+const BOX_ARMOR: ItemType[] = ['tete', 'epaules', 'cape', 'torse', 'poignets', 'mains', 'taille', 'jambes', 'pieds']
+const BOX_ACCESSORIES: ItemType[] = ['anneau', 'bijou', 'cou']
+
 /**
- * 10 coffres mystères avec une distribution de rareté (pas une rareté fixe) + une petite
- * chance de JACKPOT (raretés au-dessus de la fourchette) → on peut toujours rêver mieux.
- * Échelle de prix de 500 or à 10M.
+ * Coffres CIBLÉS et ATTRACTIFS (refonte v0.19). Au lieu de coffres « génériques » sans intérêt,
+ * chaque coffre a une PROMESSE claire : un build (Guerrier/Rôdeur/Mage), un slot (armes/armures/
+ * bijoux), un affixe fort (Critique), de la défense, ou des matériaux. Les petits coffres GARANTISSENT
+ * un objet utile (ta stat) + des éclats → ils ne sont plus jamais « gâchés ».
+ * id = index dans le tableau (utilisé par l'action mysteryBox).
  */
 export const MYSTERY_BOXES: MysteryBox[] = [
-  { id: 0, name: 'Coffre de bronze', icon: '🥉', gold: 500, count: 2, minTier: 2, maxTier: 5, jackpot: 0.02, desc: 'Petit pari. Commun → Épique.' },
-  { id: 1, name: 'Coffre d\'argent', icon: '🥈', gold: 5000, count: 3, minTier: 3, maxTier: 6, jackpot: 0.03, eclats: 150, desc: 'Inhabituel → Légendaire + éclats.' },
-  { id: 2, name: 'Coffre d\'or', icon: '🥇', gold: 30000, count: 3, minTier: 4, maxTier: 8, jackpot: 0.04, eclats: 400, noyau: 1, desc: 'Rare → Patrimoine + ressources.' },
-  { id: 3, name: 'Arsenal', icon: '⚔️', gold: 60000, count: 2, minTier: 5, maxTier: 9, jackpot: 0.05, type: 'armePrincipale', desc: 'Cible des ARMES. Épique → Mythique.' },
-  { id: 4, name: 'Coffre du gardien', icon: '🛡️', gold: 60000, count: 3, minTier: 5, maxTier: 9, jackpot: 0.05, biasResist: true, desc: 'Stuff défensif/résistances. Épique → Mythique.' },
-  { id: 5, name: 'Coffre légendaire', icon: '🟠', gold: 150000, count: 4, minTier: 6, maxTier: 10, jackpot: 0.06, eclats: 600, noyau: 2, desc: 'Légendaire → Ascendant + ressources.' },
-  { id: 6, name: 'Coffre du forgeron', icon: '🔨', gold: 400000, count: 1, minTier: 7, maxTier: 11, jackpot: 0.05, eclats: 3000, noyau: 12, poussiere: 8, desc: 'Matériaux de craft en MASSE + 1 objet.' },
-  { id: 7, name: 'Coffre mythique', icon: '🔴', gold: 800000, count: 4, minTier: 8, maxTier: 12, jackpot: 0.07, eclats: 1500, noyau: 5, poussiere: 3, costFragments: 2, desc: 'Mythique → Éternel. Exige des Fragments de raid.' },
-  { id: 8, name: 'Coffre cosmique', icon: '🌟', gold: 2500000, count: 5, minTier: 10, maxTier: 14, jackpot: 0.09, guaranteeUnique: true, eclats: 4000, noyau: 10, poussiere: 12, fragments: 2, costFragments: 6, desc: 'Ascendant → Abyssal, 1 unique garanti. Exige des Fragments.' },
-  { id: 9, name: 'Coffre du Néant', icon: '🕳️', gold: 10000000, count: 6, minTier: 12, maxTier: 16, jackpot: 0.13, guaranteeUnique: true, eclats: 10000, noyau: 25, poussiere: 35, fragments: 8, costFragments: 18, costCosmic: 3, desc: 'Le pari ultime : exige Fragments ✨ ET Éclats cosmiques 💫 (donc des raids).' },
+  // --- Coffres de BUILD : bon marché, stat primaire GARANTIE + éclats → toujours utiles ---
+  { id: 0, name: 'Coffre du Guerrier', icon: '🗡️', gold: 400, count: 2, minTier: 3, maxTier: 6, jackpot: 0.03, primary: 'force', eclats: 80, desc: 'FORCE garantie sur chaque objet (+ éclats). Rare → Légendaire.' },
+  { id: 1, name: 'Coffre du Rôdeur', icon: '🏹', gold: 400, count: 2, minTier: 3, maxTier: 6, jackpot: 0.03, primary: 'agilite', eclats: 80, desc: 'AGILITÉ garantie sur chaque objet (+ éclats). Rare → Légendaire.' },
+  { id: 2, name: 'Coffre du Mage', icon: '🔮', gold: 400, count: 2, minTier: 3, maxTier: 6, jackpot: 0.03, primary: 'intelligence', eclats: 80, desc: 'INTELLIGENCE garantie sur chaque objet (+ éclats). Rare → Légendaire.' },
+  // --- Coffres de SLOT : combler un emplacement précis ---
+  { id: 3, name: 'Arsenal', icon: '⚔️', gold: 45000, count: 2, minTier: 5, maxTier: 9, jackpot: 0.05, types: BOX_WEAPONS, desc: 'ARMES & boucliers uniquement. Épique → Mythique.' },
+  { id: 4, name: 'Armurerie', icon: '🥋', gold: 45000, count: 3, minTier: 5, maxTier: 9, jackpot: 0.05, types: BOX_ARMOR, desc: 'PIÈCES D\'ARMURE uniquement. Épique → Mythique.' },
+  { id: 5, name: 'Joaillier', icon: '💍', gold: 45000, count: 3, minTier: 5, maxTier: 9, jackpot: 0.05, types: BOX_ACCESSORIES, desc: 'BIJOUX (anneaux, talismans, colliers). Épique → Mythique.' },
+  // --- Coffres à AFFIXE / DÉFENSE : stats garanties ---
+  { id: 6, name: 'Coffre du Critique', icon: '🎯', gold: 120000, count: 3, minTier: 6, maxTier: 10, jackpot: 0.06, guaranteeAffix: 'degatsCrit', eclats: 500, desc: 'Ligne de Dégâts critiques GARANTIE sur chaque objet. Légendaire → Ascendant.' },
+  { id: 7, name: 'Coffre du Gardien', icon: '🛡️', gold: 120000, count: 3, minTier: 6, maxTier: 10, jackpot: 0.06, biasResist: true, desc: 'Stuff défensif : résistances garanties. Légendaire → Ascendant.' },
+  // --- Matériaux & haut de gamme ---
+  { id: 8, name: 'Coffre du forgeron', icon: '🔨', gold: 400000, count: 1, minTier: 7, maxTier: 11, jackpot: 0.05, eclats: 3000, noyau: 12, poussiere: 8, desc: 'Matériaux de craft en MASSE (atelier/forge) + 1 objet.' },
+  { id: 9, name: 'Coffre légendaire', icon: '🟠', gold: 800000, count: 4, minTier: 8, maxTier: 12, jackpot: 0.07, eclats: 1500, noyau: 5, poussiere: 3, costFragments: 2, desc: 'Mythique → Éternel. Exige des Fragments de raid.' },
+  { id: 10, name: 'Coffre cosmique', icon: '🌟', gold: 2500000, count: 5, minTier: 10, maxTier: 14, jackpot: 0.09, guaranteeUnique: true, eclats: 4000, noyau: 10, poussiere: 12, fragments: 2, costFragments: 6, desc: 'Ascendant → Abyssal, 1 unique garanti. Exige des Fragments.' },
+  { id: 11, name: 'Coffre du Néant', icon: '🕳️', gold: 10000000, count: 6, minTier: 12, maxTier: 16, jackpot: 0.13, guaranteeUnique: true, eclats: 10000, noyau: 25, poussiere: 35, fragments: 8, costFragments: 18, costCosmic: 3, desc: 'Le pari ultime : exige Fragments ✨ ET Éclats cosmiques 💫 (donc des raids).' },
 ]
 
 /** Prix d'achat d'un objet en échoppe (croît FORTEMENT avec la rareté → vrai puits d'or). */
@@ -1635,14 +1654,7 @@ export const useGame = create<GameState>((set, get) => {
     pendingOffline,
 
     tick: (dt) => {
-      let s = get()
-      // Échoppe : rotation sur timer réel (1 h), indépendante du combat. Se déclenche aussi
-      // pendant un donjon/raid → on rafraîchit AVANT de déléguer.
-      if (Date.now() - (s.lastShopRefresh ?? 0) >= SHOP_INTERVAL_MS) {
-        const eco = computeGlobalMods(s.upgrades)
-        s = { ...s, shopStock: generateShop(s.bestStage, Math.floor(eco.rarityLuck)), lastShopRefresh: Date.now() }
-        persist(s)
-      }
+      const s = get()
       if (s.raid) {
         tickRaid(s, dt, set)
         return
@@ -2408,9 +2420,12 @@ export const useGame = create<GameState>((set, get) => {
       const items: Item[] = []
       for (let i = 0; i < box.count; i++) {
         const rarity = rollBoxRarity(box.minTier, box.maxTier, box.jackpot)
+        const type = box.type ?? (box.types ? box.types[Math.floor(Math.random() * box.types.length)] : undefined)
         items.push(generateItem({
           ilvl, rarity, primaryBias: pickBias(s.characters),
-          ...(box.type ? { type: box.type } : {}),
+          ...(box.primary ? { primary: box.primary } : {}),
+          ...(type ? { type } : {}),
+          ...(box.guaranteeAffix ? { forceStat: box.guaranteeAffix } : {}),
           ...(box.biasResist ? { biasResist: DAMAGE_TYPE_LIST[Math.floor(Math.random() * DAMAGE_TYPE_LIST.length)] } : {}),
         }))
       }
