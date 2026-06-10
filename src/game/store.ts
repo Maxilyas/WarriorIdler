@@ -43,11 +43,12 @@ import {
   DUNGEONS, type ActiveDungeon, type DungeonId,
 } from './dungeons'
 import {
-  generateRaid, makeRaidBoss, makeRaidAdd, getRaidDef, raidUnlocked, raidBerserkTime,
+  generateRaid, makeRaidEncounter, makeRaidAdd, getRaidDef, raidUnlocked, raidBerserkTime,
   raidIlvl, raidMinTier, raidMaxTier, raidRarityDecay, raidRarityJackpot,
   raidLootCount, raidFragments, raidCosmicChance, raidCosmicQty, pickRaidLootType,
-  RAIDS, type ActiveRaid, type RaidId,
+  PAIR_ENRAGE_MULT, RAIDS, type ActiveRaid, type RaidId,
 } from './raids'
+import { SETS } from './sets'
 import { simulateOffline, type OfflineReport } from './offline'
 
 const SAVE_KEY = 'warrior-idler-save-v1'
@@ -1563,15 +1564,23 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
   const overtime = Math.max(0, fightTime - r.berserkAt)
   let dmgMult = 1
   if (mech.includes('berserk') && overtime > 0) dmgMult *= 1 + overtime * 0.6
-  // Acharnement : le boss frappe plus fort à mesure qu'il agonise.
-  const bossIn = r.enemies[0]
+  // Acharnement : le boss frappe plus fort à mesure qu'il agonise (premier boss VIVANT — duo de l'Abîme).
+  const bossIn = r.enemies.find((e) => e.boss && e.hp > 0) ?? r.enemies[0]
   if (mech.includes('execute')) dmgMult *= 1 + (1 - bossIn.hp / Math.max(1, bossIn.maxHp)) * 0.7
 
   const res = partyCombatStepMulti(s.characters, r.enemies, dt, { enrage, regen: drain, fightTime, dmgMult, heroMult: 1 + harmonyBonus(s.biomeBest) })
   let chars = res.chars
   let enemies = res.enemies
-  const boss = enemies[0]
+  const aliveBosses = enemies.filter((e) => e.boss && e.hp > 0)
+  const boss = aliveBosses[0] ?? enemies[0]
   let log = s.log
+
+  // Duo de l'Abîme : quand l'un des jumeaux tombe, le survivant entre en FURIE (+50% dégâts).
+  if (aliveBosses.length === 1 && !aliveBosses[0].enraged && enemies.some((e) => e.boss && e.hp <= 0)) {
+    aliveBosses[0].enraged = true
+    aliveBosses[0].damage = Math.round(aliveBosses[0].damage * PAIR_ENRAGE_MULT)
+    log = pushLog(log, `💢 FURIE DU SURVIVANT : ${aliveBosses[0].name} s'embrase (+50% dégâts) !`, 'death')
+  }
   let novaCd = r.novaCd - dt
   let swarmCd = r.swarmCd - dt
   let rotateCd = r.rotateCd - dt
@@ -1583,7 +1592,7 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
     rotateCd = 7
     rotateIdx = (rotateIdx + 1) % r.rotateList.length
     element = r.rotateList[rotateIdx]
-    boss.damageType = element
+    for (const b of aliveBosses) b.damageType = element
     log = pushLog(log, `🌈 ${boss.name} bascule en ${DAMAGE_TYPES[element].name} !`, 'info')
   }
   // Nova cataclysmique : grosse AoE typée (check d'EHP/mitigation).
@@ -1632,9 +1641,20 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
       const bias = pickBias(s.characters)
       const items: Item[] = []
       for (let i = 0; i < count; i++) {
-        const lootType = pickRaidLootType(def)
         // Rareté en éventail : plancher garanti → plafond, décalée vers le haut avec le tier.
         const rarity = rollBoxRarity(minTier, maxTier, jackpot, decay)
+        // L'Abîme : ~30% des objets sont des pièces de la RÉGALIA DU NÉANT (set exclusif).
+        if (def.id === 'abysse' && Math.random() < 0.3) {
+          const sd = SETS.neant
+          const types = Object.keys(sd.pieces) as ItemType[]
+          const t = types[Math.floor(Math.random() * types.length)]
+          const it = generateItem({ ilvl, rarity, type: t, primaryBias: bias, ...(t === 'armePrincipale' ? { element: 'ombre' as DamageType } : {}) })
+          it.setId = sd.id
+          it.name = sd.pieces[t]!
+          items.push(it)
+          continue
+        }
+        const lootType = pickRaidLootType(def)
         items.push(generateItem({
           ilvl, rarity, type: lootType, primaryBias: bias,
           ...(def.id === 'nexus' ? { biasResist: DAMAGE_TYPE_LIST[Math.floor(Math.random() * DAMAGE_TYPE_LIST.length)] } : {}),
@@ -1681,7 +1701,7 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
     const nr: ActiveRaid = {
       ...r,
       current: nextIndex,
-      enemies: [makeRaidBoss(def, r.tier, nextIndex, startEl)],
+      enemies: makeRaidEncounter(def, r.tier, nextIndex, startEl),
       element: startEl,
       rotateIdx: 0,
       fightTime: 0,

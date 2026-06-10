@@ -142,6 +142,12 @@ function RaidCard({ def, unlocked, cleared, bestStage, orbes, busy, partyDps, pa
       </div>
 
       <div className="mt-0.5 text-[10px] leading-snug text-slate-500">{def.lore}</div>
+      {def.id === 'abysse' && (
+        <div className="mt-1 text-[10px] leading-snug">
+          <span className="text-rose-300">👿 DUO : deux boss simultanés aux pouvoirs distincts — le survivant entre en furie (+50%).</span>{' '}
+          <span style={{ color: '#8a2be2' }}>⬢ Set exclusif : Régalia du Néant (bonus 2/4/6 pièces).</span>
+        </div>
+      )}
 
       <div className="mt-1.5 flex flex-wrap gap-1">
         <span className="rounded bg-slate-800 px-1.5 py-0.5 text-[9.5px] text-slate-300">🎁 {def.lootLabel}</span>

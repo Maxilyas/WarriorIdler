@@ -209,6 +209,8 @@ export interface Item {
   gems?: GemInstance[]
   /** Enchantement runique (id du registre enchants.ts) — une seule rune par pièce. */
   enchant?: string
+  /** Pièce de SET (id du registre sets.ts) : bonus à paliers quand plusieurs pièces sont portées. */
+  setId?: string
 }
 
 export type Equipment = Partial<Record<EquipSlotId, Item>>
@@ -389,4 +391,6 @@ export interface Enemy {
   noRegen?: number
   /** Vulnérabilité — multiplicateur de dégâts SUBIS, posé par « Sceau de faiblesse ». Transitoire. */
   vuln?: { mult: number; remaining: number }
+  /** Furie du survivant (duo de boss) : déjà enragé, ne se redéclenche pas. */
+  enraged?: boolean
 }

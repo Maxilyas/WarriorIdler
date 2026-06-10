@@ -102,9 +102,10 @@ export const RAIDS: Record<RaidId, RaidDef> = {
   },
   abysse: {
     id: 'abysse', name: 'L\'Abîme Primordial', icon: '🕳️', color: '#8a2be2',
-    lore: 'Le gouffre d\'où tout est né et où tout retourne. Le défi ultime : aucune faiblesse de stuff n\'est pardonnée. Le butin et les Éclats cosmiques y sont les plus riches.',
-    lootTypes: ['tete', 'epaules', 'torse', 'jambes', 'mains', 'taille', 'pieds', 'poignets', 'cape', 'cou', 'anneau', 'bijou', 'armePrincipale', 'armeSecondaire'], lootLabel: 'Tout l\'équipement',
-    unlockStage: 150, requires: 'nexus', baseDifficulty: 2.4, signature: ['berserk', 'nova', 'fortress', 'leech'], element: 'rotating', bosses: 5, orbeCost: 3,
+    lore: 'Le gouffre d\'où tout est né et où tout retourne. Les horreurs y chassent PAR PAIRES : abats l\'une, l\'autre entre en furie. Seul endroit au monde où tombe la Régalia du Néant.',
+    lootTypes: ['tete', 'epaules', 'torse', 'jambes', 'mains', 'taille', 'pieds', 'poignets', 'cape', 'cou', 'anneau', 'bijou', 'armePrincipale', 'armeSecondaire'], lootLabel: 'Tout + set Régalia du Néant',
+    // v0.21 : palier 150 → 100 (l'iLvl et la difficulté suivent les formules calées sur unlockStage).
+    unlockStage: 100, requires: 'nexus', baseDifficulty: 2.4, signature: ['berserk', 'nova', 'fortress', 'leech'], element: 'rotating', bosses: 5, orbeCost: 3,
   },
 }
 
@@ -260,10 +261,10 @@ export function pickRaidLootType(def: RaidDef): ItemType {
   return pick(def.lootTypes)
 }
 
-/** DPS recommandé (sur le dernier boss, contre son timer d'enrage). */
+/** DPS recommandé (sur le dernier boss, contre son timer d'enrage). L'Abîme = duo (+10% de PV). */
 export function recommendedDps(def: RaidDef, tier: number): number {
   const bosses = raidBossCount(def, tier)
-  const hp = bossHp(def, tier, bosses - 1, bosses)
+  const hp = bossHp(def, tier, bosses - 1, bosses) * (def.id === 'abysse' ? PAIR_HP_TOTAL : 1)
   return Math.round(hp / raidBerserkTime(def, tier))
 }
 
@@ -377,6 +378,50 @@ export function makeRaidBoss(def: RaidDef, tier: number, bossIndex: number, elem
   }
 }
 
+// ---- Duo de l'Abîme : les boss chassent PAR PAIRES (kits distincts, furie du survivant) ----
+
+/** Répartition des PV du duo : chaque membre porte 55% des PV d'un boss seul (total ×1,1). */
+const PAIR_HP_FRAC = 0.55
+const PAIR_HP_TOTAL = PAIR_HP_FRAC * 2
+/** Dégâts de chaque membre du duo (le total dépasse un boss seul → pression de groupe). */
+const PAIR_DMG_FRAC = 0.7
+/** Furie du survivant : multiplicateur de dégâts quand son jumeau meurt. */
+export const PAIR_ENRAGE_MULT = 1.5
+
+/** Kit du PARTENAIRE d'Abîme : contrôle + malédiction + drain (l'autre moitié du duo est le burst). */
+function abyssePartnerAbilities(): EnemyAbility[] {
+  const out: EnemyAbility[] = [
+    { kind: 'cc', element: 'ombre', name: 'Étreinte du vide', icon: '🕳️', cooldown: 11, magnitude: 0, duration: 1.8 },
+    { kind: 'debuff', element: 'arcane', name: 'Murmures du Néant', icon: '🌀', cooldown: 9, magnitude: 0, duration: 6 },
+    { kind: 'drain', element: 'ombre', name: 'Siphon d\'essence', icon: '👁️', cooldown: 13, magnitude: 1.5 },
+  ]
+  out.forEach((a, i) => { a.cd = a.cooldown * (0.6 + i * 0.35) })
+  return out
+}
+
+/**
+ * Construit la RENCONTRE d'un raid : un boss seul, ou le DUO de l'Abîme — deux boss simultanés
+ * aux pouvoirs distincts (burst télégraphié d'un côté, contrôle/drain de l'autre). Quand l'un
+ * tombe, l'autre entre en FURIE (+50% dégâts) → l'ordre de kill et les contres comptent.
+ */
+export function makeRaidEncounter(def: RaidDef, tier: number, bossIndex: number, element: DamageType): Enemy[] {
+  const main = makeRaidBoss(def, tier, bossIndex, element)
+  if (def.id !== 'abysse') return [main]
+  const partner: Enemy = {
+    ...main,
+    name: `${def.icon} ${BOSS_NAMES.abysse[(bossIndex + 3) % BOSS_NAMES.abysse.length]}`,
+    maxHp: Math.round(main.maxHp * PAIR_HP_FRAC),
+    hp: Math.round(main.maxHp * PAIR_HP_FRAC),
+    damage: Math.round(main.damage * PAIR_DMG_FRAC),
+    xp: Math.round(main.xp * 0.5),
+    abilities: abyssePartnerAbilities(),
+  }
+  main.maxHp = Math.round(main.maxHp * PAIR_HP_FRAC)
+  main.hp = main.maxHp
+  main.damage = Math.round(main.damage * PAIR_DMG_FRAC)
+  return [main, partner]
+}
+
 /**
  * Crée un RENFORT de raid (mécanique Déferlante) : un add temporaire qui frappe l'équipe puis
  * disparaît (`lifetime`). Délivre le « combat à plusieurs adversaires » sans casser le combat de boss.
@@ -417,7 +462,7 @@ export function generateRaid(raidId: RaidId, tier: number): ActiveRaid {
     name: `${def.name} · Tier ${tier}`,
     current: 0,
     totalBosses,
-    enemies: [makeRaidBoss(def, tier, 0, startEl)],
+    enemies: makeRaidEncounter(def, tier, 0, startEl),
     mechanics: def.signature,
     element: startEl,
     rotateList,

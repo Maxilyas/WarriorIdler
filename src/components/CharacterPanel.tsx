@@ -6,6 +6,7 @@ import type { PrimaryStat, DamageType, Character, PowerDef } from '../game/types
 import type { DerivedStats } from '../game/stats'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST, profileDamageMult } from '../game/damage'
 import { charTotalStats, charDerived, charMaxHp, charDamageProfile, charResist, abilityPower, powerScale } from '../game/character'
+import { setBonuses, getSet } from '../game/sets'
 import { getPower, POWER_EFFECT_META, scaleLabel, powerDamageType } from '../game/powers'
 
 const DMG_EFFECTS: ReadonlySet<string> = new Set(['nuke', 'cleave', 'dot', 'executeNuke', 'megaCleave', 'lifeNuke', 'rupture'])
@@ -161,6 +162,37 @@ export function CharacterPanel({ view = 'apercu' }: { view?: CharacterView }) {
               <Kv name="Vitesse" value={`${derived.attacksPerSecond.toFixed(2)} att/s`} />
             </div>
           </div>
+
+          {/* Sets d'équipement actifs */}
+          {(() => {
+            const counts = setBonuses(char.equipment).counts
+            const entries = Object.entries(counts)
+            if (!entries.length) return null
+            return (
+              <div className="rounded-xl border border-slate-800 bg-[#11151f] p-4">
+                <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Sets d'équipement</div>
+                {entries.map(([id, n]) => {
+                  const def = getSet(id)
+                  if (!def) return null
+                  return (
+                    <div key={id}>
+                      <div className="flex items-center justify-between text-[12px]">
+                        <span className="font-semibold" style={{ color: def.color }}>⬢ {def.name}</span>
+                        <span className="text-slate-400">{n}/{Object.keys(def.pieces).length}</span>
+                      </div>
+                      <div className="mt-1 space-y-0.5">
+                        {def.bonuses.map((b) => (
+                          <div key={b.pieces} className={'text-[10.5px] leading-snug ' + (n >= b.pieces ? 'text-emerald-300' : 'text-slate-600')}>
+                            ({b.pieces}) {n >= b.pieces ? '✓ ' : ''}{b.desc}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })()}
 
           {/* Résistances */}
           <div className="rounded-xl border border-slate-800 bg-[#11151f] p-4">

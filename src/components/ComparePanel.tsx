@@ -10,6 +10,7 @@ import {
 } from '../game/items'
 import { forgeMods } from '../game/forge'
 import { itemSockets, parseGemKey, unsocketCost, gemTierName, GEM_DMG, GEM_RES } from '../game/gems'
+import { getSet } from '../game/sets'
 import { ENCHANTS, getEnchant, enchantCost, enchantValue } from '../game/enchants'
 import type { OffensiveStat } from '../game/types'
 import { ITEM_TYPES, equipSlotsForType } from '../game/slots'
@@ -176,6 +177,9 @@ export function ComparePanel({ item, char, previewDelta, equipped, occupied, onE
           })}
         </div>
       )}
+
+      {/* Pièce de set (Régalia du Néant…) */}
+      {item.setId && <SetBlock item={item} char={char} />}
 
       {/* Effet unique */}
       {item.unique && <UniqueBlock item={item} />}
@@ -640,6 +644,30 @@ function RoleChip({ active, onClick, label }: { active: boolean; onClick: () => 
     <button onClick={onClick} className={'rounded px-2 py-1 ' + (active ? 'bg-violet-600 text-slate-50' : 'bg-slate-800 text-slate-400')}>
       {label}
     </button>
+  )
+}
+
+/** Pièce de set : nom, pièces portées, paliers de bonus (actifs en vert). */
+function SetBlock({ item, char }: { item: Item; char: Character }) {
+  const def = getSet(item.setId!)
+  if (!def) return null
+  const count = Object.values(char.equipment).filter((it) => it?.setId === def.id).length
+  const total = Object.keys(def.pieces).length
+  return (
+    <div className="mt-2 rounded-lg border p-2" style={{ borderColor: def.color + '66', background: def.color + '14' }}>
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] font-bold" style={{ color: def.color }}>⬢ {def.name}</span>
+        <span className="text-[10px]" style={{ color: def.color }}>{count}/{total} portée{count > 1 ? 's' : ''}</span>
+      </div>
+      <div className="mt-1 space-y-0.5">
+        {def.bonuses.map((b) => (
+          <div key={b.pieces} className={'text-[10px] leading-snug ' + (count >= b.pieces ? 'font-medium text-emerald-300' : 'text-slate-500')}>
+            ({b.pieces}) {count >= b.pieces ? '✓ ' : ''}{b.desc}
+          </div>
+        ))}
+      </div>
+      <div className="mt-1 text-[9px] italic text-slate-500">Exclusif à 🕳️ l'Abîme Primordial.</div>
+    </div>
   )
 }
 

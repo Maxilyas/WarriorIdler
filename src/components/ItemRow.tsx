@@ -58,6 +58,9 @@ export function ItemRow({ item, dpsDelta, selected, onClick }: Props) {
         {item.unique && (
           <span className="text-[11px] text-fuchsia-400" title={getUnique(item.unique.id)?.name}>✦</span>
         )}
+        {item.setId && (
+          <span className="text-[11px]" style={{ color: '#8a2be2' }} title="Pièce de set">⬢</span>
+        )}
         {showDelta && (
           <span className={'text-[10px] font-bold tabular-nums ' + (dpsDelta! > 0 ? 'text-emerald-400' : 'text-red-400')}>
             {dpsDelta! > 0 ? '▲' : '▼'}{fmtDelta(dpsDelta!)}

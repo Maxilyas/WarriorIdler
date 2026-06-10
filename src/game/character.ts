@@ -1,6 +1,8 @@
 import type { Character, StatBlock, StatKey, PrimaryStat, OffensiveStat, PowerDef, DamageType, Item, EquipSlotId } from './types'
 import { computeTotalStats, computeDerived, type DerivedStats } from './stats'
 import { computeDamageProfile, computeResistProfile, profileDamageMult, type DamageProfile } from './damage'
+import { DAMAGE_TYPE_LIST, RESIST_CAP } from './damage'
+import { setBonuses } from './sets'
 import { getPower, POWER_SLOTS } from './powers'
 import { theoreticalDps } from './combat'
 import {
@@ -117,6 +119,9 @@ export function setGlobalCombatMods(m: { power: number; attackSpeed: number; vit
 
 export function charDerived(char: Character): DerivedStats {
   const d = computeDerived(charTotalStats(char))
+  // Bonus de SET (Régalia du Néant…) : PV, recharge et vol de vie passent par le moteur dérivé
+  // (le multiplicateur de dégâts de set passe par charCombatMods, comme les keystones).
+  const sb = setBonuses(char.equipment)
   return {
     ...d,
     power: d.power * GLOBAL.power,
@@ -125,7 +130,9 @@ export function charDerived(char: Character): DerivedStats {
     intPower: d.intPower * GLOBAL.power,
     endurancePower: d.endurancePower * GLOBAL.power,
     attacksPerSecond: d.attacksPerSecond * GLOBAL.attackSpeed,
-    hp: d.hp * GLOBAL.vitality,
+    hp: d.hp * GLOBAL.vitality * sb.hpMult,
+    cdr: Math.min(0.75, d.cdr + sb.cdr),
+    leech: Math.min(0.6, d.leech + sb.leech),
   }
 }
 
@@ -191,9 +198,14 @@ export function charDps(char: Character): number {
   return dps
 }
 
-/** Résistances du héros (équipement + talents), capées. */
+/** Résistances du héros (équipement + talents + sets), capées. */
 export function charResist(char: Character): Partial<Record<DamageType, number>> {
-  return computeResistProfile(char.equipment, talentResistMods(char.talents ?? {}))
+  const r = computeResistProfile(char.equipment, talentResistMods(char.talents ?? {}))
+  const sb = setBonuses(char.equipment)
+  if (sb.resistAll > 0) {
+    for (const t of DAMAGE_TYPE_LIST) r[t] = Math.min(RESIST_CAP, (r[t] ?? 0) + sb.resistAll)
+  }
+  return r
 }
 
 /** Impact RÉEL d'un équipement : variation de DPS et de PV si on pose `item` dans `slot`.
@@ -223,6 +235,9 @@ export interface CombatMods {
 
 export function charCombatMods(char: Character): CombatMods {
   const out: CombatMods = { damageMult: 1, flatDr: 0, hot: 0, thorns: 0, multistrike: 0 }
+  // Multiplicateur de dégâts des bonus de SET (s'applique aux auto-attaques ET aux sorts,
+  // et donc au DPS affiché via charDps — même chemin que les keystones).
+  out.damageMult *= setBonuses(char.equipment).damageMult
   for (const k of charKeystones(char)) {
     if (k.damageMult) out.damageMult *= k.damageMult
     if (k.flatDr) out.flatDr = 1 - (1 - out.flatDr) * (1 - k.flatDr)
