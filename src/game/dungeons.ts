@@ -195,6 +195,27 @@ export function dungeonIlvl(level: number): number {
   return Math.round(10 + level * 12)
 }
 
+/**
+ * RENDEMENT par run d'un donjon, par ressource — MAPPÉ sur les coûts de craft (atelier/forge).
+ * Avant : indexé sur packXp (∝ 1.12^(7·niveau) ≈ 2.21^niveau) → explosion, 1 run = des milliers de
+ * crafts en fin de course. Désormais : base × growth^(niveau-1), où growth ≈ la croissance du COÛT
+ * de la ressource correspondante (éclats ~1.13, noyau/poussière ~1.45 via la table de rareté, or ~1.40)
+ * → le ratio « crafts par run » reste stable (~2-4) à tous les niveaux. Voir `npm run eco`.
+ */
+const DUNGEON_YIELD: Partial<Record<DungeonReward, { base: number; growth: number }>> = {
+  gold: { base: 6000, growth: 1.40 },
+  eclats: { base: 40000, growth: 1.13 },
+  noyau: { base: 500, growth: 1.45 },
+  poussiere: { base: 25, growth: 1.47 },
+}
+/** Part du rendement distribuée PAR COMBAT (le reste tombe dans le coffre de fin). */
+export const DUNGEON_YIELD_PERFIGHT_FRAC = 0.4
+/** Rendement TOTAL d'un run (par-combat + coffre) pour la ressource du donjon. */
+export function dungeonRunYield(reward: DungeonReward, level: number): number {
+  const y = DUNGEON_YIELD[reward]
+  return y ? Math.round(y.base * Math.pow(y.growth, level - 1)) : 0
+}
+
 /** Décalage de chance de rareté du coffre (généreux). */
 export function dungeonLuckTier(level: number): number {
   return 2 + Math.floor(level / 2)

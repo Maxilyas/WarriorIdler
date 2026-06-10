@@ -27,6 +27,7 @@ import { equipSlotsForType, slotAccepts } from './slots'
 import { essenceGain, upgradeCost, insertCost, getUnique, UNIQUE_MAX_RANK, randomUniqueInstance } from './uniques'
 import {
   generateDungeon, makeDungeonPack, dungeonIlvl, dungeonLuckTier, dungeonRegen, getDungeonDef, butinMinTier, butinMaxTier,
+  dungeonRunYield, DUNGEON_YIELD_PERFIGHT_FRAC,
   DUNGEONS, type ActiveDungeon, type DungeonId,
 } from './dungeons'
 import {
@@ -1338,11 +1339,13 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
     const fightItems: Item[] = []
     let logBit = ''
     let leveled = false
+    // Rendement par combat = part PERFIGHT du rendement total mappé sur les coûts (voir dungeons.ts).
+    const perFight = (r: 'gold' | 'eclats' | 'noyau' | 'poussiere') => dungeonRunYield(r, lv) * DUNGEON_YIELD_PERFIGHT_FRAC / Math.max(1, d.totalFights)
     switch (def.reward) {
-      case 'gold': { if (!noGold) { const g = Math.round(packXp * 8 * eco.goldGain); gold += g; logBit = `+${g.toLocaleString('fr-FR')} or` } break }
-      case 'eclats': { const e2 = Math.round(packXp * 4); essence += e2; logBit = `+${e2.toLocaleString('fr-FR')} éclats` } break
-      case 'noyau': { const n = accrue('noyau', packXp * 0.05); if (n) { noyau += n; logBit = `+${n} 💠` } } break
-      case 'poussiere': { const pq = accrue('poussiere', packXp * 0.015); if (pq) { poussiere += pq; logBit = `+${pq} 🌌` } } break
+      case 'gold': { if (!noGold) { const g = Math.round(perFight('gold') * eco.goldGain); gold += g; logBit = `+${g.toLocaleString('fr-FR')} or` } break }
+      case 'eclats': { const e2 = Math.round(perFight('eclats')); essence += e2; logBit = `+${e2.toLocaleString('fr-FR')} éclats` } break
+      case 'noyau': { const n = accrue('noyau', perFight('noyau')); if (n) { noyau += n; logBit = `+${n} 💠` } } break
+      case 'poussiere': { const pq = accrue('poussiere', perFight('poussiere')); if (pq) { poussiere += pq; logBit = `+${pq} 🌌` } } break
       case 'sceaux': { const sc = accrue('sceaux', packXp * 0.025); if (sc) { sceaux += sc; logBit = `+${sc} 🔑` } } break
       case 'orbes': { const ob = accrue('orbes', packXp * 0.015); if (ob) { orbes += ob; logBit = `+${ob} 🔮` } } break
       case 'xp': {
@@ -1369,18 +1372,14 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
       // --- Coffre : BONUS de fin (montant ÉLEVÉ) de la ressource du donjon, EN PLUS du par-combat ---
       let items: Item[] = []
       let cGold = 0, cEclats = 0, cNoyau = 0, cPous = 0, cSceaux = 0, cOrbes = 0, cXp = earned.xp ?? 0
+      const chestFrac = 1 - DUNGEON_YIELD_PERFIGHT_FRAC // 60% du rendement mappé tombe dans le coffre
       switch (def.reward) {
-        case 'gold': cGold = noGold ? 0 : Math.round(2000 * lv * (1 + lv * 0.15)); break
-        case 'eclats': cEclats = Math.round(1200 * lv * (1 + lv * 0.13)); break
-        case 'noyau': cNoyau = Math.round(48 * lv * (1 + lv * 0.1)); break // ×4
+        case 'gold': cGold = noGold ? 0 : Math.round(dungeonRunYield('gold', lv) * chestFrac * eco.goldGain); break
+        case 'eclats': cEclats = Math.round(dungeonRunYield('eclats', lv) * chestFrac); break
+        case 'noyau': cNoyau = Math.round(dungeonRunYield('noyau', lv) * chestFrac); break
+        case 'poussiere': cPous = Math.round(dungeonRunYield('poussiere', lv) * chestFrac); break
         case 'orbes': cOrbes = Math.round(1 + lv * 0.5); break
         case 'sceaux': cSceaux = Math.round(3 + lv * 0.9); break
-        case 'poussiere': { // ×2
-          const base = 2 * (1 + Math.floor(lv / 3))
-          const bonusChance = Math.min(0.9, 0.25 + lv * 0.03)
-          cPous = base + (Math.random() < bonusChance ? 2 + Math.floor(Math.random() * 3) : 0)
-          break
-        }
         case 'xp': { const bonus = Math.round(1200 * lv * Math.pow(1.12, lv)); chars = chars.map((c) => (c.hp > 0 ? grantXp(c, bonus) : c)); cXp += bonus; break }
         case 'stuff': {
           const ilvl = dungeonIlvl(lv)
