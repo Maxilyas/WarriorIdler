@@ -5,6 +5,7 @@ import {
   type ConstellationId, type TalentNode,
 } from '../game/talents'
 import { getPower, powerSummary, powerIcon, powerHasDamageType, powerDamageType } from '../game/powers'
+import { Sheet } from './ui'
 import { charDamageProfile } from '../game/character'
 import { DAMAGE_TYPES } from '../game/damage'
 import { ALL_STAT_META } from '../game/stats'
@@ -175,6 +176,7 @@ export function TalentTree() {
   const weaponType = charDamageProfile(char).mainType
   const [selected, setSelected] = useState<string | null>(null)
   const [focus, setFocus] = useState<ConstellationId | null>(null)
+  const [voiesOpen, setVoiesOpen] = useState(false)
 
   const layout = useMemo(() => computeRadialLayout(), [])
 
@@ -184,6 +186,9 @@ export function TalentTree() {
   const [view, setView] = useState({ panX: 300, panY: 260, scale: 0.5 })
   const drag = useRef<{ x: number; y: number; panX: number; panY: number; moved: boolean } | null>(null)
   const userMoved = useRef(false)
+  // Pinch tactile : on suit chaque pointeur ; à 2 doigts, zoom incrémental centré sur leur milieu.
+  const pointers = useRef(new Map<number, { x: number; y: number }>())
+  const pinch = useRef<{ d: number; cx: number; cy: number } | null>(null)
 
   useLayoutEffect(() => {
     const el = viewportRef.current
@@ -209,17 +214,51 @@ export function TalentTree() {
   }, [size.w, size.h, center])
 
   const onPointerDown = (e: React.PointerEvent) => {
-    drag.current = { x: e.clientX, y: e.clientY, panX: view.panX, panY: view.panY, moved: false }
-    ;(e.currentTarget as Element).setPointerCapture?.(e.pointerId)
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    try { (e.currentTarget as Element).setPointerCapture?.(e.pointerId) } catch { /* pointeur synthétique */ }
+    if (pointers.current.size === 2) {
+      const [a, b] = [...pointers.current.values()]
+      pinch.current = { d: Math.hypot(a.x - b.x, a.y - b.y), cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2 }
+      drag.current = null
+    } else if (pointers.current.size === 1) {
+      drag.current = { x: e.clientX, y: e.clientY, panX: view.panX, panY: view.panY, moved: false }
+    }
   }
   const onPointerMove = (e: React.PointerEvent) => {
+    if (pointers.current.has(e.pointerId)) pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    if (pinch.current && pointers.current.size >= 2) {
+      const [a, b] = [...pointers.current.values()]
+      const dist = Math.hypot(a.x - b.x, a.y - b.y)
+      const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2
+      const rect = viewportRef.current?.getBoundingClientRect()
+      const px = cx - (rect?.left ?? 0), py = cy - (rect?.top ?? 0)
+      const prev = pinch.current
+      userMoved.current = true
+      setView((v) => {
+        const scale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, v.scale * (dist / prev.d)))
+        const k = scale / v.scale
+        return { scale, panX: px - (px - v.panX) * k + (cx - prev.cx), panY: py - (py - v.panY) * k + (cy - prev.cy) }
+      })
+      pinch.current = { d: dist, cx, cy }
+      return
+    }
     const d = drag.current
     if (!d) return
     const dx = e.clientX - d.x, dy = e.clientY - d.y
     if (Math.abs(dx) > 3 || Math.abs(dy) > 3) { d.moved = true; userMoved.current = true }
     setView((v) => ({ ...v, panX: d.panX + dx, panY: d.panY + dy }))
   }
-  const onPointerUp = () => { drag.current = null }
+  const onPointerUp = (e: React.PointerEvent) => {
+    pointers.current.delete(e.pointerId)
+    if (pointers.current.size < 2) pinch.current = null
+    if (pointers.current.size === 1) {
+      // Reprend un pan propre avec le doigt restant.
+      const [p] = [...pointers.current.values()]
+      drag.current = { x: p.x, y: p.y, panX: view.panX, panY: view.panY, moved: true }
+    } else if (pointers.current.size === 0) {
+      drag.current = null
+    }
+  }
 
   const zoomBy = useCallback((f: number) => {
     userMoved.current = true
@@ -279,26 +318,44 @@ export function TalentTree() {
         </div>
       )}
 
-      {/* Légende des voies (surligne une constellation) */}
-      <div className="mb-2 flex gap-1 overflow-x-auto pb-1">
-        {CONSTELLATION_LIST.map((id) => {
-          const m = CONSTELLATIONS[id]
-          const active = id === focus
-          const allocated = talentsByConstellation(id).reduce((a, n) => a + (char.talents[n.id] ?? 0), 0)
-          return (
-            <button
-              key={id}
-              onClick={() => setFocus(active ? null : id)}
-              className={'shrink-0 rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition-colors ' + (active ? 'border-current' : m.archetype ? 'border-amber-700/50 text-slate-300 hover:border-amber-500' : 'border-slate-700 text-slate-400 hover:border-slate-500')}
-              style={active ? { color: m.color } : undefined}
-            >
-              {m.archetype && <span className="mr-0.5 text-[8px] text-amber-300" title="Archétype (change le gameplay)">★</span>}
-              {m.icon} {m.name}
-              {allocated > 0 && <span className="ml-1 rounded-full bg-white/10 px-1 text-[9px] text-slate-200">{allocated}</span>}
-            </button>
-          )
-        })}
+      {/* Voies & archétypes : bouton → feuille (remplace la longue rangée scrollable) */}
+      <div className="mb-2 flex items-center gap-1.5">
+        <button
+          onClick={() => setVoiesOpen(true)}
+          className="rounded-lg border border-slate-700 px-3 py-1.5 text-[11px] font-medium text-slate-300 hover:border-slate-500"
+        >
+          🌌 Voies & archétypes ▾
+        </button>
+        {focus && (
+          <button
+            onClick={() => setFocus(null)}
+            className="flex min-w-0 items-center gap-1 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold"
+            style={{ color: CONSTELLATIONS[focus].color, background: CONSTELLATIONS[focus].color + '1a' }}
+          >
+            <span className="truncate">{CONSTELLATIONS[focus].icon} {CONSTELLATIONS[focus].name}</span> ✕
+          </button>
+        )}
       </div>
+
+      {/* Feuille des voies : tap = surbrillance de la constellation dans l'arbre */}
+      {voiesOpen && (
+        <Sheet title="🌌 Voies & archétypes" onClose={() => setVoiesOpen(false)}>
+          <p className="mb-2 text-[11px] leading-snug text-slate-500">
+            Tape une voie pour la mettre en surbrillance dans l'arbre. Les points alloués sont indiqués.
+          </p>
+          <div className="grid grid-cols-2 gap-1.5">
+            {CONSTELLATION_LIST.filter((id) => !CONSTELLATIONS[id].archetype).map((id) => (
+              <VoieButton key={id} id={id} focus={focus} talents={char.talents} onPick={(v) => { setFocus(v); setVoiesOpen(false) }} />
+            ))}
+          </div>
+          <div className="mb-1.5 mt-3 text-[10px] font-semibold uppercase tracking-wide text-amber-300">★ Archétypes — changent le gameplay</div>
+          <div className="grid grid-cols-2 gap-1.5">
+            {CONSTELLATION_LIST.filter((id) => CONSTELLATIONS[id].archetype).map((id) => (
+              <VoieButton key={id} id={id} focus={focus} talents={char.talents} onPick={(v) => { setFocus(v); setVoiesOpen(false) }} />
+            ))}
+          </div>
+        </Sheet>
+      )}
 
       {/* Canevas radial */}
       <div
@@ -355,7 +412,7 @@ export function TalentTree() {
           <CtrlBtn onClick={center} label="⌖" title="Recentrer" />
         </div>
         <div className="pointer-events-none absolute left-2 top-2 rounded bg-black/40 px-1.5 py-0.5 text-[9px] text-slate-400">
-          Glisse pour explorer · molette / +/− pour zoomer
+          Glisse pour explorer · pince, molette ou +/− pour zoomer
         </div>
       </div>
 
@@ -364,6 +421,28 @@ export function TalentTree() {
 
       <RespecBar char={char} />
     </div>
+  )
+}
+
+/** Une voie dans la feuille « Voies & archétypes » : nom coloré + points alloués. */
+function VoieButton({ id, focus, talents, onPick }: {
+  id: ConstellationId
+  focus: ConstellationId | null
+  talents: Record<string, number>
+  onPick: (id: ConstellationId | null) => void
+}) {
+  const m = CONSTELLATIONS[id]
+  const allocated = talentsByConstellation(id).reduce((a, n) => a + (talents[n.id] ?? 0), 0)
+  const active = id === focus
+  return (
+    <button
+      onClick={() => onPick(active ? null : id)}
+      className={'flex items-center justify-between gap-1 rounded-lg border px-2.5 py-2 text-[12px] font-medium ' + (active ? 'border-current bg-white/5' : 'border-slate-700 hover:border-slate-500')}
+      style={{ color: m.color }}
+    >
+      <span className="truncate">{m.archetype ? '★ ' : ''}{m.icon} {m.name}</span>
+      {allocated > 0 && <span className="shrink-0 rounded-full bg-white/10 px-1.5 text-[10px] text-slate-200">{allocated}</span>}
+    </button>
   )
 }
 
