@@ -248,12 +248,12 @@ function PowersSection({ char }: { char: Character }) {
                   <button
                     onClick={() => togglePowerAuto(slot)}
                     title="Basculer entre lancement automatique et manuel (bouton en combat)"
-                    className={'rounded px-1.5 py-0.5 text-[10px] font-semibold ' + (auto ? 'bg-cyan-600/30 text-cyan-200' : 'bg-amber-600/30 text-amber-200')}
+                    className={'rounded px-2 py-1 text-[10px] font-semibold ' + (auto ? 'bg-cyan-600/30 text-cyan-200' : 'bg-amber-600/30 text-amber-200')}
                   >
                     {auto ? 'AUTO' : 'MANUEL'}
                   </button>
                 )}
-                <button onClick={() => setPower(slot, null)} className="rounded px-1 text-[11px] text-slate-500 hover:text-red-400" title="Retirer">✕</button>
+                <button onClick={() => setPower(slot, null)} className="rounded px-2 py-1 text-sm text-slate-500 hover:text-red-400" title="Retirer">✕</button>
               </div>
               {det && (
                 <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-slate-400">
@@ -284,7 +284,7 @@ function PowersSection({ char }: { char: Character }) {
                   disabled={emptySlot < 0}
                   onClick={() => setPower(emptySlot, id)}
                   title={p.description}
-                  className="rounded border border-violet-700/50 bg-violet-900/30 px-1.5 py-0.5 text-[10px] text-violet-200 hover:bg-violet-800/40 disabled:opacity-40"
+                  className="rounded border border-violet-700/50 bg-violet-900/30 px-2 py-1 text-[10px] text-violet-200 hover:bg-violet-800/40 disabled:opacity-40"
                 >
                   {p.kind === 'active' ? '⚡' : '🛡'} {p.name}
                 </button>

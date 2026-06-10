@@ -181,7 +181,7 @@ function RaidCard({ def, unlocked, cleared, bestStage, orbes, busy, partyDps, pa
           <button
             key={n}
             onClick={() => setRepeat(n)}
-            className={'rounded px-1.5 py-0.5 font-semibold ' + (repeat === n ? 'bg-rose-600 text-slate-950' : 'bg-slate-800 text-slate-400 hover:bg-slate-700')}
+            className={'rounded px-2.5 py-1.5 font-semibold ' + (repeat === n ? 'bg-rose-600 text-slate-950' : 'bg-slate-800 text-slate-400 hover:bg-slate-700')}
           >
             {n === INF ? '∞' : '×' + n}
           </button>
@@ -192,14 +192,14 @@ function RaidCard({ def, unlocked, cleared, bestStage, orbes, busy, partyDps, pa
       {/* Sélecteur de tier + lancement */}
       <div className="mt-1.5 flex items-center gap-1.5">
         <div className="flex items-center rounded-lg border border-slate-700">
-          <button onClick={() => setTier((x) => Math.max(1, Math.min(frontier, x) - 1))} className="px-2 py-1 text-xs text-slate-300 hover:bg-white/5">−</button>
+          <button onClick={() => setTier((x) => Math.max(1, Math.min(frontier, x) - 1))} className="px-3 py-2.5 text-xs text-slate-300 hover:bg-white/5">−</button>
           <span className="w-12 text-center text-xs tabular-nums text-slate-200">Tier {t}{isNew ? ' ★' : ''}</span>
-          <button onClick={() => setTier((x) => Math.min(frontier, Math.max(1, x) + 1))} className="px-2 py-1 text-xs text-slate-300 hover:bg-white/5">+</button>
+          <button onClick={() => setTier((x) => Math.min(frontier, Math.max(1, x) + 1))} className="px-3 py-2.5 text-xs text-slate-300 hover:bg-white/5">+</button>
         </div>
         <button
           disabled={!canEnter}
           onClick={() => onEnter(t, repeat)}
-          className="flex-1 rounded-lg py-1.5 text-xs font-semibold text-slate-50 disabled:opacity-40"
+          className="flex-1 rounded-lg py-2.5 text-xs font-semibold text-slate-50 disabled:opacity-40"
           style={{ background: canEnter ? def.color + 'cc' : '#1e2433' }}
         >
           {busy ? 'Indisponible' : orbes < def.orbeCost ? `Besoin de ${def.orbeCost} 🔮` : `Lancer tier ${t}${repeat > 1 ? (repeat === INF ? ' ∞' : ` ×${repeat}`) : ''} (${def.orbeCost} 🔮)`}

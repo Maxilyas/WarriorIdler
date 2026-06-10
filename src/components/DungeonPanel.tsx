@@ -47,7 +47,7 @@ export function DungeonPanel() {
       <button
         onClick={craftSceau}
         disabled={!canCraftSceau}
-        className="mb-2 w-full rounded-lg bg-amber-800/50 py-1.5 text-[11px] font-medium text-amber-200 hover:bg-amber-700/60 disabled:opacity-40"
+        className="mb-2 w-full rounded-lg bg-amber-800/50 py-2 text-[11px] font-medium text-amber-200 hover:bg-amber-700/60 disabled:opacity-40"
       >
         🔨 Forger un Sceau de faille · 💠 {SCEAU_COST.noyau} + ♦ {SCEAU_COST.eclats}
       </button>
@@ -125,7 +125,7 @@ function DungeonCard({ def, cleared, sceaux, bestStage, busy, onEnter }: {
               <button
                 key={n}
                 onClick={() => setRepeat(n)}
-                className={'rounded px-1.5 py-0.5 font-semibold ' + (repeat === n ? 'bg-amber-600 text-slate-950' : 'bg-slate-800 text-slate-400 hover:bg-slate-700')}
+                className={'rounded px-2.5 py-1.5 font-semibold ' + (repeat === n ? 'bg-amber-600 text-slate-950' : 'bg-slate-800 text-slate-400 hover:bg-slate-700')}
               >
                 {n === INF ? '∞' : '×' + n}
               </button>
@@ -133,14 +133,14 @@ function DungeonCard({ def, cleared, sceaux, bestStage, busy, onEnter }: {
           </div>
           <div className="mt-1.5 flex items-center gap-1.5">
             <div className="flex items-center rounded-lg border border-slate-700">
-              <button onClick={() => setLevel((l) => Math.max(1, Math.min(frontier, l) - 1))} className="px-2 py-1 text-xs text-slate-300 hover:bg-white/5">−</button>
+              <button onClick={() => setLevel((l) => Math.max(1, Math.min(frontier, l) - 1))} className="px-3 py-2.5 text-xs text-slate-300 hover:bg-white/5">−</button>
               <span className="w-7 text-center text-xs tabular-nums text-slate-200">{lvl}</span>
-              <button onClick={() => setLevel((l) => Math.min(frontier, Math.max(1, l) + 1))} className="px-2 py-1 text-xs text-slate-300 hover:bg-white/5">+</button>
+              <button onClick={() => setLevel((l) => Math.min(frontier, Math.max(1, l) + 1))} className="px-3 py-2.5 text-xs text-slate-300 hover:bg-white/5">+</button>
             </div>
             <button
               disabled={!canEnter}
               onClick={() => onEnter(lvl, repeat)}
-              className="flex-1 rounded-lg bg-amber-700/80 py-1.5 text-xs font-semibold hover:bg-amber-600 disabled:opacity-40"
+              className="flex-1 rounded-lg bg-amber-700/80 py-2.5 text-xs font-semibold hover:bg-amber-600 disabled:opacity-40"
             >
               {busy ? 'Donjon en cours…' : sceaux < cost ? `Manque de Sceaux (${cost} 🔑)` : `Entrer niv. ${lvl}${repeat > 1 ? ` ×${affordableRuns}${repeat === INF ? '' : ''}` : ''}${cost === 0 ? '' : ` (${cost} 🔑/run)`}`}
             </button>

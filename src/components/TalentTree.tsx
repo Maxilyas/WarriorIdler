@@ -269,7 +269,7 @@ export function TalentTree() {
               key={c.id}
               onClick={() => { setActiveChar(i); setSelected(null) }}
               className={
-                'flex-1 truncate rounded px-2 py-1 text-[11px] font-medium ' +
+                'flex-1 truncate rounded px-2 py-1.5 text-[11px] font-medium ' +
                 (i === activeChar ? 'bg-orange-500/20 text-orange-200' : 'bg-slate-800 text-slate-400')
               }
             >
@@ -289,7 +289,7 @@ export function TalentTree() {
             <button
               key={id}
               onClick={() => setFocus(active ? null : id)}
-              className={'shrink-0 rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-colors ' + (active ? 'border-current' : m.archetype ? 'border-amber-700/50 text-slate-300 hover:border-amber-500' : 'border-slate-700 text-slate-400 hover:border-slate-500')}
+              className={'shrink-0 rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition-colors ' + (active ? 'border-current' : m.archetype ? 'border-amber-700/50 text-slate-300 hover:border-amber-500' : 'border-slate-700 text-slate-400 hover:border-slate-500')}
               style={active ? { color: m.color } : undefined}
             >
               {m.archetype && <span className="mr-0.5 text-[8px] text-amber-300" title="Archétype (change le gameplay)">★</span>}
@@ -372,7 +372,7 @@ function CtrlBtn({ onClick, label, title }: { onClick: () => void; label: string
     <button
       onClick={onClick}
       title={title}
-      className="h-7 w-7 rounded-lg border border-slate-700 bg-slate-900/80 text-sm font-bold text-slate-300 hover:bg-slate-800"
+      className="h-9 w-9 rounded-lg border border-slate-700 bg-slate-900/80 text-sm font-bold text-slate-300 hover:bg-slate-800"
     >
       {label}
     </button>

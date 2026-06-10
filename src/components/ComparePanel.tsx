@@ -78,7 +78,7 @@ export function ComparePanel({ item, equipped, occupied, onEquip, onSell, onRecy
           </div>
         </div>
         {onClose && (
-          <button onClick={onClose} className="rounded-lg bg-slate-800 px-2 py-0.5 text-slate-400 hover:bg-slate-700">
+          <button onClick={onClose} className="rounded-lg bg-slate-800 px-2.5 py-1.5 text-slate-400 hover:bg-slate-700">
             ✕
           </button>
         )}
@@ -173,7 +173,7 @@ export function ComparePanel({ item, equipped, occupied, onEquip, onSell, onRecy
       {/* Actions : retirer (si équipé) ou équiper/vendre/recycler */}
       <div className="mt-2 space-y-1.5">
         {isEquipped ? (
-          <button onClick={onUnequip} className="w-full rounded-lg bg-slate-700 py-2 text-xs font-semibold hover:bg-slate-600">
+          <button onClick={onUnequip} className="w-full rounded-lg bg-slate-700 py-2.5 text-xs font-semibold hover:bg-slate-600">
             Retirer
           </button>
         ) : (
@@ -185,7 +185,7 @@ export function ComparePanel({ item, equipped, occupied, onEquip, onSell, onRecy
                 <button
                   key={slot.id}
                   onClick={() => onEquip(slot.id)}
-                  className="flex w-full items-center justify-between rounded-lg bg-emerald-700/80 px-3 py-2 text-xs font-semibold hover:bg-emerald-600"
+                  className="flex w-full items-center justify-between rounded-lg bg-emerald-700/80 px-3 py-2.5 text-xs font-semibold hover:bg-emerald-600"
                 >
                   <span>Équiper · {slot.name}</span>
                   {inPlace ? (
@@ -200,10 +200,10 @@ export function ComparePanel({ item, equipped, occupied, onEquip, onSell, onRecy
               )
             })}
             <div className="flex gap-1.5">
-              <button onClick={onSell} className="flex-1 rounded-lg bg-yellow-800/60 py-1.5 text-xs hover:bg-yellow-700/70">
+              <button onClick={onSell} className="flex-1 rounded-lg bg-yellow-800/60 py-2 text-xs hover:bg-yellow-700/70">
                 Vendre
               </button>
-              <button onClick={onRecycle} className="flex-1 rounded-lg bg-cyan-800/60 py-1.5 text-xs hover:bg-cyan-700/70">
+              <button onClick={onRecycle} className="flex-1 rounded-lg bg-cyan-800/60 py-2 text-xs hover:bg-cyan-700/70">
                 Recycler
               </button>
             </div>
@@ -249,7 +249,7 @@ function CraftSection({ item }: { item: Item }) {
 
   return (
     <div className="mt-2 rounded-lg border border-amber-800/40 bg-amber-950/10 p-2">
-      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center justify-between text-[11px] font-semibold text-amber-300">
+      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center justify-between py-1 text-[11px] font-semibold text-amber-300">
         <span>🔨 Atelier — améliorer</span>
         <span>{open ? '▾' : '▸'}</span>
       </button>
@@ -267,7 +267,7 @@ function CraftSection({ item }: { item: Item }) {
                     <button
                       key={i}
                       onClick={() => toggle(i)}
-                      className={'rounded border px-1.5 py-0.5 text-[10px] ' + (isL ? 'border-amber-400 bg-amber-900/40 text-amber-200' : 'border-slate-700 text-slate-400')}
+                      className={'rounded border px-2 py-1 text-[10px] ' + (isL ? 'border-amber-400 bg-amber-900/40 text-amber-200' : 'border-slate-700 text-slate-400')}
                       style={{ color: isL ? undefined : lbl.color }}
                     >
                       {isL ? '🔒 ' : ''}{lbl.name} +{a.value}{lbl.pct ? '%' : ''}
@@ -278,7 +278,7 @@ function CraftSection({ item }: { item: Item }) {
               <button
                 disabled={essence < rCost}
                 onClick={() => { reforge(item.id, locked); reset() }}
-                className="mt-1.5 w-full rounded bg-amber-800/60 py-1.5 text-[11px] font-medium hover:bg-amber-700/70 disabled:opacity-40"
+                className="mt-1.5 w-full rounded bg-amber-800/60 py-2 text-[11px] font-medium hover:bg-amber-700/70 disabled:opacity-40"
               >
                 Reforge les affixes · ♦ {rCost}
               </button>
@@ -289,7 +289,7 @@ function CraftSection({ item }: { item: Item }) {
             <button
               disabled={essence < sCost}
               onClick={() => { surillvl(item.id); reset() }}
-              className="w-full rounded bg-amber-800/60 py-1.5 text-[11px] font-medium hover:bg-amber-700/70 disabled:opacity-40"
+              className="w-full rounded bg-amber-800/60 py-2 text-[11px] font-medium hover:bg-amber-700/70 disabled:opacity-40"
             >
               Surillvl → iLvl {item.ilvl + SURILLVL_STEP} · ♦ {sCost}
             </button>
@@ -308,7 +308,7 @@ function CraftSection({ item }: { item: Item }) {
                       key={p}
                       disabled={cur || essence < tCost}
                       onClick={() => transmute(item.id, p)}
-                      className="rounded border border-slate-700 py-1 text-[10px] font-medium disabled:opacity-40 enabled:hover:bg-white/5"
+                      className="rounded border border-slate-700 py-1.5 text-[10px] font-medium disabled:opacity-40 enabled:hover:bg-white/5"
                       style={{ color: cur ? '#64748b' : m.color }}
                     >
                       {cur ? '✓ ' : ''}{m.short}
@@ -323,7 +323,7 @@ function CraftSection({ item }: { item: Item }) {
             <button
               disabled={essence < aCost.eclats || noyau < aCost.noyau || fragments < aCost.fragments || poussiere < aCost.poussiere || cosmic < aCost.cosmic}
               onClick={() => { ascend(item.id); reset() }}
-              className="w-full rounded bg-fuchsia-900/50 py-1.5 text-[11px] font-medium hover:bg-fuchsia-800/60 disabled:opacity-40"
+              className="w-full rounded bg-fuchsia-900/50 py-2 text-[11px] font-medium hover:bg-fuchsia-800/60 disabled:opacity-40"
             >
               Ascension → {RARITIES[nr].name} · 💠 {aCost.noyau} + ♦ {aCost.eclats}
               {aCost.poussiere ? ` + 🌌 ${aCost.poussiere}` : ''}{aCost.fragments ? ` + ✨ ${aCost.fragments}` : ''}{aCost.cosmic ? ` + 💫 ${aCost.cosmic}` : ''}
@@ -342,7 +342,7 @@ function CraftSection({ item }: { item: Item }) {
           <button
             disabled={fragments < FRAGMENT_INFUSE_COST}
             onClick={() => infuseUnique(item.id)}
-            className="w-full rounded bg-sky-900/50 py-1.5 text-[11px] font-medium text-sky-200 hover:bg-sky-800/60 disabled:opacity-40"
+            className="w-full rounded bg-sky-900/50 py-2 text-[11px] font-medium text-sky-200 hover:bg-sky-800/60 disabled:opacity-40"
             title="Ajoute un effet unique (ou monte son rang) — récompense de raid"
           >
             ✨ {item.unique ? 'Renforcer l\'unique' : 'Infuser un unique'} · {FRAGMENT_INFUSE_COST} fragments
@@ -371,7 +371,7 @@ function QuintessenceSection({ item }: { item: Item }) {
 
   return (
     <div className="rounded border border-emerald-800/40 bg-emerald-950/10 p-2">
-      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center justify-between text-[11px] font-semibold text-emerald-300">
+      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center justify-between py-1 text-[11px] font-semibold text-emerald-300">
         <span>⚗️ Quintessences élémentaires</span>
         <span className="text-[9.5px] font-normal text-slate-400">⚗️ {totalOwned} · {open ? '▾' : '▸'}</span>
       </button>
@@ -404,7 +404,7 @@ function QuintessenceSection({ item }: { item: Item }) {
                             disabled={!can}
                             onClick={() => enhanceTyped(item.id, t, kind)}
                             title={aff ? `+${QUINT_GAIN[kind]}% (palier ${level} → ${level + 1})` : `Ajoute +${kind === 'resist' ? 4 : 8}% ${label}`}
-                            className="flex-1 rounded border border-emerald-700/40 px-1 py-0.5 text-[9.5px] font-medium text-emerald-100 enabled:hover:bg-emerald-900/30 disabled:opacity-40"
+                            className="flex-1 rounded border border-emerald-700/40 px-1 py-1 text-[9.5px] font-medium text-emerald-100 enabled:hover:bg-emerald-900/30 disabled:opacity-40"
                           >
                             {aff ? '⬆' : '+'} {label} · {m.icon}{cost}
                           </button>
@@ -440,7 +440,7 @@ function InsertEffectSection({ item }: { item: Item }) {
             disabled={essence < cost.eclats}
             onClick={() => insertEffect(item.id, e.id)}
             title={e.description}
-            className="rounded border border-fuchsia-700/50 bg-fuchsia-900/30 px-1.5 py-0.5 text-[10px] text-fuchsia-200 hover:bg-fuchsia-800/40 disabled:opacity-40"
+            className="rounded border border-fuchsia-700/50 bg-fuchsia-900/30 px-2 py-1 text-[10px] text-fuchsia-200 hover:bg-fuchsia-800/40 disabled:opacity-40"
           >
             {e.name} ({essences[e.id]})
           </button>
@@ -461,7 +461,7 @@ function ChooseUniqueSection({ item }: { item: Item }) {
   const list = UNIQUE_EFFECTS.filter((e) => role === 'all' || e.role === role)
   return (
     <div className="rounded border border-violet-800/40 bg-violet-950/10 p-2">
-      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center justify-between text-[11px] font-semibold text-violet-300">
+      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center justify-between py-1 text-[11px] font-semibold text-violet-300">
         <span>💫 Invoquer un effet au choix</span>
         <span className="text-[9.5px] font-normal text-slate-400">{CHOOSE_UNIQUE_COST.cosmic} 💫 + {CHOOSE_UNIQUE_COST.fragments} ✨ · {open ? '▾' : '▸'}</span>
       </button>
@@ -479,7 +479,7 @@ function ChooseUniqueSection({ item }: { item: Item }) {
                 disabled={!affordable}
                 onClick={() => chooseUnique(item.id, e.id)}
                 title={e.description}
-                className="flex w-full items-center justify-between rounded border border-violet-800/40 px-1.5 py-0.5 text-left text-[10px] text-violet-100 hover:bg-violet-900/30 disabled:opacity-40"
+                className="flex w-full items-center justify-between rounded border border-violet-800/40 px-2 py-1 text-left text-[10px] text-violet-100 hover:bg-violet-900/30 disabled:opacity-40"
               >
                 <span className="truncate">{item.unique?.id === e.id ? '✦ ' : ''}{e.name}</span>
                 <span className="ml-1 shrink-0 text-[8.5px] text-slate-500">{e.role}</span>
@@ -494,7 +494,7 @@ function ChooseUniqueSection({ item }: { item: Item }) {
 
 function RoleChip({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
   return (
-    <button onClick={onClick} className={'rounded px-1.5 py-0.5 ' + (active ? 'bg-violet-600 text-slate-50' : 'bg-slate-800 text-slate-400')}>
+    <button onClick={onClick} className={'rounded px-2 py-1 ' + (active ? 'bg-violet-600 text-slate-50' : 'bg-slate-800 text-slate-400')}>
       {label}
     </button>
   )
@@ -548,7 +548,7 @@ function UniqueBlock({ item }: { item: Item }) {
         <button
           disabled={!canUp}
           onClick={() => upgradeUnique(item.id)}
-          className="mt-1.5 w-full rounded bg-fuchsia-800/60 py-1.5 text-[11px] font-medium hover:bg-fuchsia-700/70 disabled:opacity-40"
+          className="mt-1.5 w-full rounded bg-fuchsia-800/60 py-2 text-[11px] font-medium hover:bg-fuchsia-700/70 disabled:opacity-40"
           title={have < cost.essences ? 'Pas assez d\'essences (recycle des uniques identiques)' : ''}
         >
           Monter rang {inst.rank + 1} · {cost.essences} essences ({have}) + ♦ {cost.eclats}

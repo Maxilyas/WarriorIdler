@@ -46,7 +46,7 @@ export function GrimoirePanel() {
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={'flex-1 rounded px-2 py-1 font-medium ' + (tab === t.id ? 'bg-slate-700 text-slate-100' : 'bg-slate-800/60 text-slate-400 hover:text-slate-200')}
+            className={'flex-1 rounded px-2 py-2 font-medium ' + (tab === t.id ? 'bg-slate-700 text-slate-100' : 'bg-slate-800/60 text-slate-400 hover:text-slate-200')}
           >
             {t.icon} {t.label}
           </button>
@@ -351,7 +351,7 @@ function FilterBtn({ active, onClick, label, color }: { active: boolean; onClick
   return (
     <button
       onClick={onClick}
-      className={'rounded px-1.5 py-0.5 font-medium ' + (active ? 'text-slate-950' : 'bg-slate-800')}
+      className={'rounded px-2 py-1.5 font-medium ' + (active ? 'text-slate-950' : 'bg-slate-800')}
       style={active ? { background: color } : { color }}
     >
       {label}

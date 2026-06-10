@@ -98,7 +98,7 @@ export function MerchantPanel() {
                 <button
                   key={q}
                   onClick={() => setQty(q)}
-                  className={'rounded px-1.5 py-0.5 font-medium ' + (qty === q ? 'bg-cyan-600 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700')}
+                  className={'rounded px-2.5 py-1.5 font-medium ' + (qty === q ? 'bg-cyan-600 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700')}
                 >
                   ×{q}
                 </button>
@@ -134,7 +134,7 @@ export function MerchantPanel() {
                         <span className="block truncate text-[12px] font-medium text-slate-200">{u.name} <span className="text-slate-500">Niv. {level}{u.maxLevel ? `/${u.maxLevel}` : ''}</span></span>
                         <span className="block truncate text-[9px] text-slate-500">{u.description}</span>
                       </span>
-                      <button onClick={() => buyUpgrade(u.id)} disabled={maxed || gold < cost || poussiere < pous || essence < ecl} className="shrink-0 rounded bg-emerald-800/60 px-2 py-1 text-[10px] font-medium hover:bg-emerald-700 disabled:opacity-40">
+                      <button onClick={() => buyUpgrade(u.id)} disabled={maxed || gold < cost || poussiere < pous || essence < ecl} className="shrink-0 rounded bg-emerald-800/60 px-2.5 py-1.5 text-[10px] font-medium hover:bg-emerald-700 disabled:opacity-40">
                         {maxed ? 'Max' : <>💰 {cost.toLocaleString('fr-FR')}{ecl ? <span className={essence >= ecl ? '' : 'text-red-400'}> ♦{ecl}</span> : null}{pous ? ` 🌌${pous}` : ''}</>}
                       </button>
                     </div>

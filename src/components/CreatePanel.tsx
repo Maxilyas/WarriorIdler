@@ -57,7 +57,7 @@ export function CreatePanel({ onClose }: { onClose: () => void }) {
       >
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-base font-bold text-amber-300">🔨 Forger un objet</h2>
-          <button onClick={onClose} className="rounded-lg bg-slate-800 px-2.5 py-1 text-slate-400 hover:bg-slate-700">✕</button>
+          <button onClick={onClose} className="rounded-lg bg-slate-800 px-2.5 py-1.5 text-slate-400 hover:bg-slate-700">✕</button>
         </div>
 
         {/* Métier de forgeron : Savoir-faire 🔧 + améliorations (déblocages + bonus) */}
@@ -190,7 +190,7 @@ export function CreatePanel({ onClose }: { onClose: () => void }) {
               <button
                 key={r.id}
                 onClick={() => setRarity(r.id)}
-                className={'rounded-lg border px-2 py-1 text-[11px] font-medium ' + (rarity === r.id ? 'border-current' : 'border-slate-700/60')}
+                className={'rounded-lg border px-2.5 py-1.5 text-[11px] font-medium ' + (rarity === r.id ? 'border-current' : 'border-slate-700/60')}
                 style={{ color: r.color }}
               >
                 {r.name}

@@ -49,6 +49,9 @@ export function StuffScreen() {
   const [statFilter, setStatFilter] = useState<SecondaryStat[]>([])
   const [showStatFilter, setShowStatFilter] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
+  // Le paper-doll est repliable sur mobile (libère l'inventaire, qui est le vrai centre d'interaction).
+  // Toujours affiché sur grand écran (colonne dédiée).
+  const [equipOpen, setEquipOpen] = useState(true)
 
   const filterType: ItemType | null = selectedSlot
     ? EQUIP_SLOTS.find((s) => s.id === selectedSlot)!.accepts
@@ -123,7 +126,7 @@ export function StuffScreen() {
                   setSelectedSlot(null)
                 }}
                 className={
-                  'flex-1 truncate rounded px-1 py-1 text-[10px] font-medium ' +
+                  'flex-1 truncate rounded px-2 py-1.5 text-[10px] font-medium ' +
                   (i === activeChar ? 'bg-orange-500/20 text-orange-200' : 'bg-slate-800 text-slate-400')
                 }
               >
@@ -132,10 +135,14 @@ export function StuffScreen() {
             ))}
           </div>
         )}
-        <div className="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-          Équipement de {active?.name ?? '—'} ({equippedCount}/16)
-        </div>
-        <div className="grid grid-cols-2 gap-1 lg:grid-cols-1">
+        <button
+          onClick={() => setEquipOpen((o) => !o)}
+          className="mb-1.5 flex w-full items-center justify-between px-1 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500 lg:pointer-events-none"
+        >
+          <span>Équipement de {active?.name ?? '—'} ({equippedCount}/16)</span>
+          <span className="text-slate-600 lg:hidden">{equipOpen ? '▾' : '▸'}</span>
+        </button>
+        <div className={'grid-cols-2 gap-1 lg:grid lg:grid-cols-1 ' + (equipOpen ? 'grid' : 'hidden')}>
           {EQUIP_SLOTS.map((slot) => {
             const item = equipment[slot.id]
             const rarity = item ? RARITIES[item.rarity] : null
@@ -154,7 +161,7 @@ export function StuffScreen() {
                   }
                 }}
                 className={
-                  'group relative rounded-lg border px-2 py-1 text-left transition-colors ' +
+                  'group relative rounded-lg border px-2 py-1.5 text-left transition-colors ' +
                   (active ? 'border-white/40 bg-white/10' : 'border-slate-800 hover:bg-white/5')
                 }
                 style={item && rarity ? { borderColor: rarity.color + '55' } : undefined}
@@ -197,7 +204,7 @@ export function StuffScreen() {
             {filterType ? (
               <span className="flex items-center gap-1">
                 {ITEM_TYPES[filterType].icon} {ITEM_TYPES[filterType].name}
-                <button onClick={() => setSelectedSlot(null)} className="ml-1 rounded bg-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-600">
+                <button onClick={() => setSelectedSlot(null)} className="ml-1 rounded bg-slate-700 px-2 py-1.5 text-[10px] text-slate-300 hover:bg-slate-600">
                   tous ✕
                 </button>
               </span>
@@ -210,7 +217,7 @@ export function StuffScreen() {
               <button
                 key={m}
                 onClick={() => setSort(m)}
-                className={'rounded px-1.5 py-0.5 ' + (sort === m ? 'bg-slate-600 text-slate-100' : 'bg-slate-800 text-slate-400')}
+                className={'rounded px-2.5 py-1.5 ' + (sort === m ? 'bg-slate-600 text-slate-100' : 'bg-slate-800 text-slate-400')}
               >
                 {m === 'score' ? 'Score' : m === 'rarity' ? 'Rareté' : 'Récent'}
               </button>
@@ -222,7 +229,7 @@ export function StuffScreen() {
           <span className="text-slate-500">Affinité :</span>
           <button
             onClick={() => setPrimaryFilter(null)}
-            className={'rounded px-1.5 py-0.5 ' + (primaryFilter === null ? 'bg-slate-600 text-slate-100' : 'bg-slate-800 text-slate-400')}
+            className={'rounded px-2.5 py-1.5 ' + (primaryFilter === null ? 'bg-slate-600 text-slate-100' : 'bg-slate-800 text-slate-400')}
           >
             Toutes
           </button>
@@ -230,7 +237,7 @@ export function StuffScreen() {
             <button
               key={p}
               onClick={() => setPrimaryFilter((f) => (f === p ? null : p))}
-              className={'rounded px-1.5 py-0.5 font-medium ' + (primaryFilter === p ? 'text-slate-950' : 'bg-slate-800')}
+              className={'rounded px-2.5 py-1.5 font-medium ' + (primaryFilter === p ? 'text-slate-950' : 'bg-slate-800')}
               style={primaryFilter === p ? { background: PRIMARY_META[p].color } : { color: PRIMARY_META[p].color }}
             >
               {PRIMARY_META[p].short}
@@ -240,13 +247,13 @@ export function StuffScreen() {
 
         {/* Filtre par stat secondaire (recherche de build précis) */}
         <div className="mb-1.5 px-1 text-[10px]">
-          <button onClick={() => setShowStatFilter((v) => !v)} className="text-slate-400 hover:text-slate-200">
+          <button onClick={() => setShowStatFilter((v) => !v)} className="inline-flex items-center py-1 text-slate-400 hover:text-slate-200">
             🔍 Filtrer par stat{statFilter.length ? ` (${statFilter.length})` : ''} {showStatFilter ? '▾' : '▸'}
           </button>
           {showStatFilter && (
             <div className="mt-1 flex flex-wrap gap-1">
               {statFilter.length > 0 && (
-                <button onClick={() => setStatFilter([])} className="rounded bg-slate-700 px-1.5 py-0.5 text-slate-300 hover:bg-slate-600">tout ✕</button>
+                <button onClick={() => setStatFilter([])} className="rounded bg-slate-700 px-2 py-1.5 text-slate-300 hover:bg-slate-600">tout ✕</button>
               )}
               {SECONDARY_STATS.map((s) => {
                 const on = statFilter.includes(s)
@@ -256,7 +263,7 @@ export function StuffScreen() {
                     key={s}
                     onClick={() => setStatFilter((f) => (on ? f.filter((x) => x !== s) : [...f, s]))}
                     title={m.name}
-                    className={'rounded px-1.5 py-0.5 font-medium ' + (on ? 'text-slate-950' : 'bg-slate-800')}
+                    className={'rounded px-2 py-1.5 font-medium ' + (on ? 'text-slate-950' : 'bg-slate-800')}
                     style={on ? { background: m.color } : { color: m.color }}
                   >
                     {m.short}
@@ -268,29 +275,29 @@ export function StuffScreen() {
         </div>
 
         <div className="mb-1.5 flex flex-wrap items-center gap-1 px-1 text-[10px]">
-          <button onClick={() => setShowCreate(true)} className="rounded bg-amber-700/70 px-1.5 py-0.5 font-medium text-amber-100 hover:bg-amber-600/70">
+          <button onClick={() => setShowCreate(true)} className="rounded bg-amber-700/70 px-2.5 py-1.5 font-medium text-amber-100 hover:bg-amber-600/70">
             🔨 Forger
           </button>
           <span className="text-slate-500">sous</span>
           <select
             value={recycleThreshold}
             onChange={(e) => setRecycleThreshold(Number(e.target.value))}
-            className="rounded bg-slate-800 px-1 py-0.5 text-slate-200"
+            className="rounded bg-slate-800 px-2 py-1.5 text-slate-200"
           >
             {RARITY_LIST.filter((r) => r.tier >= 2 && r.tier <= 14).map((r) => (
               <option key={r.id} value={r.tier}>{r.name}</option>
             ))}
           </select>
-          <button onClick={() => sellAllBelow(recycleThreshold)} className="rounded bg-yellow-900/40 px-1.5 py-0.5 text-yellow-300 hover:bg-yellow-900/60">
+          <button onClick={() => sellAllBelow(recycleThreshold)} className="rounded bg-yellow-900/40 px-2.5 py-1.5 text-yellow-300 hover:bg-yellow-900/60">
             💰 Vendre
           </button>
-          <button onClick={() => recycleAllBelow(recycleThreshold)} className="rounded bg-cyan-900/40 px-1.5 py-0.5 text-cyan-300 hover:bg-cyan-900/60">
+          <button onClick={() => recycleAllBelow(recycleThreshold)} className="rounded bg-cyan-900/40 px-2.5 py-1.5 text-cyan-300 hover:bg-cyan-900/60">
             ♻️ Recycler
           </button>
           <button
             onClick={toggleAutoRecycle}
             title="Recycle automatiquement tout butin (non unique) sous le seuil, directement au drop."
-            className={'rounded px-1.5 py-0.5 font-medium ' + (autoRecycle ? 'bg-emerald-600 text-slate-950' : 'bg-slate-800 text-slate-400 hover:text-slate-200')}
+            className={'rounded px-2.5 py-1.5 font-medium ' + (autoRecycle ? 'bg-emerald-600 text-slate-950' : 'bg-slate-800 text-slate-400 hover:text-slate-200')}
           >
             {autoRecycle ? '♻️ Auto ✓' : '♻️ Auto'}
           </button>
