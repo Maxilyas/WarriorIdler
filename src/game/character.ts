@@ -186,8 +186,8 @@ export function charDps(char: Character): number {
   const derived = charDerived(char)
   const profile = charDamageProfile(char)
   const pm = profileDamageMult(profile)
-  // Multiplicateur de dégâts PERSISTANT issu des keystones (Carnage, Titan…) : appliqué en combat
-  // aux auto-attaques ET aux sorts → il doit l'être ici aussi, sinon le DPS affiché sous-estime.
+  // Multiplicateur de dégâts PERSISTANT issu des keystones (Carnage, Titan…) + bonus de SET :
+  // appliqué en combat aux auto-attaques ET aux sorts → il doit l'être ici aussi.
   const dmgMult = charCombatMods(char).damageMult
   let dps = theoreticalDps(derived, profile, dmgMult)
   for (const pid of char.powers) {
@@ -196,6 +196,52 @@ export function charDps(char: Character): number {
     if (p) dps += abilityDps(p, derived, pm, dmgMult)
   }
   return dps
+}
+
+/**
+ * DÉTAIL du DPS affiché — exact PAR CONSTRUCTION : il appelle les mêmes fonctions que charDps
+ * (theoreticalDps + abilityDps), il ne peut donc pas diverger. Sert la transparence : « pourquoi
+ * cette pièce monte/baisse mon DPS ? » a toujours une réponse lisible ici.
+ * Le DPS de fiche est HORS CIBLE : armure, résistances/vulnérabilités, pénétration, dégâts vs boss
+ * et bonus conditionnels (PV bas/hauts, exécution, harmonie, élan) s'appliquent en combat réel.
+ */
+export interface DpsBreakdown {
+  total: number
+  auto: number
+  spells: { name: string; dps: number }[]
+  /** Facteurs multiplicatifs de l'auto-attaque (le produit × puissance × vitesse = auto). */
+  factors: { label: string; value: string }[]
+  /** Le build convertit des stats (Endurance→offense…) : une pièce défensive PEUT monter le DPS. */
+  hasConversions: boolean
+}
+
+export function dpsBreakdown(char: Character): DpsBreakdown {
+  const derived = charDerived(char)
+  const profile = charDamageProfile(char)
+  const pm = profileDamageMult(profile)
+  const dmgMult = charCombatMods(char).damageMult
+  const auto = theoreticalDps(derived, profile, dmgMult)
+  const spells: { name: string; dps: number }[] = []
+  for (const pid of char.powers) {
+    if (!pid) continue
+    const p = getPower(pid)
+    if (!p || p.kind !== 'active') continue
+    const d = abilityDps(p, derived, pm, dmgMult)
+    if (d > 0) spells.push({ name: p.name, dps: d })
+  }
+  const avgCrit = 1 + derived.critChance * (derived.critMult - 1)
+  const factors = [
+    { label: 'Puissance', value: Math.round(derived.power).toLocaleString('fr-FR') },
+    { label: 'Vitesse', value: `${derived.attacksPerSecond.toFixed(2)} att/s` },
+    { label: 'Maîtrise', value: `×${derived.masteryMult.toFixed(2)}` },
+    { label: 'Surpuissance', value: `×${derived.overpower.toFixed(2)}` },
+    { label: 'Critique moyen', value: `×${avgCrit.toFixed(2)}` },
+    { label: 'Profil de dégâts', value: `×${pm.toFixed(2)}` },
+    { label: 'Multifrappe', value: `×${(1 + derived.multistrike).toFixed(2)}` },
+    { label: 'Talents & sets', value: `×${dmgMult.toFixed(2)}` },
+  ]
+  const hasConversions = charKeystones(char).some((k) => k.statAsOther || k.enduranceAs)
+  return { total: auto + spells.reduce((a, s) => a + s.dps, 0), auto, spells, factors, hasConversions }
 }
 
 /** Résistances du héros (équipement + talents + sets), capées. */

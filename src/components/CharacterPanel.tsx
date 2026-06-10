@@ -5,7 +5,7 @@ import type { StatEffect } from '../game/stats'
 import type { PrimaryStat, DamageType, Character, PowerDef } from '../game/types'
 import type { DerivedStats } from '../game/stats'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST, profileDamageMult } from '../game/damage'
-import { charTotalStats, charDerived, charMaxHp, charDamageProfile, charResist, abilityPower, powerScale } from '../game/character'
+import { charTotalStats, charDerived, charMaxHp, charDamageProfile, charResist, abilityPower, powerScale, dpsBreakdown } from '../game/character'
 import { setBonuses, getSet } from '../game/sets'
 import { getPower, POWER_EFFECT_META, scaleLabel, powerDamageType } from '../game/powers'
 
@@ -268,6 +268,49 @@ export function CharacterPanel({ view = 'apercu' }: { view?: CharacterView }) {
               Empile des affixes « +% {DAMAGE_TYPES[dmg.mainType].name} » (ton type principal) pour faire monter le multiplicateur. Investir dans un type minoritaire rapporte peu : sa part du profil est faible.
             </p>
           </div>
+
+          {/* Détail du DPS — exact par construction (mêmes formules que le DPS affiché) */}
+          {(() => {
+            const bd = dpsBreakdown(char)
+            return (
+              <div className="rounded-xl border border-slate-800 bg-[#11151f] p-4">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">🔬 Détail du DPS</span>
+                  <span className="text-sm font-bold text-emerald-300">{Math.round(bd.total).toLocaleString('fr-FR')}</span>
+                </div>
+                <div className="space-y-1 text-[12px]">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-300">⚔ Auto-attaque</span>
+                    <span className="tabular-nums text-slate-100">{Math.round(bd.auto).toLocaleString('fr-FR')}</span>
+                  </div>
+                  {bd.spells.map((sp) => (
+                    <div key={sp.name} className="flex items-center justify-between">
+                      <span className="text-slate-400">✨ {sp.name}</span>
+                      <span className="tabular-nums text-slate-300">{Math.round(sp.dps).toLocaleString('fr-FR')}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-0.5 border-t border-slate-800 pt-2 text-[10.5px]">
+                  {bd.factors.map((f) => (
+                    <div key={f.label} className="flex items-center justify-between">
+                      <span className="text-slate-500">{f.label}</span>
+                      <span className="tabular-nums text-slate-300">{f.value}</span>
+                    </div>
+                  ))}
+                </div>
+                {bd.hasConversions && (
+                  <p className="mt-2 rounded bg-amber-950/30 p-1.5 text-[10px] leading-snug text-amber-200/90">
+                    ⚠️ Tes talents CONVERTISSENT des stats (ex. Endurance → offense) : une pièce défensive peut
+                    donc réellement augmenter ton DPS.
+                  </p>
+                )}
+                <p className="mt-1.5 text-[9.5px] leading-snug text-slate-600">
+                  DPS « de fiche », hors cible : l'armure, les résistances/vulnérabilités, la Pénétration, les
+                  Dégâts aux boss et les bonus conditionnels (PV bas, exécution, harmonie, élan) s'appliquent en combat.
+                </p>
+              </div>
+            )
+          })()}
         </>
       )}
 
