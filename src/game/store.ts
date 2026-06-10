@@ -1689,7 +1689,7 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
         logBit = `+${xp.toLocaleString('fr-FR')} XP`
         break
       }
-      case 'stuff': { if (Math.random() < 0.4) { fightItems.push(generateItem({ ilvl: dungeonIlvl(lv), luckTier: dungeonLuckTier(lv), primaryBias: pickBias(s.characters) })); logBit = '+1 objet' } break }
+      case 'stuff': { if (Math.random() < 0.4) { fightItems.push(generateItem({ ilvl: dungeonIlvl(lv, s.bestStage), luckTier: dungeonLuckTier(lv), primaryBias: pickBias(s.characters) })); logBit = '+1 objet' } break }
     }
     log = pushLog(log, `⚔️ ${def.icon} Combat ${d.current + 1}/${d.totalFights}${logBit ? ` · ${logBit}` : ''}.`, 'kill')
     if (leveled) log = pushLog(log, '⬆ Niveau gagné !', 'level')
@@ -1718,7 +1718,7 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
         case 'sceaux': cSceaux = Math.round(dungeonKeyYield('sceaux', lv) * chestFrac); break
         case 'xp': { const bonus = Math.round(1200 * lv * Math.pow(1.12, lv)); chars = chars.map((c) => (c.hp > 0 ? grantXp(c, bonus) : c)); cXp += bonus; break }
         case 'stuff': {
-          const ilvl = dungeonIlvl(lv)
+          const ilvl = dungeonIlvl(lv, s.bestStage)
           const count = 3 + Math.floor(lv / 2)
           const minTier = Math.min(14, butinMinTier(lv) + rareBonus)
           const maxTier = Math.min(16, butinMaxTier(lv) + rareBonus)

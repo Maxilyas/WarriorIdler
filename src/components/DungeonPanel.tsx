@@ -109,7 +109,7 @@ function DungeonCard({ def, cleared, sceaux, bestStage, busy, onEnter }: {
       <div className="mt-0.5 text-[10px] leading-snug text-slate-400">{def.traitLabel}</div>
       <div className="mt-0.5 text-[10px] text-slate-500">
         Attaques en <span style={{ color: el.color }}>{el.icon} {el.name}</span> · Niv. {lvl} · {dungeonFights(lvl)} combats
-        {def.reward === 'stuff' ? ` · coffre iLvl ~${dungeonIlvl(lvl)}` : ''}
+        {def.reward === 'stuff' ? ` · coffre iLvl ~${dungeonIlvl(lvl, bestStage)}` : ''}
         {' · '}{cost === 0 ? <span className="text-emerald-400">gratuit</span> : <span className="text-amber-300">{cost} 🔑</span>}
       </div>
       {locked ? (

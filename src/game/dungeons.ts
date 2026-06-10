@@ -96,14 +96,16 @@ export const DUNGEON_LIST: DungeonDef[] = [
 ]
 
 /**
- * Rampe de rareté FINE du donjon Butin (Cache du Pilleur). Niv 1 = {Médiocre, Commun, Inhabituel} ;
- * la fenêtre s'élargit et se décale vers le haut avec le niveau (via rollBoxRarity).
+ * Rampe de rareté FINE du donjon Butin (Cache du Pilleur). Niv 1 = {Médiocre…Rare} ; la fenêtre
+ * s'élargit et se décale vers le haut avec le niveau (via rollBoxRarity).
+ * v0.22 : courbe APLATIE — avant, maxTier = 2+niveau donnait du Transcendant dès le niv 14 et la
+ * Cache snowballait (stuff >> farm → niveau suivant trivial). Tier 16 n'arrive plus qu'au niv ~37.
  */
 export function butinMinTier(level: number): number {
-  return Math.max(1, Math.min(14, 1 + Math.floor((level - 1) / 2)))
+  return Math.max(1, Math.min(11, 1 + Math.floor(level / 4)))
 }
 export function butinMaxTier(level: number): number {
-  return Math.max(3, Math.min(16, 2 + level))
+  return Math.max(3, Math.min(16, 3 + Math.floor(level * 0.35)))
 }
 
 /**
@@ -181,7 +183,8 @@ const TRAIT_CFG: Record<DungeonTrait, TraitCfg> = {
   pack: { hp: 0.55, dmg: 0.9, armor: 1, pack: 4 },
   colosse: { hp: 2.6, dmg: 1.25, armor: 1.3, pack: 1 },
   armure: { hp: 1.0, dmg: 1.0, armor: 3.4, pack: 2 },
-  elite: { hp: 1.5, dmg: 1.15, armor: 1.2, pack: 2, elite: true },
+  // v0.22 : les lieutenants de la Cache étaient trop mous pour la qualité du butin → durcis.
+  elite: { hp: 2.1, dmg: 1.3, armor: 1.2, pack: 2, elite: true },
   regen: { hp: 1.1, dmg: 1.0, armor: 1, pack: 2, regen: 0.03 },
 }
 
@@ -190,9 +193,15 @@ export function dungeonFights(level: number): number {
   return Math.min(4, 2 + Math.floor(level / 4))
 }
 
-/** ilvl du butin du coffre (en avance sur le farm normal pour récompenser le défi). */
-export function dungeonIlvl(level: number): number {
-  return Math.round(10 + level * 12)
+/**
+ * ilvl du butin du coffre : en avance sur le farm pour récompenser le défi, mais PLAFONNÉ à
+ * 125% de l'ilvl du record de palier. v0.22 : avant (10 + 12·niv, sans plafond) la Cache niv 38
+ * crachait de l'ilvl 466 quand le farm en donnait 180 — boule de neige stuff → niveau suivant.
+ * Monter le PALIER redevient le moteur ; le donjon garde une longueur d'avance, pas une galaxie.
+ */
+export function dungeonIlvl(level: number, bestStage: number): number {
+  const cap = Math.round(Math.max(1, bestStage) * 1.5 * 1.25) // stageIlvl(bestStage) × 1.25
+  return Math.min(Math.round(10 + level * 8), Math.max(20, cap))
 }
 
 /**
