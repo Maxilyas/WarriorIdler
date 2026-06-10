@@ -33,7 +33,11 @@ const SPEC_INFO: Record<PrimaryStat, string> = {
   endurance: '',
 }
 
-export function CharacterPanel() {
+export type CharacterView = 'apercu' | 'stats' | 'capacites'
+
+/** Fiche du personnage, éclatée en vues courtes (sous-onglets du hub Héros) :
+ *  Aperçu = identité + spé + résumé combat · Stats = le détail chiffré · Capacités = les 5 slots. */
+export function CharacterPanel({ view = 'apercu' }: { view?: CharacterView }) {
   const characters = useGame((s) => s.characters)
   const activeChar = useGame((s) => s.activeChar)
   const setActiveChar = useGame((s) => s.setActiveChar)
@@ -59,7 +63,7 @@ export function CharacterPanel() {
 
   return (
     <div className="space-y-3">
-      {/* Sélecteur d'équipe */}
+      {/* Sélecteur d'équipe (toutes vues) */}
       {characters.length > 1 && (
         <div className="flex gap-1.5">
           {characters.map((c, i) => (
@@ -77,137 +81,143 @@ export function CharacterPanel() {
         </div>
       )}
 
-      {/* Identité */}
-      <div className="rounded-xl border border-slate-800 bg-gradient-to-br from-[#161c2a] to-[#0d111a] p-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-lg font-bold text-slate-100">{char.name}</div>
-            <div className="text-xs text-slate-400">
-              Niveau {char.level} · Build <span style={{ color: PRIMARY_META[derived.mainStat].color }}>{buildName}</span>
+      {view === 'apercu' && (
+        <>
+          {/* Identité */}
+          <div className="rounded-xl border border-slate-800 bg-gradient-to-br from-[#161c2a] to-[#0d111a] p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-lg font-bold text-slate-100">{char.name}</div>
+                <div className="text-xs text-slate-400">
+                  Niveau {char.level} · Build <span style={{ color: PRIMARY_META[derived.mainStat].color }}>{buildName}</span>
+                </div>
+              </div>
+              <div className="text-right text-xs">
+                <div className="text-yellow-400">💰 {gold.toLocaleString('fr-FR')} or</div>
+                <div className="text-cyan-300">♦ {essence.toLocaleString('fr-FR')} éclats</div>
+                <div className="text-fuchsia-300">💠 {noyau.toLocaleString('fr-FR')} noyaux</div>
+                {orbes > 0 && <div className="text-rose-300">🔮 {orbes.toLocaleString('fr-FR')} orbes</div>}
+                {fragments > 0 && <div className="text-sky-300">✨ {fragments.toLocaleString('fr-FR')} fragments</div>}
+              </div>
+            </div>
+            <Bar label="Vie" value={char.hp} max={maxHp} color="from-emerald-600 to-emerald-400" />
+            <Bar label="Expérience" value={char.xp} max={xpNeed} color="from-violet-600 to-violet-400" />
+          </div>
+
+          {/* Spécialisation */}
+          <div className="rounded-xl border border-slate-800 bg-[#11151f] p-4">
+            <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Spécialisation</div>
+            <p className="mb-2 text-[11.5px] leading-snug text-slate-400">
+              Choisit la <b className="text-slate-300">stat de combat</b> de ce perso : seule la stat dominante alimente sa
+              puissance. +2 dedans (et +1 Endurance) par niveau, et le butin penche vers cette stat.
+            </p>
+            <div className="grid grid-cols-3 gap-1.5">
+              {(['force', 'agilite', 'intelligence'] as PrimaryStat[]).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setBias(p)}
+                  title={SPEC_INFO[p]}
+                  className={
+                    'rounded-lg border px-2 py-2 text-xs font-medium transition-colors ' +
+                    (char.primaryBias === p ? 'border-transparent text-slate-950' : 'border-slate-700 text-slate-300 hover:border-slate-500')
+                  }
+                  style={char.primaryBias === p ? { background: PRIMARY_META[p].color } : undefined}
+                >
+                  {PRIMARY_META[p].name}
+                </button>
+              ))}
             </div>
           </div>
-          <div className="text-right text-xs">
-            <div className="text-yellow-400">💰 {gold.toLocaleString('fr-FR')} or</div>
-            <div className="text-cyan-300">♦ {essence.toLocaleString('fr-FR')} éclats</div>
-            <div className="text-fuchsia-300">💠 {noyau.toLocaleString('fr-FR')} noyaux</div>
-            {orbes > 0 && <div className="text-rose-300">🔮 {orbes.toLocaleString('fr-FR')} orbes</div>}
-            {fragments > 0 && <div className="text-sky-300">✨ {fragments.toLocaleString('fr-FR')} fragments</div>}
+
+          {/* Résumé combat */}
+          <div className="rounded-xl border border-slate-800 bg-[#11151f] p-4">
+            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Combat</div>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
+              <Kv name="Puissance" value={Math.round(derived.power).toLocaleString('fr-FR')} />
+              <Kv name="Points de vie" value={Math.round(maxHp).toLocaleString('fr-FR')} />
+              <Kv name="Multiplicateur dég." value={`×${(derived.masteryMult * derived.overpower).toFixed(2)}`} />
+              <Kv name="Vitesse" value={`${derived.attacksPerSecond.toFixed(2)} att/s`} />
+            </div>
           </div>
-        </div>
-        <Bar label="Vie" value={char.hp} max={maxHp} color="from-emerald-600 to-emerald-400" />
-        <Bar label="Expérience" value={char.xp} max={xpNeed} color="from-violet-600 to-violet-400" />
-      </div>
 
-      {/* Capacités équipables (débloquées via l'arbre de talents) */}
-      <PowersSection char={char} />
-
-      {/* Spécialisation */}
-      <div className="rounded-xl border border-slate-800 bg-[#11151f] p-4">
-        <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Spécialisation</div>
-        <p className="mb-2 text-[11.5px] leading-snug text-slate-400">
-          Choisit la <b className="text-slate-300">stat de combat</b> de ce perso : seule la stat dominante alimente sa
-          puissance. +2 dedans (et +1 Endurance) par niveau, et le butin penche vers cette stat.
-        </p>
-        <div className="grid grid-cols-3 gap-1.5">
-          {(['force', 'agilite', 'intelligence'] as PrimaryStat[]).map((p) => (
-            <button
-              key={p}
-              onClick={() => setBias(p)}
-              title={SPEC_INFO[p]}
-              className={
-                'rounded-lg border px-2 py-2 text-xs font-medium transition-colors ' +
-                (char.primaryBias === p ? 'border-transparent text-slate-950' : 'border-slate-700 text-slate-300 hover:border-slate-500')
-              }
-              style={char.primaryBias === p ? { background: PRIMARY_META[p].color } : undefined}
-            >
-              {PRIMARY_META[p].name}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Stats primaires */}
-      <div className="rounded-xl border border-slate-800 bg-[#11151f] p-4">
-        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Stats primaires</div>
-        <div className="space-y-2">{primary.map((e) => <EffectRow key={e.key} e={e} />)}</div>
-      </div>
-
-      {/* Stats secondaires */}
-      <div className="rounded-xl border border-slate-800 bg-[#11151f] p-4">
-        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Stats secondaires</div>
-        <div className="space-y-2">{secondary.map((e) => <EffectRow key={e.key} e={e} />)}</div>
-      </div>
-
-      {/* Profil de dégâts */}
-      <div className="rounded-xl border border-slate-800 bg-[#11151f] p-4">
-        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Profil de dégâts</div>
-        <div className="mb-1 text-[11.5px] text-slate-400">
-          Type principal :{' '}
-          <span style={{ color: DAMAGE_TYPES[dmg.mainType].color }}>
-            {DAMAGE_TYPES[dmg.mainType].icon} {DAMAGE_TYPES[dmg.mainType].name}
-          </span>{' '}
-          (défini par l'arme)
-        </div>
-        <div className="mb-2 text-[12px] text-slate-300">
-          Multiplicateur de dégâts :{' '}
-          <span className="font-bold text-emerald-300">×{profileDamageMult(dmg).toFixed(2)}</span>
-          <span className="text-slate-500"> · sur toutes tes attaques & sorts</span>
-        </div>
-        <div className="space-y-1">
-          {dmgTypes.map((t) => {
-            const m = DAMAGE_TYPES[t as DamageType]
-            const frac = dmg.profile[t as DamageType] ?? 0
-            const bonus = dmg.bonus[t as DamageType] ?? 0
-            return (
-              <div key={t} className="flex items-center justify-between text-[12px]">
-                <span style={{ color: m.color }}>{m.icon} {m.name}</span>
-                <span className="text-slate-400">
-                  {frac > 0 && <span>{Math.round(frac * 100)}% du profil</span>}
-                  {bonus > 0 && <span className="ml-2 text-emerald-400">+{Math.round(bonus * 100)}% dégâts</span>}
-                </span>
+          {/* Résistances */}
+          <div className="rounded-xl border border-slate-800 bg-[#11151f] p-4">
+            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Résistances</div>
+            {resistTypes.length === 0 ? (
+              <p className="text-[11px] italic text-slate-500">
+                Aucune résistance. Équipe des affixes/talents de résistance pour encaisser le type d'attaque de l'ennemi.
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                {resistTypes.map((t) => {
+                  const m = DAMAGE_TYPES[t]
+                  const v = resist[t] ?? 0
+                  return (
+                    <span key={t} title={`-${Math.round(v * 100)}% de dégâts ${m.name} subis`}>
+                      <span style={{ color: m.color }}>{m.icon} {m.name}</span>{' '}
+                      <span className="font-semibold text-emerald-300">{Math.round(v * 100)}%</span>
+                    </span>
+                  )
+                })}
               </div>
-            )
-          })}
-        </div>
-        <p className="mt-2 text-[10px] leading-snug text-slate-500">
-          Empile des affixes « +% {DAMAGE_TYPES[dmg.mainType].name} » (ton type principal) pour faire monter le multiplicateur. Investir dans un type minoritaire rapporte peu : sa part du profil est faible.
-        </p>
-      </div>
-
-      {/* Résistances */}
-      <div className="rounded-xl border border-slate-800 bg-[#11151f] p-4">
-        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Résistances</div>
-        {resistTypes.length === 0 ? (
-          <p className="text-[11px] italic text-slate-500">
-            Aucune résistance. Équipe des affixes/talents de résistance pour encaisser le type d'attaque de l'ennemi.
-          </p>
-        ) : (
-          <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
-            {resistTypes.map((t) => {
-              const m = DAMAGE_TYPES[t]
-              const v = resist[t] ?? 0
-              return (
-                <span key={t} title={`-${Math.round(v * 100)}% de dégâts ${m.name} subis`}>
-                  <span style={{ color: m.color }}>{m.icon} {m.name}</span>{' '}
-                  <span className="font-semibold text-emerald-300">{Math.round(v * 100)}%</span>
-                </span>
-              )
-            })}
+            )}
           </div>
-        )}
-      </div>
+        </>
+      )}
 
-      {/* Combat */}
-      <div className="rounded-xl border border-slate-800 bg-[#11151f] p-4">
-        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Combat</div>
-        <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
-          <Kv name="Puissance" value={Math.round(derived.power).toLocaleString('fr-FR')} />
-          <Kv name="Points de vie" value={Math.round(maxHp).toLocaleString('fr-FR')} />
-          <Kv name="Multiplicateur dég." value={`×${(derived.masteryMult * derived.overpower).toFixed(2)}`} />
-          <Kv name="Vitesse" value={`${derived.attacksPerSecond.toFixed(2)} att/s`} />
-        </div>
-      </div>
+      {view === 'stats' && (
+        <>
+          {/* Stats primaires */}
+          <div className="rounded-xl border border-slate-800 bg-[#11151f] p-4">
+            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Stats primaires</div>
+            <div className="space-y-2">{primary.map((e) => <EffectRow key={e.key} e={e} />)}</div>
+          </div>
 
+          {/* Stats secondaires */}
+          <div className="rounded-xl border border-slate-800 bg-[#11151f] p-4">
+            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Stats secondaires</div>
+            <div className="space-y-2">{secondary.map((e) => <EffectRow key={e.key} e={e} />)}</div>
+          </div>
+
+          {/* Profil de dégâts */}
+          <div className="rounded-xl border border-slate-800 bg-[#11151f] p-4">
+            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Profil de dégâts</div>
+            <div className="mb-1 text-[11.5px] text-slate-400">
+              Type principal :{' '}
+              <span style={{ color: DAMAGE_TYPES[dmg.mainType].color }}>
+                {DAMAGE_TYPES[dmg.mainType].icon} {DAMAGE_TYPES[dmg.mainType].name}
+              </span>{' '}
+              (défini par l'arme)
+            </div>
+            <div className="mb-2 text-[12px] text-slate-300">
+              Multiplicateur de dégâts :{' '}
+              <span className="font-bold text-emerald-300">×{profileDamageMult(dmg).toFixed(2)}</span>
+              <span className="text-slate-500"> · sur toutes tes attaques & sorts</span>
+            </div>
+            <div className="space-y-1">
+              {dmgTypes.map((t) => {
+                const m = DAMAGE_TYPES[t as DamageType]
+                const frac = dmg.profile[t as DamageType] ?? 0
+                const bonus = dmg.bonus[t as DamageType] ?? 0
+                return (
+                  <div key={t} className="flex items-center justify-between text-[12px]">
+                    <span style={{ color: m.color }}>{m.icon} {m.name}</span>
+                    <span className="text-slate-400">
+                      {frac > 0 && <span>{Math.round(frac * 100)}% du profil</span>}
+                      {bonus > 0 && <span className="ml-2 text-emerald-400">+{Math.round(bonus * 100)}% dégâts</span>}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+            <p className="mt-2 text-[10px] leading-snug text-slate-500">
+              Empile des affixes « +% {DAMAGE_TYPES[dmg.mainType].name} » (ton type principal) pour faire monter le multiplicateur. Investir dans un type minoritaire rapporte peu : sa part du profil est faible.
+            </p>
+          </div>
+        </>
+      )}
+
+      {view === 'capacites' && <PowersSection char={char} />}
     </div>
   )
 }

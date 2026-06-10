@@ -1,20 +1,25 @@
 import { useState } from 'react'
 import { useGame } from '../game/store'
-import { CharacterPanel } from './CharacterPanel'
+import { CharacterPanel, type CharacterView } from './CharacterPanel'
 import { TalentTree } from './TalentTree'
 import { SubTab } from './ui'
 
-/** Hub Héros : fiche du personnage + arbre de talents sous un seul onglet de barre. */
+type HerosView = CharacterView | 'talents'
+
+/** Hub Héros : la fiche perso éclatée en vues courtes + l'arbre de talents,
+ *  sous un seul onglet de barre. */
 export function HerosHub({ talentsUnlocked }: { talentsUnlocked: boolean }) {
   const characters = useGame((s) => s.characters)
   const talentPoints = characters.reduce((a, c) => a + c.talentPoints, 0)
-  const [sub, setSub] = useState<'perso' | 'talents'>('perso')
-  const active = sub === 'talents' && talentsUnlocked ? 'talents' : 'perso'
+  const [sub, setSub] = useState<HerosView>('apercu')
+  const active: HerosView = sub === 'talents' && !talentsUnlocked ? 'apercu' : sub
 
   return (
     <div className="flex h-full flex-col">
       <div className="mb-2 flex gap-1.5">
-        <SubTab on={active === 'perso'} onClick={() => setSub('perso')}>🛡 Perso</SubTab>
+        <SubTab on={active === 'apercu'} onClick={() => setSub('apercu')}>🛡 Aperçu</SubTab>
+        <SubTab on={active === 'stats'} onClick={() => setSub('stats')}>📊 Stats</SubTab>
+        <SubTab on={active === 'capacites'} onClick={() => setSub('capacites')}>⚡ Capacités</SubTab>
         {talentsUnlocked && (
           <SubTab on={active === 'talents'} onClick={() => setSub('talents')}>
             🌌 Talents
@@ -27,7 +32,7 @@ export function HerosHub({ talentsUnlocked }: { talentsUnlocked: boolean }) {
           <TalentTree />
         ) : (
           <div className="h-full overflow-y-auto pr-1">
-            <CharacterPanel />
+            <CharacterPanel view={active} />
           </div>
         )}
       </div>
