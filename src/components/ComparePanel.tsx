@@ -9,6 +9,7 @@ import {
   quintCost, QUINT_GAIN,
 } from '../game/items'
 import { forgeMods } from '../game/forge'
+import { itemSockets, parseGemKey, unsocketCost, gemTierName, GEM_DMG, GEM_RES } from '../game/gems'
 import type { OffensiveStat } from '../game/types'
 import { ITEM_TYPES, equipSlotsForType } from '../game/slots'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from '../game/damage'
@@ -345,6 +346,8 @@ function CraftSection({ item }: { item: Item }) {
 
           {mods.quint ? <QuintessenceSection item={item} /> : <Locked label="Craft à la Quintessence" />}
 
+          {itemSockets(item) > 0 && (mods.gems ? <GemSection item={item} /> : <Locked label="Sertissage (gemmes)" />)}
+
           <InsertEffectSection item={item} />
 
           <ChooseUniqueSection item={item} />
@@ -426,6 +429,82 @@ function QuintessenceSection({ item }: { item: Item }) {
                 )
               })}
             </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Châsses & gemmes : sertir une gemme élémentaire du stock, désertir contre des éclats.
+ * Les gemmes tombent CHACUNE dans le biome de leur élément (5e mécanique de biome).
+ */
+function GemSection({ item }: { item: Item }) {
+  const gems = useGame((s) => s.gems)
+  const essence = useGame((s) => s.essence)
+  const socketGem = useGame((s) => s.socketGem)
+  const unsocketGem = useGame((s) => s.unsocketGem)
+  const [open, setOpen] = useState(false)
+
+  const sockets = itemSockets(item)
+  const filled = item.gems ?? []
+  const stock = Object.entries(gems)
+    .filter(([, n]) => n > 0)
+    .map(([k, n]) => ({ ...parseGemKey(k), n }))
+    .sort((a, b) => b.tier - a.tier || a.type.localeCompare(b.type))
+
+  return (
+    <div className="rounded border border-sky-800/40 bg-sky-950/10 p-2">
+      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center justify-between py-1 text-[11px] font-semibold text-sky-300">
+        <span>💎 Châsses ({filled.length}/{sockets})</span>
+        <span>{open ? '▾' : '▸'}</span>
+      </button>
+      {open && (
+        <div className="mt-1.5 space-y-1.5">
+          {filled.map((g, i) => {
+            const m = DAMAGE_TYPES[g.type]
+            const cost = unsocketCost(g)
+            return (
+              <div key={i} className="flex items-center gap-2 rounded bg-black/20 px-1.5 py-1 text-[10px]">
+                <span className="min-w-0 flex-1 truncate font-medium" style={{ color: m.color }}>
+                  {m.icon} {m.name} {gemTierName(g.tier)}
+                </span>
+                <span className="shrink-0 text-slate-400">+{GEM_DMG[g.tier - 1]}% dég. · +{GEM_RES[g.tier - 1]}% rés.</span>
+                <button
+                  disabled={essence < cost}
+                  onClick={() => unsocketGem(item.id, i)}
+                  title={`Désertir (-${cost} éclats, gemme rendue)`}
+                  className="shrink-0 rounded bg-slate-800 px-1.5 py-1 text-slate-400 hover:text-red-400 disabled:opacity-40"
+                >
+                  ✕ ♦{cost}
+                </button>
+              </div>
+            )
+          })}
+          {filled.length < sockets && (
+            stock.length === 0 ? (
+              <div className="text-[10px] italic text-slate-500">
+                Aucune gemme en stock — chaque gemme tombe dans le biome de SON élément (~1,5% par kill).
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-1">
+                {stock.map((g) => {
+                  const m = DAMAGE_TYPES[g.type]
+                  return (
+                    <button
+                      key={`${g.type}:${g.tier}`}
+                      onClick={() => socketGem(item.id, g.type, g.tier)}
+                      title={`+${GEM_DMG[g.tier - 1]}% dégâts ${m.name} · +${GEM_RES[g.tier - 1]}% résistance`}
+                      className="rounded border border-sky-700/40 px-2 py-1 text-[10px] font-medium hover:bg-sky-900/30"
+                      style={{ color: m.color }}
+                    >
+                      {m.icon} {gemTierName(g.tier)} ×{g.n}
+                    </button>
+                  )
+                })}
+              </div>
+            )
           )}
         </div>
       )}

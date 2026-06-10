@@ -19,6 +19,7 @@ import {
   enhanceTypedAffixes, quintRefund,
 } from './items'
 import { forgeMods, forgeMasteryGain, getForgeUpgrade, forgeUpgradeCost, forgeUpgradeMaxed } from './forge'
+import { gemKey, itemSockets, unsocketCost, gemTierName, GEM_DROP, GEM_FUSE_COUNT, GEM_FUSE_GOLD, GEM_MAX_TIER } from './gems'
 import { makeEnemy, isBossStage, stageIlvl, stageLuckTier } from './enemies'
 import { BIOME_IDS, biomeUnlocked, getBiomeDef, type BiomeId } from './biomes'
 import {
@@ -143,6 +144,17 @@ function addQuint(base: Record<DamageType, number>, add: Partial<Record<DamageTy
   return changed ? out : base
 }
 
+/** Rend au stock les gemmes serties d'un objet (vente/recyclage : les gemmes ne se perdent pas). */
+function gemStockAdd(stock: Record<string, number>, item: Item): Record<string, number> {
+  if (!item.gems?.length) return stock
+  const out = { ...stock }
+  for (const g of item.gems) {
+    const k = gemKey(g.type, g.tier)
+    out[k] = (out[k] ?? 0) + 1
+  }
+  return out
+}
+
 /** Suffixe de log « + 🔥3 + ❄️2 » pour un remboursement de Quintessences (vide si rien). */
 function quintLogSuffix(refund: Partial<Record<DamageType, number>>): string {
   const parts: string[] = []
@@ -200,6 +212,8 @@ interface SaveData {
   poussiere: number
   /** Quintessences élémentaires : 1 par type de dégâts (drop ~1% par biome). Craft typé sur le stuff. */
   quint: Record<DamageType, number>
+  /** Stock de gemmes élémentaires (clé `${type}:${tier}`) — drop exclusif au biome assorti. */
+  gems: Record<string, number>
   essences: Record<string, number>
   sceaux: number
   dungeonProgress: DungeonProgress
@@ -258,6 +272,12 @@ interface GameState extends SaveData {
   transmute: (itemId: string, newPrimary: OffensiveStat) => void
   /** Améliore (ou ajoute) la ligne typée (dégâts/résist) d'un objet via une Quintessence du type. */
   enhanceTyped: (itemId: string, type: DamageType, kind: 'dmgType' | 'resist') => void
+  /** Fusionne 3 gemmes d'une qualité en 1 de la qualité supérieure (coût en or). */
+  fuseGems: (type: DamageType, tier: number) => void
+  /** Sertit une gemme du stock dans une châsse libre de l'objet. */
+  socketGem: (itemId: string, type: DamageType, tier: number) => void
+  /** Désertit la gemme à l'index donné (coût en éclats, gemme rendue au stock). */
+  unsocketGem: (itemId: string, index: number) => void
   createItem: (opts: CreateOptions) => void
   /** Achète/monte une amélioration du métier de forgeron (dépense du Savoir-faire 🔧). */
   buyForgeUpgrade: (id: string) => void
@@ -335,6 +355,7 @@ function freshSave(): SaveData {
     noyau: 0,
     poussiere: 0,
     quint: emptyQuint(),
+    gems: {},
     essences: {},
     sceaux: 0,
     dungeonProgress: emptyDungeonProgress(),
@@ -424,6 +445,7 @@ function sanitize(save: SaveData): SaveData {
     save.quint = q
   }
   if (typeof save.farmLock !== 'boolean') save.farmLock = false
+  if (!save.gems || typeof save.gems !== 'object') save.gems = {}
   if (typeof save.recycleThreshold !== 'number') save.recycleThreshold = 4
   if (typeof save.autoRecycle !== 'boolean') save.autoRecycle = false
   if (typeof save.lastSeen !== 'number') save.lastSeen = Date.now()
@@ -596,6 +618,7 @@ function persist(s: GameState) {
     noyau: s.noyau,
     poussiere: s.poussiere,
     quint: s.quint,
+    gems: s.gems,
     essences: s.essences,
     sceaux: s.sceaux,
     dungeonProgress: s.dungeonProgress,
@@ -1765,6 +1788,17 @@ export const useGame = create<GameState>((set, get) => {
           }
         }
 
+        // Gemme élémentaire : drop EXCLUSIF au biome assorti (la gemme de feu ne tombe qu'au Feu).
+        let gems = s.gems
+        {
+          const gBase = boss ? GEM_DROP.boss : elite ? GEM_DROP.elite : GEM_DROP.normal
+          if (Math.random() < gBase) {
+            const k = gemKey(s.activeBiome, 1)
+            gems = { ...gems, [k]: (gems[k] ?? 0) + 1 }
+            log = pushLog(log, `💎 Gemme de ${DAMAGE_TYPES[s.activeBiome].name} (Éclatée) trouvée — exclusive à ce biome !`, 'loot')
+          }
+        }
+
         // Le verrou de farm fige la progression au palier courant.
         let characters = chars
         let biomeBest = s.biomeBest
@@ -1791,7 +1825,7 @@ export const useGame = create<GameState>((set, get) => {
         const enemyNext = makeEnemy(stage, s.activeBiome)
         if (isBossStage(stage)) log = pushLog(log, `⚔ Un boss vous barre la route : ${enemyNext.name} !`, 'info')
 
-        const next = { ...s, characters, stage, bestStage, biomeBest, gold, sceaux, poussiere, quint, essence, codex, inventory, enemy: enemyNext, log, killCount: s.killCount + 1 }
+        const next = { ...s, characters, stage, bestStage, biomeBest, gold, sceaux, poussiere, quint, gems, essence, codex, inventory, enemy: enemyNext, log, killCount: s.killCount + 1 }
         persist(next)
         set(next)
         return
@@ -1910,8 +1944,9 @@ export const useGame = create<GameState>((set, get) => {
       const next = {
         ...s,
         gold: s.gold + gain,
+        gems: gemStockAdd(s.gems, item),
         inventory: s.inventory.filter((i) => i.id !== itemId),
-        log: pushLog(s.log, `Vendu : ${item.name} (+${gain} or).`, 'gold'),
+        log: pushLog(s.log, `Vendu : ${item.name} (+${gain} or${item.gems?.length ? ', gemmes rendues' : ''}).`, 'gold'),
       }
       persist(next)
       set(next)
@@ -1937,9 +1972,10 @@ export const useGame = create<GameState>((set, get) => {
         essence: s.essence + gain,
         poussiere: s.poussiere + pous,
         quint: addQuint(s.quint, refund),
+        gems: gemStockAdd(s.gems, item),
         essences,
         inventory: s.inventory.filter((i) => i.id !== itemId),
-        log: pushLog(s.log, `Recyclé : ${item.name} (+${gain} éclats${pous ? ` + ${pous} 🌌` : ''}${qLog}${essLog}).`, 'craft'),
+        log: pushLog(s.log, `Recyclé : ${item.name} (+${gain} éclats${pous ? ` + ${pous} 🌌` : ''}${qLog}${essLog}${item.gems?.length ? ', gemmes rendues' : ''}).`, 'craft'),
       }
       persist(next)
       set(next)
@@ -1948,16 +1984,18 @@ export const useGame = create<GameState>((set, get) => {
     sellAllBelow: (tier) => {
       const s = get()
       let gold = s.gold
+      let gems = s.gems
       let count = 0
       const keep: Item[] = []
       for (const item of s.inventory) {
         if (RARITIES[item.rarity].tier < tier) {
           gold += sellValue(item)
+          gems = gemStockAdd(gems, item)
           count++
         } else keep.push(item)
       }
       const gained = gold - s.gold
-      const next = { ...s, gold, inventory: keep, log: count ? pushLog(s.log, `${count} objet(s) vendu(s) (+${gained} or).`, 'gold') : s.log }
+      const next = { ...s, gold, gems, inventory: keep, log: count ? pushLog(s.log, `${count} objet(s) vendu(s) (+${gained} or).`, 'gold') : s.log }
       persist(next)
       set(next)
     },
@@ -1967,6 +2005,7 @@ export const useGame = create<GameState>((set, get) => {
       let essence = s.essence
       let poussiere = s.poussiere
       let quint = s.quint
+      let gems = s.gems
       let count = 0
       const essences = { ...s.essences }
       const keep: Item[] = []
@@ -1975,12 +2014,13 @@ export const useGame = create<GameState>((set, get) => {
           essence += recycleValue(item)
           poussiere += recyclePoussiere(item)
           quint = addQuint(quint, quintRefund(item))
+          gems = gemStockAdd(gems, item)
           if (item.unique) essences[item.unique.id] = (essences[item.unique.id] ?? 0) + essenceGain(RARITIES[item.rarity].tier, item.unique.rank)
           count++
         } else keep.push(item)
       }
       const gained = essence - s.essence
-      const next = { ...s, essence, poussiere, quint, essences, inventory: keep, log: count ? pushLog(s.log, `${count} objet(s) recyclé(s) (+${gained} éclats).`, 'craft') : s.log }
+      const next = { ...s, essence, poussiere, quint, gems, essences, inventory: keep, log: count ? pushLog(s.log, `${count} objet(s) recyclé(s) (+${gained} éclats).`, 'craft') : s.log }
       persist(next)
       set(next)
     },
@@ -2109,6 +2149,67 @@ export const useGame = create<GameState>((set, get) => {
         quint: { ...s.quint, [type]: have - res.cost },
         forgeMastery: s.forgeMastery + gain,
         log: pushLog(s.log, `${m.icon} Ligne ${kind === 'resist' ? 'Résist.' : 'Dégâts'} ${m.name} ${verb} (-${res.cost} Quintessence, +${gain} 🔧).`, 'craft'),
+      }
+      persist(next)
+      set(next)
+    },
+
+    fuseGems: (type, tier) => {
+      const s = get()
+      if (tier < 1 || tier >= GEM_MAX_TIER) return
+      const key = gemKey(type, tier)
+      const have = s.gems[key] ?? 0
+      const goldCost = GEM_FUSE_GOLD[tier - 1]
+      if (have < GEM_FUSE_COUNT || s.gold < goldCost) return
+      const up = gemKey(type, tier + 1)
+      const gems = { ...s.gems, [key]: have - GEM_FUSE_COUNT, [up]: (s.gems[up] ?? 0) + 1 }
+      const next = {
+        ...s, gold: s.gold - goldCost, gems,
+        log: pushLog(s.log, `💎 Fusion : 3 ${DAMAGE_TYPES[type].name} ${gemTierName(tier)} → 1 ${gemTierName(tier + 1)} (-${goldCost.toLocaleString('fr-FR')} or).`, 'craft'),
+      }
+      persist(next)
+      set(next)
+    },
+
+    socketGem: (itemId, type, tier) => {
+      const s = get()
+      const mods = forgeMods(s.forgeUpgrades)
+      if (!mods.gems) return // débloqué via le métier (Sertisseur)
+      const item = findItemById(s, itemId)
+      if (!item) return
+      if ((item.gems?.length ?? 0) >= itemSockets(item)) return
+      const key = gemKey(type, tier)
+      if ((s.gems[key] ?? 0) < 1) return
+      const upd = applyItemPatch(s, itemId, { gems: [...(item.gems ?? []), { type, tier }] })
+      if (!upd) return
+      const gain = forgeMasteryGain(RARITIES[item.rarity].tier, 'modify', mods.yieldMult)
+      const next = {
+        ...s, ...upd,
+        gems: { ...s.gems, [key]: (s.gems[key] ?? 0) - 1 },
+        forgeMastery: s.forgeMastery + gain,
+        log: pushLog(s.log, `💎 Sertie : ${DAMAGE_TYPES[type].name} ${gemTierName(tier)} sur ${item.name} (+${gain} 🔧).`, 'craft'),
+      }
+      persist(next)
+      set(next)
+    },
+
+    unsocketGem: (itemId, index) => {
+      const s = get()
+      const mods = forgeMods(s.forgeUpgrades)
+      if (!mods.gems) return
+      const item = findItemById(s, itemId)
+      const g = item?.gems?.[index]
+      if (!item || !g) return
+      const cost = unsocketCost(g)
+      if (s.essence < cost) return
+      const upd = applyItemPatch(s, itemId, { gems: item.gems!.filter((_, i) => i !== index) })
+      if (!upd) return
+      const key = gemKey(g.type, g.tier)
+      const next = {
+        ...s, ...upd,
+        essence: s.essence - cost,
+        gems: { ...s.gems, [key]: (s.gems[key] ?? 0) + 1 },
+        log: pushLog(s.log, `💎 Désertie : ${DAMAGE_TYPES[g.type].name} ${gemTierName(g.tier)} (-${cost} éclats, gemme rendue).`, 'craft'),
       }
       persist(next)
       set(next)

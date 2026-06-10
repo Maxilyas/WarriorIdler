@@ -10,6 +10,7 @@
 
 export type ForgeUpgradeId =
   | 'unlockSurillvl' | 'unlockTransmute' | 'unlockQuint' | 'unlockAscend'
+  | 'unlockGems' | 'unlockEnchant'
   | 'forgeCost' | 'forgeLuck' | 'forgeYield'
 
 export interface ForgeUpgrade {
@@ -23,7 +24,7 @@ export interface ForgeUpgrade {
   baseCost: number
   growth: number
   /** Déblocage d'une fonction de l'atelier (sinon = bonus chiffré). */
-  unlocks?: 'surillvl' | 'ascend' | 'transmute' | 'quint'
+  unlocks?: 'surillvl' | 'ascend' | 'transmute' | 'quint' | 'gems' | 'enchant'
 }
 
 /** Boutique du métier : d'abord les déblocages (progression), puis les bonus à paliers. */
@@ -36,6 +37,10 @@ export const FORGE_UPGRADES: ForgeUpgrade[] = [
     description: 'Débloque le craft typé à la QUINTESSENCE (lignes de dégâts / résistance).' },
   { id: 'unlockAscend', name: 'Grand-maître forgeron', icon: '✨', maxLevel: 1, baseCost: 450, growth: 1, unlocks: 'ascend',
     description: 'Débloque l\'ASCENSION : monter un objet d\'un cran de rareté.' },
+  { id: 'unlockGems', name: 'Sertisseur', icon: '💎', maxLevel: 1, baseCost: 180, growth: 1, unlocks: 'gems',
+    description: 'Débloque le SERTISSAGE : poser des gemmes élémentaires dans les châsses (Rare+).' },
+  { id: 'unlockEnchant', name: 'Runiste', icon: '🪄', maxLevel: 1, baseCost: 320, growth: 1, unlocks: 'enchant',
+    description: 'Débloque l\'ENCHANTEMENT : graver une rune de stat sur chaque pièce.' },
   { id: 'forgeCost', name: 'Forgeron économe', icon: '💰', maxLevel: 10, baseCost: 100, growth: 1.5,
     description: '−3% des coûts de craft (éclats & matériaux) par niveau.' },
   { id: 'forgeLuck', name: 'Œil du joaillier', icon: '🎲', maxLevel: 10, baseCost: 130, growth: 1.55,
@@ -69,6 +74,8 @@ export interface ForgeMods {
   ascend: boolean
   transmute: boolean
   quint: boolean
+  gems: boolean
+  enchant: boolean
 }
 
 export function forgeMods(upg: Record<string, number>): ForgeMods {
@@ -81,6 +88,8 @@ export function forgeMods(upg: Record<string, number>): ForgeMods {
     ascend: lv('unlockAscend') > 0,
     transmute: lv('unlockTransmute') > 0,
     quint: lv('unlockQuint') > 0,
+    gems: lv('unlockGems') > 0,
+    enchant: lv('unlockEnchant') > 0,
   }
 }
 

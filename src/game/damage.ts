@@ -1,6 +1,7 @@
 import type { DamageType, Equipment } from './types'
 import type { KeystoneEffect } from './talents'
 import { instanceResist } from './uniques'
+import { GEM_DMG, GEM_RES } from './gems'
 
 export interface DamageTypeMeta {
   id: DamageType
@@ -67,6 +68,12 @@ export function computeDamageProfile(equipment: Equipment, keystones: KeystoneEf
         weight[aff.type] = (weight[aff.type] ?? 0) + (aff.value / 100) * AFFIX_PROFILE_SHARE
         bonus[aff.type] = (bonus[aff.type] ?? 0) + (aff.value / 100) * AFFIX_BONUS_SHARE
       }
+    }
+    // Gemmes serties : contribuent comme une ligne « +% dégâts du type ».
+    for (const g of item.gems ?? []) {
+      const v = (GEM_DMG[g.tier - 1] ?? 0) / 100
+      weight[g.type] = (weight[g.type] ?? 0) + v * AFFIX_PROFILE_SHARE
+      bonus[g.type] = (bonus[g.type] ?? 0) + v * AFFIX_BONUS_SHARE
     }
   }
 
@@ -137,6 +144,10 @@ export function computeResistProfile(
     if (!item) continue
     for (const aff of item.affixes) {
       if (aff.kind === 'resist' && aff.type) resist[aff.type] = (resist[aff.type] ?? 0) + aff.value / 100
+    }
+    // Gemmes serties : +% résistance du type.
+    for (const g of item.gems ?? []) {
+      resist[g.type] = (resist[g.type] ?? 0) + (GEM_RES[g.tier - 1] ?? 0) / 100
     }
     if (item.unique) {
       const ur = instanceResist(item.unique)

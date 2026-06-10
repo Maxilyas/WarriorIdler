@@ -7,6 +7,7 @@ import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from '../game/damage'
 import { RARITY_LIST } from '../game/rarities'
 import { maxCraftTier, createCost } from '../game/items'
 import { FORGE_UPGRADES, forgeMods, forgeUpgradeCost, forgeUpgradeMaxed } from '../game/forge'
+import { gemKey, gemTierName, GEM_MAX_TIER, GEM_FUSE_COUNT, GEM_FUSE_GOLD, GEM_DMG, GEM_RES } from '../game/gems'
 import { stageIlvl } from '../game/enemies'
 import type { ItemType, OffensiveStat, ItemOrientation, DamageType, RarityId } from '../game/types'
 
@@ -94,6 +95,9 @@ export function AtelierPanel() {
           })}
         </div>
       </div>
+
+      {/* Taillerie de gemmes (stock + fusion 3 → 1) */}
+      <GemWorkshop unlocked={mods.gems} />
 
       {/* Type d'objet */}
       <Section title="Type d'objet">
@@ -230,6 +234,65 @@ export function AtelierPanel() {
         Forger {isWeapon ? `${DAMAGE_TYPES[element].icon} ` : ''}{ITEM_TYPES[type].name}
       </button>
       <p className="mt-1.5 pb-2 text-center text-[10px] text-slate-500">L'objet apparaît dans ton Sac. Tu peux forger en série.</p>
+    </div>
+  )
+}
+
+/**
+ * Taillerie : stock de gemmes par élément/qualité + fusion 3 → 1 (puits d'or).
+ * Les gemmes tombent chacune dans le biome de LEUR élément → farmer tous les biomes.
+ */
+function GemWorkshop({ unlocked }: { unlocked: boolean }) {
+  const gems = useGame((s) => s.gems)
+  const gold = useGame((s) => s.gold)
+  const fuseGems = useGame((s) => s.fuseGems)
+  const total = Object.values(gems).reduce((a, b) => a + b, 0)
+  if (total === 0 && !unlocked) return null
+
+  return (
+    <div className="mb-3 rounded-xl border border-sky-800/40 bg-sky-950/10 p-2.5">
+      <div className="mb-1.5 flex items-center justify-between">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-sky-300">💎 Taillerie de gemmes</span>
+        <span className="text-[10px] text-slate-500">{total} en stock</span>
+      </div>
+      <p className="mb-1.5 text-[9.5px] leading-snug text-slate-500">
+        Chaque gemme tombe dans le biome de SON élément. Sertis-les sur ton stuff (fiche objet, Rare+),
+        fusionne 3 gemmes en 1 de qualité supérieure.{!unlocked && ' 🔒 Sertissage : débloque « Sertisseur » ci-dessus.'}
+      </p>
+      {total === 0 ? (
+        <div className="text-[10px] italic text-slate-500">Aucune gemme — farme les biomes (~1,5% par kill, plus sur élites/boss).</div>
+      ) : (
+        <div className="space-y-1">
+          {DAMAGE_TYPE_LIST.map((t) => {
+            const counts = [1, 2, 3].map((tier) => gems[gemKey(t, tier)] ?? 0)
+            if (counts.every((c) => c === 0)) return null
+            const m = DAMAGE_TYPES[t]
+            return (
+              <div key={t} className="flex items-center gap-1.5 rounded bg-black/20 px-1.5 py-1 text-[10px]">
+                <span className="w-16 shrink-0 truncate font-medium" style={{ color: m.color }}>{m.icon} {m.name}</span>
+                <span className="flex flex-1 flex-wrap items-center gap-x-2 gap-y-0.5 text-slate-300">
+                  {counts.map((c, i) => (c > 0 ? <span key={i} title={`+${GEM_DMG[i]}% dég. · +${GEM_RES[i]}% rés.`}>{gemTierName(i + 1)} ×{c}</span> : null))}
+                </span>
+                <span className="flex shrink-0 gap-1">
+                  {[1, 2].map((tier) =>
+                    tier < GEM_MAX_TIER && (gems[gemKey(t, tier)] ?? 0) >= GEM_FUSE_COUNT ? (
+                      <button
+                        key={tier}
+                        disabled={gold < GEM_FUSE_GOLD[tier - 1]}
+                        onClick={() => fuseGems(t, tier)}
+                        title={`3 ${gemTierName(tier)} → 1 ${gemTierName(tier + 1)} · ${GEM_FUSE_GOLD[tier - 1].toLocaleString('fr-FR')} or`}
+                        className="rounded border border-sky-700/40 px-1.5 py-1 font-medium text-sky-200 hover:bg-sky-900/30 disabled:opacity-40"
+                      >
+                        ⏫ {gemTierName(tier + 1)}
+                      </button>
+                    ) : null,
+                  )}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

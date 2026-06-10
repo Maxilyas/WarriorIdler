@@ -4,6 +4,7 @@ import { RARE_STATS } from './stats'
 import { ITEM_TYPES } from './slots'
 import { rollUnique, instanceMods } from './uniques'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from './damage'
+import { gemScore } from './gems'
 
 const ITEM_TYPE_LIST: ItemType[] = Object.keys(ITEM_TYPES) as ItemType[]
 
@@ -260,8 +261,10 @@ export function itemScore(item: Item): number {
     if (a.kind === 'dmgType') typeSum += a.value * 2
     else if (a.kind === 'resist') resistSum += a.value * 3
   }
-  // La stat primaire pèse double, un effet unique et les dégâts/résistances de type comptent.
-  return sum + item.primaryValue + typeSum + resistSum + (item.unique ? 150 : 0)
+  let gemSum = 0
+  for (const g of item.gems ?? []) gemSum += gemScore(g)
+  // La stat primaire pèse double, un effet unique, les gemmes et les lignes de type comptent.
+  return sum + item.primaryValue + typeSum + resistSum + gemSum + (item.unique ? 150 : 0)
 }
 
 /** Or obtenu en vendant l'objet (récompense croissante avec la rareté). */

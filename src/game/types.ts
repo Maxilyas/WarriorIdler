@@ -128,6 +128,14 @@ export interface UniqueInstance {
   rank: number
 }
 
+// ---- Gemmes (sertissage) ----
+
+/** Une gemme sertie dans une châsse d'objet : élément + qualité (1=Éclatée, 2=Polie, 3=Parfaite). */
+export interface GemInstance {
+  type: DamageType
+  tier: number
+}
+
 // ---- Équipement ----
 
 /**
@@ -197,6 +205,10 @@ export interface Item {
   /** Type de dégâts de base (uniquement sur l'arme principale). */
   damageType?: DamageType
   unique?: UniqueInstance
+  /** Gemmes serties (le nombre de châsses dépend de la rareté — voir gems.ts). */
+  gems?: GemInstance[]
+  /** Enchantement runique (id du registre enchants.ts) — une seule rune par pièce. */
+  enchant?: string
 }
 
 export type Equipment = Partial<Record<EquipSlotId, Item>>
