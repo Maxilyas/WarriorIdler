@@ -8,7 +8,14 @@ import { RARITY_LIST } from '../game/rarities'
 import { maxCraftTier, createCost } from '../game/items'
 import { FORGE_UPGRADES, forgeMods, forgeUpgradeCost, forgeUpgradeMaxed } from '../game/forge'
 import { gemKey, gemTierName, GEM_MAX_TIER, GEM_FUSE_COUNT, GEM_FUSE_GOLD, GEM_DMG, GEM_RES } from '../game/gems'
+import {
+  missionLabel, automateRunDuration, automateEfficiency, automateUpgradeCost,
+  AUTOMATE_MAX, AUTOMATE_COSTS, AUTOMATE_UPG_MAX, type AutomateMission,
+} from '../game/automates'
+import { DUNGEON_LIST } from '../game/dungeons'
+import { RAID_LIST } from '../game/raids'
 import { stageIlvl } from '../game/enemies'
+import { Sheet } from './ui'
 import type { ItemType, OffensiveStat, ItemOrientation, DamageType, RarityId } from '../game/types'
 
 const TYPE_LIST = Object.values(ITEM_TYPES)
@@ -95,6 +102,9 @@ export function AtelierPanel() {
           })}
         </div>
       </div>
+
+      {/* Automates de forge : le sommet du métier (farm parallèle des donjons/raids battus) */}
+      <AutomateWorkshop />
 
       {/* Taillerie de gemmes (stock + fusion 3 → 1) */}
       <GemWorkshop unlocked={mods.gems} />
@@ -234,6 +244,160 @@ export function AtelierPanel() {
         Forger {isWeapon ? `${DAMAGE_TYPES[element].icon} ` : ''}{ITEM_TYPES[type].name}
       </button>
       <p className="mt-1.5 pb-2 text-center text-[10px] text-slate-500">L'objet apparaît dans ton Sac. Tu peux forger en série.</p>
+    </div>
+  )
+}
+
+/**
+ * Atelier des automates : construction (3 max, coûts brutaux), assignation de mission
+ * (donjon/raid DÉJÀ battu, farmé au niveau record), améliorations vitesse/rendement.
+ * L'automate consomme les clés, rapporte les ressources à 60-85% — jamais le stuff ni les 💫.
+ */
+function AutomateWorkshop() {
+  const automates = useGame((s) => s.automates)
+  const gold = useGame((s) => s.gold)
+  const poussiere = useGame((s) => s.poussiere)
+  const fragments = useGame((s) => s.fragments)
+  const cosmic = useGame((s) => s.cosmic)
+  const forgeMastery = useGame((s) => s.forgeMastery)
+  const dungeonProgress = useGame((s) => s.dungeonProgress)
+  const raidProgress = useGame((s) => s.raidProgress)
+  const buildAutomate = useGame((s) => s.buildAutomate)
+  const assignAutomate = useGame((s) => s.assignAutomate)
+  const toggleAutomatePause = useGame((s) => s.toggleAutomatePause)
+  const upgradeAutomate = useGame((s) => s.upgradeAutomate)
+  const [assigning, setAssigning] = useState<number | null>(null)
+
+  const nextCost = AUTOMATE_COSTS[automates.length]
+  const anyBeaten = Object.values(dungeonProgress).some((v) => v > 0) || Object.values(raidProgress).some((v) => v > 0)
+  // L'atelier des automates ne se révèle qu'une fois du contenu battu (et reste discret avant).
+  if (automates.length === 0 && !anyBeaten) return null
+
+  const beatenDungeons = DUNGEON_LIST.filter((d) => (dungeonProgress[d.id] ?? 0) > 0)
+  const beatenRaids = RAID_LIST.filter((r) => (raidProgress[r.id] ?? 0) > 0)
+
+  return (
+    <div className="mb-3 rounded-xl border border-violet-800/40 bg-violet-950/10 p-2.5">
+      <div className="mb-1.5 flex items-center justify-between">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-violet-300">🤖 Automates de forge</span>
+        <span className="text-[10px] text-slate-500">{automates.length}/{AUTOMATE_MAX}</span>
+      </div>
+      <p className="mb-2 text-[9.5px] leading-snug text-slate-500">
+        Une machine refait EN BOUCLE un donjon/raid déjà battu (au niveau record), même hors-ligne.
+        Elle consomme les clés (🔑/🔮) et rapporte les ressources à {Math.round(60)}–85% — jamais le stuff ni les 💫.
+        Astuce : un automate sur l'Antre des Failles produit les Sceaux des autres.
+      </p>
+
+      <div className="space-y-2">
+        {automates.map((a) => {
+          const duration = automateRunDuration(a)
+          const pct = a.mission ? Math.min(100, (a.progress / duration) * 100) : 0
+          return (
+            <div key={a.id} className="rounded-lg border border-slate-700 bg-black/20 p-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[12px] font-semibold text-violet-200">🤖 {a.name}</span>
+                <span className="text-[9px] text-slate-500">rendement {Math.round(automateEfficiency(a) * 100)}% · run {a.mission ? Math.round(duration) + ' s' : '—'}</span>
+              </div>
+              <div className="mt-1 text-[10.5px]">
+                {a.mission ? (
+                  <span className="text-slate-300">{missionLabel(a.mission)}{a.paused ? ' · ⏸ en pause' : a.waiting ? ' · ⏳ en attente de clés' : ''}</span>
+                ) : (
+                  <span className="italic text-slate-500">Sans mission — assigne-lui un donjon ou un raid battu.</span>
+                )}
+              </div>
+              {a.mission && !a.paused && (
+                <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+                  <div className="h-full bg-violet-500 transition-all" style={{ width: `${pct}%` }} />
+                </div>
+              )}
+              <div className="mt-1.5 flex flex-wrap gap-1 text-[10px]">
+                <button onClick={() => setAssigning(a.id)} className="rounded bg-violet-900/40 px-2 py-1 font-medium text-violet-200 hover:bg-violet-800/50">
+                  🎯 Mission
+                </button>
+                {a.mission && (
+                  <button onClick={() => toggleAutomatePause(a.id)} className="rounded bg-slate-800 px-2 py-1 text-slate-300 hover:bg-slate-700">
+                    {a.paused ? '▶ Reprendre' : '⏸ Pause'}
+                  </button>
+                )}
+                {(['speed', 'yield'] as const).map((kind) => {
+                  const lvl = kind === 'speed' ? a.speedLvl : a.yieldLvl
+                  const maxed = lvl >= AUTOMATE_UPG_MAX
+                  const cost = automateUpgradeCost(kind, lvl)
+                  return (
+                    <button
+                      key={kind}
+                      disabled={maxed || forgeMastery < cost}
+                      onClick={() => upgradeAutomate(a.id, kind)}
+                      className="rounded bg-slate-800 px-2 py-1 text-slate-300 hover:bg-slate-700 disabled:opacity-40"
+                    >
+                      {kind === 'speed' ? '⚡ Vitesse' : '📈 Rendement'} {lvl}/{AUTOMATE_UPG_MAX}{maxed ? '' : ` · 🔧${cost}`}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })}
+
+        {nextCost && (
+          <button
+            onClick={buildAutomate}
+            disabled={gold < nextCost.gold || poussiere < nextCost.poussiere || fragments < nextCost.fragments || cosmic < nextCost.cosmic || forgeMastery < nextCost.mastery}
+            className="w-full rounded-lg border border-violet-700/50 bg-violet-900/20 py-2 text-[11px] font-medium text-violet-200 hover:bg-violet-800/30 disabled:opacity-40"
+          >
+            🛠 Construire « {['Rouage', 'Enclume', 'Vigile'][automates.length]} » · 💰 {nextCost.gold.toLocaleString('fr-FR')} + 🌌 {nextCost.poussiere}
+            {' '}+ ✨ {nextCost.fragments}{nextCost.cosmic ? ` + 💫 ${nextCost.cosmic}` : ''} + 🔧 {nextCost.mastery.toLocaleString('fr-FR')}
+          </button>
+        )}
+      </div>
+
+      {/* Feuille d'assignation : contenu déjà battu uniquement (farmé au niveau record) */}
+      {assigning !== null && (
+        <Sheet title="🎯 Mission de l'automate" onClose={() => setAssigning(null)}>
+          <p className="mb-2 text-[11px] leading-snug text-slate-500">
+            Uniquement du contenu DÉJÀ battu — l'automate farme au niveau record (les gains suivent si tu bats mieux : réassigne).
+          </p>
+          <div className="space-y-1">
+            {beatenDungeons.map((d) => {
+              const rec = dungeonProgress[d.id] ?? 0
+              const m: AutomateMission = { kind: 'dungeon', id: d.id, level: rec }
+              return (
+                <button
+                  key={d.id}
+                  onClick={() => { assignAutomate(assigning, m); setAssigning(null) }}
+                  className="flex w-full items-center justify-between rounded-lg border border-slate-700 px-2.5 py-2 text-left text-[12px] hover:border-violet-500"
+                >
+                  <span style={{ color: d.color }}>{d.icon} {d.name}</span>
+                  <span className="text-[10px] text-slate-500">niv. {rec}{d.sceauCost ? ` · ${d.sceauCost} 🔑/run` : ' · gratuit'}</span>
+                </button>
+              )
+            })}
+            {beatenRaids.map((r) => {
+              const rec = raidProgress[r.id] ?? 0
+              const m: AutomateMission = { kind: 'raid', id: r.id, level: rec }
+              return (
+                <button
+                  key={r.id}
+                  onClick={() => { assignAutomate(assigning, m); setAssigning(null) }}
+                  className="flex w-full items-center justify-between rounded-lg border border-slate-700 px-2.5 py-2 text-left text-[12px] hover:border-violet-500"
+                >
+                  <span style={{ color: r.color }}>{r.icon} {r.name}</span>
+                  <span className="text-[10px] text-slate-500">T{rec} · {r.orbeCost} 🔮/run</span>
+                </button>
+              )
+            })}
+            {beatenDungeons.length === 0 && beatenRaids.length === 0 && (
+              <div className="text-center text-[11px] italic text-slate-500">Bats d'abord un donjon ou un raid.</div>
+            )}
+            <button
+              onClick={() => { assignAutomate(assigning, null); setAssigning(null) }}
+              className="w-full rounded-lg bg-slate-800 py-2 text-[11px] text-slate-400 hover:bg-slate-700"
+            >
+              ✕ Retirer la mission
+            </button>
+          </div>
+        </Sheet>
+      )}
     </div>
   )
 }

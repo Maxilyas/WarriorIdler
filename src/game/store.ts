@@ -21,6 +21,11 @@ import {
 import { forgeMods, forgeMasteryGain, getForgeUpgrade, forgeUpgradeCost, forgeUpgradeMaxed } from './forge'
 import { gemKey, itemSockets, unsocketCost, gemTierName, GEM_DROP, GEM_FUSE_COUNT, GEM_FUSE_GOLD, GEM_MAX_TIER } from './gems'
 import { getEnchant, enchantCost } from './enchants'
+import {
+  tickAutomates, missionLabel, automateUpgradeCost,
+  AUTOMATE_MAX, AUTOMATE_COSTS, AUTOMATE_NAMES, AUTOMATE_UPG_MAX,
+  type Automate, type AutomateMission,
+} from './automates'
 import { makeEnemy, isBossStage, stageIlvl, stageLuckTier } from './enemies'
 import { BIOME_IDS, biomeUnlocked, getBiomeDef, type BiomeId } from './biomes'
 import {
@@ -233,6 +238,8 @@ interface SaveData {
   /** Métier de forgeron : Savoir-faire 🔧 accumulé + niveaux d'améliorations de forge. */
   forgeMastery: number
   forgeUpgrades: Record<string, number>
+  /** Automates de forge : farment en boucle les donjons/raids déjà battus (3 max). */
+  automates: Automate[]
   /** Stock de l'échoppe du marchand. */
   shopStock: Item[]
   inventory: Item[]
@@ -284,6 +291,13 @@ interface GameState extends SaveData {
   createItem: (opts: CreateOptions) => void
   /** Achète/monte une amélioration du métier de forgeron (dépense du Savoir-faire 🔧). */
   buyForgeUpgrade: (id: string) => void
+  /** Construit le prochain automate de forge (3 max, coût croissant brutal). */
+  buildAutomate: () => void
+  /** Assigne (ou retire) la mission d'un automate — donjon/raid DÉJÀ battu uniquement. */
+  assignAutomate: (id: number, mission: AutomateMission | null) => void
+  toggleAutomatePause: (id: number) => void
+  /** Améliore la vitesse ou le rendement d'un automate (Savoir-faire 🔧). */
+  upgradeAutomate: (id: number, kind: 'speed' | 'yield') => void
   enterDungeon: (dungeonId: DungeonId, level: number, repeat?: number) => void
   abandonDungeon: () => void
   enterRaid: (raidId: RaidId, tier: number, repeat?: number) => void
@@ -373,6 +387,7 @@ function freshSave(): SaveData {
     upgrades: {},
     forgeMastery: 0,
     forgeUpgrades: {},
+    automates: [],
     shopStock: [],
     inventory: [],
     recycleThreshold: 4,
@@ -449,6 +464,21 @@ function sanitize(save: SaveData): SaveData {
   }
   if (typeof save.farmLock !== 'boolean') save.farmLock = false
   if (!save.gems || typeof save.gems !== 'object') save.gems = {}
+  // Automates : valide la structure (mission, bornes d'amélioration, banque).
+  if (!Array.isArray(save.automates)) save.automates = []
+  save.automates = save.automates
+    .filter((a) => a && typeof a === 'object')
+    .slice(0, AUTOMATE_MAX)
+    .map((a, i) => ({
+      id: typeof a.id === 'number' ? a.id : i + 1,
+      name: typeof a.name === 'string' ? a.name : AUTOMATE_NAMES[i] ?? `Automate ${i + 1}`,
+      mission: a.mission && (a.mission.kind === 'dungeon' || a.mission.kind === 'raid') && typeof a.mission.level === 'number' ? a.mission : null,
+      progress: typeof a.progress === 'number' ? Math.max(0, a.progress) : 0,
+      paused: a.paused === true,
+      speedLvl: Math.max(0, Math.min(AUTOMATE_UPG_MAX, a.speedLvl ?? 0)),
+      yieldLvl: Math.max(0, Math.min(AUTOMATE_UPG_MAX, a.yieldLvl ?? 0)),
+      bank: a.bank && typeof a.bank === 'object' ? a.bank : {},
+    }))
   if (typeof save.recycleThreshold !== 'number') save.recycleThreshold = 4
   if (typeof save.autoRecycle !== 'boolean') save.autoRecycle = false
   if (typeof save.lastSeen !== 'number') save.lastSeen = Date.now()
@@ -636,6 +666,7 @@ function persist(s: GameState) {
     upgrades: s.upgrades,
     forgeMastery: s.forgeMastery,
     forgeUpgrades: s.forgeUpgrades,
+    automates: s.automates,
     shopStock: s.shopStock,
     inventory: s.inventory,
     recycleThreshold: s.recycleThreshold,
@@ -1692,15 +1723,42 @@ export const useGame = create<GameState>((set, get) => {
     }
   }
 
+  // Automates de forge HORS-LIGNE : même moteur que le tick, avec un grand dt (plafonné 12 h,
+  // plein régime — ce sont des machines). Les clés sont consommées run par run.
+  const autoLogLines: string[] = []
+  if (elapsed > 60_000 && save.automates.length > 0) {
+    const ar = tickAutomates(save, Math.min(elapsed, 12 * 3600 * 1000) / 1000)
+    if (ar) {
+      Object.assign(save, ar.eco)
+      if (ar.xpEach > 0) save.characters = save.characters.map((c) => (c.hp > 0 ? grantXp(c, ar.xpEach) : c))
+      autoLogLines.push(...ar.lines.map((l) => `(hors-ligne) ${l}`))
+    }
+  }
+
   return {
     ...save,
     enemy: makeEnemy(save.stage, save.activeBiome),
-    log: [{ id: logId++, text: 'Bienvenue, guerrier. Le combat commence.', kind: 'info' }],
+    log: [
+      ...autoLogLines.map((text) => ({ id: logId++, text, kind: 'craft' as LogKind })),
+      { id: logId++, text: 'Bienvenue, guerrier. Le combat commence.', kind: 'info' as LogKind },
+    ],
     killCount: 0,
     pendingOffline,
 
     tick: (dt) => {
-      const s = get()
+      let s = get()
+
+      // Automates de forge : avancent en PARALLÈLE de tout le reste (farm, donjon, raid).
+      const ar = tickAutomates(s, dt)
+      if (ar) {
+        let log = s.log
+        for (const line of ar.lines) log = pushLog(log, line, 'craft')
+        let characters = s.characters
+        if (ar.xpEach > 0) characters = characters.map((c) => (c.hp > 0 ? grantXp(c, ar.xpEach) : c))
+        s = { ...s, ...ar.eco, characters, log }
+        if (ar.completed) persist(s)
+      }
+
       if (s.raid) {
         tickRaid(s, dt, set)
         return
@@ -2281,6 +2339,78 @@ export const useGame = create<GameState>((set, get) => {
       if (s.forgeMastery < cost) return
       const forgeUpgrades = { ...s.forgeUpgrades, [id]: level + 1 }
       const next = { ...s, forgeMastery: s.forgeMastery - cost, forgeUpgrades, log: pushLog(s.log, `🔧 Forgeron amélioré : ${u.name}${u.maxLevel > 1 ? ` niv ${level + 1}` : ''} (-${cost} 🔧).`, 'craft') }
+      persist(next)
+      set(next)
+    },
+
+    buildAutomate: () => {
+      const s = get()
+      const idx = s.automates.length
+      if (idx >= AUTOMATE_MAX) return
+      const c = AUTOMATE_COSTS[idx]
+      if (s.gold < c.gold || s.poussiere < c.poussiere || s.fragments < c.fragments || s.cosmic < c.cosmic || s.forgeMastery < c.mastery) return
+      const a: Automate = {
+        id: idx + 1,
+        name: AUTOMATE_NAMES[idx] ?? `Automate ${idx + 1}`,
+        mission: null, progress: 0, paused: false, speedLvl: 0, yieldLvl: 0, bank: {},
+      }
+      const next = {
+        ...s,
+        gold: s.gold - c.gold,
+        poussiere: s.poussiere - c.poussiere,
+        fragments: s.fragments - c.fragments,
+        cosmic: s.cosmic - c.cosmic,
+        forgeMastery: s.forgeMastery - c.mastery,
+        automates: [...s.automates, a],
+        log: pushLog(s.log, `🤖 Automate construit : ${a.name} ! Assigne-lui un donjon ou un raid déjà battu (Atelier).`, 'craft'),
+      }
+      persist(next)
+      set(next)
+    },
+
+    assignAutomate: (id, mission) => {
+      const s = get()
+      if (mission) {
+        // Uniquement du contenu DÉJÀ BATTU (l'automate ne progresse jamais, il récolte).
+        const record = mission.kind === 'dungeon'
+          ? s.dungeonProgress[mission.id as DungeonId] ?? 0
+          : s.raidProgress[mission.id as RaidId] ?? 0
+        if (mission.level < 1 || mission.level > record) return
+      }
+      const automates = s.automates.map((a) => (a.id === id ? { ...a, mission, progress: 0, waiting: false } : a))
+      const next = {
+        ...s, automates,
+        log: pushLog(s.log, mission
+          ? `🤖 Mission assignée : ${missionLabel(mission)}.`
+          : '🤖 Mission retirée — l\'automate est au repos.', 'craft'),
+      }
+      persist(next)
+      set(next)
+    },
+
+    toggleAutomatePause: (id) => {
+      const s = get()
+      const automates = s.automates.map((a) => (a.id === id ? { ...a, paused: !a.paused } : a))
+      const next = { ...s, automates }
+      persist(next)
+      set(next)
+    },
+
+    upgradeAutomate: (id, kind) => {
+      const s = get()
+      const a = s.automates.find((x) => x.id === id)
+      if (!a) return
+      const lvl = kind === 'speed' ? a.speedLvl : a.yieldLvl
+      if (lvl >= AUTOMATE_UPG_MAX) return
+      const cost = automateUpgradeCost(kind, lvl)
+      if (s.forgeMastery < cost) return
+      const automates = s.automates.map((x) =>
+        x.id === id ? { ...x, speedLvl: kind === 'speed' ? x.speedLvl + 1 : x.speedLvl, yieldLvl: kind === 'yield' ? x.yieldLvl + 1 : x.yieldLvl } : x,
+      )
+      const next = {
+        ...s, automates, forgeMastery: s.forgeMastery - cost,
+        log: pushLog(s.log, `🤖 ${a.name} amélioré : ${kind === 'speed' ? 'vitesse' : 'rendement'} niv. ${lvl + 1} (-${cost} 🔧).`, 'craft'),
+      }
       persist(next)
       set(next)
     },
