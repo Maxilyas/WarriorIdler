@@ -5,6 +5,7 @@ import { ITEM_TYPES } from './slots'
 import { rollUnique, instanceMods } from './uniques'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from './damage'
 import { gemScore } from './gems'
+import { enchantMods } from './enchants'
 
 const ITEM_TYPE_LIST: ItemType[] = Object.keys(ITEM_TYPES) as ItemType[]
 
@@ -233,7 +234,7 @@ export function rollBoxRarity(minTier: number, maxTier: number, jackpot: number,
   return (RARITY_LIST.find((x) => x.tier === tier) ?? RARITY_LIST[0]).id
 }
 
-/** Stats totales apportées par un objet (primaire + endurance + affixes 'stat' + mods uniques). */
+/** Stats totales apportées par un objet (primaire + endurance + affixes 'stat' + uniques + rune). */
 export function itemStatBlock(item: Item): Record<string, number> {
   const block: Record<string, number> = { [item.primary]: item.primaryValue }
   if (item.endurance) block.endurance = (block.endurance ?? 0) + item.endurance
@@ -241,6 +242,10 @@ export function itemStatBlock(item: Item): Record<string, number> {
   if (item.unique) {
     const mods = instanceMods(item.unique, item)
     for (const k in mods) block[k] = (block[k] ?? 0) + (mods[k as keyof typeof mods] ?? 0)
+  }
+  if (item.enchant) {
+    const em = enchantMods(item)
+    for (const k in em) block[k] = (block[k] ?? 0) + (em[k as keyof typeof em] ?? 0)
   }
   return block
 }

@@ -10,6 +10,7 @@ import {
 } from '../game/items'
 import { forgeMods } from '../game/forge'
 import { itemSockets, parseGemKey, unsocketCost, gemTierName, GEM_DMG, GEM_RES } from '../game/gems'
+import { ENCHANTS, getEnchant, enchantCost, enchantValue } from '../game/enchants'
 import type { OffensiveStat } from '../game/types'
 import { ITEM_TYPES, equipSlotsForType } from '../game/slots'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from '../game/damage'
@@ -348,6 +349,8 @@ function CraftSection({ item }: { item: Item }) {
 
           {itemSockets(item) > 0 && (mods.gems ? <GemSection item={item} /> : <Locked label="Sertissage (gemmes)" />)}
 
+          {mods.enchant ? <EnchantSection item={item} /> : <Locked label="Enchantement (runes)" />}
+
           <InsertEffectSection item={item} />
 
           <ChooseUniqueSection item={item} />
@@ -506,6 +509,56 @@ function GemSection({ item }: { item: Item }) {
               </div>
             )
           )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Rune d'enchantement : grave une stat CHOISIE, qui scale avec l'iLvl. Une rune par pièce. */
+function EnchantSection({ item }: { item: Item }) {
+  const essence = useGame((s) => s.essence)
+  const forgeMastery = useGame((s) => s.forgeMastery)
+  const enchantItem = useGame((s) => s.enchantItem)
+  const [open, setOpen] = useState(false)
+  const current = item.enchant ? getEnchant(item.enchant) : undefined
+
+  return (
+    <div className="rounded border border-amber-700/40 bg-amber-950/10 p-2">
+      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center justify-between py-1 text-[11px] font-semibold text-amber-200">
+        <span>🪄 Rune {current ? `· ${current.icon} ${current.name}` : '· aucune'}</span>
+        <span>{open ? '▾' : '▸'}</span>
+      </button>
+      {open && (
+        <div className="mt-1.5">
+          <div className="mb-1 text-[9.5px] leading-snug text-slate-500">
+            Grave une stat choisie (scale avec l'iLvl — un surillvl l'améliore aussi). Une rune par pièce, remplaçable.
+          </div>
+          <div className="space-y-0.5">
+            {ENCHANTS.map((e) => {
+              const cost = enchantCost(e, item)
+              const on = item.enchant === e.id
+              const can = !on && forgeMastery >= cost.mastery && essence >= cost.eclats
+              return (
+                <button
+                  key={e.id}
+                  disabled={!can}
+                  onClick={() => enchantItem(item.id, e.id)}
+                  title={e.description}
+                  className={
+                    'flex w-full items-center justify-between gap-1 rounded border px-1.5 py-1 text-left text-[10px] disabled:opacity-40 ' +
+                    (on ? 'border-amber-400 bg-amber-900/30 text-amber-200' : 'border-slate-700 text-slate-300 enabled:hover:bg-amber-900/20')
+                  }
+                >
+                  <span className="min-w-0 truncate">
+                    {on ? '✓ ' : ''}{e.icon} {e.name}{e.rare ? ' 💎' : ''}
+                    <span className="text-slate-500"> · +{enchantValue(e, item)} {ALL_STAT_META[e.stat].short}</span>
+                  </span>
+                  {!on && <span className="shrink-0 text-[9px] text-slate-500">🔧{cost.mastery} ♦{cost.eclats}</span>}
+                </button>
+              )
+            })}
+          </div>
         </div>
       )}
     </div>

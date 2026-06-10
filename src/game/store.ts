@@ -20,6 +20,7 @@ import {
 } from './items'
 import { forgeMods, forgeMasteryGain, getForgeUpgrade, forgeUpgradeCost, forgeUpgradeMaxed } from './forge'
 import { gemKey, itemSockets, unsocketCost, gemTierName, GEM_DROP, GEM_FUSE_COUNT, GEM_FUSE_GOLD, GEM_MAX_TIER } from './gems'
+import { getEnchant, enchantCost } from './enchants'
 import { makeEnemy, isBossStage, stageIlvl, stageLuckTier } from './enemies'
 import { BIOME_IDS, biomeUnlocked, getBiomeDef, type BiomeId } from './biomes'
 import {
@@ -278,6 +279,8 @@ interface GameState extends SaveData {
   socketGem: (itemId: string, type: DamageType, tier: number) => void
   /** Désertit la gemme à l'index donné (coût en éclats, gemme rendue au stock). */
   unsocketGem: (itemId: string, index: number) => void
+  /** Grave (ou remplace) la rune d'enchantement d'un objet (coût : Savoir-faire + éclats). */
+  enchantItem: (itemId: string, enchantId: string) => void
   createItem: (opts: CreateOptions) => void
   /** Achète/monte une amélioration du métier de forgeron (dépense du Savoir-faire 🔧). */
   buyForgeUpgrade: (id: string) => void
@@ -2210,6 +2213,27 @@ export const useGame = create<GameState>((set, get) => {
         essence: s.essence - cost,
         gems: { ...s.gems, [key]: (s.gems[key] ?? 0) + 1 },
         log: pushLog(s.log, `💎 Désertie : ${DAMAGE_TYPES[g.type].name} ${gemTierName(g.tier)} (-${cost} éclats, gemme rendue).`, 'craft'),
+      }
+      persist(next)
+      set(next)
+    },
+
+    enchantItem: (itemId, enchantId) => {
+      const s = get()
+      const mods = forgeMods(s.forgeUpgrades)
+      if (!mods.enchant) return // débloqué via le métier (Runiste)
+      const def = getEnchant(enchantId)
+      const item = findItemById(s, itemId)
+      if (!def || !item || item.enchant === enchantId) return
+      const cost = enchantCost(def, item)
+      if (s.forgeMastery < cost.mastery || s.essence < cost.eclats) return
+      const upd = applyItemPatch(s, itemId, { enchant: enchantId })
+      if (!upd) return
+      const next = {
+        ...s, ...upd,
+        forgeMastery: s.forgeMastery - cost.mastery,
+        essence: s.essence - cost.eclats,
+        log: pushLog(s.log, `🪄 Rune gravée : ${def.icon} ${def.name} sur ${item.name} (-${cost.mastery} 🔧, -${cost.eclats} ♦).`, 'craft'),
       }
       persist(next)
       set(next)
