@@ -7,6 +7,7 @@ import { PRIMARY_META } from '../game/stats'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from '../game/damage'
 import { RARITY_LIST } from '../game/rarities'
 import { maxCraftTier, createCost } from '../game/items'
+import { FORGE_UPGRADES, forgeMods, forgeUpgradeCost, forgeUpgradeMaxed } from '../game/forge'
 import { stageIlvl } from '../game/enemies'
 import type { ItemType, OffensiveStat, ItemOrientation, DamageType, RarityId } from '../game/types'
 
@@ -26,6 +27,10 @@ export function CreatePanel({ onClose }: { onClose: () => void }) {
   const poussiere = useGame((s) => s.poussiere)
   const cosmic = useGame((s) => s.cosmic)
   const createItem = useGame((s) => s.createItem)
+  const forgeMastery = useGame((s) => s.forgeMastery)
+  const forgeUpgrades = useGame((s) => s.forgeUpgrades)
+  const buyForgeUpgrade = useGame((s) => s.buyForgeUpgrade)
+  const mods = forgeMods(forgeUpgrades)
 
   const ilvl = stageIlvl(bestStage)
   const maxTier = maxCraftTier(bestStage)
@@ -39,8 +44,10 @@ export function CreatePanel({ onClose }: { onClose: () => void }) {
 
   const isWeapon = type === 'armePrincipale'
   const tier = RARITY_LIST.find((r) => r.id === rarity)!.tier
-  const cost = createCost(tier, ilvl)
-  const canForge = essence >= cost.eclats && noyau >= cost.noyau && fragments >= (cost.fragments ?? 0) && poussiere >= (cost.poussiere ?? 0) && cosmic >= (cost.cosmic ?? 0)
+  const raw = createCost(tier, ilvl)
+  const cm = mods.costMult
+  const cost = { eclats: Math.round(raw.eclats * cm), noyau: Math.round(raw.noyau * cm), fragments: Math.round((raw.fragments ?? 0) * cm), poussiere: Math.round((raw.poussiere ?? 0) * cm), cosmic: Math.round((raw.cosmic ?? 0) * cm) }
+  const canForge = essence >= cost.eclats && noyau >= cost.noyau && fragments >= cost.fragments && poussiere >= cost.poussiere && cosmic >= cost.cosmic
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={onClose}>
@@ -51,6 +58,46 @@ export function CreatePanel({ onClose }: { onClose: () => void }) {
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-base font-bold text-amber-300">🔨 Forger un objet</h2>
           <button onClick={onClose} className="rounded-lg bg-slate-800 px-2.5 py-1 text-slate-400 hover:bg-slate-700">✕</button>
+        </div>
+
+        {/* Métier de forgeron : Savoir-faire 🔧 + améliorations (déblocages + bonus) */}
+        <div className="mb-3 rounded-xl border border-amber-800/40 bg-amber-950/10 p-2.5">
+          <div className="mb-1.5 flex items-center justify-between">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-amber-300">🔧 Métier de forgeron</span>
+            <span className="text-[11px] text-amber-200">🔧 {forgeMastery.toLocaleString('fr-FR')} Savoir-faire</span>
+          </div>
+          <p className="mb-1.5 text-[9.5px] leading-snug text-slate-500">
+            Gagne du Savoir-faire en créant/modifiant des objets, puis débloque & améliore ton atelier.
+          </p>
+          <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+            {FORGE_UPGRADES.map((u) => {
+              const lvl = forgeUpgrades[u.id] ?? 0
+              const maxed = forgeUpgradeMaxed(u, lvl)
+              const c = forgeUpgradeCost(u, lvl)
+              const isUnlock = u.maxLevel === 1
+              const owned = isUnlock && lvl > 0
+              return (
+                <button
+                  key={u.id}
+                  disabled={maxed || forgeMastery < c}
+                  onClick={() => buyForgeUpgrade(u.id)}
+                  title={u.description}
+                  className={'flex items-center gap-2 rounded-lg border px-2 py-1.5 text-left disabled:opacity-50 ' + (owned ? 'border-emerald-700/50 bg-emerald-950/20' : 'border-slate-700 bg-black/20 hover:border-amber-600/60')}
+                >
+                  <span className="text-base">{u.icon}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[11px] font-medium text-slate-200">
+                      {u.name}{u.maxLevel > 1 ? <span className="text-slate-500"> {lvl}/{u.maxLevel}</span> : null}
+                    </span>
+                    <span className="block truncate text-[8.5px] text-slate-500">{u.description}</span>
+                  </span>
+                  <span className="shrink-0 text-[10px] font-semibold">
+                    {owned ? <span className="text-emerald-400">✓ Débloqué</span> : maxed ? <span className="text-slate-500">Max</span> : <span className={forgeMastery >= c ? 'text-amber-300' : 'text-red-400'}>🔧 {c}</span>}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
         </div>
 
         {/* Type d'objet */}
@@ -171,6 +218,12 @@ export function CreatePanel({ onClose }: { onClose: () => void }) {
               <span className={cosmic >= (cost.cosmic ?? 0) ? 'text-violet-300' : 'text-red-400'}>💫 {cost.cosmic}</span>
             )}
           </div>
+          {(mods.costMult < 1 || mods.luckChance > 0) && (
+            <div className="mt-1 flex flex-wrap gap-x-3 text-[10.5px] text-amber-300/80">
+              {mods.costMult < 1 && <span>💰 −{Math.round((1 - mods.costMult) * 100)}% coûts (métier)</span>}
+              {mods.luckChance > 0 && <span>🎲 +{Math.round(mods.luckChance * 100)}% chance de rareté supérieure</span>}
+            </div>
+          )}
           {tier >= 7 && <div className="mt-1 text-[10.5px] text-fuchsia-300/80">Rareté Artefact+ : chance d'obtenir un effet unique.</div>}
         </div>
 

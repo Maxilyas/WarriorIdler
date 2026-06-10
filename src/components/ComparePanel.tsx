@@ -7,6 +7,7 @@ import {
   reforgeCost, surillvlCost, ascendCost, nextRarity, SURILLVL_STEP, transmuteCost,
   quintCost, QUINT_GAIN,
 } from '../game/items'
+import { forgeMods } from '../game/forge'
 import type { OffensiveStat } from '../game/types'
 import { ITEM_TYPES, equipSlotsForType } from '../game/slots'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from '../game/damage'
@@ -227,15 +228,21 @@ function CraftSection({ item }: { item: Item }) {
   const ascend = useGame((s) => s.ascend)
   const infuseUnique = useGame((s) => s.infuseUnique)
   const transmute = useGame((s) => s.transmute)
+  const mods = forgeMods(useGame((s) => s.forgeUpgrades))
   const [open, setOpen] = useState(false)
   const [locked, setLocked] = useState<number[]>([])
-  const tCost = transmuteCost(item)
+  const cm = mods.costMult
+  const tCost = Math.round(transmuteCost(item) * cm)
   const OFFENSIVE: OffensiveStat[] = ['force', 'agilite', 'intelligence']
 
-  const rCost = reforgeCost(item)
-  const sCost = surillvlCost(item)
-  const aCost = ascendCost(item)
+  const rCost = Math.round(reforgeCost(item) * cm)
+  const sCost = Math.round(surillvlCost(item) * cm)
+  const rawA = ascendCost(item)
+  const aCost = { eclats: Math.round(rawA.eclats * cm), noyau: Math.round(rawA.noyau * cm), fragments: Math.round((rawA.fragments ?? 0) * cm), poussiere: Math.round((rawA.poussiere ?? 0) * cm), cosmic: Math.round((rawA.cosmic ?? 0) * cm) }
   const nr = nextRarity(item.rarity)
+  const Locked = ({ label }: { label: string }) => (
+    <div className="rounded border border-slate-800 bg-black/20 py-1.5 text-center text-[10px] text-slate-500">🔒 {label} — débloque-le via le 🔧 métier de forgeron (onglet Forge)</div>
+  )
 
   const toggle = (i: number) => setLocked((l) => (l.includes(i) ? l.filter((x) => x !== i) : [...l, i]))
   const reset = () => setLocked([])
@@ -278,39 +285,43 @@ function CraftSection({ item }: { item: Item }) {
             </div>
           )}
 
-          <button
-            disabled={essence < sCost}
-            onClick={() => { surillvl(item.id); reset() }}
-            className="w-full rounded bg-amber-800/60 py-1.5 text-[11px] font-medium hover:bg-amber-700/70 disabled:opacity-40"
-          >
-            Surillvl → iLvl {item.ilvl + SURILLVL_STEP} · ♦ {sCost}
-          </button>
+          {mods.surillvl ? (
+            <button
+              disabled={essence < sCost}
+              onClick={() => { surillvl(item.id); reset() }}
+              className="w-full rounded bg-amber-800/60 py-1.5 text-[11px] font-medium hover:bg-amber-700/70 disabled:opacity-40"
+            >
+              Surillvl → iLvl {item.ilvl + SURILLVL_STEP} · ♦ {sCost}
+            </button>
+          ) : <Locked label="Surillvl" />}
 
           {/* Transmuter l'affinité (Force/Agi/Int) */}
-          <div>
-            <div className="mb-1 text-[10px] text-slate-500">Transmuter l'affinité · ♦ {tCost} :</div>
-            <div className="grid grid-cols-3 gap-1">
-              {OFFENSIVE.map((p) => {
-                const m = ALL_STAT_META[p]
-                const cur = item.primary === p
-                return (
-                  <button
-                    key={p}
-                    disabled={cur || essence < tCost}
-                    onClick={() => transmute(item.id, p)}
-                    className="rounded border border-slate-700 py-1 text-[10px] font-medium disabled:opacity-40 enabled:hover:bg-white/5"
-                    style={{ color: cur ? '#64748b' : m.color }}
-                  >
-                    {cur ? '✓ ' : ''}{m.short}
-                  </button>
-                )
-              })}
+          {mods.transmute ? (
+            <div>
+              <div className="mb-1 text-[10px] text-slate-500">Transmuter l'affinité · ♦ {tCost} :</div>
+              <div className="grid grid-cols-3 gap-1">
+                {OFFENSIVE.map((p) => {
+                  const m = ALL_STAT_META[p]
+                  const cur = item.primary === p
+                  return (
+                    <button
+                      key={p}
+                      disabled={cur || essence < tCost}
+                      onClick={() => transmute(item.id, p)}
+                      className="rounded border border-slate-700 py-1 text-[10px] font-medium disabled:opacity-40 enabled:hover:bg-white/5"
+                      style={{ color: cur ? '#64748b' : m.color }}
+                    >
+                      {cur ? '✓ ' : ''}{m.short}
+                    </button>
+                  )
+                })}
+              </div>
             </div>
-          </div>
+          ) : <Locked label="Transmutation" />}
 
-          {nr ? (
+          {!mods.ascend ? <Locked label="Ascension" /> : nr ? (
             <button
-              disabled={essence < aCost.eclats || noyau < aCost.noyau || fragments < (aCost.fragments ?? 0) || poussiere < (aCost.poussiere ?? 0) || cosmic < (aCost.cosmic ?? 0)}
+              disabled={essence < aCost.eclats || noyau < aCost.noyau || fragments < aCost.fragments || poussiere < aCost.poussiere || cosmic < aCost.cosmic}
               onClick={() => { ascend(item.id); reset() }}
               className="w-full rounded bg-fuchsia-900/50 py-1.5 text-[11px] font-medium hover:bg-fuchsia-800/60 disabled:opacity-40"
             >
@@ -321,7 +332,7 @@ function CraftSection({ item }: { item: Item }) {
             <div className="text-center text-[10px] italic text-slate-600">Rareté maximale atteinte.</div>
           )}
 
-          <QuintessenceSection item={item} />
+          {mods.quint ? <QuintessenceSection item={item} /> : <Locked label="Craft à la Quintessence" />}
 
           <InsertEffectSection item={item} />
 

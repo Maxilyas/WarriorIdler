@@ -15,9 +15,10 @@ import { getUpgrade, upgradeCost as accountUpgradeCost, upgradePoussiere, upgrad
 import {
   generateItem, rollBoxRarity, sellValue, recycleValue, recyclePoussiere, itemScore,
   reforgeItem, surillvlItem, ascendItem,
-  reforgeCost, surillvlCost, ascendCost, createCost, transmuteCost,
+  reforgeCost, surillvlCost, ascendCost, createCost, transmuteCost, maxCraftTier,
   enhanceTypedAffixes, quintRefund,
 } from './items'
+import { forgeMods, forgeMasteryGain, getForgeUpgrade, forgeUpgradeCost, forgeUpgradeMaxed } from './forge'
 import { makeEnemy, isBossStage, stageIlvl, stageLuckTier } from './enemies'
 import { BIOME_IDS, biomeUnlocked, getBiomeDef, type BiomeId } from './biomes'
 import { RARITIES, RARITY_LIST } from './rarities'
@@ -208,6 +209,9 @@ interface SaveData {
   codex: string[]
   /** Améliorations permanentes : id → niveau. */
   upgrades: Record<string, number>
+  /** Métier de forgeron : Savoir-faire 🔧 accumulé + niveaux d'améliorations de forge. */
+  forgeMastery: number
+  forgeUpgrades: Record<string, number>
   /** Stock de l'échoppe du marchand. */
   shopStock: Item[]
   inventory: Item[]
@@ -249,6 +253,8 @@ interface GameState extends SaveData {
   /** Améliore (ou ajoute) la ligne typée (dégâts/résist) d'un objet via une Quintessence du type. */
   enhanceTyped: (itemId: string, type: DamageType, kind: 'dmgType' | 'resist') => void
   createItem: (opts: CreateOptions) => void
+  /** Achète/monte une amélioration du métier de forgeron (dépense du Savoir-faire 🔧). */
+  buyForgeUpgrade: (id: string) => void
   enterDungeon: (dungeonId: DungeonId, level: number, repeat?: number) => void
   abandonDungeon: () => void
   enterRaid: (raidId: RaidId, tier: number, repeat?: number) => void
@@ -333,6 +339,8 @@ function freshSave(): SaveData {
     raid: null,
     codex: [],
     upgrades: {},
+    forgeMastery: 0,
+    forgeUpgrades: {},
     shopStock: [],
     inventory: [],
     recycleThreshold: 4,
@@ -591,6 +599,8 @@ function persist(s: GameState) {
     raid: s.raid,
     codex: s.codex,
     upgrades: s.upgrades,
+    forgeMastery: s.forgeMastery,
+    forgeUpgrades: s.forgeUpgrades,
     shopStock: s.shopStock,
     inventory: s.inventory,
     recycleThreshold: s.recycleThreshold,
@@ -1959,50 +1969,61 @@ export const useGame = create<GameState>((set, get) => {
       const s = get()
       const item = findItemById(s, itemId)
       if (!item) return
-      const cost = reforgeCost(item)
+      const mods = forgeMods(s.forgeUpgrades)
+      const cost = Math.round(reforgeCost(item) * mods.costMult)
       if (s.essence < cost) return
       // Les lignes renforcées à la Quintessence sont protégées (jamais re-tirées).
       const enhanced = item.affixes.map((a, i) => ((a.upgraded ?? 0) > 0 ? i : -1)).filter((i) => i >= 0)
       const allLocked = [...new Set([...locked, ...enhanced])]
       const upd = applyItemPatch(s, itemId, { affixes: reforgeItem(item, allLocked) })
       if (!upd) return
-      const next = { ...s, ...upd, essence: s.essence - cost, log: pushLog(s.log, `Reforge : ${item.name} (-${cost} éclats).`, 'craft') }
+      const gain = forgeMasteryGain(RARITIES[item.rarity].tier, 'modify', mods.yieldMult)
+      const next = { ...s, ...upd, essence: s.essence - cost, forgeMastery: s.forgeMastery + gain, log: pushLog(s.log, `Reforge : ${item.name} (-${cost} éclats, +${gain} 🔧).`, 'craft') }
       persist(next)
       set(next)
     },
 
     surillvl: (itemId) => {
       const s = get()
+      const mods = forgeMods(s.forgeUpgrades)
+      if (!mods.surillvl) return // débloqué via le métier de forgeron
       const item = findItemById(s, itemId)
       if (!item) return
-      const cost = surillvlCost(item)
+      const cost = Math.round(surillvlCost(item) * mods.costMult)
       if (s.essence < cost) return
       const upd = applyItemPatch(s, itemId, surillvlItem(item))
       if (!upd) return
-      const next = { ...s, ...upd, essence: s.essence - cost, log: pushLog(s.log, `Surillvl : ${item.name} → iLvl ${item.ilvl + 2} (-${cost} éclats).`, 'craft') }
+      const gain = forgeMasteryGain(RARITIES[item.rarity].tier, 'modify', mods.yieldMult)
+      const next = { ...s, ...upd, essence: s.essence - cost, forgeMastery: s.forgeMastery + gain, log: pushLog(s.log, `Surillvl : ${item.name} → iLvl ${item.ilvl + 2} (-${cost} éclats, +${gain} 🔧).`, 'craft') }
       persist(next)
       set(next)
     },
 
     ascend: (itemId) => {
       const s = get()
+      const mods = forgeMods(s.forgeUpgrades)
+      if (!mods.ascend) return // débloqué via le métier de forgeron
       const item = findItemById(s, itemId)
       if (!item) return
       const patch = ascendItem(item)
       if (!patch) return
-      const cost = ascendCost(item)
-      if (s.essence < cost.eclats || s.noyau < cost.noyau || s.fragments < (cost.fragments ?? 0) || s.poussiere < (cost.poussiere ?? 0) || s.cosmic < (cost.cosmic ?? 0)) return
+      const c = ascendCost(item)
+      const m = mods.costMult
+      const cost = { eclats: Math.round(c.eclats * m), noyau: Math.round(c.noyau * m), fragments: Math.round((c.fragments ?? 0) * m), poussiere: Math.round((c.poussiere ?? 0) * m), cosmic: Math.round((c.cosmic ?? 0) * m) }
+      if (s.essence < cost.eclats || s.noyau < cost.noyau || s.fragments < cost.fragments || s.poussiere < cost.poussiere || s.cosmic < cost.cosmic) return
       const upd = applyItemPatch(s, itemId, patch)
       if (!upd) return
+      const gain = forgeMasteryGain(RARITIES[patch.rarity!].tier, 'ascend', mods.yieldMult)
       const next = {
         ...s,
         ...upd,
         essence: s.essence - cost.eclats,
         noyau: s.noyau - cost.noyau,
-        fragments: s.fragments - (cost.fragments ?? 0),
-        poussiere: s.poussiere - (cost.poussiere ?? 0),
-        cosmic: s.cosmic - (cost.cosmic ?? 0),
-        log: pushLog(s.log, `Ascension : ${item.name} → ${RARITIES[patch.rarity!].name} ! (-${cost.noyau} Noyau)`, 'craft'),
+        fragments: s.fragments - cost.fragments,
+        poussiere: s.poussiere - cost.poussiere,
+        cosmic: s.cosmic - cost.cosmic,
+        forgeMastery: s.forgeMastery + gain,
+        log: pushLog(s.log, `Ascension : ${item.name} → ${RARITIES[patch.rarity!].name} ! (-${cost.noyau} Noyau, +${gain} 🔧)`, 'craft'),
       }
       persist(next)
       set(next)
@@ -2033,19 +2054,24 @@ export const useGame = create<GameState>((set, get) => {
 
     transmute: (itemId, newPrimary) => {
       const s = get()
+      const mods = forgeMods(s.forgeUpgrades)
+      if (!mods.transmute) return // débloqué via le métier de forgeron
       const item = findItemById(s, itemId)
       if (!item || item.primary === newPrimary) return
-      const cost = transmuteCost(item)
+      const cost = Math.round(transmuteCost(item) * mods.costMult)
       if (s.essence < cost) return
       const upd = applyItemPatch(s, itemId, { primary: newPrimary })
       if (!upd) return
-      const next = { ...s, ...upd, essence: s.essence - cost, log: pushLog(s.log, `Affinité transmutée : ${item.name} → ${newPrimary} (-${cost} éclats).`, 'craft') }
+      const gain = forgeMasteryGain(RARITIES[item.rarity].tier, 'modify', mods.yieldMult)
+      const next = { ...s, ...upd, essence: s.essence - cost, forgeMastery: s.forgeMastery + gain, log: pushLog(s.log, `Affinité transmutée : ${item.name} → ${newPrimary} (-${cost} éclats, +${gain} 🔧).`, 'craft') }
       persist(next)
       set(next)
     },
 
     enhanceTyped: (itemId, type, kind) => {
       const s = get()
+      const mods = forgeMods(s.forgeUpgrades)
+      if (!mods.quint) return // débloqué via le métier de forgeron
       const item = findItemById(s, itemId)
       if (!item) return
       const res = enhanceTypedAffixes(item, type, kind)
@@ -2056,11 +2082,13 @@ export const useGame = create<GameState>((set, get) => {
       if (!upd) return
       const m = DAMAGE_TYPES[type]
       const verb = item.affixes.some((a) => a.kind === kind && a.type === type) ? 'renforcée' : 'ajoutée'
+      const gain = forgeMasteryGain(RARITIES[item.rarity].tier, 'modify', mods.yieldMult)
       const next = {
         ...s,
         ...upd,
         quint: { ...s.quint, [type]: have - res.cost },
-        log: pushLog(s.log, `${m.icon} Ligne ${kind === 'resist' ? 'Résist.' : 'Dégâts'} ${m.name} ${verb} (-${res.cost} Quintessence).`, 'craft'),
+        forgeMastery: s.forgeMastery + gain,
+        log: pushLog(s.log, `${m.icon} Ligne ${kind === 'resist' ? 'Résist.' : 'Dégâts'} ${m.name} ${verb} (-${res.cost} Quintessence, +${gain} 🔧).`, 'craft'),
       }
       persist(next)
       set(next)
@@ -2068,23 +2096,46 @@ export const useGame = create<GameState>((set, get) => {
 
     createItem: (opts) => {
       const s = get()
+      const mods = forgeMods(s.forgeUpgrades)
       const tier = RARITIES[opts.rarity].tier
       const ilvl = stageIlvl(s.bestStage)
-      const cost = createCost(tier, ilvl)
-      if (s.essence < cost.eclats || s.noyau < cost.noyau || s.fragments < (cost.fragments ?? 0) || s.poussiere < (cost.poussiere ?? 0) || s.cosmic < (cost.cosmic ?? 0)) return
-      const item = generateItem({ ilvl, type: opts.type, rarity: opts.rarity, primary: opts.primary, ...(opts.orientation ? { orientation: opts.orientation } : {}), ...(opts.element ? { element: opts.element } : {}) })
+      // Coût de la rareté CHOISIE, réduit par le métier (Forgeron économe).
+      const c = createCost(tier, ilvl); const m = mods.costMult
+      const cost = { eclats: Math.round(c.eclats * m), noyau: Math.round(c.noyau * m), fragments: Math.round((c.fragments ?? 0) * m), poussiere: Math.round((c.poussiere ?? 0) * m), cosmic: Math.round((c.cosmic ?? 0) * m) }
+      if (s.essence < cost.eclats || s.noyau < cost.noyau || s.fragments < cost.fragments || s.poussiere < cost.poussiere || s.cosmic < cost.cosmic) return
+      // Œil du joaillier : chance de forger une rareté SUPÉRIEURE (gratuit), capée au max craftable.
+      const lucky = Math.random() < mods.luckChance && tier < maxCraftTier(s.bestStage)
+      const prodTier = lucky ? tier + 1 : tier
+      const rarityId = RARITY_LIST.find((r) => r.tier === prodTier)?.id ?? opts.rarity
+      const item = generateItem({ ilvl, type: opts.type, rarity: rarityId, primary: opts.primary, ...(opts.orientation ? { orientation: opts.orientation } : {}), ...(opts.element ? { element: opts.element } : {}) })
       const inventory = [item, ...s.inventory].slice(0, invMax)
+      const gain = forgeMasteryGain(prodTier, 'create', mods.yieldMult)
       const next = {
         ...s,
         essence: s.essence - cost.eclats,
         noyau: s.noyau - cost.noyau,
-        fragments: s.fragments - (cost.fragments ?? 0),
-        poussiere: s.poussiere - (cost.poussiere ?? 0),
-        cosmic: s.cosmic - (cost.cosmic ?? 0),
+        fragments: s.fragments - cost.fragments,
+        poussiere: s.poussiere - cost.poussiere,
+        cosmic: s.cosmic - cost.cosmic,
+        forgeMastery: s.forgeMastery + gain,
         inventory,
         codex: discoverFromItems(s.codex, [item]),
-        log: pushLog(s.log, `Forgé : ${item.name} (${RARITIES[opts.rarity].name}).`, 'craft'),
+        log: pushLog(s.log, `Forgé : ${item.name} (${RARITIES[rarityId].name})${lucky ? ' — 🎲 rareté chanceuse !' : ''} (+${gain} 🔧).`, 'craft'),
       }
+      persist(next)
+      set(next)
+    },
+
+    buyForgeUpgrade: (id) => {
+      const s = get()
+      const u = getForgeUpgrade(id as never)
+      if (!u) return
+      const level = s.forgeUpgrades[id] ?? 0
+      if (forgeUpgradeMaxed(u, level)) return
+      const cost = forgeUpgradeCost(u, level)
+      if (s.forgeMastery < cost) return
+      const forgeUpgrades = { ...s.forgeUpgrades, [id]: level + 1 }
+      const next = { ...s, forgeMastery: s.forgeMastery - cost, forgeUpgrades, log: pushLog(s.log, `🔧 Forgeron amélioré : ${u.name}${u.maxLevel > 1 ? ` niv ${level + 1}` : ''} (-${cost} 🔧).`, 'craft') }
       persist(next)
       set(next)
     },

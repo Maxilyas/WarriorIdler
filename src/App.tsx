@@ -49,6 +49,7 @@ export default function App() {
   const orbes = useGame((s) => s.orbes)
   const fragments = useGame((s) => s.fragments)
   const cosmic = useGame((s) => s.cosmic)
+  const forgeMastery = useGame((s) => s.forgeMastery)
   const isDesktop = useMediaQuery('(min-width: 1024px)')
   const sceaux = useGame((s) => s.sceaux)
   const bestStage = useGame((s) => s.bestStage)
@@ -101,6 +102,7 @@ export default function App() {
             const breakdown = DAMAGE_TYPE_LIST.filter((t) => (quint[t] ?? 0) > 0).map((t) => `${DAMAGE_TYPES[t].icon} ${DAMAGE_TYPES[t].name} : ${quint[t]}`).join('\n')
             return <span className="text-emerald-300" title={`Quintessences élémentaires (craft typé)\n${breakdown}`}>⚗️ {total.toLocaleString('fr-FR')}</span>
           })()}
+          {forgeMastery > 0 && <span className="text-amber-200" title="Savoir-faire de forge (métier de forgeron)">🔧 {forgeMastery.toLocaleString('fr-FR')}</span>}
           {orbes > 0 && <span className="text-rose-300" title="Orbe de raid">🔮 {orbes.toLocaleString('fr-FR')}</span>}
           {fragments > 0 && <span className="text-sky-300" title="Fragment d'éternité">✨ {fragments.toLocaleString('fr-FR')}</span>}
           {cosmic > 0 && <span className="text-violet-300" title="Éclat cosmique (raids)">💫 {cosmic.toLocaleString('fr-FR')}</span>}
