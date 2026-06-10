@@ -305,8 +305,8 @@ chain('bastion', 'ba_c', 'ba_entry', 1, [
   { name: 'Sentinelle', maxRank: 3, statMods: { endurance: 50, esquive: 24 } },
 ])
 // Passerelles d'archétype découvertes en Bastion.
-single({ id: 'ba_gw_templier', name: '→ Templier', constellation: 'bastion', kind: 'gateway', tier: 4, maxRank: 1, requires: ['ba_a4', 'ba_b2'], description: 'Passerelle vers le Templier (sacré). +20 Endurance, +20 Intelligence.', statMods: { endurance: 20, intelligence: 20 } })
-single({ id: 'ba_gw_colosse', name: '→ Colosse', constellation: 'bastion', kind: 'gateway', tier: 4, maxRank: 1, requires: ['ba_a3', 'ba_c1'], description: 'Passerelle vers le Colosse (juggernaut). +60 Endurance.', statMods: { endurance: 60 } })
+single({ id: 'ba_gw_templier', name: '→ Templier', constellation: 'bastion', kind: 'gateway', tier: 4, maxRank: 1, requires: ['ba_b2'], description: 'Passerelle vers le Templier (sacré). +20 Endurance, +20 Intelligence.', statMods: { endurance: 20, intelligence: 20 } })
+single({ id: 'ba_gw_colosse', name: '→ Colosse', constellation: 'bastion', kind: 'gateway', tier: 4, maxRank: 1, requires: ['ba_a3'], description: 'Passerelle vers le Colosse (juggernaut). +60 Endurance.', statMods: { endurance: 60 } })
 
 /* ---------------- ORACLE (Soin) ---------------- */
 single({ id: 'so_entry', name: 'Bienveillance', constellation: 'soin', kind: 'minor', tier: 0, maxRank: 5, requires: ['co_gw_soin'], description: '+15 Intelligence, +15 Régén par rang.', statMods: { intelligence: 15, regen: 15 } })
@@ -443,13 +443,13 @@ chain('colosse', 'jc_b', 'jc_entry', 1, [
 ])
 
 // Passerelles d'archétype hébergées dans les spécialisations correspondantes.
-single({ id: 'in_gw_elem', name: '→ Élémentaliste', constellation: 'intelligence', kind: 'gateway', tier: 4, maxRank: 1, requires: ['in_a3', 'in_b3'], description: 'Passerelle vers l\'Élémentaliste. +30 Intelligence.', statMods: { intelligence: 30 } })
-single({ id: 'ag_gw_duel', name: '→ Duelliste', constellation: 'agilite', kind: 'gateway', tier: 4, maxRank: 1, requires: ['ag_a3', 'ag_b2'], description: 'Passerelle vers le Duelliste. +30 Agilité.', statMods: { agilite: 30 } })
+single({ id: 'in_gw_elem', name: '→ Élémentaliste', constellation: 'intelligence', kind: 'gateway', tier: 4, maxRank: 1, requires: ['in_a3'], description: 'Passerelle vers l\'Élémentaliste. +30 Intelligence.', statMods: { intelligence: 30 } })
+single({ id: 'ag_gw_duel', name: '→ Duelliste', constellation: 'agilite', kind: 'gateway', tier: 4, maxRank: 1, requires: ['ag_a3'], description: 'Passerelle vers le Duelliste. +30 Agilité.', statMods: { agilite: 30 } })
 
 /* ================== ARCHÉTYPES v0.17 (4 nouveaux) ================== */
 
 /* PESTIFÉRÉ — peste, DoT, Altération (scale via la nouvelle stat Altération) */
-single({ id: 'in_gw_peste', name: '→ Pestiféré', constellation: 'intelligence', kind: 'gateway', tier: 5, maxRank: 1, requires: ['in_a4', 'in_b2'], description: 'Passerelle vers le Pestiféré (peste/DoT). +30 Altération.', statMods: { alteration: 30 } })
+single({ id: 'in_gw_peste', name: '→ Pestiféré', constellation: 'intelligence', kind: 'gateway', tier: 5, maxRank: 1, requires: ['in_a4'], description: 'Passerelle vers le Pestiféré (peste/DoT). +30 Altération.', statMods: { alteration: 30 } })
 single({ id: 'pe_entry', name: 'Étreinte pestilentielle', constellation: 'pestifere', kind: 'notable', tier: 0, maxRank: 1, requires: ['in_gw_peste'], description: 'La maladie devient ton arme. +40 Intelligence, +30 Altération.', statMods: { intelligence: 40, alteration: 30 } })
 chain('pestifere', 'pe_a', 'pe_entry', 1, [
   { name: 'Virulence', maxRank: 5, statMods: { alteration: 30, intelligence: 12 } },
@@ -465,7 +465,7 @@ chain('pestifere', 'pe_b', 'pe_entry', 1, [
 ])
 
 /* BOURREAU — anti-boss, exécution, précision (stat Dégâts boss + Précision) */
-single({ id: 'fo_gw_bourreau', name: '→ Bourreau', constellation: 'force', kind: 'gateway', tier: 5, maxRank: 1, requires: ['fo_a3', 'fo_c1'], description: 'Passerelle vers le Bourreau (anti-boss). +30 Dégâts boss.', statMods: { degatsBoss: 30 } })
+single({ id: 'fo_gw_bourreau', name: '→ Bourreau', constellation: 'force', kind: 'gateway', tier: 5, maxRank: 1, requires: ['fo_c1'], description: 'Passerelle vers le Bourreau (anti-boss). +30 Dégâts boss.', statMods: { degatsBoss: 30 } })
 single({ id: 'bo_entry', name: 'Sentence de mort', constellation: 'bourreau', kind: 'notable', tier: 0, maxRank: 1, requires: ['fo_gw_bourreau'], description: 'Les colosses tombent sous ta hache. +40 Force, +30 Dégâts boss.', statMods: { force: 40, degatsBoss: 30 } })
 chain('bourreau', 'bo_a', 'bo_entry', 1, [
   { name: 'Marque du bourreau', maxRank: 5, statMods: { degatsBoss: 30 } },
@@ -480,7 +480,7 @@ chain('bourreau', 'bo_b', 'bo_entry', 1, [
 ])
 
 /* SPECTRE — évasion, précision, anti-contrôle (Esquive + Ténacité + Précision) */
-single({ id: 'ag_gw_spectre', name: '→ Spectre', constellation: 'agilite', kind: 'gateway', tier: 5, maxRank: 1, requires: ['ag_a3', 'ag_b0'], description: 'Passerelle vers le Spectre (évasion). +25 Esquive.', statMods: { esquive: 25 } })
+single({ id: 'ag_gw_spectre', name: '→ Spectre', constellation: 'agilite', kind: 'gateway', tier: 5, maxRank: 1, requires: ['ag_b0'], description: 'Passerelle vers le Spectre (évasion). +25 Esquive.', statMods: { esquive: 25 } })
 single({ id: 'sp_entry', name: 'Forme spectrale', constellation: 'spectre', kind: 'notable', tier: 0, maxRank: 1, requires: ['ag_gw_spectre'], description: 'Tu deviens insaisissable. +40 Agilité, +30 Esquive.', statMods: { agilite: 40, esquive: 30 } })
 chain('spectre', 'sp_a', 'sp_entry', 1, [
   { name: 'Forme éthérée', maxRank: 5, statMods: { esquive: 30 } },
@@ -495,7 +495,7 @@ chain('spectre', 'sp_b', 'sp_entry', 1, [
 ])
 
 /* BRISEUR — multi-cible, inarrêtable (Ténacité anti-CC + cleave pour les packs) */
-single({ id: 'ba_gw_briseur', name: '→ Briseur', constellation: 'bastion', kind: 'gateway', tier: 5, maxRank: 1, requires: ['ba_a3', 'ba_c0'], description: 'Passerelle vers le Briseur (multi-cible). +30 Ténacité.', statMods: { tenacite: 30 } })
+single({ id: 'ba_gw_briseur', name: '→ Briseur', constellation: 'bastion', kind: 'gateway', tier: 5, maxRank: 1, requires: ['ba_c0'], description: 'Passerelle vers le Briseur (multi-cible). +30 Ténacité.', statMods: { tenacite: 30 } })
 single({ id: 'br_entry', name: 'Rage inarrêtable', constellation: 'briseur', kind: 'notable', tier: 0, maxRank: 1, requires: ['ba_gw_briseur'], description: 'Rien ne t\'arrête. +80 Endurance, +30 Ténacité.', statMods: { endurance: 80, tenacite: 30 } })
 chain('briseur', 'br_a', 'br_entry', 1, [
   { name: 'Déchaînement', maxRank: 5, statMods: { force: 18, endurance: 18 } },
