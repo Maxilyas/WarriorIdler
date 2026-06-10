@@ -229,7 +229,8 @@ export function ComparePanel({ item, char, previewDelta, equipped, occupied, onE
         )}
       </div>
 
-      <CraftSection item={item} />
+      {/* key=id : les verrous de reforge ne survivent pas au changement d'objet */}
+      <CraftSection key={item.id} item={item} />
     </div>
   )
 }
@@ -263,7 +264,14 @@ function CraftSection({ item }: { item: Item }) {
   )
 
   const toggle = (i: number) => setLocked((l) => (l.includes(i) ? l.filter((x) => x !== i) : [...l, i]))
-  const reset = () => setLocked([])
+  // Reforge en chaîne : les affixes conservés (verrous + lignes Quintessence) passent en TÊTE du
+  // nouveau tableau — on remappe les indices verrouillés pour que les cadenas restent posés.
+  const reforgeKeepingLocks = () => {
+    const enhanced = item.affixes.map((a, i) => ((a.upgraded ?? 0) > 0 ? i : -1)).filter((i) => i >= 0)
+    const kept = [...new Set([...locked, ...enhanced])].sort((a, b) => a - b)
+    reforge(item.id, locked)
+    setLocked(locked.map((i) => kept.indexOf(i)))
+  }
 
   return (
     <div className="mt-2 rounded-lg border border-amber-800/40 bg-amber-950/10 p-2">
@@ -295,7 +303,7 @@ function CraftSection({ item }: { item: Item }) {
               </div>
               <button
                 disabled={essence < rCost}
-                onClick={() => { reforge(item.id, locked); reset() }}
+                onClick={reforgeKeepingLocks}
                 className="mt-1.5 w-full rounded bg-amber-800/60 py-2 text-[11px] font-medium hover:bg-amber-700/70 disabled:opacity-40"
               >
                 Reforge les affixes · ♦ {rCost}
@@ -306,7 +314,7 @@ function CraftSection({ item }: { item: Item }) {
           {mods.surillvl ? (
             <button
               disabled={essence < sCost}
-              onClick={() => { surillvl(item.id); reset() }}
+              onClick={() => surillvl(item.id)}
               className="w-full rounded bg-amber-800/60 py-2 text-[11px] font-medium hover:bg-amber-700/70 disabled:opacity-40"
             >
               Surillvl → iLvl {item.ilvl + SURILLVL_STEP} · ♦ {sCost}
@@ -340,7 +348,7 @@ function CraftSection({ item }: { item: Item }) {
           {!mods.ascend ? <Locked label="Ascension" /> : nr ? (
             <button
               disabled={essence < aCost.eclats || noyau < aCost.noyau || fragments < aCost.fragments || poussiere < aCost.poussiere || cosmic < aCost.cosmic}
-              onClick={() => { ascend(item.id); reset() }}
+              onClick={() => ascend(item.id)}
               className="w-full rounded bg-fuchsia-900/50 py-2 text-[11px] font-medium hover:bg-fuchsia-800/60 disabled:opacity-40"
             >
               Ascension → {RARITIES[nr].name} · 💠 {aCost.noyau} + ♦ {aCost.eclats}
