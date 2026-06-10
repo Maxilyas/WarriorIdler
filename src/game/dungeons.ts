@@ -74,7 +74,7 @@ export const DUNGEONS: Record<DungeonId, DungeonDef> = {
   },
   butin: {
     id: 'butin', name: 'Cache du Pilleur', icon: '🎒', color: '#a78bfa', reward: 'stuff',
-    lore: 'Le repaire d\'un seigneur-voleur, gardé par ses lieutenants d\'élite. Le butin y est exceptionnel et monte en rareté avec le niveau.',
+    lore: 'Le repaire d\'un seigneur-voleur, gardé par ses lieutenants d\'élite. Le butin monte en rareté avec le niveau, jusqu\'à Éternel — au-delà, seul un tirage infime perce le voile.',
     trait: 'elite', traitLabel: 'Lieutenants d\'élite coriaces → DPS soutenu et Dégâts vs Boss.',
     element: 'ombre', unlockStage: 24, sceauCost: 1,
   },
@@ -127,14 +127,39 @@ export function geodeGemRank(level: number): number {
 /**
  * Rampe de rareté FINE du donjon Butin (Cache du Pilleur). Niv 1 = {Médiocre…Rare} ; la fenêtre
  * s'élargit et se décale vers le haut avec le niveau (via rollBoxRarity).
- * v0.22 : courbe APLATIE — avant, maxTier = 2+niveau donnait du Transcendant dès le niv 14 et la
- * Cache snowballait (stuff >> farm → niveau suivant trivial). Tier 16 n'arrive plus qu'au niv ~37.
+ * v0.23 : SOFT CAP à Éternel (t12) — la Cache n'est PAS la source du stuff au-dessus d'Éternel
+ * (ça, c'est le rôle des raids). Au-delà, seul un tirage « au-delà du voile » à part peut tomber
+ * (voir butinOverChance/butinOverRarity) : infime, et presque insensible au niveau.
  */
+export const BUTIN_RARITY_CAP = 12 // Éternel — plafond DUR de la fenêtre normale (jackpot compris)
 export function butinMinTier(level: number): number {
   return Math.max(1, Math.min(11, 1 + Math.floor(level / 4)))
 }
 export function butinMaxTier(level: number): number {
-  return Math.max(3, Math.min(16, 3 + Math.floor(level * 0.45))) // tier 16 vers le niv 29 (le mur pratique est ~24-28)
+  return Math.max(3, Math.min(BUTIN_RARITY_CAP, 3 + Math.floor(level * 0.45))) // Éternel atteint vers le niv 20
+}
+
+/**
+ * « Au-delà du voile » : chance qu'UN objet du coffre perce le soft cap (Cosmique → Transcendant).
+ * Infime par design : ~0,4% au niv 1, qui grimpe DOUCEMENT (+0,02%/niv) et plafonne à 1,5%.
+ * Le niveau du donjon n'achète donc jamais ces raretés — il en effleure juste la probabilité.
+ */
+export function butinOverChance(level: number): number {
+  return Math.min(0.015, 0.004 + level * 0.0002)
+}
+
+/** Répartition (quasi figée, quel que soit le niveau) du tirage au-delà d'Éternel. */
+const BUTIN_OVER_WEIGHTS: { tier: number; w: number }[] = [
+  { tier: 13, w: 60 }, // Cosmique
+  { tier: 14, w: 25 }, // Abyssal
+  { tier: 15, w: 11 }, // Primordial
+  { tier: 16, w: 4 },  // Transcendant
+]
+export function butinOverTier(): number {
+  const total = BUTIN_OVER_WEIGHTS.reduce((a, x) => a + x.w, 0)
+  let r = Math.random() * total
+  for (const x of BUTIN_OVER_WEIGHTS) { r -= x.w; if (r <= 0) return x.tier }
+  return 13
 }
 
 /**

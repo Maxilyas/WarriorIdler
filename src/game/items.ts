@@ -226,8 +226,10 @@ export function generateItem(opts: GenerateOptions): Item {
  * entre minTier et maxTier, avec une petite chance de JACKPOT au-dessus de maxTier.
  * `decay` (0→1) règle l'inclinaison : proche de 1, la distribution s'aplatit et remonte
  * vers les hautes raretés (utilisé par les raids pour scaler avec le tier).
+ * `cap` : plafond DUR (jackpot compris) — soft cap des sources qui ne doivent pas dépasser
+ * une rareté (ex. Cache du Pilleur, bloquée à Éternel ; au-delà, c'est une table à part).
  */
-export function rollBoxRarity(minTier: number, maxTier: number, jackpot: number, decay = 0.62): RarityId {
+export function rollBoxRarity(minTier: number, maxTier: number, jackpot: number, decay = 0.62, cap = 16): RarityId {
   const weights: number[] = []
   for (let t = minTier; t <= maxTier; t++) weights.push(Math.pow(decay, t - minTier))
   const total = weights.reduce((a, b) => a + b, 0)
@@ -235,7 +237,7 @@ export function rollBoxRarity(minTier: number, maxTier: number, jackpot: number,
   let tier = minTier
   for (let i = 0; i < weights.length; i++) { r -= weights[i]; if (r <= 0) { tier = minTier + i; break } }
   if (Math.random() < jackpot) tier += 1 + Math.floor(Math.random() * 4) // jackpot : +1 à +4 crans
-  tier = Math.max(1, Math.min(16, tier))
+  tier = Math.max(1, Math.min(Math.min(16, cap), tier))
   return (RARITY_LIST.find((x) => x.tier === tier) ?? RARITY_LIST[0]).id
 }
 

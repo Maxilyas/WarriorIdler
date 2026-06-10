@@ -49,7 +49,8 @@ import { DAMAGE_TYPE_LIST, DAMAGE_TYPES, profileDamageMult, type DamageProfile }
 import { equipSlotsForType, slotAccepts } from './slots'
 import { essenceGain, upgradeCost, insertCost, getUnique, UNIQUE_MAX_RANK, randomUniqueInstance } from './uniques'
 import {
-  generateDungeon, makeDungeonPack, dungeonIlvl, dungeonLuckTier, dungeonRegen, getDungeonDef, butinMinTier, butinMaxTier,
+  generateDungeon, makeDungeonPack, dungeonIlvl, dungeonLuckTier, dungeonRegen, getDungeonDef,
+  butinMinTier, butinMaxTier, butinOverChance, butinOverTier, BUTIN_RARITY_CAP,
   dungeonRunYield, dungeonKeyYield, DUNGEON_YIELD_PERFIGHT_FRAC,
   geodeDustYield, geodeGemChance, geodeGemRank,
   DUNGEONS, type ActiveDungeon, type DungeonId,
@@ -1790,10 +1791,14 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
         case 'stuff': {
           const ilvl = dungeonIlvl(lv, s.bestStage)
           const count = 3 + Math.floor(lv / 2)
-          const minTier = Math.min(14, butinMinTier(lv) + rareBonus)
-          const maxTier = Math.min(16, butinMaxTier(lv) + rareBonus)
+          // Soft cap v0.23 : la fenêtre (et son jackpot) est PLAFONNÉE à Éternel — même « Avare »
+          // ne la perce pas. Au-dessus, seul le tirage « au-delà du voile » (infime) peut tomber.
+          const minTier = Math.min(11, butinMinTier(lv) + rareBonus)
+          const maxTier = Math.min(BUTIN_RARITY_CAP, butinMaxTier(lv) + rareBonus)
           for (let i = 0; i < count; i++) {
-            const rarity = rollBoxRarity(minTier, maxTier, Math.min(0.25, 0.05 + lv * 0.01), 0.6)
+            const rarity = Math.random() < butinOverChance(lv)
+              ? (RARITY_LIST.find((r) => r.tier === butinOverTier())?.id ?? 'cosmique')
+              : rollBoxRarity(minTier, maxTier, Math.min(0.25, 0.05 + lv * 0.01), 0.6, BUTIN_RARITY_CAP)
             items.push(generateItem({ ilvl, rarity, primaryBias: bias }))
           }
           break
