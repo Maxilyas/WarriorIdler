@@ -7,7 +7,7 @@ import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from '../game/damage'
 import { RARITY_LIST } from '../game/rarities'
 import { maxCraftTier, createCost } from '../game/items'
 import {
-  METIERS, METIER_LIST, METIER_NODES, METIER_MAX_LEVEL, AUTOMATE_FORGERON_LEVELS,
+  METIERS, METIER_LIST, METIER_NODES, METIER_MAX_LEVEL, AUTOMATE_FORGERON_LEVELS, CONVERSIONS,
   craftMods, levelFromXp, xpTotalForLevel, pointsAvailable, pointsTotal, canLearnNode, nodeRank, respecCost,
   type MetierId,
 } from '../game/metiers'
@@ -697,6 +697,12 @@ function AlchimisteWorkshop() {
   const metiers = useGame((s) => s.metiers)
   const mods = craftMods(metiers)
   const totalQuint = DAMAGE_TYPE_LIST.reduce((a, t) => a + (quint[t] ?? 0), 0)
+  const essence = useGame((s) => s.essence)
+  const poussiere = useGame((s) => s.poussiere)
+  const noyau = useGame((s) => s.noyau)
+  const convertResource = useGame((s) => s.convertResource)
+  const [quintType, setQuintType] = useState<DamageType>('feu')
+  const have: Record<string, number> = { essence, poussiere, noyau }
 
   return (
     <div className="mb-3 rounded-xl border border-emerald-800/40 bg-emerald-950/10 p-2.5">
@@ -734,8 +740,41 @@ function AlchimisteWorkshop() {
           {!mods.synth3 && <span className="shrink-0 text-slate-500">🔒</span>}
         </div>
       </div>
+      {/* ◈ Transmutateur : conversions de ressources (à perte) */}
+      <div className="mt-2 mb-1 text-[10px] font-semibold text-emerald-300/80">
+        ⚗️ Transmutation de ressources {!mods.transmutateur && <span className="font-normal text-slate-500">— 🔒 spécialisation ◈ Transmutateur</span>}
+      </div>
+      {mods.transmutateur ? (
+        <div className="space-y-1">
+          {CONVERSIONS.map((c) => {
+            const isQuint = c.to.res === 'quint'
+            return (
+              <div key={c.id} className="flex flex-wrap items-center gap-1.5 rounded bg-black/20 px-1.5 py-1 text-[10px]">
+                <span className="min-w-0 flex-1 truncate text-slate-300">{c.name}</span>
+                <span className="shrink-0 text-slate-500">{c.from.amt.toLocaleString('fr-FR')} → {c.to.amt}</span>
+                {isQuint && (
+                  <select value={quintType} onChange={(e) => setQuintType(e.target.value as DamageType)} className="shrink-0 rounded bg-slate-800 px-1 py-0.5 text-slate-200">
+                    {DAMAGE_TYPE_LIST.map((t) => <option key={t} value={t}>{DAMAGE_TYPES[t].icon} {DAMAGE_TYPES[t].name}</option>)}
+                  </select>
+                )}
+                {[1, 10].map((n) => (
+                  <button
+                    key={n}
+                    disabled={(have[c.from.res] ?? 0) < c.from.amt * n}
+                    onClick={() => convertResource(c.id, n, isQuint ? quintType : undefined)}
+                    className="shrink-0 rounded border border-emerald-700/40 px-1.5 py-1 font-medium text-emerald-200 hover:bg-emerald-900/30 disabled:opacity-40"
+                  >
+                    ×{n}
+                  </button>
+                ))}
+              </div>
+            )
+          })}
+          <p className="text-[9px] italic text-slate-600">Taux à perte (aller-retour ≈ ÷2) : un robinet d'appoint, jamais l'optimum.</p>
+        </div>
+      ) : null}
       <p className="mt-2 text-[9px] italic text-slate-600">
-        Le recyclage d'objets nourrit l'XP d'Alchimiste — la Distillation le rend plus rentable.
+        Le recyclage d'objets nourrit l'XP d'Alchimiste — la Distillation le rend plus rentable{mods.distillateur ? ' (◈ Distillateur : +25% et essences ×2)' : ''}.
       </p>
     </div>
   )

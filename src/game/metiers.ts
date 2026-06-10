@@ -176,6 +176,12 @@ export const METIER_NODES: Record<MetierId, MetierNode[]> = {
       desc: 'Débloque la RECOUPE : améliorer les paramètres d\'une gemme, cran par cran.' },
     { id: 'chasseArme', name: 'Châsse forcée', icon: '🕳️', maxRank: 1, minLevel: 20,
       desc: 'Les ARMES gagnent une châsse supplémentaire.' },
+    { id: 'specRythme', name: 'Maître du Rythme', icon: '🥁', maxRank: 1, minLevel: 15, exclusive: 'joaillier-spec', requires: 'sertissage',
+      desc: 'SPÉCIALISATION : les gemmes de RYTHME portées comptent +1 rang (jusqu\'au max). Exclusif avec les autres familles.' },
+    { id: 'specFlux', name: 'Maître du Flux', icon: '🌊', maxRank: 1, minLevel: 15, exclusive: 'joaillier-spec', requires: 'sertissage',
+      desc: 'SPÉCIALISATION : les gemmes de FLUX portées comptent +1 rang (jusqu\'au max). Exclusif avec les autres familles.' },
+    { id: 'specEnv', name: 'Maître de l\'Environnement', icon: '🌍', maxRank: 1, minLevel: 15, exclusive: 'joaillier-spec', requires: 'sertissage',
+      desc: 'SPÉCIALISATION : les gemmes d\'ENVIRONNEMENT portées comptent +1 rang (jusqu\'au max). Exclusif avec les autres familles.' },
   ],
   runiste: [
     { id: 'gravure', name: 'Gravure', icon: '🪄', maxRank: 1,
@@ -204,6 +210,10 @@ export const METIER_NODES: Record<MetierId, MetierNode[]> = {
       desc: 'Insérer une essence d\'unique recyclé : un effet SEMI-CIBLÉ (celui de l\'essence).' },
     { id: 'synthese3', name: 'Synthèse III — Invocation', icon: '💫', maxRank: 1, minLevel: 20, minStage: 100, requires: 'synthese2',
       desc: 'L\'acte final du craft : invoquer l\'effet unique de ton CHOIX (Éclats cosmiques).' },
+    { id: 'specDistillateur', name: 'Distillateur', icon: '🧪', maxRank: 1, minLevel: 15, exclusive: 'alchimiste-spec', requires: 'distillation',
+      desc: 'SPÉCIALISATION : +25% d\'éclats au recyclage et essences d\'uniques ×2. Exclusif avec Transmutateur.' },
+    { id: 'specTransmutateur', name: 'Transmutateur', icon: '⚗️', maxRank: 1, minLevel: 15, exclusive: 'alchimiste-spec', requires: 'quintessence',
+      desc: 'SPÉCIALISATION : débloque la TRANSMUTATION DE RESSOURCES (♦ ↔ 🌌 / 💠 / ⚗️, à perte — l\'alchimie taxe). Exclusif avec Distillateur.' },
   ],
 }
 
@@ -281,6 +291,8 @@ export interface CraftMods {
   broyage: boolean
   taille: boolean
   recoupe: boolean
+  /** ◈ Spécialisation de famille : les gemmes portées de cette famille comptent +1 rang. */
+  gemFamilyBonus: 'rythme' | 'flux' | 'environnement' | null
   /* Runiste */
   enchant: boolean
   ruleRunes: boolean
@@ -298,6 +310,10 @@ export interface CraftMods {
   synth1: boolean
   synth2: boolean
   synth3: boolean
+  /** ◈ Distillateur : essences d'uniques ×2 au recyclage. */
+  distillateur: boolean
+  /** ◈ Transmutateur : conversions de ressources débloquées. */
+  transmutateur: boolean
 }
 
 export function craftMods(metiers: MetiersState): CraftMods {
@@ -320,6 +336,7 @@ export function craftMods(metiers: MetiersState): CraftMods {
     broyage: r('joaillier', 'broyage') > 0,
     taille: r('joaillier', 'taille') > 0,
     recoupe: r('joaillier', 'recoupe') > 0,
+    gemFamilyBonus: r('joaillier', 'specRythme') > 0 ? 'rythme' : r('joaillier', 'specFlux') > 0 ? 'flux' : r('joaillier', 'specEnv') > 0 ? 'environnement' : null,
     enchant: r('runiste', 'gravure') > 0,
     ruleRunes: r('runiste', 'regles') > 0,
     enchantCostMult: Math.max(0.4, 1 - r('runiste', 'palimpseste') * 0.15),
@@ -327,12 +344,40 @@ export function craftMods(metiers: MetiersState): CraftMods {
     runisteTempo: r('runiste', 'specChrono') > 0 ? 1.5 : 1,
     loiAmplifiee: r('runiste', 'specLegislateur') > 0,
     quint: r('alchimiste', 'quintessence') > 0,
-    recycleMult: 1 + r('alchimiste', 'distillation') * 0.1,
+    recycleMult: (1 + r('alchimiste', 'distillation') * 0.1) * (r('alchimiste', 'specDistillateur') > 0 ? 1.25 : 1),
     quintDropMult: 1 + r('alchimiste', 'condensation') * 0.2,
     synth1: r('alchimiste', 'synthese1') > 0,
     synth2: r('alchimiste', 'synthese2') > 0,
     synth3: r('alchimiste', 'synthese3') > 0,
+    distillateur: r('alchimiste', 'specDistillateur') > 0,
+    transmutateur: r('alchimiste', 'specTransmutateur') > 0,
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* ◈ Transmutateur : conversions de ressources (à perte — l'alchimie taxe) */
+/* ------------------------------------------------------------------ */
+
+export type ConvRes = 'essence' | 'poussiere' | 'noyau' | 'quint'
+
+export interface ConversionDef {
+  id: string
+  name: string
+  from: { res: ConvRes; amt: number }
+  to: { res: ConvRes; amt: number }
+}
+
+/** Taux volontairement défavorables (aller-retour ≈ ÷2) : un robinet d'appoint, jamais l'optimum. */
+export const CONVERSIONS: ConversionDef[] = [
+  { id: 'eclatsPoussiere', name: '♦ → 🌌 Poussière d\'étoile', from: { res: 'essence', amt: 400 }, to: { res: 'poussiere', amt: 1 } },
+  { id: 'poussiereEclats', name: '🌌 → ♦ Éclats', from: { res: 'poussiere', amt: 1 }, to: { res: 'essence', amt: 200 } },
+  { id: 'eclatsNoyau', name: '♦ → 💠 Noyau primordial', from: { res: 'essence', amt: 300 }, to: { res: 'noyau', amt: 1 } },
+  { id: 'noyauEclats', name: '💠 → ♦ Éclats', from: { res: 'noyau', amt: 1 }, to: { res: 'essence', amt: 150 } },
+  { id: 'eclatsQuint', name: '♦ → ⚗️ Quintessence (au choix)', from: { res: 'essence', amt: 2000 }, to: { res: 'quint', amt: 1 } },
+]
+
+export function getConversion(id: string): ConversionDef | undefined {
+  return CONVERSIONS.find((c) => c.id === id)
 }
 
 /* ------------------------------------------------------------------ */

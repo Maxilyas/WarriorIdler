@@ -230,8 +230,9 @@ export interface CondMods {
   nomade?: number
 }
 
-/** Meilleur rang porté par gemme sur TOUTE l'équipe. */
-export function condGemRanks(characters: Character[]): Map<CondGemId, number> {
+/** Meilleur rang porté par gemme sur TOUTE l'équipe.
+ *  `familyBonus` (◈ spec du Joaillier) : les gemmes de cette famille comptent +1 rang (capé). */
+export function condGemRanks(characters: Character[], familyBonus?: GemFamily | null): Map<CondGemId, number> {
   const out = new Map<CondGemId, number>()
   for (const c of characters) {
     for (const slot in c.equipment) {
@@ -239,7 +240,11 @@ export function condGemRanks(characters: Character[]): Map<CondGemId, number> {
       for (const g of it?.gems ?? []) {
         if (!g.cond) continue
         const id = g.cond as CondGemId
-        out.set(id, Math.max(out.get(id) ?? 0, g.rank ?? 1))
+        const def = COND_GEMS[id]
+        if (!def) continue
+        const bonus = familyBonus && def.family === familyBonus ? 1 : 0
+        const rank = Math.min(gemMaxRank(def), (g.rank ?? 1) + bonus)
+        out.set(id, Math.max(out.get(id) ?? 0, rank))
       }
     }
   }
@@ -247,8 +252,8 @@ export function condGemRanks(characters: Character[]): Map<CondGemId, number> {
 }
 
 /** Construit les mods de combat depuis les rangs portés. */
-export function condGemMods(characters: Character[]): CondMods {
-  const ranks = condGemRanks(characters)
+export function condGemMods(characters: Character[], familyBonus?: GemFamily | null): CondMods {
+  const ranks = condGemRanks(characters, familyBonus)
   const val = (id: CondGemId) => {
     const r = ranks.get(id)
     return r ? gemValue(COND_GEMS[id], r) : undefined

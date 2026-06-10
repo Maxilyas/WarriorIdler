@@ -30,6 +30,7 @@ import {
   gemMaxRank, grindDust, legacyGemDust, recutCost, BIOME_GEM_FAMILY, COND_GEM_DROP, GEM_DUST_DROP, GEM_CUT_COST,
   type CondGemId, type CondMods,
 } from './condGems'
+import { getConversion, type ConvRes } from './metiers'
 import {
   tickAutomates, missionLabel, automateUpgradeCost,
   AUTOMATE_MAX, AUTOMATE_COSTS, AUTOMATE_NAMES, AUTOMATE_UPG_MAX,
@@ -314,6 +315,8 @@ interface GameState extends SaveData {
   learnMetierNode: (metier: MetierId, nodeId: string) => void
   /** Réinitialise l'arbre d'un métier contre de l'or (XP et niveau conservés). */
   respecMetier: (metier: MetierId) => void
+  /** ◈ Transmutateur : convertit des ressources (à perte). `quintType` requis pour ♦ → ⚗️. */
+  convertResource: (conversionId: string, times?: number, quintType?: DamageType) => void
   /** Construit le prochain automate de forge (3 max, coût croissant brutal). */
   buildAutomate: () => void
   /** Assigne (ou retire) la mission d'un automate — donjon/raid DÉJÀ battu uniquement. */
@@ -1687,8 +1690,9 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
     if (m.regenPct) regen += m.regenPct
   }
 
-  const dCond = condGemMods(s.characters)
-  const dRunes = timeRuneMods(equippedTimeRunes(s.characters), craftMods(s.metiers).runisteTempo)
+  const dCraft = craftMods(s.metiers)
+  const dCond = condGemMods(s.characters, dCraft.gemFamilyBonus)
+  const dRunes = timeRuneMods(equippedTimeRunes(s.characters), dCraft.runisteTempo)
   const dHeroMult = (1 + harmonyBonus(s.biomeBest)) * (1 + crescendoBonus(dCond.crescendoCap))
   const res = partyCombatStepMulti(s.characters, d.enemies, dt, { enrage, reflect, regen, fightTime, heroMult: dHeroMult, cond: dCond, runes: dRunes })
   let chars = res.chars
@@ -1866,8 +1870,9 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
   const bossIn = r.enemies.find((e) => e.boss && e.hp > 0) ?? r.enemies[0]
   if (mech.includes('execute')) dmgMult *= 1 + (1 - bossIn.hp / Math.max(1, bossIn.maxHp)) * 0.7
 
-  const rCond = condGemMods(s.characters)
-  const rRunes = timeRuneMods(equippedTimeRunes(s.characters), craftMods(s.metiers).runisteTempo)
+  const rCraft = craftMods(s.metiers)
+  const rCond = condGemMods(s.characters, rCraft.gemFamilyBonus)
+  const rRunes = timeRuneMods(equippedTimeRunes(s.characters), rCraft.runisteTempo)
   const rHeroMult = (1 + harmonyBonus(s.biomeBest)) * (1 + crescendoBonus(rCond.crescendoCap))
   const res = partyCombatStepMulti(s.characters, r.enemies, dt, { enrage, regen: drain, fightTime, dmgMult, heroMult: rHeroMult, cond: rCond, runes: rRunes })
   let chars = res.chars
@@ -2121,8 +2126,8 @@ export const useGame = create<GameState>((set, get) => {
 
       // Bonus de biome : harmonie (plus petit record) partout, élan du voyageur dans le biome rejoint.
       // + gemmes d'ENVIRONNEMENT (🌩️ Orage en Surcharge, 👣 Nomade pendant l'Élan) et 📯 Crescendo.
-      const cond = condGemMods(s.characters)
       const cmodsTick = craftMods(s.metiers)
+      const cond = condGemMods(s.characters, cmodsTick.gemFamilyBonus)
       const runes = timeRuneMods(equippedTimeRunes(s.characters), cmodsTick.runisteTempo)
       const surgedNow = surgeBiome() === s.activeBiome
       const elanOn = elanActive(s.elan, s.activeBiome)
@@ -2442,7 +2447,8 @@ export const useGame = create<GameState>((set, get) => {
       const essences = { ...s.essences }
       let essLog = ''
       if (item.unique) {
-        const eg = essenceGain(RARITIES[item.rarity].tier, item.unique.rank)
+        // ◈ Distillateur : essences d'uniques ×2 au recyclage.
+        const eg = essenceGain(RARITIES[item.rarity].tier, item.unique.rank) * (mods.distillateur ? 2 : 1)
         essences[item.unique.id] = (essences[item.unique.id] ?? 0) + eg
         essLog = ` + ${eg} essences de ${getUnique(item.unique.id)?.name ?? 'l\'effet'}`
       }
@@ -2499,7 +2505,7 @@ export const useGame = create<GameState>((set, get) => {
           poussiere += recyclePoussiere(item)
           quint = addQuint(quint, quintRefund(item))
           gems = gemStockAdd(gems, item)
-          if (item.unique) essences[item.unique.id] = (essences[item.unique.id] ?? 0) + essenceGain(RARITIES[item.rarity].tier, item.unique.rank)
+          if (item.unique) essences[item.unique.id] = (essences[item.unique.id] ?? 0) + essenceGain(RARITIES[item.rarity].tier, item.unique.rank) * (mods.distillateur ? 2 : 1)
           xp += metierXpGain(RARITIES[item.rarity].tier, 'modify')
           count++
         } else keep.push(item)
@@ -2846,6 +2852,33 @@ export const useGame = create<GameState>((set, get) => {
       const next = {
         ...s, metiers, gold: s.gold - cost,
         log: pushLog(s.log, `${m.icon} ${m.name} : arbre réinitialisé (-${cost.toLocaleString('fr-FR')} or). Points rendus.`, 'craft'),
+      }
+      persist(next)
+      set(next)
+    },
+
+    convertResource: (conversionId, times = 1, quintType) => {
+      const s = get()
+      const mods = craftMods(s.metiers)
+      if (!mods.transmutateur) return // ◈ spécialisation Transmutateur de l'Alchimiste
+      const def = getConversion(conversionId)
+      const n = Math.max(1, Math.round(times))
+      if (!def) return
+      if (def.to.res === 'quint' && !quintType) return
+      const pool: Record<ConvRes, number> = { essence: s.essence, poussiere: s.poussiere, noyau: s.noyau, quint: 0 }
+      const cost = def.from.amt * n
+      if (pool[def.from.res] < cost) return
+      const gainAmt = def.to.amt * n
+      const next = {
+        ...s,
+        essence: s.essence + (def.to.res === 'essence' ? gainAmt : 0) - (def.from.res === 'essence' ? cost : 0),
+        poussiere: s.poussiere + (def.to.res === 'poussiere' ? gainAmt : 0) - (def.from.res === 'poussiere' ? cost : 0),
+        noyau: s.noyau + (def.to.res === 'noyau' ? gainAmt : 0) - (def.from.res === 'noyau' ? cost : 0),
+        quint: def.to.res === 'quint' && quintType ? { ...s.quint, [quintType]: (s.quint[quintType] ?? 0) + gainAmt } : s.quint,
+        ...(() => {
+          const g = gainMetierXp(s, 'alchimiste', metierXpGain(3, 'modify'))
+          return { metiers: g.metiers, log: pushLog(g.log, `⚗️ Transmutation : ${def.name}${quintType ? ` (${DAMAGE_TYPES[quintType].name})` : ''} ×${n}.`, 'craft') }
+        })(),
       }
       persist(next)
       set(next)
