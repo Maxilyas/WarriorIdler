@@ -208,11 +208,6 @@ export function CharacterPanel() {
         </div>
       </div>
 
-      {/* Paramètres */}
-      <div className="rounded-xl border border-slate-800 bg-[#11151f] p-4">
-        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Paramètres</div>
-        <ResetButton />
-      </div>
     </div>
   )
 }
@@ -333,7 +328,8 @@ function Kv({ name, value }: { name: string; value: string }) {
   )
 }
 
-function ResetButton() {
+/** Réinitialisation de la partie — affiché dans la feuille ⚙ Réglages (en-tête). */
+export function ResetButton() {
   const reset = useGame((s) => s.reset)
   const [confirm, setConfirm] = useState(false)
   if (confirm) {

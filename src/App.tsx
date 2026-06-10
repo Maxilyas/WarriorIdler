@@ -4,38 +4,45 @@ import { useMediaQuery } from './useMediaQuery'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from './game/damage'
 import { TALENT_START_LEVEL } from './game/character'
 import { CombatPanel } from './components/CombatPanel'
-import { CharacterPanel } from './components/CharacterPanel'
-import { TalentTree } from './components/TalentTree'
 import { StuffScreen } from './components/StuffScreen'
-import { DungeonPanel } from './components/DungeonPanel'
-import { RaidPanel } from './components/RaidPanel'
+import { HerosHub } from './components/HerosHub'
+import { ExpedHub } from './components/ExpedHub'
 import { MerchantPanel } from './components/MerchantPanel'
 import { GrimoirePanel } from './components/GrimoirePanel'
+import { ResetButton } from './components/CharacterPanel'
+import { Sheet } from './components/ui'
 import { ChestModal } from './components/ChestModal'
 import { WelcomeBackModal } from './components/WelcomeBackModal'
 
 const TICK_MS = 200
 
-type Tab = 'combat' | 'perso' | 'talents' | 'stuff' | 'donjons' | 'raids' | 'marchand' | 'grimoire'
+type Tab = 'combat' | 'stuff' | 'heros' | 'exped' | 'marche'
+type DeskTab = 'stuff' | 'heros' | 'exped' | 'marche' | 'grimoire'
 
-/** Palier de déblocage de chaque fonctionnalité (révélation progressive de l'UI). */
+/** Paliers de déblocage (révélation progressive de l'UI). */
+const MARCHE_STAGE = 10
 const DONJON_STAGE = 20
 const RAID_STAGE = 50
 
+/** Barre du bas : 5 emplacements maximum — les features futures vivent DANS les hubs. */
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'combat', label: 'Combat', icon: '⚔' },
-  { id: 'perso', label: 'Perso', icon: '🛡' },
-  { id: 'talents', label: 'Talents', icon: '🌌' },
   { id: 'stuff', label: 'Stuff', icon: '🎒' },
-  { id: 'donjons', label: 'Donjons', icon: '🏰' },
-  { id: 'raids', label: 'Raids', icon: '☠️' },
-  { id: 'marchand', label: 'Marché', icon: '🏪' },
-  { id: 'grimoire', label: 'Codex', icon: '📖' },
+  { id: 'heros', label: 'Héros', icon: '🛡' },
+  { id: 'exped', label: 'Expéd.', icon: '🏰' },
+  { id: 'marche', label: 'Marché', icon: '🏪' },
 ]
 
-const DESK_LABEL: Record<Exclude<Tab, 'combat'>, string> = {
-  stuff: '🎒 Équipement', perso: '🛡 Personnage', talents: '🌌 Talents',
-  donjons: '🏰 Donjons', raids: '☠️ Raids', marchand: '🏪 Marché', grimoire: '📖 Codex',
+const DESK_LABEL: Record<DeskTab, string> = {
+  stuff: '🎒 Équipement', heros: '🛡 Héros', exped: '🏰 Expéditions', marche: '🏪 Marché', grimoire: '📖 Codex',
+}
+
+/** Format court des grands nombres (en-tête mobile : la place est comptée). */
+function fmtShort(n: number): string {
+  if (n >= 1e9) return (n / 1e9).toFixed(1).replace('.', ',') + ' Md'
+  if (n >= 1e6) return (n / 1e6).toFixed(1).replace('.', ',') + ' M'
+  if (n >= 10000) return Math.round(n / 1000).toLocaleString('fr-FR') + ' k'
+  return n.toLocaleString('fr-FR')
 }
 
 export default function App() {
@@ -50,68 +57,87 @@ export default function App() {
   const fragments = useGame((s) => s.fragments)
   const cosmic = useGame((s) => s.cosmic)
   const forgeMastery = useGame((s) => s.forgeMastery)
-  const isDesktop = useMediaQuery('(min-width: 1024px)')
   const sceaux = useGame((s) => s.sceaux)
   const bestStage = useGame((s) => s.bestStage)
   const characters = useGame((s) => s.characters)
   const dungeonProgress = useGame((s) => s.dungeonProgress)
+  const upgrades = useGame((s) => s.upgrades)
   const inDungeon = useGame((s) => s.dungeon !== null)
   const inRaid = useGame((s) => s.raid !== null)
+  const isDesktop = useMediaQuery('(min-width: 1024px)')
   const [tab, setTab] = useState<Tab>('combat')
-  const [deskTab, setDeskTab] = useState<'perso' | 'talents' | 'stuff' | 'donjons' | 'raids' | 'marchand' | 'grimoire'>('stuff')
+  const [deskTab, setDeskTab] = useState<DeskTab>('stuff')
+  const [sheet, setSheet] = useState<null | 'monnaies' | 'codex' | 'reglages'>(null)
 
   useEffect(() => {
     const id = setInterval(() => tick(TICK_MS / 1000), TICK_MS)
     return () => clearInterval(id)
   }, [tick])
 
-  // Révélation progressive : on ne montre une fonctionnalité qu'une fois pertinente.
+  // Révélation progressive : une fonctionnalité n'apparaît qu'une fois pertinente.
   const maxLevel = characters.reduce((m, c) => Math.max(m, c.level), 1)
   const anyDungeon = Object.values(dungeonProgress).some((v) => v > 0)
-  const unlocked: Record<Tab, boolean> = {
-    combat: true,
-    perso: true,
-    stuff: true,
-    // Marché & Codex disponibles dès le début (pas de mur d'entrée).
-    grimoire: true,
-    marchand: true,
-    // Talents au niveau 10 ; Donjons au palier 20 ; Raids au palier 50 (révélation progressive).
-    talents: maxLevel >= TALENT_START_LEVEL || characters.some((c) => c.talentPoints > 0),
-    donjons: sceaux > 0 || anyDungeon || inDungeon || bestStage >= DONJON_STAGE,
-    raids: orbes > 0 || inRaid || bestStage >= RAID_STAGE,
-  }
+  const anyUpgrade = Object.values(upgrades).some((v) => v > 0)
+  const talentsUnlocked = maxLevel >= TALENT_START_LEVEL || characters.some((c) => c.talentPoints > 0)
+  const raidsUnlocked = orbes > 0 || inRaid || bestStage >= RAID_STAGE
+  const expedUnlocked = sceaux > 0 || anyDungeon || inDungeon || bestStage >= DONJON_STAGE || raidsUnlocked
+  const marcheUnlocked = bestStage >= MARCHE_STAGE || anyUpgrade
 
+  const unlocked: Record<Tab, boolean> = { combat: true, stuff: true, heros: true, exped: expedUnlocked, marche: marcheUnlocked }
   const mobileTabs = TABS.filter((t) => unlocked[t.id])
-  const deskTabs = (['stuff', 'perso', 'talents', 'donjons', 'raids', 'marchand', 'grimoire'] as const).filter((t) => unlocked[t])
-  const navCols = mobileTabs.length
+  const deskTabs = (['stuff', 'heros', 'exped', 'marche', 'grimoire'] as const).filter((t) => t === 'grimoire' || unlocked[t])
+  const talentPoints = characters.reduce((a, c) => a + c.talentPoints, 0)
+
+  // Monnaies : l'en-tête mobile n'en montre que 2 + un compteur ; le détail vit dans une feuille
+  // (les info-bulles `title` n'existent pas au tactile).
+  const quintTotal = DAMAGE_TYPE_LIST.reduce((a, t) => a + (quint[t] ?? 0), 0)
+  const currencies = [
+    { icon: '💰', name: 'Or', value: gold, cls: 'text-yellow-400' },
+    { icon: '♦', name: 'Éclats d\'arcane', value: essence, cls: 'text-cyan-300' },
+    { icon: '💠', name: 'Noyaux primordiaux', value: noyau, cls: 'text-fuchsia-300' },
+    { icon: '🌌', name: 'Poussière d\'étoile', value: poussiere, cls: 'text-indigo-300' },
+    { icon: '⚗️', name: 'Quintessences élémentaires', value: quintTotal, cls: 'text-emerald-300' },
+    { icon: '🔧', name: 'Savoir-faire de forge', value: forgeMastery, cls: 'text-amber-200' },
+    { icon: '🔮', name: 'Orbes de raid', value: orbes, cls: 'text-rose-300' },
+    { icon: '✨', name: 'Fragments d\'éternité', value: fragments, cls: 'text-sky-300' },
+    { icon: '💫', name: 'Éclats cosmiques', value: cosmic, cls: 'text-violet-300' },
+  ]
+  const extraCount = currencies.slice(2).filter((c) => c.value > 0).length
 
   return (
     <div className="mx-auto flex h-[100dvh] max-w-6xl flex-col">
-      <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-slate-800 px-4 py-2">
+      <header className="flex items-center justify-between gap-2 border-b border-slate-800 px-3 py-2 sm:px-4">
         <h1 className="shrink-0 whitespace-nowrap text-base font-bold tracking-wide">
           <span className="text-orange-400">⚔</span> Warrior <span className="text-orange-400">Idler</span>
         </h1>
-        <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-x-3 gap-y-0.5 text-xs font-medium">
-          <span className="text-yellow-400">💰 {gold.toLocaleString('fr-FR')}</span>
-          <span className="text-cyan-300" title="Éclats d'arcane">♦ {essence.toLocaleString('fr-FR')}</span>
-          <span className="text-fuchsia-300" title="Noyau primordial (boss)">💠 {noyau.toLocaleString('fr-FR')}</span>
-          {poussiere > 0 && <span className="text-indigo-300" title="Poussière d'étoile (craft sommital)">🌌 {poussiere.toLocaleString('fr-FR')}</span>}
-          {(() => {
-            const total = DAMAGE_TYPE_LIST.reduce((a, t) => a + (quint[t] ?? 0), 0)
-            if (total <= 0) return null
-            const breakdown = DAMAGE_TYPE_LIST.filter((t) => (quint[t] ?? 0) > 0).map((t) => `${DAMAGE_TYPES[t].icon} ${DAMAGE_TYPES[t].name} : ${quint[t]}`).join('\n')
-            return <span className="text-emerald-300" title={`Quintessences élémentaires (craft typé)\n${breakdown}`}>⚗️ {total.toLocaleString('fr-FR')}</span>
-          })()}
-          {forgeMastery > 0 && <span className="text-amber-200" title="Savoir-faire de forge (métier de forgeron)">🔧 {forgeMastery.toLocaleString('fr-FR')}</span>}
-          {orbes > 0 && <span className="text-rose-300" title="Orbe de raid">🔮 {orbes.toLocaleString('fr-FR')}</span>}
-          {fragments > 0 && <span className="text-sky-300" title="Fragment d'éternité">✨ {fragments.toLocaleString('fr-FR')}</span>}
-          {cosmic > 0 && <span className="text-violet-300" title="Éclat cosmique (raids)">💫 {cosmic.toLocaleString('fr-FR')}</span>}
+        <div className="flex min-w-0 items-center justify-end gap-2">
+          {isDesktop ? (
+            <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-0.5 text-xs font-medium">
+              {currencies.filter((c, i) => i < 2 || c.value > 0).map((c) => (
+                <span key={c.name} className={c.cls} title={c.name}>{c.icon} {c.value.toLocaleString('fr-FR')}</span>
+              ))}
+            </div>
+          ) : (
+            <button onClick={() => setSheet('monnaies')} className="flex shrink-0 items-center gap-2 whitespace-nowrap px-1 py-1.5 text-xs font-medium">
+              <span className="text-yellow-400">💰 {fmtShort(gold)}</span>
+              <span className="text-cyan-300">♦ {fmtShort(essence)}</span>
+              {extraCount > 0 && <span className="rounded bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-300">+{extraCount} ▾</span>}
+            </button>
+          )}
+          {!isDesktop && (
+            <button onClick={() => setSheet('codex')} className="rounded-lg bg-slate-800/70 px-2 py-1.5 text-sm" aria-label="Codex">
+              📖
+            </button>
+          )}
+          <button onClick={() => setSheet('reglages')} className="rounded-lg bg-slate-800/70 px-2 py-1.5 text-sm" aria-label="Réglages">
+            ⚙
+          </button>
         </div>
       </header>
 
       <main className="min-h-0 flex-1 overflow-hidden p-3">
         {isDesktop ? (
-          /* Desktop : Combat fixe à gauche + onglet Perso/Stuff à droite */
+          /* Desktop : Combat fixe à gauche + hub à droite */
           <div className="grid h-full grid-cols-[320px_1fr] gap-3">
             <div className="min-h-0 overflow-hidden">
               <CombatPanel />
@@ -128,33 +154,23 @@ export default function App() {
                     }
                   >
                     {DESK_LABEL[t]}
-                    {t === 'donjons' && (sceaux > 0 || inDungeon) && (
-                      <span className="ml-1.5 rounded-full bg-amber-500 px-1.5 text-[10px] text-slate-950">
-                        {inDungeon ? '!' : sceaux}
-                      </span>
+                    {t === 'heros' && talentPoints > 0 && (
+                      <span className="ml-1.5 rounded-full bg-amber-500 px-1.5 text-[10px] text-slate-950">{talentPoints}</span>
                     )}
-                    {t === 'raids' && (orbes > 0 || inRaid) && (
-                      <span className="ml-1.5 rounded-full bg-rose-500 px-1.5 text-[10px] text-slate-950">
-                        {inRaid ? '!' : orbes}
+                    {t === 'exped' && (sceaux > 0 || inDungeon || inRaid) && (
+                      <span className="ml-1.5 rounded-full bg-amber-500 px-1.5 text-[10px] text-slate-950">
+                        {inDungeon || inRaid ? '!' : sceaux}
                       </span>
                     )}
                   </button>
                 ))}
               </div>
               <div className="min-h-0 flex-1">
-                {!unlocked[deskTab] ? (
-                  <StuffScreen />
-                ) : deskTab === 'perso' ? (
-                  <div className="h-full overflow-y-auto pr-1">
-                    <CharacterPanel />
-                  </div>
-                ) : deskTab === 'talents' ? (
-                  <TalentTree />
-                ) : deskTab === 'donjons' ? (
-                  <DungeonPanel />
-                ) : deskTab === 'raids' ? (
-                  <RaidPanel />
-                ) : deskTab === 'marchand' ? (
+                {deskTab === 'heros' ? (
+                  <HerosHub talentsUnlocked={talentsUnlocked} />
+                ) : deskTab === 'exped' ? (
+                  <ExpedHub raidsUnlocked={raidsUnlocked} />
+                ) : deskTab === 'marche' ? (
                   <MerchantPanel />
                 ) : deskTab === 'grimoire' ? (
                   <GrimoirePanel />
@@ -165,27 +181,20 @@ export default function App() {
             </div>
           </div>
         ) : (
-          /* Mobile : un onglet à la fois */
+          /* Mobile : un hub à la fois */
           <div className="h-full">
             {tab === 'combat' && <CombatPanel />}
-            {tab === 'perso' && (
-              <div className="h-full overflow-y-auto pr-1">
-                <CharacterPanel />
-              </div>
-            )}
-            {tab === 'talents' && <TalentTree />}
             {tab === 'stuff' && <StuffScreen />}
-            {tab === 'donjons' && <DungeonPanel />}
-            {tab === 'raids' && <RaidPanel />}
-            {tab === 'marchand' && <MerchantPanel />}
-            {tab === 'grimoire' && <GrimoirePanel />}
+            {tab === 'heros' && <HerosHub talentsUnlocked={talentsUnlocked} />}
+            {tab === 'exped' && <ExpedHub raidsUnlocked={raidsUnlocked} />}
+            {tab === 'marche' && <MerchantPanel />}
           </div>
         )}
       </main>
 
-      {/* Barre d'onglets (mobile uniquement) — n'affiche que les fonctionnalités débloquées */}
+      {/* Barre d'onglets (mobile) — seules les fonctionnalités débloquées apparaissent */}
       {!isDesktop && (
-        <nav className="grid border-t border-slate-800" style={{ gridTemplateColumns: `repeat(${navCols}, minmax(0, 1fr))` }}>
+        <nav className="grid border-t border-slate-800" style={{ gridTemplateColumns: `repeat(${mobileTabs.length}, minmax(0, 1fr))` }}>
           {mobileTabs.map((t) => (
             <button
               key={t.id}
@@ -198,23 +207,62 @@ export default function App() {
               <span className="text-lg leading-none">{t.icon}</span>
               {t.label}
               {t.id === 'stuff' && inventory.length > 0 && (
-                <span className="absolute right-3 top-1 rounded-full bg-slate-700 px-1 text-[9px] text-slate-200">
+                <span className="absolute right-2 top-1 rounded-full bg-slate-700 px-1 text-[9px] text-slate-200">
                   {inventory.length}
                 </span>
               )}
-              {t.id === 'donjons' && (sceaux > 0 || inDungeon) && (
-                <span className="absolute right-1.5 top-1 rounded-full bg-amber-500 px-1 text-[9px] text-slate-950">
-                  {inDungeon ? '!' : sceaux}
-                </span>
+              {t.id === 'heros' && talentPoints > 0 && (
+                <span className="absolute right-2 top-1 rounded-full bg-amber-500 px-1 text-[9px] text-slate-950">{talentPoints}</span>
               )}
-              {t.id === 'raids' && (orbes > 0 || inRaid) && (
-                <span className="absolute right-1.5 top-1 rounded-full bg-rose-500 px-1 text-[9px] text-slate-950">
-                  {inRaid ? '!' : orbes}
+              {t.id === 'exped' && (sceaux > 0 || inDungeon || inRaid) && (
+                <span className="absolute right-2 top-1 rounded-full bg-amber-500 px-1 text-[9px] text-slate-950">
+                  {inDungeon || inRaid ? '!' : sceaux}
                 </span>
               )}
             </button>
           ))}
         </nav>
+      )}
+
+      {/* Feuilles d'en-tête : monnaies / codex / réglages */}
+      {sheet === 'monnaies' && (
+        <Sheet title="Ressources" onClose={() => setSheet(null)}>
+          <div className="space-y-1.5">
+            {currencies.filter((c, i) => i < 2 || c.value > 0).map((c) => (
+              <div key={c.name} className="flex items-center justify-between text-sm">
+                <span className={c.cls}>{c.icon} {c.name}</span>
+                <span className="tabular-nums text-slate-200">{c.value.toLocaleString('fr-FR')}</span>
+              </div>
+            ))}
+          </div>
+          {quintTotal > 0 && (
+            <div className="mt-2 border-t border-slate-800 pt-2 text-[11px]">
+              <span className="text-slate-500">Quintessences par élément : </span>
+              {DAMAGE_TYPE_LIST.filter((t) => (quint[t] ?? 0) > 0).map((t) => (
+                <span key={t} className="mr-2" style={{ color: DAMAGE_TYPES[t].color }}>
+                  {DAMAGE_TYPES[t].icon} {quint[t]}
+                </span>
+              ))}
+            </div>
+          )}
+        </Sheet>
+      )}
+      {sheet === 'codex' && (
+        <Sheet title="📖 Codex" onClose={() => setSheet(null)}>
+          <div className="h-[72vh]">
+            <GrimoirePanel />
+          </div>
+        </Sheet>
+      )}
+      {sheet === 'reglages' && (
+        <Sheet title="⚙ Réglages" onClose={() => setSheet(null)}>
+          <div className="space-y-2">
+            <div className="text-[11px] text-slate-500">
+              Record de palier : <span className="text-slate-300">{bestStage}</span> · Niveau max : <span className="text-slate-300">{maxLevel}</span>
+            </div>
+            <ResetButton />
+          </div>
+        </Sheet>
       )}
 
       <ChestModal />

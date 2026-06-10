@@ -454,11 +454,11 @@ function abilityHint(a: EnemyAbility): string {
 /** Prochain objectif du joueur — sert de fil conducteur et annonce les déblocages (intro progressive). */
 function nextObjective(bestStage: number, maxLevel: number, physiqueBest: number): string | null {
   if (bestStage < 3) return 'Frappe ! Tue des ennemis pour ramasser du butin, puis équipe tes meilleures pièces dans l\'onglet 🎒 Stuff.'
-  if (bestStage < 5) return 'Les ennemis frappent de plus en plus fort : équipe-toi (Endurance, résistances). Le palier 5 débloque les 🏰 Donjons.'
-  if (bestStage < 10) return 'Atteins le palier 10 pour débloquer le 🏪 Marché. Un boss t\'y attend : prépare ton stuff.'
-  if (maxLevel <= TALENT_START_LEVEL) return `Monte un personnage au niveau ${TALENT_START_LEVEL + 1} (onglet 🛡 Perso) pour débloquer l'arbre de 🌌 Talents.`
-  if (physiqueBest < 20) return 'Atteins le palier 20 aux Champs de Bataille pour débloquer 4 nouveaux 🧭 biomes (Feu, Froid, Foudre, Nature) — chacun son butin et ses menaces.'
-  if (bestStage < 50) return 'Atteins le palier 50 (n\'importe quel biome) pour débloquer les ☠️ Raids et les biomes Arcane & Ombre.'
+  if (bestStage < 10) return 'Les ennemis frappent de plus en plus fort : équipe-toi (Endurance, résistances). Le palier 10 débloque le 🏪 Marché — un boss t\'y attend.'
+  if (bestStage < 12) return 'Palier 12 : l\'🔨 Atelier de forge ouvre dans l\'onglet Stuff. Recycle ton butin pour des ♦ éclats en attendant.'
+  if (maxLevel <= TALENT_START_LEVEL) return `Monte un personnage au niveau ${TALENT_START_LEVEL + 1} (hub 🛡 Héros) pour débloquer l'arbre de 🌌 Talents.`
+  if (physiqueBest < 20) return 'Atteins le palier 20 aux Champs de Bataille pour débloquer 4 nouveaux 🧭 biomes (Feu, Froid, Foudre, Nature) et les 🏰 Expéditions (donjons).'
+  if (bestStage < 50) return 'Atteins le palier 50 (n\'importe quel biome) pour débloquer les ☠️ Raids (hub Expéditions) et les biomes Arcane & Ombre.'
   if (maxLevel < 100) return `Vise le niveau 100 — le soft cap (3-5 h de jeu) qui débloque des builds complets. Farme le 📚 Sanctuaire du Savoir pour l'XP. (Niv. actuel max : ${maxLevel})`
   return null
 }
