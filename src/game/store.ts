@@ -166,6 +166,9 @@ function quintTierMult(stage: number): number {
 const DUNGEON_FIGHT_XP_MULT = 7 // ×XP de l'équipe par combat dans le Sanctuaire du Savoir (donjon d'XP)
 /** Boost de l'XP du combat CLASSIQUE : recale le ratio donjon/classique (~×80 → ~×10). */
 const CLASSIC_XP_MULT = 8
+/** Or par kill en combat CLASSIQUE (fraction de l'XP du mob). Relevé 0.12 → 0.8 : farmer les paliers
+ *  rapporte enfin un vrai revenu d'or (avant : « pratiquement rien »). */
+const CLASSIC_GOLD_MULT = 0.8
 
 interface SaveData {
   characters: Character[]
@@ -1669,7 +1672,7 @@ export const useGame = create<GameState>((set, get) => {
         const boss = isBossStage(stage)
         const eco = computeGlobalMods(s.upgrades)
         // Le combat CLASSIQUE n'est plus qu'un filet d'or/butin : la vraie source = donjons & raids.
-        const goldGain = Math.round(enemy.xp * 0.12 * eco.goldGain)
+        const goldGain = Math.round(enemy.xp * CLASSIC_GOLD_MULT * eco.goldGain)
         const xpGain = Math.round(enemy.xp * eco.xpGain * CLASSIC_XP_MULT)
         gold += goldGain
 

@@ -19,8 +19,7 @@ const TICK_MS = 200
 type Tab = 'combat' | 'perso' | 'talents' | 'stuff' | 'donjons' | 'raids' | 'marchand' | 'grimoire'
 
 /** Palier de déblocage de chaque fonctionnalité (révélation progressive de l'UI). */
-const MARCHAND_STAGE = 10
-const DONJON_STAGE = 5
+const DONJON_STAGE = 20
 const RAID_STAGE = 50
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
@@ -72,11 +71,13 @@ export default function App() {
     combat: true,
     perso: true,
     stuff: true,
-    grimoire: bestStage >= 3 || inventory.some((i) => i.unique),
-    talents: maxLevel > TALENT_START_LEVEL || characters.some((c) => c.talentPoints > 0),
+    // Marché & Codex disponibles dès le début (pas de mur d'entrée).
+    grimoire: true,
+    marchand: true,
+    // Talents au niveau 10 ; Donjons au palier 20 ; Raids au palier 50 (révélation progressive).
+    talents: maxLevel >= TALENT_START_LEVEL || characters.some((c) => c.talentPoints > 0),
     donjons: sceaux > 0 || anyDungeon || inDungeon || bestStage >= DONJON_STAGE,
     raids: orbes > 0 || inRaid || bestStage >= RAID_STAGE,
-    marchand: bestStage >= MARCHAND_STAGE,
   }
 
   const mobileTabs = TABS.filter((t) => unlocked[t.id])
