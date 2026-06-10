@@ -347,6 +347,8 @@ export interface Enemy {
   trait?: string
   /** Ennemi d'élite (stats accrues + meilleur butin). */
   elite?: boolean
+  /** Champion ✦ : rencontre rare nommée, butin exceptionnel (drops + chance de rareté accrus). */
+  champion?: boolean
   /** Renfort temporaire (adds de raid) : disparaît après `lifetime` secondes. */
   lifetime?: number
   /** Renfort secondaire (pas le boss / pas la cible d'objectif). */

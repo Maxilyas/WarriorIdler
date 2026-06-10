@@ -1725,11 +1725,13 @@ export const useGame = create<GameState>((set, get) => {
         // boss/élites de farm — elles se farment en DONJON dédié (mono-ressource). Le farm classique
         // reste une source de stuff, d'XP et d'un filet d'or.
         const elite = enemy.elite === true
-        if (elite) log = pushLog(log, '◆ Élite vaincue : butin supérieur !', 'kill')
+        const champion = enemy.champion === true
+        if (champion) log = pushLog(log, '✦ CHAMPION vaincu : butin exceptionnel !', 'kill')
+        else if (elite) log = pushLog(log, '◆ Élite vaincue : butin supérieur !', 'kill')
         // Moins d'objets en combat classique (le farm de stuff se fait en donjon/raid).
-        const drops = (boss ? 2 : Math.random() < 0.30 + eco.lootChance ? 1 : 0) + (elite ? 1 : 0)
+        const drops = (boss ? 2 : Math.random() < 0.30 + eco.lootChance ? 1 : 0) + (elite ? 1 : 0) + (champion ? 1 : 0)
         const bias = pickBias(chars)
-        const luck = stageLuckTier(stage) + (boss ? 1 : 0) + (elite ? 3 : 0) + Math.floor(eco.rarityLuck)
+        const luck = stageLuckTier(stage) + (boss ? 1 : 0) + (elite ? 3 : 0) + (champion ? 5 : 0) + Math.floor(eco.rarityLuck)
         let codex = s.codex
         let autoRec = 0
         for (let dd = 0; dd < drops; dd++) {

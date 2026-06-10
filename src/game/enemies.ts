@@ -37,16 +37,35 @@ function biomeAbilities(biome: BiomeId, isBoss: boolean, isElite: boolean): Enem
   return out
 }
 
-const ENEMY_NAMES = [
-  'Gobelin pillard', 'Loup affamé', 'Squelette rouillé', 'Bandit de grand chemin',
-  'Araignée venimeuse', 'Ogre des cavernes', 'Goule putride', 'Cultiste masqué',
-  'Golem de pierre', 'Wyrm des cendres', 'Spectre hurlant', 'Démon mineur',
-]
+/** Faune PAR BIOME : chaque zone a ses créatures (texture, zéro redondance inter-biomes). */
+const BIOME_ENEMIES: Record<BiomeId, string[]> = {
+  physique: ['Gobelin pillard', 'Loup affamé', 'Squelette rouillé', 'Bandit de grand chemin', 'Ogre des cavernes', 'Brute orque', 'Mercenaire déchu', 'Sanglier de guerre', 'Gnoll chasseur', 'Géant des collines'],
+  feu: ['Salamandre ardente', 'Diablotin des braises', 'Golem de magma', 'Chien de lave', 'Élémentaire de feu', 'Wyrm des cendres', 'Efrit déchaîné', 'Phénix corrompu', 'Forgeron damné', 'Cendre-vive'],
+  froid: ['Loup arctique', 'Élémentaire de givre', 'Yéti des cimes', 'Harpie boréale', 'Golem de glace', 'Spectre gelé', 'Traqueur des neiges', 'Wendigo affamé', 'Sorcière du blizzard', 'Mammouth spectral'],
+  foudre: ['Élémentaire d\'orage', 'Harpie fulgurante', 'Drake voltaïque', 'Esprit du tonnerre', 'Golem conducteur', 'Serpent d\'éclairs', 'Djinn des tempêtes', 'Vouivre des pics', 'Condor foudroyé', 'Titan statique'],
+  nature: ['Araignée venimeuse', 'Tréant corrompu', 'Mante toxique', 'Serpent des lianes', 'Champignon carnivore', 'Dryade vengeresse', 'Basilic des fourrés', 'Frelon royal', 'Limace caustique', 'Gardien sylvestre'],
+  arcane: ['Aberration instable', 'Tisseur de sorts', 'Élémentaire d\'arcane', 'Œil scrutateur', 'Golem runique', 'Djinn du Voile', 'Horreur géométrique', 'Mage dissous', 'Écho de mana', 'Sphinx déchu'],
+  ombre: ['Goule putride', 'Spectre hurlant', 'Cultiste masqué', 'Démon mineur', 'Ombre rampante', 'Vampire famélique', 'Cauchemar incarné', 'Faucheur silencieux', 'Liche mineure', 'Dévoreur d\'âmes'],
+}
 
-const BOSS_NAMES = [
-  'Seigneur Mortepierre', 'Vrakthul l\'Insatiable', 'La Veuve d\'Ébène',
-  'Korgath le Briseur', 'Néfarius l\'Éternel', 'L\'Avatar du Néant',
-]
+/** Boss PAR BIOME (un nom thématique tous les 10 paliers). */
+const BIOME_BOSSES: Record<BiomeId, string[]> = {
+  physique: ['Seigneur Mortepierre', 'Korgath le Briseur', 'Général Fer-Noir', 'Urzog, Fléau des Plaines', 'La Montagne qui Marche'],
+  feu: ['Pyrothan l\'Incandescent', 'La Fournaise Vivante', 'Ignis, Cœur de Braise', 'Le Sultan des Cendres', 'Vulkar l\'Éruptif'],
+  froid: ['Borealis, le Gel Éternel', 'La Reine du Blizzard', 'Glacius l\'Implacable', 'Père Hiver Corrompu', 'L\'Avalanche Consciente'],
+  foudre: ['Fulgur, Voix du Tonnerre', 'L\'Œil du Cyclone', 'Voltaïa la Fulgurante', 'Le Paratonnerre Vivant', 'Tempestas, l\'Orage Roi'],
+  nature: ['La Matriarche des Ronces', 'Venimor l\'Empoisonneur', 'Le Cœur de la Jungle', 'Sylvanus le Pourrissant', 'La Ruche Première'],
+  arcane: ['Néfarius l\'Éternel', 'Le Paradoxe Incarné', 'Arcanya, Mère des Sorts', 'L\'Équation Vivante', 'Voilebrume le Distordu'],
+  ombre: ['Vrakthul l\'Insatiable', 'La Veuve d\'Ébène', 'L\'Avatar du Néant', 'Morsombre le Dévoreur', 'Le Roi sans Visage'],
+}
+
+/** Épithètes déterministes (pure texture — les TRAITS gardent les effets de stats). */
+const EPITHETS = ['vorace', 'sinistre', 'hurlant', 'rampant', 'funeste', 'farouche', 'ancien', 'errant', 'sauvage', 'famélique']
+
+/** Titres des CHAMPIONS ✦ : ennemis nommés rares au butin exceptionnel (moment de jackpot). */
+const CHAMPION_TITLES = ['le Terrible', 'l\'Écorcheur', 'la Calamité', 'le Maudit', 'le Colossal', 'l\'Immortel', 'le Hanteur', 'la Fin de Toute Chose']
+/** Chance qu'un ennemi normal (palier > 10) soit un champion. */
+const CHAMPION_CHANCE = 0.03
 
 /**
  * Traits déterministes (texture du combat classique, pas d'aléatoire d'un run à l'autre).
@@ -83,21 +102,33 @@ export function stageResistRamp(stage: number): number {
 /** Crée l'ennemi correspondant à un palier (stage) dans un biome donné. Boss tous les 10 paliers. */
 export function makeEnemy(stage: number, biome: BiomeId = 'physique'): Enemy {
   const isBoss = stage % 10 === 0
-  const isElite = !isBoss && stage % ELITE_EVERY === 0 && stage > ELITE_EVERY
-  // Trait déterministe sur certains paliers (cycle), hors boss/élite.
-  const trait = !isBoss && !isElite && stage % 3 === 0 ? TRAITS[Math.floor(stage / 3) % TRAITS.length] : undefined
+  // Champion ✦ : rencontre rare et ALÉATOIRE (l'imprévu qui casse la routine du farm).
+  const isChampion = !isBoss && stage > 10 && Math.random() < CHAMPION_CHANCE
+  const isElite = !isBoss && !isChampion && stage % ELITE_EVERY === 0 && stage > ELITE_EVERY
+  // Trait déterministe sur certains paliers (cycle), hors boss/élite/champion.
+  const trait = !isBoss && !isElite && !isChampion && stage % 3 === 0 ? TRAITS[Math.floor(stage / 3) % TRAITS.length] : undefined
 
-  const hpMult = (isElite ? 2.2 : 1) * (trait?.hpMult ?? 1)
-  const dmgMult = (isElite ? 1.4 : 1) * (trait?.dmgMult ?? 1)
+  const hpMult = (isElite ? 2.2 : isChampion ? 1.8 : 1) * (trait?.hpMult ?? 1)
+  const dmgMult = (isElite ? 1.4 : isChampion ? 1.25 : 1) * (trait?.dmgMult ?? 1)
   const armorMult = trait?.armorMult ?? 1
 
   // Croissance exponentielle douce du HP (réduite : moins de "sacs à PV"). Boss un peu moins gonflés.
   const hpBase = 40 * Math.pow(1.17, stage - 1)
   const maxHp = Math.round(hpBase * (isBoss ? 5 : 1) * hpMult)
-  const baseName = isBoss
-    ? BOSS_NAMES[Math.floor((stage / 10 - 1) % BOSS_NAMES.length)]
-    : ENEMY_NAMES[(stage - 1) % ENEMY_NAMES.length]
-  const name = isBoss ? `★ ${baseName}` : isElite ? `◆ ${baseName} d'élite` : trait ? `${baseName} ${trait.name.toLowerCase()}` : baseName
+  const pool = BIOME_ENEMIES[biome]
+  const baseName = pool[(stage - 1) % pool.length]
+  const bosses = BIOME_BOSSES[biome]
+  const name = isBoss
+    ? `★ ${bosses[Math.floor(stage / 10 - 1) % bosses.length]}`
+    : isChampion
+      ? `✦ ${baseName} ${CHAMPION_TITLES[Math.floor(Math.random() * CHAMPION_TITLES.length)]}`
+      : isElite
+        ? `◆ ${baseName} d'élite`
+        : trait
+          ? `${baseName} ${trait.name.toLowerCase()}`
+          : stage % 2 === 1
+            ? `${baseName} ${EPITHETS[(stage * 3 + baseName.length) % EPITHETS.length]}`
+            : baseName
 
   // Résistance GLOBALE (tous types identiques) → difficulté monotone, la Pénétration la contre.
   const ramp = stageResistRamp(stage)
@@ -127,12 +158,13 @@ export function makeEnemy(stage: number, biome: BiomeId = 'physique'): Enemy {
     // vient désormais de la pression soutenue + des techniques télégraphiées (à parer), pas du mur sec.
     damage: Math.round(7 * Math.pow(1.115, stage - 1) * (isBoss ? 1.8 : 1) * dmgMult),
     // XP rare (monter de niveau se mérite — levelling volontairement lent au début).
-    xp: Math.round((isBoss ? 38 : isElite ? 17 : 4) * Math.pow(1.115, stage - 1)),
+    xp: Math.round((isBoss ? 38 : isElite || isChampion ? 17 : 4) * Math.pow(1.115, stage - 1)),
     resist,
     damageType,
-    ...(trait ? { trait: trait.name } : isElite ? { trait: 'Élite' } : {}),
-    ...(() => { const a = biomeAbilities(biome, isBoss, isElite); return a.length ? { abilities: a } : {} })(),
-    ...(isElite ? { elite: true, dodge: 0.1 } : {}),
+    ...(trait ? { trait: trait.name } : isElite ? { trait: 'Élite' } : isChampion ? { trait: 'Champion ✦' } : {}),
+    ...(() => { const a = biomeAbilities(biome, isBoss, isElite || isChampion); return a.length ? { abilities: a } : {} })(),
+    ...(isElite || isChampion ? { elite: true, dodge: 0.1 } : {}),
+    ...(isChampion ? { champion: true } : {}),
     // Boss : reçoivent les « Dégâts vs Boss », esquivent (→ Précision) et étourdissent (→ Ténacité).
     ...(isBoss ? { boss: true, dodge: 0.15, ccDur: 1.5, ccCd: 7 } : {}),
   }
