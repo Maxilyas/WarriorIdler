@@ -39,7 +39,7 @@ import { equipSlotsForType, slotAccepts } from './slots'
 import { essenceGain, upgradeCost, insertCost, getUnique, UNIQUE_MAX_RANK, randomUniqueInstance } from './uniques'
 import {
   generateDungeon, makeDungeonPack, dungeonIlvl, dungeonLuckTier, dungeonRegen, getDungeonDef, butinMinTier, butinMaxTier,
-  dungeonRunYield, DUNGEON_YIELD_PERFIGHT_FRAC,
+  dungeonRunYield, dungeonKeyYield, DUNGEON_YIELD_PERFIGHT_FRAC,
   DUNGEONS, type ActiveDungeon, type DungeonId,
 } from './dungeons'
 import {
@@ -188,7 +188,9 @@ function quintTierMult(stage: number): number {
  * gagne de l'XP (créditée tout de suite, gardée même si le run échoue) et de l'or (versé au coffre).
  * Multiplicateurs volontairement GÉNÉREUX (le levelling est lent par design) — à affiner.
  */
-const DUNGEON_FIGHT_XP_MULT = 7 // ×XP de l'équipe par combat dans le Sanctuaire du Savoir (donjon d'XP)
+// ×XP de l'équipe par combat dans le Sanctuaire du Savoir. Relevé 7 → 24 (v0.21) : les donjons
+// sont passés de 4+N combats à 2-4 → on préserve l'XP totale d'un run.
+const DUNGEON_FIGHT_XP_MULT = 24
 /** Boost de l'XP du combat CLASSIQUE : recale le ratio donjon/classique (~×80 → ~×10). */
 const CLASSIC_XP_MULT = 8
 /** Or par kill en combat CLASSIQUE (fraction de l'XP du mob). Relevé 0.12 → 0.8 : farmer les paliers
@@ -1201,7 +1203,9 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
       effDmg, enemy.damageType, td.derived, td.resist,
       (1 - td.passives.damageReduction) * (1 - td.cmods.flatDr),
     ) * dt
-    if (mods?.reflect) incoming += totalDealt * mods.reflect
+    // Réfléchissant : CAPÉ à 10% des PV max de la cible par seconde — sinon un héros à très gros
+    // DPS et petits PV se one-shotait lui-même (400k DPS vs 12k PV…).
+    if (mods?.reflect) incoming += Math.min(totalDealt * mods.reflect, charMaxHp(t) * 0.10 * dt)
     // Immunité / bouclier d'absorption du héros (Phase éthérée, Égide titanesque).
     damageHero(t, incoming)
     // Épines (thorns) : renvoie une fraction de l'attaque à l'ennemi (basée sur le coup, bouclier inclus).
@@ -1364,7 +1368,8 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
       effDmg, enemy.damageType, td.derived, td.resist,
       (1 - td.passives.damageReduction) * (1 - td.cmods.flatDr),
     ) * dt
-    if (mods?.reflect && !reflectApplied) { incoming += totalDealt * mods.reflect; reflectApplied = true }
+    // Même cap que le combat mono-cible : le renvoi ne dépasse jamais 10% des PV max/s.
+    if (mods?.reflect && !reflectApplied) { incoming += Math.min(totalDealt * mods.reflect, charMaxHp(t) * 0.10 * dt); reflectApplied = true }
     // Immunité / bouclier d'absorption du héros (Phase éthérée, Égide titanesque).
     damageHero(t, incoming)
     if (td.cmods.thorns > 0 && enemy.hp > 0) enemy.hp = Math.max(0, enemy.hp - incoming * td.cmods.thorns)
@@ -1440,8 +1445,10 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
       case 'eclats': { const e2 = Math.round(perFight('eclats')); essence += e2; logBit = `+${e2.toLocaleString('fr-FR')} éclats` } break
       case 'noyau': { const n = accrue('noyau', perFight('noyau')); if (n) { noyau += n; logBit = `+${n} 💠` } } break
       case 'poussiere': { const pq = accrue('poussiere', perFight('poussiere')); if (pq) { poussiere += pq; logBit = `+${pq} 🌌` } } break
-      case 'sceaux': { const sc = accrue('sceaux', packXp * 0.025); if (sc) { sceaux += sc; logBit = `+${sc} 🔑` } } break
-      case 'orbes': { const ob = accrue('orbes', packXp * 0.015); if (ob) { orbes += ob; logBit = `+${ob} 🔮` } } break
+      // Clés : mêmes règles que les autres ressources (40% au fil des combats, 60% au coffre) —
+      // fini le fil exponentiel indexé sur l'XP du pack qui rendait le coffre ridicule.
+      case 'sceaux': { const sc = accrue('sceaux', dungeonKeyYield('sceaux', lv) * DUNGEON_YIELD_PERFIGHT_FRAC / Math.max(1, d.totalFights)); if (sc) { sceaux += sc; logBit = `+${sc} 🔑` } } break
+      case 'orbes': { const ob = accrue('orbes', dungeonKeyYield('orbes', lv) * DUNGEON_YIELD_PERFIGHT_FRAC / Math.max(1, d.totalFights)); if (ob) { orbes += ob; logBit = `+${ob} 🔮` } } break
       case 'xp': {
         const xp = Math.round(packXp * DUNGEON_FIGHT_XP_MULT * eco.xpGain)
         chars = chars.map((c) => { if (c.hp <= 0) return c; const nc = grantXp(c, xp); if (nc.level > c.level) leveled = true; return nc })
@@ -1472,8 +1479,8 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
         case 'eclats': cEclats = Math.round(dungeonRunYield('eclats', lv) * chestFrac); break
         case 'noyau': cNoyau = Math.round(dungeonRunYield('noyau', lv) * chestFrac); break
         case 'poussiere': cPous = Math.round(dungeonRunYield('poussiere', lv) * chestFrac); break
-        case 'orbes': cOrbes = Math.round(1 + lv * 0.5); break
-        case 'sceaux': cSceaux = Math.round(3 + lv * 0.9); break
+        case 'orbes': cOrbes = Math.round(dungeonKeyYield('orbes', lv) * chestFrac); break
+        case 'sceaux': cSceaux = Math.round(dungeonKeyYield('sceaux', lv) * chestFrac); break
         case 'xp': { const bonus = Math.round(1200 * lv * Math.pow(1.12, lv)); chars = chars.map((c) => (c.hp > 0 ? grantXp(c, bonus) : c)); cXp += bonus; break }
         case 'stuff': {
           const ilvl = dungeonIlvl(lv)

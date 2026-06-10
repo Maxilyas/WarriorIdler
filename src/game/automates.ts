@@ -1,6 +1,6 @@
 import type { DungeonId } from './dungeons'
 import type { RaidId } from './raids'
-import { DUNGEONS, dungeonRunYield, butinMinTier } from './dungeons'
+import { DUNGEONS, dungeonRunYield, dungeonKeyYield, butinMinTier } from './dungeons'
 import { RAIDS, raidFragments } from './raids'
 
 /**
@@ -99,8 +99,8 @@ function runGains(m: AutomateMission): Record<string, number> {
       case 'eclats': return { essence: dungeonRunYield('eclats', N) }
       case 'noyau': return { noyau: dungeonRunYield('noyau', N) }
       case 'poussiere': return { poussiere: dungeonRunYield('poussiere', N) }
-      case 'sceaux': return { sceaux: 3 + 0.9 * N }
-      case 'orbes': return { orbes: 1 + 0.5 * N }
+      case 'sceaux': return { sceaux: dungeonKeyYield('sceaux', N) }
+      case 'orbes': return { orbes: dungeonKeyYield('orbes', N) }
       case 'xp': return { xp: 1200 * N * Math.pow(1.12, N) }
       // Cache du Pilleur : le butin est RECYCLÉ par l'automate (pas de stuff hors jeu actif).
       case 'stuff': return { essence: (3 + N / 2) * 3 * Math.pow(butinMinTier(N) + 1, 1.8) }

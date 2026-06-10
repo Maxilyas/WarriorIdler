@@ -140,7 +140,7 @@ export const DUNGEON_MODIFIERS: DungeonModifier[] = [
   { id: 'colossal', name: 'Colossal', description: '+40% de PV des ennemis.', hpMult: 1.4 },
   { id: 'blinde', name: 'Blindé', description: 'Armure doublée.', armorMult: 2 },
   { id: 'enrage', name: 'Enragé', description: 'Les ennemis frappent de plus en plus fort avec le temps.', enrageRampPerSec: 0.08 },
-  { id: 'reflectif', name: 'Réfléchissant', description: 'Renvoie 12% des dégâts que tu infliges.', reflectPct: 0.12 },
+  { id: 'reflectif', name: 'Réfléchissant', description: 'Renvoie une partie de tes dégâts (capé à 10% de tes PV max par seconde).', reflectPct: 0.10 },
   { id: 'erudit', name: 'Érudit', description: '+100% XP, mais ennemis plus coriaces.', xpMult: 2, hpMult: 1.5 },
   { id: 'avare', name: 'Avare', description: 'Aucun or, mais davantage d\'objets rares.', noGold: true, rareBonus: 1 },
 ]
@@ -185,9 +185,9 @@ const TRAIT_CFG: Record<DungeonTrait, TraitCfg> = {
   regen: { hp: 1.1, dmg: 1.0, armor: 1, pack: 2, regen: 0.03 },
 }
 
-/** Nombre de combats d'un donjon de niveau N. */
+/** Nombre de combats d'un donjon de niveau N — court et dense (v0.21 : 2 à 4, fini les 4+N). */
 export function dungeonFights(level: number): number {
-  return 4 + level
+  return Math.min(4, 2 + Math.floor(level / 4))
 }
 
 /** ilvl du butin du coffre (en avance sur le farm normal pour récompenser le défi). */
@@ -218,6 +218,16 @@ export const DUNGEON_YIELD_PERFIGHT_FRAC = 0.4
 export function dungeonRunYield(reward: DungeonReward, level: number): number {
   const y = DUNGEON_YIELD[reward]
   return y ? Math.round(y.base * Math.pow(y.growth, level - 1)) : 0
+}
+
+/**
+ * Rendement TOTAL en CLÉS (Sceaux / Orbes) d'un run — v0.21 : mappé comme les autres ressources
+ * (40% au fil des combats, 60% au coffre). Avant, le fil de combats était indexé sur l'XP du pack
+ * (exponentielle) et le coffre sur une formule linéaire → le Vortex crachait tout PENDANT le run
+ * et un coffre ridicule. C'est désormais l'inverse : le coffre est le gros morceau.
+ */
+export function dungeonKeyYield(reward: 'sceaux' | 'orbes', level: number): number {
+  return reward === 'sceaux' ? 3 + 0.9 * level : 1 + 0.5 * level
 }
 
 /** Décalage de chance de rareté du coffre (généreux). */
