@@ -276,6 +276,13 @@ export function randomUniqueInstance(): UniqueInstance {
   return { id: def.id, rank: 1 }
 }
 
+/** Tire un effet unique PAS ENCORE découvert (Coffre du Collectionneur) ; Grimoire complet → aléatoire. */
+export function undiscoveredUnique(codex: string[]): UniqueInstance {
+  const pool = UNIQUE_EFFECTS.filter((u) => !codex.includes(u.id))
+  const def = pool.length ? pool[Math.floor(Math.random() * pool.length)] : UNIQUE_EFFECTS[Math.floor(Math.random() * UNIQUE_EFFECTS.length)]
+  return { id: def.id, rank: 1 }
+}
+
 /** Essences gagnées en recyclant un objet portant cet unique. */
 export function essenceGain(rarityTier: number, rank: number): number {
   return Math.max(1, Math.floor(rarityTier / 2) + Math.floor(rank / 2))

@@ -46,8 +46,8 @@ import {
 import { RARITIES, RARITY_LIST } from './rarities'
 import { SECONDARY_STATS } from './stats'
 import { DAMAGE_TYPE_LIST, DAMAGE_TYPES, profileDamageMult, type DamageProfile } from './damage'
-import { equipSlotsForType, slotAccepts } from './slots'
-import { essenceGain, upgradeCost, insertCost, getUnique, UNIQUE_MAX_RANK, randomUniqueInstance } from './uniques'
+import { equipSlotsForType, slotAccepts, EQUIP_SLOTS } from './slots'
+import { essenceGain, upgradeCost, insertCost, getUnique, UNIQUE_MAX_RANK, randomUniqueInstance, undiscoveredUnique } from './uniques'
 import {
   generateDungeon, makeDungeonPack, dungeonIlvl, dungeonLuckTier, dungeonRegen, getDungeonDef,
   butinMinTier, butinMaxTier, butinOverChance, butinOverTier, BUTIN_RARITY_CAP,
@@ -116,6 +116,12 @@ export interface ChestReward {
   gemDust?: number
   /** 💎 Gemme de condition trouvée dans le coffre (La Géode — aile choisie). */
   gem?: { id: CondGemId; rank: number }
+}
+
+/** Coffre du Destin 🎭 : objets révélés dont UN SEUL sera gardé (les autres sont recyclés). */
+export interface ChoiceReward {
+  name: string
+  items: Item[]
 }
 
 export const SCEAU_COST = { noyau: 3, eclats: 600 }
@@ -249,6 +255,12 @@ interface SaveData {
   dungeonProgress: DungeonProgress
   dungeon: ActiveDungeon | null
   pendingChest: ChestReward | null
+  /** Coffre du Destin en attente de choix (3 objets révélés, un seul gardé). */
+  pendingChoice: ChoiceReward | null
+  /** Horodatage du dernier Coffre du Jour 🗓️ (gratuit, cooldown réel). */
+  lastFreeBox: number
+  /** Karma du marchand 🍀 : coffres ouverts sans jackpot (bonus de jackpot croissant, reset au proc). */
+  boxPity: number
   orbes: number
   fragments: number
   /** Éclat cosmique 💫 — ressource ultra-rare des raids. */
@@ -358,9 +370,12 @@ interface GameState extends SaveData {
   buyUpgrade: (id: string) => void
   refreshShop: () => void
   buyShopItem: (itemId: string) => void
-  buyEclats: (qty?: number) => void
-  buyResource: (kind: 'sceau' | 'orbe', qty?: number) => void
-  mysteryBox: (tier: number) => void
+  /** Échange générique de ressources au marché (taux taxés — voir MARKET_TRADES). */
+  tradeResource: (tradeId: string, times?: number) => void
+  /** Achète un coffre. `qty` ×5 = achat en gros (-10% d'or) ; `element` requis pour le coffre élémentaire. */
+  mysteryBox: (id: number, opts?: { qty?: number; element?: DamageType }) => void
+  /** Coffre du Destin : garde l'objet à cet index, recycle les autres. */
+  chooseFromChoice: (index: number) => void
   recruitCharacter: () => void
   reset: () => void
 }
@@ -502,6 +517,9 @@ function freshSave(): SaveData {
     dungeonProgress: emptyDungeonProgress(),
     dungeon: null,
     pendingChest: null,
+    pendingChoice: null,
+    lastFreeBox: 0,
+    boxPity: 0,
     orbes: 0,
     fragments: 0,
     cosmic: 0,
@@ -675,6 +693,9 @@ function sanitize(save: SaveData): SaveData {
   }
   if (typeof save.recycleThreshold !== 'number') save.recycleThreshold = 4
   if (typeof save.autoRecycle !== 'boolean') save.autoRecycle = false
+  if (typeof save.lastFreeBox !== 'number') save.lastFreeBox = 0
+  if (typeof save.boxPity !== 'number') save.boxPity = 0
+  if (save.pendingChoice && !Array.isArray(save.pendingChoice.items)) save.pendingChoice = null
   if (typeof save.killsSinceEpic !== 'number') save.killsSinceEpic = 0
   if (typeof save.lastSeen !== 'number') save.lastSeen = Date.now()
   if (typeof save.lastShopRefresh !== 'number') save.lastShopRefresh = 0
@@ -865,6 +886,9 @@ function persist(s: GameState) {
     dungeonProgress: s.dungeonProgress,
     dungeon: s.dungeon,
     pendingChest: s.pendingChest,
+    pendingChoice: s.pendingChoice,
+    lastFreeBox: s.lastFreeBox,
+    boxPity: s.boxPity,
     orbes: s.orbes,
     fragments: s.fragments,
     cosmic: s.cosmic,
@@ -952,8 +976,59 @@ function refreshGlobals(upgrades: Record<string, number>) {
 const SHOP_SIZE = 6
 /** Intervalle de rotation de l'échoppe : 1 h réelle (indépendant du combat). */
 export const SHOP_INTERVAL_MS = 60 * 60 * 1000
-// L'or est désormais rare (le combat classique n'en donne presque plus) → ces taux sont de vrais puits.
-export const EXCHANGE_RATES = { eclatsBatch: 100, eclatGoldCost: 1500, sceauGold: 8000, orbeGold: 25000 }
+// ---- Comptoir d'échange (v0.23) : troc de ressources ENTRE ELLES, taxé fort ----
+
+export type TradeRes = 'gold' | 'essence' | 'noyau' | 'poussiere' | 'sceaux' | 'orbes' | 'fragments' | 'cosmic' | 'gemDust'
+
+export const TRADE_RES_META: Record<TradeRes, { icon: string; name: string }> = {
+  gold: { icon: '💰', name: 'or' },
+  essence: { icon: '♦', name: 'éclats' },
+  noyau: { icon: '💠', name: 'noyaux' },
+  poussiere: { icon: '🌌', name: 'poussière d\'étoile' },
+  sceaux: { icon: '🔑', name: 'sceaux' },
+  orbes: { icon: '🔮', name: 'orbes' },
+  fragments: { icon: '✨', name: 'fragments' },
+  cosmic: { icon: '💫', name: 'éclats cosmiques' },
+  gemDust: { icon: '🔹', name: 'poussière de gemme' },
+}
+
+export interface ResourceTrade {
+  id: string
+  from: { res: TradeRes; amt: number }
+  to: { res: TradeRes; amt: number }
+  /** Record (bestStage) requis pour voir l'offre (calé sur l'arrivée de la ressource dans le jeu). */
+  unlockStage?: number
+}
+
+/**
+ * Taux volontairement DÉFAVORABLES (aller-retour ≈ ÷4) : le comptoir dépanne, il n'est jamais
+ * l'optimum. La spécialisation ◈ Transmutateur de l'Alchimiste garde de bien meilleurs taux sur
+ * les paires qu'elle couvre. L'or n'est JAMAIS une sortie (pas de planche à billets).
+ */
+export const MARKET_TRADES: ResourceTrade[] = [
+  // Or → ressources (puits d'or, repris de l'ancien onglet)
+  { id: 'goldEclats', from: { res: 'gold', amt: 1500 }, to: { res: 'essence', amt: 100 } },
+  { id: 'goldSceau', from: { res: 'gold', amt: 8000 }, to: { res: 'sceaux', amt: 1 }, unlockStage: 5 },
+  { id: 'goldOrbe', from: { res: 'gold', amt: 25000 }, to: { res: 'orbes', amt: 1 }, unlockStage: 50 },
+  // Matériaux de craft (le marchand taxe plus fort que l'Alchimiste ◈ Transmutateur)
+  { id: 'eclatsNoyau', from: { res: 'essence', amt: 500 }, to: { res: 'noyau', amt: 1 }, unlockStage: 18 },
+  { id: 'noyauEclats', from: { res: 'noyau', amt: 2 }, to: { res: 'essence', amt: 250 }, unlockStage: 18 },
+  { id: 'eclatsPoussiere', from: { res: 'essence', amt: 700 }, to: { res: 'poussiere', amt: 1 }, unlockStage: 45 },
+  { id: 'poussiereEclats', from: { res: 'poussiere', amt: 1 }, to: { res: 'essence', amt: 170 }, unlockStage: 45 },
+  { id: 'noyauPoussiere', from: { res: 'noyau', amt: 5 }, to: { res: 'poussiere', amt: 1 }, unlockStage: 45 },
+  // Clés : passerelle Sceaux ↔ Orbes
+  { id: 'sceauxOrbe', from: { res: 'sceaux', amt: 4 }, to: { res: 'orbes', amt: 1 }, unlockStage: 50 },
+  { id: 'orbeSceaux', from: { res: 'orbes', amt: 1 }, to: { res: 'sceaux', amt: 2 }, unlockStage: 50 },
+  // Gemmes : appoint de poussière 🔹 pour le Joaillier
+  { id: 'eclatsGemDust', from: { res: 'essence', amt: 400 }, to: { res: 'gemDust', amt: 25 }, unlockStage: 30 },
+  // Trésors de raid : Fragments ↔ Éclat cosmique
+  { id: 'fragmentsCosmic', from: { res: 'fragments', amt: 8 }, to: { res: 'cosmic', amt: 1 }, unlockStage: 50 },
+  { id: 'cosmicFragments', from: { res: 'cosmic', amt: 1 }, to: { res: 'fragments', amt: 4 }, unlockStage: 50 },
+]
+
+export function getMarketTrade(id: string): ResourceTrade | undefined {
+  return MARKET_TRADES.find((t) => t.id === id)
+}
 export interface MysteryBox {
   id: number
   name: string
@@ -980,11 +1055,41 @@ export interface MysteryBox {
   noyau?: number
   poussiere?: number
   fragments?: number
+  /** Récompenses en CLÉS (Trousseau du Pilleur). */
+  sceaux?: number
+  orbes?: number
+  /** 🔹 Poussière de gemme (base — scalée sur le bestStage à l'achat). */
+  gemDust?: number
+  /** Chance qu'une gemme de CONDITION (rang 1) accompagne le coffre. */
+  gemChance?: number
+  /** Coffre du Jour 🗓️ : gratuit, un par FREE_BOX_COOLDOWN_MS. */
+  free?: boolean
+  /** Coffre du Destin 🎭 : révèle `count` objets, le joueur n'en GARDE qu'un (les autres recyclés). */
+  choice?: boolean
+  /** Coffre élémentaire 🔥 : l'élément est choisi à l'achat → ligne « +% dégâts du type » garantie. */
+  elementPick?: boolean
+  /** Coffre du Collectionneur 📖 : effet unique JAMAIS DÉCOUVERT garanti (complète le Grimoire). */
+  collector?: boolean
+  /** Coffre du Maillon Faible 🧩 : cible l'emplacement équipé le plus faible du perso actif. */
+  weakest?: boolean
+  /** Coffre Maudit 🎲 : 75% contenu DOUBLÉ, 25% un seul objet Commun. */
+  cursed?: boolean
   /** Coût SUPPLÉMENTAIRE en ressources de raid (les coffres d'élite ne s'achètent pas qu'avec de l'or). */
   costFragments?: number
   costCosmic?: number
   desc: string
 }
+
+/** Coffre du Jour 🗓️ : un gratuit toutes les 22 h (réelles). */
+export const FREE_BOX_COOLDOWN_MS = 22 * 3600 * 1000
+/** Achat en gros 📦 : ×5 d'un coup → -10% sur l'or (pas sur les ressources de raid). */
+export const BOX_BULK_QTY = 5
+export const BOX_BULK_DISCOUNT = 0.9
+/** Karma du marchand 🍀 : +1% de jackpot par coffre sans jackpot, plafonné à +25% ; reset au proc. */
+export const BOX_PITY_STEP = 0.01
+export const BOX_PITY_CAP = 0.25
+/** Coffre Maudit 🎲 : chance que la malédiction soit déjouée (contenu doublé). */
+export const CURSED_WIN_CHANCE = 0.75
 
 // Catégories d'objets pour les coffres ciblés par slot.
 const BOX_WEAPONS: ItemType[] = ['armePrincipale', 'armeSecondaire']
@@ -1015,6 +1120,15 @@ export const MYSTERY_BOXES: MysteryBox[] = [
   { id: 9, name: 'Coffre légendaire', icon: '🟠', gold: 800000, count: 4, minTier: 8, maxTier: 12, jackpot: 0.07, eclats: 1500, noyau: 5, poussiere: 3, costFragments: 2, desc: 'Mythique → Éternel. Exige des Fragments de raid.' },
   { id: 10, name: 'Coffre cosmique', icon: '🌟', gold: 2500000, count: 5, minTier: 10, maxTier: 14, jackpot: 0.09, guaranteeUnique: true, eclats: 4000, noyau: 10, poussiere: 12, fragments: 2, costFragments: 6, desc: 'Ascendant → Abyssal, 1 unique garanti. Exige des Fragments.' },
   { id: 11, name: 'Coffre du Néant', icon: '🕳️', gold: 10000000, count: 6, minTier: 12, maxTier: 16, jackpot: 0.13, guaranteeUnique: true, eclats: 10000, noyau: 25, poussiere: 35, fragments: 8, costFragments: 18, costCosmic: 3, desc: 'Le pari ultime : exige Fragments ✨ ET Éclats cosmiques 💫 (donc des raids).' },
+  // --- Nouveautés v0.23 (les ids sont des INDEX : on n'insère jamais, on AJOUTE) ---
+  { id: 12, name: 'Coffre du Jour', icon: '🗓️', gold: 0, free: true, count: 1, minTier: 4, maxTier: 8, jackpot: 0.06, eclats: 150, desc: 'GRATUIT toutes les 22 h. Un objet (Rare → Patrimoine) + des éclats. Reviens demain !' },
+  { id: 13, name: 'Coffre Maudit', icon: '🎲', gold: 60000, count: 2, minTier: 6, maxTier: 10, jackpot: 0.08, cursed: true, desc: '75% : contenu DOUBLÉ (4 objets). 25% : la malédiction ne laisse qu\'un objet Commun.' },
+  { id: 14, name: 'Coffre élémentaire', icon: '🔥', gold: 35000, count: 2, minTier: 5, maxTier: 9, jackpot: 0.05, elementPick: true, desc: 'Choisis un ÉLÉMENT : ligne « +% dégâts du type » garantie sur chaque objet (armes typées).' },
+  { id: 15, name: 'Trousseau du Pilleur', icon: '🗝️', gold: 70000, count: 0, minTier: 1, maxTier: 1, jackpot: 0, sceaux: 5, orbes: 2, desc: '5 Sceaux 🔑 + 2 Orbes 🔮 d\'un coup — moins cher qu\'à l\'unité.' },
+  { id: 16, name: 'Coffre du Lapidaire', icon: '💎', gold: 90000, count: 0, minTier: 1, maxTier: 1, jackpot: 0, gemDust: 220, gemChance: 0.45, desc: 'Poussière de gemme 🔹 (scalée sur ton record) + 45% de gemme de condition.' },
+  { id: 17, name: 'Coffre du Destin', icon: '🎭', gold: 120000, count: 3, minTier: 6, maxTier: 11, jackpot: 0.07, choice: true, desc: 'Révèle 3 objets : tu n\'en GARDES qu\'UN, les deux autres sont recyclés en éclats.' },
+  { id: 18, name: 'Coffre du Maillon Faible', icon: '🧩', gold: 150000, count: 2, minTier: 7, maxTier: 11, jackpot: 0.06, weakest: true, desc: 'Analyse ton équipement et cible ton EMPLACEMENT le plus faible (vide ou en retard).' },
+  { id: 19, name: 'Coffre du Collectionneur', icon: '📖', gold: 300000, count: 1, minTier: 8, maxTier: 12, jackpot: 0.06, collector: true, costFragments: 3, desc: 'Un objet portant un effet unique JAMAIS DÉCOUVERT — complète le Grimoire.' },
 ]
 
 /** Prix d'achat d'un objet en échoppe (croît FORTEMENT avec la rareté → vrai puits d'or). */
@@ -1033,6 +1147,17 @@ function generateShop(bestStage: number, luckBonus: number): Item[] {
   const out: Item[] = []
   for (let i = 0; i < SHOP_SIZE; i++) out.push(generateItem({ ilvl, luckTier: luck }))
   return out
+}
+
+/** Type d'objet de l'emplacement le plus FAIBLE d'un perso (vide en priorité, sinon score minimal). */
+function weakestSlotType(c: Character): ItemType {
+  let worst: { score: number; type: ItemType } | null = null
+  for (const slot of EQUIP_SLOTS) {
+    const it = c.equipment[slot.id]
+    const score = it ? itemScore(it) : -1 // un emplacement vide est toujours le plus faible
+    if (!worst || score < worst.score) worst = { score, type: slot.accepts }
+  }
+  return worst!.type
 }
 
 /** Affinité de drop : celle d'un membre d'équipe au hasard (nourrit tous les builds). */
@@ -3366,70 +3491,158 @@ export const useGame = create<GameState>((set, get) => {
       set(next)
     },
 
-    buyEclats: (qty = 1) => {
+    tradeResource: (tradeId, times = 1) => {
       const s = get()
-      const n = Math.max(1, Math.floor(qty))
-      const c = EXCHANGE_RATES.eclatGoldCost * n
-      if (s.gold < c) return
-      const next = { ...s, gold: s.gold - c, essence: s.essence + EXCHANGE_RATES.eclatsBatch * n, log: pushLog(s.log, `Acheté ${EXCHANGE_RATES.eclatsBatch * n} éclats (-${c.toLocaleString('fr-FR')} or).`, 'gold') }
+      const t = getMarketTrade(tradeId)
+      if (!t) return
+      if (s.bestStage < (t.unlockStage ?? 0)) return
+      const n = Math.max(1, Math.floor(times))
+      const cost = t.from.amt * n
+      const gain = t.to.amt * n
+      const pool: Record<TradeRes, number> = {
+        gold: s.gold, essence: s.essence, noyau: s.noyau, poussiere: s.poussiere,
+        sceaux: s.sceaux, orbes: s.orbes, fragments: s.fragments, cosmic: s.cosmic, gemDust: s.gemDust,
+      }
+      if (pool[t.from.res] < cost) return
+      pool[t.from.res] -= cost
+      pool[t.to.res] += gain
+      const fm = TRADE_RES_META[t.from.res]
+      const tm = TRADE_RES_META[t.to.res]
+      const next = {
+        ...s,
+        gold: pool.gold, essence: pool.essence, noyau: pool.noyau, poussiere: pool.poussiere,
+        sceaux: pool.sceaux, orbes: pool.orbes, fragments: pool.fragments, cosmic: pool.cosmic, gemDust: pool.gemDust,
+        log: pushLog(s.log, `🔄 Échange : ${fm.icon} ${cost.toLocaleString('fr-FR')} → ${tm.icon} ${gain.toLocaleString('fr-FR')}.`, 'gold'),
+      }
       persist(next)
       set(next)
     },
 
-    buyResource: (kind, qty = 1) => {
+    mysteryBox: (id, opts = {}) => {
       const s = get()
-      const n = Math.max(1, Math.floor(qty))
-      if (kind === 'sceau') {
-        const c = EXCHANGE_RATES.sceauGold * n
-        if (s.gold < c) return
-        const next = { ...s, gold: s.gold - c, sceaux: s.sceaux + n, log: pushLog(s.log, `Sceau de faille ×${n} acheté (-${c.toLocaleString('fr-FR')} or).`, 'gold') }
-        persist(next)
-        set(next)
-      } else {
-        const c = EXCHANGE_RATES.orbeGold * n
-        if (s.gold < c) return
-        const next = { ...s, gold: s.gold - c, orbes: s.orbes + n, log: pushLog(s.log, `Orbe de raid ×${n} achetée (-${c.toLocaleString('fr-FR')} or).`, 'gold') }
-        persist(next)
-        set(next)
-      }
-    },
+      const box = MYSTERY_BOXES[id]
+      if (!box || s.pendingChest || s.pendingChoice) return
+      // Coffre du Jour : gratuit, mais un seul par fenêtre de 22 h.
+      if (box.free && Date.now() - s.lastFreeBox < FREE_BOX_COOLDOWN_MS) return
+      if (box.elementPick && !opts.element) return
+      // Achat en gros : ×5 d'un coup → -10% d'or. (Pas de gros sur le gratuit / le Destin.)
+      const qty = box.free || box.choice ? 1 : Math.max(1, Math.min(BOX_BULK_QTY, Math.round(opts.qty ?? 1)))
+      const goldCost = Math.round(box.gold * qty * (qty >= BOX_BULK_QTY ? BOX_BULK_DISCOUNT : 1))
+      const fragCost = (box.costFragments ?? 0) * qty
+      const cosmicCost = (box.costCosmic ?? 0) * qty
+      if (s.gold < goldCost || s.fragments < fragCost || s.cosmic < cosmicCost) return
 
-    mysteryBox: (tier) => {
-      const s = get()
-      const box = MYSTERY_BOXES[tier]
-      if (!box || s.gold < box.gold || s.pendingChest) return
-      // Les coffres d'élite exigent en plus des ressources de raid (pas d'or seul).
-      if (s.fragments < (box.costFragments ?? 0) || s.cosmic < (box.costCosmic ?? 0)) return
       const ilvl = Math.max(1, stageIlvl(s.bestStage))
-      const items: Item[] = []
-      for (let i = 0; i < box.count; i++) {
-        const rarity = rollBoxRarity(box.minTier, box.maxTier, box.jackpot)
-        const type = box.type ?? (box.types ? box.types[Math.floor(Math.random() * box.types.length)] : undefined)
-        items.push(generateItem({
+      // Karma du marchand 🍀 : la malchance accumulée gonfle la chance de jackpot, reset au proc.
+      const pityBonus = Math.min(BOX_PITY_CAP, s.boxPity * BOX_PITY_STEP)
+      let jackpotHit = false
+      // Maillon Faible : cible l'emplacement le plus FAIBLE (vide ou au score le plus bas) du perso actif.
+      const weakType = box.weakest ? weakestSlotType(s.characters[s.activeChar] ?? s.characters[0]) : undefined
+
+      const rollOne = (): Item => {
+        const proc = box.jackpot > 0 && Math.random() < Math.min(0.95, box.jackpot + pityBonus)
+        if (proc) jackpotHit = true
+        const rarity = rollBoxRarity(box.minTier, box.maxTier, proc ? 1 : 0)
+        const type = weakType ?? box.type ?? (box.types ? box.types[Math.floor(Math.random() * box.types.length)] : undefined)
+        return generateItem({
           ilvl, rarity, primaryBias: pickBias(s.characters),
           ...(box.primary ? { primary: box.primary } : {}),
           ...(type ? { type } : {}),
           ...(box.guaranteeAffix ? { forceStat: box.guaranteeAffix } : {}),
           ...(box.biasResist ? { biasResist: DAMAGE_TYPE_LIST[Math.floor(Math.random() * DAMAGE_TYPE_LIST.length)] } : {}),
-        }))
+          ...(opts.element ? { forceDmgType: opts.element, element: opts.element } : {}),
+        })
       }
+
+      const items: Item[] = []
+      let cursedWins = 0
+      let cursedFails = 0
+      for (let q = 0; q < qty; q++) {
+        if (box.cursed) {
+          // Coffre Maudit 🎲 : pile, contenu doublé ; face, un seul objet Commun.
+          if (Math.random() < CURSED_WIN_CHANCE) {
+            cursedWins++
+            for (let i = 0; i < box.count * 2; i++) items.push(rollOne())
+          } else {
+            cursedFails++
+            items.push(generateItem({ ilvl, rarity: 'commun', primaryBias: pickBias(s.characters) }))
+          }
+        } else {
+          for (let i = 0; i < box.count; i++) items.push(rollOne())
+        }
+      }
+      // Collectionneur 📖 : l'objet porte un effet unique JAMAIS DÉCOUVERT (complète le Grimoire).
+      if (box.collector && items.length) items[0].unique = undiscoveredUnique(s.codex)
       // Garantie d'unique : si aucun objet n'en a, on en pose un sur le meilleur.
       if (box.guaranteeUnique && !items.some((it) => it.unique)) {
         const best = items.reduce((a, b) => (RARITIES[b.rarity].tier > RARITIES[a.rarity].tier ? b : a), items[0])
         if (best) best.unique = randomUniqueInstance()
       }
-      const chest: ChestReward = {
-        dungeonName: box.name, level: 0, items, gold: 0, sceaux: 0,
-        eclats: box.eclats ?? 0, noyau: box.noyau ?? 0, poussiere: box.poussiere ?? 0, fragments: box.fragments ?? 0,
+
+      // Lapidaire 💎 : poussière de gemme scalée sur le record + chance de gemme de condition.
+      const gemDustGain = box.gemDust ? Math.round(box.gemDust * (1 + s.bestStage / 50)) * qty : 0
+      let gem: ChestReward['gem']
+      if (box.gemChance && Math.random() < 1 - Math.pow(1 - box.gemChance, qty)) {
+        const g = rollCondGem()
+        gem = { id: g.id, rank: 1 }
       }
-      const extraCost = `${box.costFragments ? ` -${box.costFragments} ✨` : ''}${box.costCosmic ? ` -${box.costCosmic} 💫` : ''}`
-      const next = {
+
+      // Le pity ne bouge que sur les coffres qui TIRENT des raretés (pas Trousseau/Lapidaire purs).
+      const rolled = !box.cursed ? box.count > 0 : true
+      const boxPity = rolled ? (jackpotHit ? 0 : s.boxPity + qty) : s.boxPity
+
+      const extraCost = `${fragCost ? ` -${fragCost} ✨` : ''}${cosmicCost ? ` -${cosmicCost} 💫` : ''}`
+      const bulk = qty > 1 ? ` ×${qty} (-10%)` : ''
+      const cursedNote = box.cursed ? (cursedFails && !cursedWins ? ' 🎲 Maudit !' : cursedWins && !cursedFails ? ' 🎲 Malédiction déjouée : contenu doublé !' : ' 🎲 Fortunes mêlées.') : ''
+      const logLine = box.free
+        ? `🗓️ Coffre du Jour ouvert — reviens dans 22 h !`
+        : `${box.name}${bulk} acheté (-${goldCost.toLocaleString('fr-FR')} or${extraCost}) !${cursedNote}`
+
+      const base = {
         ...s,
-        gold: s.gold - box.gold,
-        fragments: s.fragments - (box.costFragments ?? 0),
-        cosmic: s.cosmic - (box.costCosmic ?? 0),
-        pendingChest: chest,
-        log: pushLog(s.log, `${box.name} acheté (-${box.gold.toLocaleString('fr-FR')} or${extraCost}) !`, 'gold'),
+        gold: s.gold - goldCost,
+        fragments: s.fragments - fragCost,
+        cosmic: s.cosmic - cosmicCost,
+        boxPity,
+        lastFreeBox: box.free ? Date.now() : s.lastFreeBox,
+        log: pushLog(s.log, logLine, 'gold'),
+      }
+      // Coffre du Destin 🎭 : les objets partent dans le modal de CHOIX (un seul sera gardé).
+      const next = box.choice
+        ? { ...base, pendingChoice: { name: box.name, items } }
+        : {
+            ...base,
+            pendingChest: {
+              dungeonName: box.name, level: 0, items, gold: 0,
+              sceaux: (box.sceaux ?? 0) * qty, orbes: (box.orbes ?? 0) * qty,
+              eclats: (box.eclats ?? 0) * qty, noyau: (box.noyau ?? 0) * qty,
+              poussiere: (box.poussiere ?? 0) * qty, fragments: (box.fragments ?? 0) * qty,
+              gemDust: gemDustGain, gem,
+            } satisfies ChestReward,
+          }
+      persist(next)
+      set(next)
+    },
+
+    chooseFromChoice: (index) => {
+      const s = get()
+      const pc = s.pendingChoice
+      if (!pc) return
+      const chosen = pc.items[index]
+      if (!chosen) return
+      let essence = s.essence
+      let poussiere = s.poussiere
+      for (let i = 0; i < pc.items.length; i++) {
+        if (i === index) continue
+        essence += recycleValue(pc.items[i])
+        poussiere += recyclePoussiere(pc.items[i])
+      }
+      const inventory = [chosen, ...s.inventory].slice(0, invMax)
+      const next = {
+        ...s, essence, poussiere, inventory,
+        codex: discoverFromItems(s.codex, [chosen]),
+        pendingChoice: null,
+        log: pushLog(s.log, `🎭 Destin scellé : ${chosen.name} gardé, le reste recyclé en éclats.`, 'loot'),
       }
       persist(next)
       set(next)

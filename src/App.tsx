@@ -14,6 +14,7 @@ import { GrimoirePanel } from './components/GrimoirePanel'
 import { ResetButton } from './components/CharacterPanel'
 import { Sheet } from './components/ui'
 import { ChestModal } from './components/ChestModal'
+import { ChoiceModal } from './components/ChoiceModal'
 import { WelcomeBackModal } from './components/WelcomeBackModal'
 
 const TICK_MS = 200
@@ -283,6 +284,7 @@ export default function App() {
       )}
 
       <ChestModal />
+      <ChoiceModal />
       <WelcomeBackModal />
     </div>
   )
