@@ -209,7 +209,10 @@ export interface Item {
   /** Type de dégâts de base (uniquement sur l'arme principale). */
   damageType?: DamageType
   unique?: UniqueInstance
-  /** Gemmes serties (le nombre de châsses dépend de la rareté — voir gems.ts). */
+  /** Nombre de CHÂSSES (sockets) — roulé à la génération, RARE par design (voir gems.ts rollSockets).
+   *  Absent sur l'ancien stuff → l'ancienne règle déterministe par rareté s'applique (grandfather). */
+  sockets?: number
+  /** Gemmes serties (≤ `sockets`). */
   gems?: GemInstance[]
   /** Enchantement runique (id du registre enchants.ts) — une seule rune par pièce. */
   enchant?: string

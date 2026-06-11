@@ -7,6 +7,7 @@ import { EQUIP_SLOTS, ITEM_TYPES, equipSlotsForType, slotAccepts } from '../game
 import { RARITIES, RARITY_LIST } from '../game/rarities'
 import { itemScore, itemHasRareStat, itemStatBlock } from '../game/items'
 import { PRIMARY_META, SECONDARY_META, SECONDARY_STATS } from '../game/stats'
+import { getCondGem } from '../game/condGems'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from '../game/damage'
 import { equipDelta, type EquipDelta } from '../game/character'
 import { rarityTextStyle, rarityNameClass } from './rarityStyle'
@@ -172,6 +173,9 @@ export function StuffScreen() {
             const item = equipment[slot.id]
             const rarity = item ? RARITIES[item.rarity] : null
             const active = selectedSlot === slot.id
+            // Gemmes serties : un objet gemmé est un NET AVANTAGE → on le fait SORTIR DU LOT (halo).
+            const gems = item?.gems ?? []
+            const gemColor = gems.length ? getCondGem(gems[0].cond ?? '')?.color ?? '#a78bfa' : null
             return (
               <button
                 key={slot.id}
@@ -189,8 +193,27 @@ export function StuffScreen() {
                   'group relative rounded-lg border px-2 py-1.5 text-left transition-colors ' +
                   (active ? 'border-white/40 bg-white/10' : 'border-slate-800 hover:bg-white/5')
                 }
-                style={item && rarity ? { borderColor: rarity.color + '55' } : undefined}
+                style={item && rarity ? { borderColor: gemColor ?? rarity.color + '55', ...(gemColor ? { boxShadow: `0 0 9px 0 ${gemColor}aa` } : {}) } : undefined}
               >
+                {/* Gemme(s) INCRUSTÉE(S) dans le coin haut-droit, lumineuse(s) — l'objet brille. */}
+                {gems.length > 0 && (
+                  <span className="pointer-events-none absolute -right-1.5 -top-1.5 flex gap-0.5">
+                    {gems.map((g, i) => {
+                      const cg = g.cond ? getCondGem(g.cond) : undefined
+                      const c = cg?.color ?? '#a78bfa'
+                      return (
+                        <span
+                          key={i}
+                          title={cg ? `Gemme : ${cg.name}` : 'Gemme sertie'}
+                          className="flex h-4 w-4 animate-pulse items-center justify-center rounded-full text-[9px] leading-none"
+                          style={{ background: c + '33', border: `1px solid ${c}`, boxShadow: `0 0 6px 1px ${c}, inset 0 0 2px ${c}` }}
+                        >
+                          {cg?.icon ?? '💎'}
+                        </span>
+                      )
+                    })}
+                  </span>
+                )}
                 <div className="text-[9px] uppercase tracking-wide text-slate-500">{slot.name}</div>
                 {item ? (
                   <div className="flex items-center gap-1">

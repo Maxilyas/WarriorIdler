@@ -28,7 +28,8 @@ import { rarityTextStyle, rarityCardStyle, rarityNameClass } from './rarityStyle
 function affixLabel(a: Affix): { name: string; color: string; pct: boolean } {
   if (a.kind === 'stat' && a.stat) { const m = ALL_STAT_META[a.stat]; return { name: m.name, color: m.color, pct: false } }
   if (a.kind === 'dmgType' && a.type) { const m = DAMAGE_TYPES[a.type]; return { name: `Dégâts ${m.name}`, color: m.color, pct: true } }
-  if (a.kind === 'resist' && a.type) { const m = DAMAGE_TYPES[a.type]; return { name: `Résist. ${m.name}`, color: m.color, pct: true } }
+  // v0.24 : la résistance est en POINTS (plus en %) → pas de suffixe « % ».
+  if (a.kind === 'resist' && a.type) { const m = DAMAGE_TYPES[a.type]; return { name: `Résist. ${m.name}`, color: m.color, pct: false } }
   return { name: '?', color: '#94a3b8', pct: false }
 }
 

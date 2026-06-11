@@ -83,7 +83,7 @@ export const DUNGEONS: Record<DungeonId, DungeonDef> = {
     id: 'geode', name: 'La Géode', icon: '🔹', color: '#38bdf8', reward: 'gemmes',
     lore: 'Une caverne aux mille facettes, divisée en trois ailes cristallines — une par famille de gemme. Choisis ton aile : la poussière est garantie, la gemme se mérite.',
     trait: 'armure', traitLabel: 'Golems cristallins blindés : sans Pénétration, ton DPS s\'effondre.',
-    element: 'froid', unlockStage: 30, sceauCost: 2,
+    element: 'froid', unlockStage: 50, sceauCost: 2,
   },
   orbes: {
     id: 'orbes', name: 'Vortex des Orbes', icon: '🔮', color: '#e599f7', reward: 'orbes',

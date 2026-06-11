@@ -3,6 +3,7 @@ import { RARITIES, RARITY_LIST, rollRarity } from './rarities'
 import { RARE_STATS } from './stats'
 import { ITEM_TYPES } from './slots'
 import { rollUnique, instanceMods } from './uniques'
+import { rollSockets } from './gems'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from './damage'
 
 const ITEM_TYPE_LIST: ItemType[] = Object.keys(ITEM_TYPES) as ItemType[]
@@ -218,6 +219,7 @@ export function generateItem(opts: GenerateOptions): Item {
     endurance,
     orientation,
     affixes,
+    sockets: rollSockets(rarity.tier), // v0.25 : châsses RARES (roulées), plus déterministes par rareté
     ...(damageType ? { damageType } : {}),
     ...(unique ? { unique } : {}),
   }
