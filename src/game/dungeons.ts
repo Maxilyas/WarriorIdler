@@ -77,7 +77,7 @@ export const DUNGEONS: Record<DungeonId, DungeonDef> = {
     id: 'butin', name: 'Cache du Pilleur', icon: '🎒', color: '#a78bfa', reward: 'stuff',
     lore: 'Le repaire d\'un seigneur-voleur, gardé par ses lieutenants d\'élite. Le butin monte en rareté avec le niveau, jusqu\'à Artefact — au-delà, seul un tirage infime perce le voile (Éternel max). Les raretés cosmiques sont l\'apanage des raids.',
     trait: 'elite', traitLabel: 'Lieutenants d\'élite coriaces → DPS soutenu et Dégâts vs Boss.',
-    element: 'ombre', unlockStage: 24, sceauCost: 1,
+    element: 'ombre', unlockStage: 40, sceauCost: 1,
   },
   geode: {
     id: 'geode', name: 'La Géode', icon: '🔹', color: '#38bdf8', reward: 'gemmes',
@@ -89,7 +89,7 @@ export const DUNGEONS: Record<DungeonId, DungeonDef> = {
     id: 'orbes', name: 'Vortex des Orbes', icon: '🔮', color: '#e599f7', reward: 'orbes',
     lore: 'Un maelström où se condensent les Orbes de raid. Y pénétrer exige de sacrifier une poignée de Sceaux.',
     trait: 'pack', traitLabel: 'Nuées denses → privilégie le cleave.',
-    element: 'arcane', unlockStage: 30, sceauCost: 10,
+    element: 'arcane', unlockStage: 50, sceauCost: 10,
   },
   poussiere: {
     id: 'poussiere', name: 'Observatoire Stellaire', icon: '🌌', color: '#748ffc', reward: 'poussiere',
@@ -132,9 +132,11 @@ export function geodeGemRank(level: number): number {
  * Au-delà d'Artefact, seul le tirage « au-delà du voile » perce — jusqu'à Éternel max.
  */
 export const BUTIN_RARITY_CAP = 7 // Artefact — plafond pratique de la fenêtre normale
+// v0.25 : la Cache se débloque au palier 40 (joueur déjà ~full Légendaire au farm) → elle doit être
+// RELEVANTE dès le rang 1. Pic Rare au rang 1, glisse vers Artefact (~niv 9), feeder du raid T1.
 export function cacheRarityWindow(level: number): { floor: number; peak: number; cap: number } {
-  const peak = Math.max(2, Math.min(6, 2 + Math.floor(level / 4)))
-  return { floor: Math.max(1, peak - 2), peak, cap: Math.min(BUTIN_RARITY_CAP, peak + 1) }
+  const peak = Math.max(4, Math.min(7, 4 + Math.floor(level / 3)))
+  return { floor: Math.max(2, peak - 2), peak, cap: Math.min(BUTIN_RARITY_CAP, peak + 1) }
 }
 /** Plancher / plafond pratiques (affichage + rendement des automates). */
 export function butinMinTier(level: number): number {
@@ -264,7 +266,9 @@ export function dungeonFights(level: number): number {
  */
 export function dungeonIlvl(level: number, bestStage: number): number {
   const cap = Math.round(Math.max(1, bestStage) * 1.5 * 1.25) // stageIlvl(bestStage) × 1.25
-  return Math.min(Math.round(10 + level * 8), Math.max(20, cap))
+  // v0.25 : rang 1 ≈ iLvl 66 (la Cache débloquée au palier 40 doit valoir le coup), plafonné par le
+  // record (monter le PALIER reste le moteur ; le donjon garde une avance, pas une galaxie).
+  return Math.min(Math.round(46 + level * 20), Math.max(20, cap))
 }
 
 /**
@@ -308,14 +312,16 @@ export function dungeonLuckTier(level: number): number {
 }
 
 // Constantes d'équilibrage des donjons (à ajuster facilement).
-const EFF_STAGE_PER_LEVEL = 7 // sert aux RÉCOMPENSES (xp) et à l'armure → économie inchangée.
-// Scaling COMBAT (refonte) : PV/dégâts par NIVEAU de donjon DÉCOUPLÉS du nombre de combats, calés
-// sur une vraie courbe de progression (cf. npm run dungeon). Avant : effStage=level*7+combat avec
-// base 1.18/1.12 → PV ×3.18 ET dégâts ridicules en début de palier ET ×8.6 PV sur un run.
-const DUNGEON_HP_BASE = 3200       // PV d'un ennemi NORMAL, donjon niv 1, 1er combat (neutre)
-const DUNGEON_HP_PER_LEVEL = 1.42  // ×PV par niveau de donjon (montée douce → progression réelle)
-const DUNGEON_DMG_BASE = 389       // dégâts de base RELEVÉS (fini les dégâts ridicules au début)
-const DUNGEON_DMG_PER_LEVEL = 1.26 // ×dégâts par niveau (plus lent que les PV → la survie suit)
+const EFF_STAGE_PER_LEVEL = 7 // sert aux RÉCOMPENSES (xp) → économie inchangée.
+// v0.25 — difficulté de COMBAT ANCRÉE au palier de déblocage : le niv 1 d'un donjon ≈ son palier
+// d'ouverture (fini les donjons triviaux à fort unlockStage : Cache 40, Vortex 50, Observatoire 45),
+// puis +DUNGEON_STAGE_STEP paliers de farm par niveau. On calque la COURBE DE FARM (enemies.ts) →
+// PV/dégâts cohérents avec le reste du jeu, la survie suit (dmg 1.115 < hp 1.17).
+const DUNGEON_STAGE_STEP = 2       // paliers de farm gagnés par NIVEAU de donjon
+const FARM_HP_BASE = 40            // = makeEnemy (enemies.ts) : PV d'un normal au palier 1
+const FARM_HP_GROWTH = 1.17        // = makeEnemy : ×PV / palier
+const FARM_DMG_BASE = 7            // = makeEnemy : dégâts d'un normal au palier 1
+const FARM_DMG_GROWTH = 1.115      // = makeEnemy : ×dégâts / palier (plus lent → la survie suit)
 const DUNGEON_FIGHT_RAMP = 1.04    // ×PV & dégâts par combat DANS un run (rampe douce, pas un mur)
 const DUNGEON_BOSS_HP_MULT = 5     // le boss (dernier combat) reste un pic de PV
 
@@ -350,9 +356,11 @@ export function makeDungeonEnemy(
   }
 
   const lvl = level - 1
-  const effStage = level * EFF_STAGE_PER_LEVEL + fightIndex // récompenses (xp) + armure (économie inchangée)
-  // PV : montée modérée par NIVEAU (1.42) + rampe douce par COMBAT (1.04) → courbe de progression.
-  const hpBase = DUNGEON_HP_BASE * Math.pow(DUNGEON_HP_PER_LEVEL, lvl) * Math.pow(DUNGEON_FIGHT_RAMP, fightIndex)
+  const effStage = level * EFF_STAGE_PER_LEVEL + fightIndex // récompenses (xp) — économie inchangée
+  // Palier de farm EFFECTIF pour la DIFFICULTÉ : ancré au déblocage, +STEP paliers par niveau de donjon.
+  const combatStage = def.unlockStage + lvl * DUNGEON_STAGE_STEP
+  // PV : calqués sur la courbe de farm au palier effectif + rampe douce par COMBAT (1.04).
+  const hpBase = FARM_HP_BASE * Math.pow(FARM_HP_GROWTH, combatStage - 1) * Math.pow(DUNGEON_FIGHT_RAMP, fightIndex)
   const maxHp = Math.round(hpBase * (isBoss ? DUNGEON_BOSS_HP_MULT : 1) * hpMult)
   const isElite = cfg.elite && !isBoss
 
@@ -363,9 +371,9 @@ export function makeDungeonEnemy(
     name,
     maxHp,
     hp: maxHp,
-    armor: Math.round((10 + level * 10) * armorMult),
-    // Dégâts : base RELEVÉE + croissance par niveau plus lente que les PV (1.26 < 1.42) → survie suit.
-    damage: Math.round(DUNGEON_DMG_BASE * Math.pow(DUNGEON_DMG_PER_LEVEL, lvl) * Math.pow(DUNGEON_FIGHT_RAMP, fightIndex) * cfg.dmg * (isBoss ? 1.8 : 1)),
+    armor: Math.round(combatStage * 1.5 * armorMult), // = armure de farm (stage×1.5) au palier effectif
+    // Dégâts : courbe de farm au palier effectif (croissance plus lente que les PV → survie suit).
+    damage: Math.round(FARM_DMG_BASE * Math.pow(FARM_DMG_GROWTH, combatStage - 1) * Math.pow(DUNGEON_FIGHT_RAMP, fightIndex) * cfg.dmg * (isBoss ? 1.8 : 1)),
     xp: Math.round(8 * Math.pow(1.12, effStage - 1) * (isBoss ? 5 : 1) * xpMult),
     resist: {},
     damageType: def.element,

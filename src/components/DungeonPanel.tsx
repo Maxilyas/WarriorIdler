@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useGame, SCEAU_COST } from '../game/store'
-import { DUNGEON_LIST, dungeonFights, dungeonIlvl, GEODE_WING_ELEMENT, type DungeonDef, type DungeonReward } from '../game/dungeons'
+import { DUNGEON_LIST, dungeonFights, dungeonIlvl, butinMinTier, butinMaxTier, GEODE_WING_ELEMENT, type DungeonDef, type DungeonReward } from '../game/dungeons'
 import { DAMAGE_TYPES } from '../game/damage'
 import { dungeonReq, resistMult } from '../game/resist'
 import { charResist } from '../game/character'
+import { RARITY_LIST } from '../game/rarities'
 import { GEM_FAMILIES, type GemFamily } from '../game/condGems'
 import type { Character, DamageType } from '../game/types'
 
@@ -143,6 +144,20 @@ function DungeonCard({ def, cleared, sceaux, bestStage, characters, busy, onEnte
           </span>
         </div>
       )}
+      {!locked && def.reward === 'stuff' && (() => {
+        const minR = RARITY_LIST.find((r) => r.tier === butinMinTier(lvl))
+        const maxR = RARITY_LIST.find((r) => r.tier === butinMaxTier(lvl))
+        if (!minR || !maxR) return null
+        return (
+          <div className="mt-1 text-[10px] text-slate-500">
+            🎲 Butin :{' '}
+            <span style={{ color: minR.color }}>{minR.name}</span>
+            <span className="text-slate-600"> → </span>
+            <span style={{ color: maxR.color }}>{maxR.name}</span>
+            <span className="text-slate-600"> (pic plus probable · traîne rare ↑ avec le niv.)</span>
+          </div>
+        )
+      })()}
       {locked ? (
         <div className="mt-2 rounded-lg bg-slate-800/60 py-1.5 text-center text-[11px] text-slate-500">
           🔒 Atteins le palier {def.unlockStage} pour débloquer
