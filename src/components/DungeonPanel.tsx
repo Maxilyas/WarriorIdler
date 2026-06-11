@@ -2,7 +2,10 @@ import { useState } from 'react'
 import { useGame, SCEAU_COST } from '../game/store'
 import { DUNGEON_LIST, dungeonFights, dungeonIlvl, GEODE_WING_ELEMENT, type DungeonDef, type DungeonReward } from '../game/dungeons'
 import { DAMAGE_TYPES } from '../game/damage'
+import { dungeonReq, resistMult } from '../game/resist'
+import { charResist } from '../game/character'
 import { GEM_FAMILIES, type GemFamily } from '../game/condGems'
+import type { Character, DamageType } from '../game/types'
 
 /** Valeur « ∞ » du sélecteur de répétitions (limité en pratique par les Sceaux disponibles). */
 const INF = 999
@@ -25,6 +28,7 @@ export function DungeonPanel() {
   const progress = useGame((s) => s.dungeonProgress)
   const dungeon = useGame((s) => s.dungeon)
   const bestStage = useGame((s) => s.bestStage)
+  const characters = useGame((s) => s.characters)
   const enterDungeon = useGame((s) => s.enterDungeon)
   const craftSceau = useGame((s) => s.craftSceau)
   const noyau = useGame((s) => s.noyau)
@@ -68,6 +72,7 @@ export function DungeonPanel() {
             cleared={progress[def.id] ?? 0}
             sceaux={sceaux}
             bestStage={bestStage}
+            characters={characters}
             busy={!!dungeon}
             onEnter={(lvl, rep, wing) => enterDungeon(def.id, lvl, rep, wing)}
           />
@@ -77,11 +82,12 @@ export function DungeonPanel() {
   )
 }
 
-function DungeonCard({ def, cleared, sceaux, bestStage, busy, onEnter }: {
+function DungeonCard({ def, cleared, sceaux, bestStage, characters, busy, onEnter }: {
   def: DungeonDef
   cleared: number
   sceaux: number
   bestStage: number
+  characters: Character[]
   busy: boolean
   onEnter: (level: number, repeat: number, wing?: GemFamily) => void
 }) {
@@ -93,7 +99,13 @@ function DungeonCard({ def, cleared, sceaux, bestStage, busy, onEnter }: {
   const [wing, setWing] = useState<GemFamily>('rythme')
   const lvl = Math.max(1, Math.min(frontier, level))
   const locked = bestStage < def.unlockStage
-  const el = DAMAGE_TYPES[isGeode ? GEODE_WING_ELEMENT[wing] : def.element]
+  const elType: DamageType = isGeode ? GEODE_WING_ELEMENT[wing] : def.element
+  const el = DAMAGE_TYPES[elType]
+  // Exigence de résistance du donjon (sur son élément) vs le membre le plus exposé de l'équipe.
+  const req = dungeonReq(lvl)
+  const weakest = characters.length ? Math.min(...characters.map((c) => Math.round(charResist(c)[elType] ?? 0))) : 0
+  const resMult = resistMult(req, weakest)
+  const resOk = resMult <= 1.05
   const cost = def.sceauCost
   const canEnter = !busy && sceaux >= cost && !locked
   // Nombre de runs réellement payables d'affilée (∞ = limité par les Sceaux).
@@ -117,6 +129,20 @@ function DungeonCard({ def, cleared, sceaux, bestStage, busy, onEnter }: {
         {def.reward === 'stuff' ? ` · coffre iLvl ~${dungeonIlvl(lvl, bestStage)}` : ''}
         {' · '}{cost === 0 ? <span className="text-emerald-400">gratuit</span> : <span className="text-amber-300">{cost} 🔑</span>}
       </div>
+      {!locked && req > 0 && (
+        <div className="mt-1 flex items-center gap-1.5 text-[10px]">
+          <span className="text-slate-500">🛡 Résist conseillée</span>
+          <span
+            title={`${el.name} : exigence ${req} · ton membre le plus exposé ${weakest}${resOk ? ' — au cap (×1)' : ` — dégâts subis ×${resMult.toFixed(1)}`}`}
+            className={
+              'rounded px-1.5 py-0.5 font-medium ' +
+              (resOk ? 'bg-emerald-900/30 text-emerald-300' : weakest >= req * 0.6 ? 'bg-amber-900/30 text-amber-300' : 'bg-rose-900/40 text-rose-300')
+            }
+          >
+            {el.icon} {weakest}/{req}{resOk ? ' ✓' : ` ×${resMult.toFixed(1)}`}
+          </span>
+        </div>
+      )}
       {locked ? (
         <div className="mt-2 rounded-lg bg-slate-800/60 py-1.5 text-center text-[11px] text-slate-500">
           🔒 Atteins le palier {def.unlockStage} pour débloquer
