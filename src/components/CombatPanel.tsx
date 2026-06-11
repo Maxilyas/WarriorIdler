@@ -351,7 +351,7 @@ export function CombatPanel() {
                   const dead = e.hp <= 0
                   const isFocus = e === enemy
                   return (
-                    <div key={i} className={dead ? 'opacity-40' : ''}>
+                    <div key={e.uid ?? i} className={dead ? 'opacity-40' : ''}>
                       <div className="flex items-center justify-between text-[10px]">
                         <span className={'truncate ' + (e.add ? 'text-rose-300/80' : 'text-slate-200')}>
                           {isFocus ? '🎯 ' : ''}{e.name}

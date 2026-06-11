@@ -835,10 +835,18 @@ function sanitize(save: SaveData): SaveData {
   // (tier débloqué = meilleur tier vaincu + 1), les Trophées partent de zéro.
   if (!save.raidTrophies || typeof save.raidTrophies !== 'object') save.raidTrophies = {}
   {
+    // SEED UNIQUE (v0.24 fix) : si la save n'a pas encore de tiers débloqués (pré-v0.24), on dérive
+    // l'accès du meilleur tier vaincu +1. SINON on conserve l'acquis SANS re-bump — avant, ce bloc
+    // tournait à CHAQUE chargement et faisait `max(progress+1, …)` → clear le tier N rouvrait le N+1
+    // GRATUITEMENT au reload (le gate Trophées court-circuité). Désormais seul `unlockRaidTier` ouvre.
+    const existing = save.raidTierUnlocked && typeof save.raidTierUnlocked === 'object'
+      ? (save.raidTierUnlocked as Partial<Record<RaidId, number>>)
+      : null
     const unlocked: Partial<Record<RaidId, number>> = {}
-    const src = (save.raidTierUnlocked ?? {}) as Partial<Record<RaidId, number>>
     for (const id of Object.keys(RAIDS) as RaidId[]) {
-      unlocked[id] = Math.max(1, (save.raidProgress[id] ?? 0) + 1, src[id] ?? 1)
+      unlocked[id] = existing
+        ? Math.max(1, existing[id] ?? 1)                // conserve, ne re-bump jamais depuis progress
+        : Math.max(1, (save.raidProgress[id] ?? 0) + 1) // seed initial, une seule fois
     }
     save.raidTierUnlocked = unlocked
   }
@@ -2308,7 +2316,16 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
     swarmCd = 5
     const liveAdds = enemies.filter((e) => e.add && e.hp > 0).length
     const toSpawn = Math.max(0, Math.min(2, 3 - liveAdds))
-    for (let k = 0; k < toSpawn; k++) enemies.push(makeRaidAdd(def, r.tier, element))
+    // uid stable (1001+ pour ne JAMAIS percuter l'index des boss en [0]/[1]) + numérotation :
+    // sans ça, la liste keyée par index faisait « sauter » les barres quand un rejeton expirait.
+    const ADD_TAGS = ['α', 'β', 'γ', 'δ', 'ε', 'ζ']
+    let uid = enemies.reduce((m, e) => Math.max(m, e.uid ?? 0), 1000)
+    for (let k = 0; k < toSpawn; k++) {
+      const add = makeRaidAdd(def, r.tier, element)
+      add.uid = ++uid
+      add.name = `${add.name} ${ADD_TAGS[(uid - 1001) % ADD_TAGS.length]}`
+      enemies.push(add)
+    }
     if (toSpawn > 0) log = pushLog(log, `🐛 ${toSpawn} renfort(s) surgissent !`, 'death')
   }
 

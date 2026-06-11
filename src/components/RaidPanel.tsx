@@ -7,6 +7,7 @@ import {
 } from '../game/raids'
 import { charDps, charMaxHp, charResist } from '../game/character'
 import { resistMult } from '../game/resist'
+import { ConfirmButton } from './ui'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from '../game/damage'
 import { RARITY_LIST } from '../game/rarities'
 import type { Character, DamageType } from '../game/types'
@@ -264,13 +265,14 @@ function RaidCard({ def, unlocked, cleared, maxTier, trophies, bestStage, orbes,
               ? <>Tier {maxTier + 1} : <span className="text-amber-300">🏆 {trophies}/{unlockCost}</span> Trophées (≈ {Math.ceil(Math.max(0, unlockCost - trophies) / maxTier)} clear{Math.ceil(Math.max(0, unlockCost - trophies) / maxTier) > 1 ? 's' : ''} T{maxTier})</>
               : <>Tier {maxTier + 1} : vaincs d'abord le <span className="text-rose-300">Tier {maxTier}</span> (+ 🏆 {unlockCost} Trophées)</>}
           </span>
-          <button
+          <ConfirmButton
             disabled={!canUnlock}
-            onClick={onUnlockTier}
+            onConfirm={onUnlockTier}
+            confirmLabel={`⚠ Dépenser ${unlockCost} 🏆 ?`}
             className="shrink-0 rounded bg-amber-600/80 px-2.5 py-1.5 text-[10px] font-semibold text-slate-950 disabled:opacity-40"
           >
             Débloquer T{maxTier + 1}
-          </button>
+          </ConfirmButton>
         </div>
       )}
 

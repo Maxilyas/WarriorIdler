@@ -387,6 +387,9 @@ export interface Enemy {
   lifetime?: number
   /** Renfort secondaire (pas le boss / pas la cible d'objectif). */
   add?: boolean
+  /** Identifiant stable pour le rendu (clé React) — surtout pour les renforts qui apparaissent/
+   *  disparaissent : sans lui, le keying par index faisait « sauter » les barres de vie. */
+  uid?: number
   /** Boss : reçoit les bonus « Dégâts vs Boss » et peut étourdir. */
   boss?: boolean
   /** Chance d'ESQUIVE de l'ennemi (0..1) — annulée par la Précision du héros. */
