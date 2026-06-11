@@ -224,12 +224,52 @@ export function generateItem(opts: GenerateOptions): Item {
 }
 
 /**
+ * FENÊTRE À PIC (v0.24, DESIGN §4.0) — LA fonction de rareté unifiée du jeu (farm / Cache /
+ * raids). Distribution « plancher → PIC → plafond » à DEUX PENTES géométriques :
+ *  - sous le pic : `down` par cran (raide — le bas de fenêtre reste minoritaire),
+ *  - au-dessus : « épaule » `shoulder` au premier cran, puis traîne `tail` par cran
+ *    (TRÈS raide → le haut de fenêtre existe toujours, mais reste un événement).
+ * Repère (fenêtre raid T1, pic Épique) : ~57% Épique · 16% Légendaire · 3.5% Artefact ·
+ * 0.8% Patrimoine · … · ~0.008% Céleste.
+ */
+export function rollWindowRarity(
+  floor: number, peak: number, cap: number,
+  opts?: { down?: number; shoulder?: number; tail?: number },
+): RarityId {
+  const down = opts?.down ?? 0.30
+  const shoulder = opts?.shoulder ?? 0.30
+  const tail = opts?.tail ?? 0.25
+  const lo = Math.max(1, Math.min(16, Math.round(floor)))
+  const hi = Math.max(lo, Math.min(16, Math.round(cap)))
+  const pk = Math.max(lo, Math.min(hi, Math.round(peak)))
+  const weights: number[] = []
+  for (let t = lo; t <= hi; t++) {
+    weights.push(t <= pk ? Math.pow(down, pk - t) : shoulder * Math.pow(tail, t - pk - 1))
+  }
+  const total = weights.reduce((a, b) => a + b, 0)
+  let r = Math.random() * total
+  let tier = pk
+  for (let i = 0; i < weights.length; i++) { r -= weights[i]; if (r <= 0) { tier = lo + i; break } }
+  return (RARITY_LIST.find((x) => x.tier === tier) ?? RARITY_LIST[0]).id
+}
+
+/**
+ * Fenêtre de rareté du FARM (paliers classiques) : le pic glisse de Commun (palier 1) à
+ * Épique (~palier 54), plafond DUR à Légendaire — le farm n'est PAS la chasse à la rareté
+ * (ça, c'est la Cache puis les raids). `shift` décale la fenêtre (élite +1, champion +2,
+ * boss +1, karma/chance), toujours sous le plafond.
+ */
+export const FARM_RARITY_CAP = 6 // Légendaire
+export function rollFarmRarity(stage: number, shift = 0): RarityId {
+  const peak = Math.min(FARM_RARITY_CAP, Math.max(2, Math.min(5, 2 + Math.floor(stage / 18))) + shift)
+  return rollWindowRarity(Math.max(1, peak - 2), peak, Math.min(FARM_RARITY_CAP, peak + 2))
+}
+
+/**
  * Tire une rareté pour un coffre : distribution pondérée (favorise le bas de la fourchette)
  * entre minTier et maxTier, avec une petite chance de JACKPOT au-dessus de maxTier.
  * `decay` (0→1) règle l'inclinaison : proche de 1, la distribution s'aplatit et remonte
- * vers les hautes raretés (utilisé par les raids pour scaler avec le tier).
- * `cap` : plafond DUR (jackpot compris) — soft cap des sources qui ne doivent pas dépasser
- * une rareté (ex. Cache du Pilleur, bloquée à Éternel ; au-delà, c'est une table à part).
+ * vers les hautes raretés. (Coffres du marché — farm/Cache/raids utilisent rollWindowRarity.)
  */
 export function rollBoxRarity(minTier: number, maxTier: number, jackpot: number, decay = 0.62, cap = 16): RarityId {
   const weights: number[] = []

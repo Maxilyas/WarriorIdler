@@ -3,7 +3,7 @@ import { useGame } from '../game/store'
 import {
   RAID_LIST, RAID_UNLOCK_STAGE, RAID_MECHANIC_META, getRaidDef, raidUnlocked,
   raidBossVariant, raidIlvl, raidBerserkTime, raidFragments, raidCosmicChance,
-  raidMinTier, raidMaxTier, raidReqs, recommendedDps, recommendedEhp, type RaidDef,
+  raidMinTier, raidMaxTier, raidReqs, raidTierUnlockCost, recommendedDps, recommendedEhp, type RaidDef,
 } from '../game/raids'
 import { charDps, charMaxHp, charResist } from '../game/character'
 import { resistMult } from '../game/resist'
@@ -28,10 +28,13 @@ export function RaidPanel() {
   const cosmic = useGame((s) => s.cosmic)
   const bestStage = useGame((s) => s.bestStage)
   const progress = useGame((s) => s.raidProgress)
+  const trophies = useGame((s) => s.raidTrophies)
+  const tierUnlocked = useGame((s) => s.raidTierUnlocked)
   const raid = useGame((s) => s.raid)
   const dungeon = useGame((s) => s.dungeon)
   const characters = useGame((s) => s.characters)
   const enterRaid = useGame((s) => s.enterRaid)
+  const unlockRaidTier = useGame((s) => s.unlockRaidTier)
 
   const partyDps = characters.filter((c) => c.hp > 0).reduce((a, c) => a + charDps(c), 0)
   const partyHp = characters.reduce((a, c) => a + charMaxHp(c), 0)
@@ -52,9 +55,10 @@ export function RaidPanel() {
       <p className="mb-2 text-[11px] leading-snug text-slate-500">
         Cinq sanctuaires <b className="text-slate-300">distincts</b>, chacun ciblant une catégorie de butin et montés
         en <b className="text-slate-300">tiers indépendants</b>. Un raid = <b className="text-slate-300">un seul affrontement</b>,
-        et <b className="text-rose-300">le boss change à chaque tier</b> (mécaniques différentes). Chaque tier vaincu
-        débloque le suivant : butin de plus en plus haut en iLvl et en rareté, Fragments d'éternité et le
-        rarissime <b className="text-violet-300">Éclat cosmique 💫</b>.
+        et <b className="text-rose-300">le boss change à chaque tier</b>. Chaque tier est un <b className="text-amber-300">mur</b> :
+        on FARME le tier courant — stuff, <b className="text-amber-300">Trophées 🏆</b> — pour débloquer le suivant
+        (~5 clears). Prépare tes <b className="text-sky-300">résistances</b> selon la fiche du boss : sous son exigence,
+        ses coups frappent jusqu'à ×5. Seule source de stuff <b className="text-slate-300">Céleste → Transcendant</b>.
       </p>
 
       <div className="mb-2 rounded-lg border border-slate-800 bg-[#0d111a] px-2.5 py-1.5 text-[10.5px]">
@@ -83,6 +87,8 @@ export function RaidPanel() {
               def={def}
               unlocked={raidUnlocked(def, bestStage, progress)}
               cleared={progress[def.id] ?? 0}
+              maxTier={tierUnlocked[def.id] ?? 1}
+              trophies={trophies[def.id] ?? 0}
               bestStage={bestStage}
               orbes={orbes}
               busy={!!raid || !!dungeon}
@@ -90,6 +96,7 @@ export function RaidPanel() {
               partyHp={partyHp}
               characters={characters}
               onEnter={(tier, rep) => enterRaid(def.id, tier, rep)}
+              onUnlockTier={() => unlockRaidTier(def.id)}
             />
           ))}
         </div>
@@ -139,10 +146,14 @@ function BossReqs({ def, tier, characters }: { def: RaidDef; tier: number; chara
   )
 }
 
-function RaidCard({ def, unlocked, cleared, bestStage, orbes, busy, partyDps, partyHp, characters, onEnter }: {
+function RaidCard({ def, unlocked, cleared, maxTier, trophies, bestStage, orbes, busy, partyDps, partyHp, characters, onEnter, onUnlockTier }: {
   def: RaidDef
   unlocked: boolean
   cleared: number
+  /** Tier maximal TENTABLE (débloqué via Trophées). */
+  maxTier: number
+  /** 🏆 Trophées de CE raid. */
+  trophies: number
   bestStage: number
   orbes: number
   busy: boolean
@@ -150,11 +161,16 @@ function RaidCard({ def, unlocked, cleared, bestStage, orbes, busy, partyDps, pa
   partyHp: number
   characters: Character[]
   onEnter: (tier: number, repeat: number) => void
+  onUnlockTier: () => void
 }) {
-  const frontier = cleared + 1
+  const frontier = maxTier
   const [tier, setTier] = useState(frontier)
   const [repeat, setRepeat] = useState(1)
   const t = Math.max(1, Math.min(frontier, tier))
+  // Déblocage du tier suivant : la frontière doit être VAINCUE, puis payée en Trophées.
+  const unlockCost = raidTierUnlockCost(maxTier + 1)
+  const frontierCleared = cleared >= maxTier
+  const canUnlock = frontierCleared && trophies >= unlockCost
 
   if (!unlocked) {
     const reqRaid = def.requires ? getRaidDef(def.requires) : null
@@ -185,7 +201,10 @@ function RaidCard({ def, unlocked, cleared, bestStage, orbes, busy, partyDps, pa
     <div className="rounded-lg border bg-[#11151f] p-2.5" style={{ borderColor: def.color + '40' }}>
       <div className="flex items-center justify-between">
         <div className="font-medium" style={{ color: def.color }}>{def.icon} {def.name}</div>
-        <div className="text-[10px] text-slate-500">Record : tier {cleared}</div>
+        <div className="text-[10px] text-slate-500">
+          <span className="mr-2 text-amber-300" title={`Trophées de ${def.name} — gagnés par victoire, dépensés pour débloquer les tiers`}>🏆 {trophies}</span>
+          Record : tier {cleared}
+        </div>
       </div>
 
       <div className="mt-0.5 text-[10px] leading-snug text-slate-500">{def.lore}</div>
@@ -236,6 +255,24 @@ function RaidCard({ def, unlocked, cleared, bestStage, orbes, busy, partyDps, pa
       </div>
 
       <RarityRange def={def} tier={t} />
+
+      {/* 🏆 Passage de tier : chaque tier est un MUR — clear de la frontière + Trophées du raid */}
+      {maxTier < 10 && (
+        <div className="mt-1.5 flex items-center gap-1.5 rounded-lg border border-amber-800/40 bg-amber-950/15 px-2 py-1.5">
+          <span className="min-w-0 flex-1 text-[9.5px] leading-snug text-slate-400">
+            {frontierCleared
+              ? <>Tier {maxTier + 1} : <span className="text-amber-300">🏆 {trophies}/{unlockCost}</span> Trophées (≈ {Math.ceil(Math.max(0, unlockCost - trophies) / maxTier)} clear{Math.ceil(Math.max(0, unlockCost - trophies) / maxTier) > 1 ? 's' : ''} T{maxTier})</>
+              : <>Tier {maxTier + 1} : vaincs d'abord le <span className="text-rose-300">Tier {maxTier}</span> (+ 🏆 {unlockCost} Trophées)</>}
+          </span>
+          <button
+            disabled={!canUnlock}
+            onClick={onUnlockTier}
+            className="shrink-0 rounded bg-amber-600/80 px-2.5 py-1.5 text-[10px] font-semibold text-slate-950 disabled:opacity-40"
+          >
+            Débloquer T{maxTier + 1}
+          </button>
+        </div>
+      )}
 
       {/* Auto-raid : nombre de raids enchaînés (consomme les Orbes à la volée) */}
       <div className="mt-2 flex items-center gap-1 text-[10px]">

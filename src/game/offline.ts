@@ -1,7 +1,7 @@
 import type { Character, Item, DamageType } from './types'
 import { charDps } from './character'
-import { makeEnemy, stageIlvl, stageLuckTier } from './enemies'
-import { generateItem } from './items'
+import { makeEnemy, stageIlvl } from './enemies'
+import { generateItem, rollFarmRarity } from './items'
 import { computeGlobalMods } from './upgrades'
 
 /** Plafond de progression hors-ligne (12 h) et taux réduit. */
@@ -56,9 +56,9 @@ export function simulateOffline(
 
   // Quelques drops représentatifs (plafonnés pour ne pas saturer l'inventaire).
   const dropCount = Math.min(MAX_OFFLINE_DROPS, Math.floor(kills * (0.2 + eco.lootChance)))
-  const luck = stageLuckTier(stage) + Math.floor(eco.rarityLuck)
+  const shift = Math.min(2, Math.floor(eco.rarityLuck))
   const items: Item[] = []
-  for (let i = 0; i < dropCount; i++) items.push(generateItem({ ilvl: stageIlvl(stage), luckTier: luck }))
+  for (let i = 0; i < dropCount; i++) items.push(generateItem({ ilvl: stageIlvl(stage), rarity: rollFarmRarity(stage, shift) }))
 
   const sceaux = Math.floor(kills / 50) // ~1 sceau / 50 kills
   const noyau = Math.floor(kills / 80)

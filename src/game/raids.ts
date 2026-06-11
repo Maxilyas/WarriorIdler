@@ -197,46 +197,67 @@ export function raidBerserkTime(def: RaidDef, tier: number): number {
 
 /**
  * iLvl du butin (les raids restent la meilleure source de stuff du jeu).
- * v0.23 : ancré sur le palier EFFECTIF du tier + un VRAI gap par tier (~+19 iLvl) — chaque tier
- * vaincu équipe concrètement pour le suivant. L'Abîme, ancré plus haut, loote au-dessus de tous.
+ * v0.24 : gap MULTIPLICATIF ×1,22 par tier — le budget de stats d'un objet est linéaire en
+ * iLvl, donc chaque tier vaut « +1 cran de rareté » en stats brutes (statMult ≈ ×1,22/cran).
+ * Un Légendaire T(n+1) peut donc battre un Cosmique T(n) : monter de tier paie toujours.
  */
 export function raidIlvl(def: RaidDef, tier: number): number {
-  return Math.round(stageIlvl(effStage(def, tier)) * 1.12 + def.baseDifficulty * 8 + (tier - 1) * 12)
+  const base = stageIlvl(def.anchorStage ?? def.unlockStage) * 1.12 + def.baseDifficulty * 8
+  return Math.round(base * Math.pow(1.22, tier - 1))
 }
 
 /**
- * Rareté du butin de raid — distribution en ÉVENTAIL entre un plancher garanti `raidMinTier`
- * et un plafond `raidMaxTier`, avec jackpot au-dessus. v0.23 : le plancher monte d'UN RANG
- * PLEIN par tier (vrai gap de rareté) ; les raids sont LA source du stuff au-delà d'Éternel.
+ * Rareté du butin de raid (v0.24, DESIGN §4.3) : FENÊTRE À PIC par tier (rollWindowRarity).
+ * Le pic reste « banal » (Épique au T1) ; le haut de fenêtre est une TRAÎNE très rare —
+ * looter au-dessus du pic doit faire dire « c'est un truc de fou ». Les raids sont la SEULE
+ * source de Céleste → Transcendant.
  */
+const RAID_WINDOW_FLOOR = [3, 3, 4, 4, 6, 6, 7, 7, 7, 8]   // T1..T10 : Inhabituel → Patrimoine
+const RAID_WINDOW_CAP = [11, 11, 12, 12, 13, 13, 14, 14, 15, 16] // T1..T10 : Céleste → Transcendant
 
-/** Rareté plancher GARANTIE du butin (+1 rang par tier ; l'Abîme part un cran au-dessus). */
+export function raidRarityWindow(_def: RaidDef, tier: number): { floor: number; peak: number; cap: number } {
+  const i = Math.max(0, Math.min(RAID_WINDOW_FLOOR.length - 1, tier - 1))
+  const floor = RAID_WINDOW_FLOOR[i]
+  return { floor, peak: floor + 2, cap: RAID_WINDOW_CAP[i] }
+}
+
+/** Rareté plancher de la fenêtre (affichage). */
 export function raidMinTier(def: RaidDef, tier: number): number {
-  const cap = def.id === 'abysse' ? 13 : 12
-  return Math.min(cap, 4 + Math.round(def.baseDifficulty) + (tier - 1) + (def.id === 'abysse' ? 1 : 0))
+  return raidRarityWindow(def, tier).floor
 }
 
-/** Rareté plafond ATTEIGNABLE : la fenêtre s'élargit avec le tier (Transcendant aux hauts tiers). */
+/** Rareté plafond ATTEIGNABLE de la fenêtre (affichage — traîne très rare). */
 export function raidMaxTier(def: RaidDef, tier: number): number {
-  return Math.min(16, raidMinTier(def, tier) + 3 + Math.floor(tier / 2))
+  return raidRarityWindow(def, tier).cap
 }
 
 /**
- * Aplatissement de la distribution (0→1) : plus c'est proche de 1, plus le tirage « remonte »
- * vers le haut de la fenêtre. Croît avec le tier et la difficulté du raid.
+ * Nombre d'objets du coffre (v0.24, DESIGN §4.4) : 1 GARANTI (2 pour l'Abîme) + tirages
+ * bonus indépendants dont la chance monte avec le tier — radin, mais juteux quand ça proc.
+ *   T1 : +1 à 5% · +2 à 2.5%   ·   T5 : +1 à 25% · +2 à 12.5% · +3 à 5%   ·   T10 : 50/25/10%.
  */
-export function raidRarityDecay(def: RaidDef, tier: number): number {
-  return Math.min(0.92, 0.5 + tier * 0.04 + def.baseDifficulty * 0.04)
+export function rollRaidLootCount(def: RaidDef, tier: number): number {
+  let n = def.id === 'abysse' ? 2 : 1
+  const p1 = Math.min(0.5, 0.05 * tier)
+  if (Math.random() < p1) n++
+  if (Math.random() < p1 * 0.5) n++
+  if (tier >= 3 && Math.random() < p1 * 0.2) n++
+  return n
 }
 
-/** Chance de « jackpot » (cran de rareté bonus au-delà du plafond), croissante avec le tier. */
-export function raidRarityJackpot(def: RaidDef, tier: number): number {
-  return Math.min(0.5, 0.04 + tier * 0.04 + def.baseDifficulty * 0.03)
+// ---- 🏆 Trophées (v0.24, DESIGN §4.5) : la monnaie de PASSAGE DE TIER, par raid ----
+// Chaque victoire au tier T rapporte T Trophées de CE raid ; débloquer le tier suivant coûte
+// ~5 clears du tier courant (ou plus de clears de tiers inférieurs). Chaque tier est un mur :
+// on farme le T(n) — stuff + Trophées — pour ouvrir le T(n+1).
+
+/** Trophées gagnés par victoire (= le tier vaincu). */
+export function raidTrophyGain(tier: number): number {
+  return tier
 }
 
-/** Nombre d'objets dans le coffre. */
-export function raidLootCount(def: RaidDef, tier: number): number {
-  return 3 + Math.floor(tier / 2) + (def.id === 'abysse' ? 2 : 0)
+/** Coût en Trophées du déblocage du tier `next` (≈ 5 clears du tier précédent). */
+export function raidTierUnlockCost(next: number): number {
+  return 5 * Math.max(1, next - 1)
 }
 
 /** Fragments d'éternité gagnés. */

@@ -14,7 +14,7 @@ import { getTalent, canAllocate } from './talents'
 import { getPower } from './powers'
 import { getUpgrade, upgradeCost as accountUpgradeCost, upgradePoussiere, upgradeEclats, isMaxed, computeGlobalMods } from './upgrades'
 import {
-  generateItem, rollBoxRarity, sellValue, recycleValue, recyclePoussiere, itemScore,
+  generateItem, rollBoxRarity, rollWindowRarity, rollFarmRarity, sellValue, recycleValue, recyclePoussiere, itemScore,
   reforgeItem, surillvlItem, ascendItem,
   reforgeCost, surillvlCost, ascendCost, createCost, transmuteCost, maxCraftTier,
   enhanceTypedAffixes, quintRefund,
@@ -50,8 +50,8 @@ import { DAMAGE_TYPE_LIST, DAMAGE_TYPES, profileDamageMult, type DamageProfile }
 import { equipSlotsForType, slotAccepts, EQUIP_SLOTS } from './slots'
 import { essenceGain, upgradeCost, insertCost, getUnique, UNIQUE_MAX_RANK, randomUniqueInstance, undiscoveredUnique } from './uniques'
 import {
-  generateDungeon, makeDungeonPack, dungeonIlvl, dungeonLuckTier, dungeonRegen, getDungeonDef,
-  butinMinTier, butinMaxTier, butinOverChance, butinOverTier, BUTIN_RARITY_CAP,
+  generateDungeon, makeDungeonPack, dungeonIlvl, dungeonRegen, getDungeonDef,
+  cacheRarityWindow, butinOverChance, butinOverTier, BUTIN_RARITY_CAP,
   dungeonRunYield, dungeonKeyYield, DUNGEON_YIELD_PERFIGHT_FRAC,
   geodeDustYield, geodeGemChance, geodeGemRank,
   DUNGEONS, type ActiveDungeon, type DungeonId,
@@ -59,8 +59,8 @@ import {
 import type { GemFamily } from './condGems'
 import {
   generateRaid, makeRaidAdd, getRaidDef, raidUnlocked, raidBossVariant,
-  raidIlvl, raidMinTier, raidMaxTier, raidRarityDecay, raidRarityJackpot,
-  raidLootCount, raidFragments, raidCosmicChance, raidCosmicQty, pickRaidLootType,
+  raidIlvl, raidRarityWindow, rollRaidLootCount, raidTrophyGain, raidTierUnlockCost,
+  raidFragments, raidCosmicChance, raidCosmicQty, pickRaidLootType,
   PAIR_ENRAGE_MULT, NOVA_MULT, RAIDS, type ActiveRaid, type RaidId,
 } from './raids'
 import { SETS } from './sets'
@@ -267,6 +267,10 @@ interface SaveData {
   /** Éclat cosmique 💫 — ressource ultra-rare des raids. */
   cosmic: number
   raidProgress: RaidProgress
+  /** 🏆 Trophées par raid (v0.24) : la monnaie de PASSAGE DE TIER (gagnés par clear). */
+  raidTrophies: Partial<Record<RaidId, number>>
+  /** Tier maximal TENTABLE par raid (v0.24) : monte via unlockRaidTier (clear + Trophées). */
+  raidTierUnlocked: Partial<Record<RaidId, number>>
   raid: ActiveRaid | null
   /** Grimoire : ids des effets uniques déjà découverts. */
   codex: string[]
@@ -348,6 +352,8 @@ interface GameState extends SaveData {
   abandonDungeon: () => void
   enterRaid: (raidId: RaidId, tier: number, repeat?: number) => void
   abandonRaid: () => void
+  /** 🏆 Débloque le tier suivant d'un raid (exige : frontière vaincue + Trophées du raid). */
+  unlockRaidTier: (raidId: RaidId) => void
   infuseUnique: (itemId: string) => void
   chooseUnique: (itemId: string, effectId: string) => void
   claimChest: () => void
@@ -525,6 +531,8 @@ function freshSave(): SaveData {
     fragments: 0,
     cosmic: 0,
     raidProgress: emptyRaidProgress(),
+    raidTrophies: {},
+    raidTierUnlocked: {},
     raid: null,
     codex: [],
     upgrades: {},
@@ -737,6 +745,18 @@ function sanitize(save: SaveData): SaveData {
     for (const id of Object.keys(RAIDS) as RaidId[]) rec[id] = (rp as RaidProgress)[id] ?? 0
     save.raidProgress = rec
   }
+  // 🏆 Trophées & tiers débloqués (v0.24) : migration — l'accès existant est conservé
+  // (tier débloqué = meilleur tier vaincu + 1), les Trophées partent de zéro.
+  if (!save.raidTrophies || typeof save.raidTrophies !== 'object') save.raidTrophies = {}
+  {
+    const unlocked: Partial<Record<RaidId, number>> = {}
+    const src = (save.raidTierUnlocked ?? {}) as Partial<Record<RaidId, number>>
+    for (const id of Object.keys(RAIDS) as RaidId[]) {
+      unlocked[id] = Math.max(1, (save.raidProgress[id] ?? 0) + 1, src[id] ?? 1)
+    }
+    save.raidTierUnlocked = unlocked
+  }
+
   // Raid en cours au format obsolète (pas de `raidId`) → abandonné par la migration.
   if (save.raid && !(save.raid as { raidId?: string }).raidId) save.raid = null
   // v0.23 : un raid = UN affrontement. Un raid multi-boss en cours (ancienne save) est abandonné.
@@ -903,6 +923,8 @@ function persist(s: GameState) {
     fragments: s.fragments,
     cosmic: s.cosmic,
     raidProgress: s.raidProgress,
+    raidTrophies: s.raidTrophies,
+    raidTierUnlocked: s.raidTierUnlocked,
     raid: s.raid,
     codex: s.codex,
     upgrades: s.upgrades,
@@ -1898,7 +1920,8 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
         logBit = `+${xp.toLocaleString('fr-FR')} XP`
         break
       }
-      case 'stuff': { if (Math.random() < 0.4) { fightItems.push(generateItem({ ilvl: dungeonIlvl(lv, s.bestStage), luckTier: dungeonLuckTier(lv), primaryBias: pickBias(s.characters) })); logBit = '+1 objet' } break }
+      // Cache du Pilleur, drops PAR COMBAT : même fenêtre que le coffre (pic ≤ Légendaire, plafond Artefact).
+      case 'stuff': { if (Math.random() < 0.4) { const cw = cacheRarityWindow(lv); fightItems.push(generateItem({ ilvl: dungeonIlvl(lv, s.bestStage), rarity: rollWindowRarity(cw.floor, cw.peak, cw.cap), primaryBias: pickBias(s.characters) })); logBit = '+1 objet' } break }
       // La Géode : la poussière 🔹 coule à chaque combat (la gemme, elle, attend le coffre).
       case 'gemmes': { const gd = accrue('gemDust', geodeDustYield(lv) * DUNGEON_YIELD_PERFIGHT_FRAC / Math.max(1, d.totalFights)); if (gd) { gemDust += gd; logBit = `+${gd} 🔹` } } break
     }
@@ -1933,14 +1956,17 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
         case 'stuff': {
           const ilvl = dungeonIlvl(lv, s.bestStage)
           const count = 3 + Math.floor(lv / 2)
-          // Soft cap v0.23 : la fenêtre (et son jackpot) est PLAFONNÉE à Éternel — même « Avare »
-          // ne la perce pas. Au-dessus, seul le tirage « au-delà du voile » (infime) peut tomber.
-          const minTier = Math.min(11, butinMinTier(lv) + rareBonus)
-          const maxTier = Math.min(BUTIN_RARITY_CAP, butinMaxTier(lv) + rareBonus)
+          // v0.24 : FENÊTRE de la Cache (pic ≤ Légendaire, plafond pratique Artefact — même
+          // « Avare » ne le perce pas). Au-dessus, seul le « voile » (infime, → Éternel max).
+          const cw = cacheRarityWindow(lv)
           for (let i = 0; i < count; i++) {
             const rarity = Math.random() < butinOverChance(lv)
-              ? (RARITY_LIST.find((r) => r.tier === butinOverTier())?.id ?? 'cosmique')
-              : rollBoxRarity(minTier, maxTier, Math.min(0.25, 0.05 + lv * 0.01), 0.6, BUTIN_RARITY_CAP)
+              ? (RARITY_LIST.find((r) => r.tier === butinOverTier())?.id ?? 'patrimoine')
+              : rollWindowRarity(
+                  Math.min(BUTIN_RARITY_CAP, cw.floor + rareBonus),
+                  Math.min(BUTIN_RARITY_CAP, cw.peak + rareBonus),
+                  Math.min(BUTIN_RARITY_CAP, cw.cap + rareBonus),
+                )
             items.push(generateItem({ ilvl, rarity, primaryBias: bias }))
           }
           break
@@ -2114,16 +2140,13 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
     {
       const tier = r.tier
       const ilvl = raidIlvl(def, tier)
-      const minTier = raidMinTier(def, tier)
-      const maxTier = raidMaxTier(def, tier)
-      const decay = raidRarityDecay(def, tier)
-      const jackpot = raidRarityJackpot(def, tier)
-      const count = raidLootCount(def, tier)
+      // v0.24 : fenêtre à pic par tier (DESIGN §4.3) — pic « banal », traîne très rare vers le haut.
+      const w = raidRarityWindow(def, tier)
+      const count = rollRaidLootCount(def, tier)
       const bias = pickBias(s.characters)
       const items: Item[] = []
       for (let i = 0; i < count; i++) {
-        // Rareté en éventail : plancher garanti → plafond, décalée vers le haut avec le tier.
-        const rarity = rollBoxRarity(minTier, maxTier, jackpot, decay)
+        const rarity = rollWindowRarity(w.floor, w.peak, w.cap)
         // L'Abîme : ~30% des objets sont des pièces de la RÉGALIA DU NÉANT (set exclusif).
         if (def.id === 'abysse' && Math.random() < 0.3) {
           const sd = SETS.neant
@@ -2156,6 +2179,10 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
       }
       const healed = chars.map(fullHeal)
       const raidProgress = { ...s.raidProgress, [r.raidId]: Math.max(s.raidProgress[r.raidId] ?? 0, tier) }
+      // 🏆 Trophées du raid : la monnaie de passage de tier (≈ 5 clears du tier courant).
+      const trophies = raidTrophyGain(tier)
+      const raidTrophies = { ...s.raidTrophies, [r.raidId]: (s.raidTrophies[r.raidId] ?? 0) + trophies }
+      log = pushLog(log, `🏆 +${trophies} Trophée${trophies > 1 ? 's' : ''} de ${def.name} (total ${raidTrophies[r.raidId]}).`, 'loot')
       const repeatLeft = r.repeatLeft ?? 0
 
       // Gemme de CONDITION (25% par raid vaincu) — l'autre source est le champion ✦ de farm.
@@ -2173,7 +2200,7 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
           const nr = generateRaid(r.raidId, tier)
           nr.repeatLeft = repeatLeft - 1
           const log3 = pushLog(log, `🔁 Auto-raid : trésor encaissé${cosmic ? ` (💫 ×${cosmic})` : ''} · ${repeatLeft} relance${repeatLeft > 1 ? 's' : ''} restante${repeatLeft > 1 ? 's' : ''}.`, 'kill')
-          const next = { ...s, ...credited, gems, characters: healed, raidProgress, orbes: credited.orbes - def.orbeCost, raid: nr, log: log3 }
+          const next = { ...s, ...credited, gems, characters: healed, raidProgress, raidTrophies, orbes: credited.orbes - def.orbeCost, raid: nr, log: log3 }
           persist(next)
           set(next)
           return
@@ -2181,7 +2208,7 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
       }
 
       log = pushLog(log, `🏆 RAID VAINCU : ${def.name} (Tier ${tier}) !${cosmic ? ` 💫 Éclat cosmique ×${cosmic} !` : ''} Un trésor t'attend.`, 'kill')
-      const next = { ...s, gems, characters: healed, raid: null, raidProgress, pendingChest: chest, log }
+      const next = { ...s, gems, characters: healed, raid: null, raidProgress, raidTrophies, pendingChest: chest, log }
       persist(next)
       set(next)
       return
@@ -2355,7 +2382,10 @@ export const useGame = create<GameState>((set, get) => {
           ? 0
           : (boss ? 2 : Math.random() < 0.30 + eco.lootChance ? 1 : 0) + (elite ? 1 : 0) + (champion ? 1 : 0)
         const bias = pickBias(chars)
-        const luck = stageLuckTier(stage) + (boss ? 1 : 0) + (elite ? 3 : 0) + (champion ? 5 : 0) + Math.floor(eco.rarityLuck) + karmaBonus
+        // v0.24 : FENÊTRE de rareté du farm (≤ Légendaire). Élite/champion/boss + karma/chance
+        // décalent la fenêtre — toujours sous le plafond (la chasse est en donjon/raid).
+        const shift = (boss ? 1 : 0) + (elite ? 1 : 0) + (champion ? 2 : 0)
+          + Math.min(2, Math.floor(eco.rarityLuck)) + Math.min(2, karmaBonus)
         let codex = s.codex
         let autoRec = 0
         let killsSinceEpic = s.killsSinceEpic + 1
@@ -2363,7 +2393,7 @@ export const useGame = create<GameState>((set, get) => {
           // Identité de loot du biome : ~50% dégâts de l'élément, ~25% résistance à l'élément, ~25% neutre.
           const br = Math.random()
           const biomeOpts = br < 0.5 ? { forceDmgType: s.activeBiome } : br < 0.75 ? { biasResist: s.activeBiome } : {}
-          const it = generateItem({ ilvl: stageIlvl(stage), luckTier: luck, primaryBias: bias, ...biomeOpts })
+          const it = generateItem({ ilvl: stageIlvl(stage), rarity: rollFarmRarity(stage, shift), primaryBias: bias, ...biomeOpts })
           // Rune du Karma : un drop Épique+ remet le compteur de pitié à zéro.
           if (RARITIES[it.rarity].tier >= 5) killsSinceEpic = 0
           // Recyclage automatique : tout butin commun sous le seuil part directement en éclats (on garde les uniques).
@@ -3150,7 +3180,8 @@ export const useGame = create<GameState>((set, get) => {
       if (s.raid || s.dungeon) return
       const def = getRaidDef(raidId)
       if (!def || !raidUnlocked(def, s.bestStage, s.raidProgress)) return
-      const maxTier = (s.raidProgress[raidId] ?? 0) + 1
+      // v0.24 : le tier doit être DÉBLOQUÉ (clear de la frontière + Trophées — voir unlockRaidTier).
+      const maxTier = s.raidTierUnlocked[raidId] ?? 1
       if (tier < 1 || tier > maxTier) return
       if (s.orbes < def.orbeCost) return
       const raid = generateRaid(raidId, tier)
@@ -3169,6 +3200,26 @@ export const useGame = create<GameState>((set, get) => {
       if (!s.raid) return
       // Quitter une instance soigne et RESSUSCITE toute l'équipe (sinon un perso mort restait mort).
       const next = { ...s, characters: s.characters.map(fullHeal), raid: null, log: pushLog(s.log, 'Raid abandonné. L\'Orbe est perdue.', 'info') }
+      persist(next)
+      set(next)
+    },
+
+    unlockRaidTier: (raidId) => {
+      const s = get()
+      const def = getRaidDef(raidId)
+      if (!def) return
+      const cur = s.raidTierUnlocked[raidId] ?? 1
+      // Il faut avoir VAINCU la frontière actuelle (le mur se franchit, il ne s'achète pas seul)…
+      if ((s.raidProgress[raidId] ?? 0) < cur) return
+      // …et payer les Trophées du raid (≈ 5 clears du tier courant).
+      const cost = raidTierUnlockCost(cur + 1)
+      if ((s.raidTrophies[raidId] ?? 0) < cost) return
+      const next = {
+        ...s,
+        raidTrophies: { ...s.raidTrophies, [raidId]: (s.raidTrophies[raidId] ?? 0) - cost },
+        raidTierUnlocked: { ...s.raidTierUnlocked, [raidId]: cur + 1 },
+        log: pushLog(s.log, `🏆 ${def.name} : Tier ${cur + 1} débloqué (-${cost} Trophées) !`, 'level'),
+      }
       persist(next)
       set(next)
     },
