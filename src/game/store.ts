@@ -377,8 +377,6 @@ interface GameState extends SaveData {
   buyUpgrade: (id: string) => void
   refreshShop: () => void
   buyShopItem: (itemId: string) => void
-  /** Échange générique de ressources au marché (taux taxés — voir MARKET_TRADES). */
-  tradeResource: (tradeId: string, times?: number) => void
   /** Achète un coffre. `qty` ×5 = achat en gros (-10% d'or) ; `element` requis pour le coffre élémentaire. */
   mysteryBox: (id: number, opts?: { qty?: number; element?: DamageType }) => void
   /** Coffre du Destin : garde l'objet à cet index, recycle les autres. */
@@ -1102,59 +1100,6 @@ function refreshGlobals(upgrades: Record<string, number>) {
 const SHOP_SIZE = 6
 /** Intervalle de rotation de l'échoppe : 1 h réelle (indépendant du combat). */
 export const SHOP_INTERVAL_MS = 60 * 60 * 1000
-// ---- Comptoir d'échange (v0.23) : troc de ressources ENTRE ELLES, taxé fort ----
-
-export type TradeRes = 'gold' | 'essence' | 'noyau' | 'poussiere' | 'sceaux' | 'orbes' | 'fragments' | 'cosmic' | 'gemDust'
-
-export const TRADE_RES_META: Record<TradeRes, { icon: string; name: string }> = {
-  gold: { icon: '💰', name: 'or' },
-  essence: { icon: '♦', name: 'éclats' },
-  noyau: { icon: '💠', name: 'noyaux' },
-  poussiere: { icon: '🌌', name: 'poussière d\'étoile' },
-  sceaux: { icon: '🔑', name: 'sceaux' },
-  orbes: { icon: '🔮', name: 'orbes' },
-  fragments: { icon: '✨', name: 'fragments' },
-  cosmic: { icon: '💫', name: 'éclats cosmiques' },
-  gemDust: { icon: '🔹', name: 'poussière de gemme' },
-}
-
-export interface ResourceTrade {
-  id: string
-  from: { res: TradeRes; amt: number }
-  to: { res: TradeRes; amt: number }
-  /** Record (bestStage) requis pour voir l'offre (calé sur l'arrivée de la ressource dans le jeu). */
-  unlockStage?: number
-}
-
-/**
- * Taux volontairement DÉFAVORABLES (aller-retour ≈ ÷4) : le comptoir dépanne, il n'est jamais
- * l'optimum. La spécialisation ◈ Transmutateur de l'Alchimiste garde de bien meilleurs taux sur
- * les paires qu'elle couvre. L'or n'est JAMAIS une sortie (pas de planche à billets).
- */
-export const MARKET_TRADES: ResourceTrade[] = [
-  // Or → ressources (puits d'or, repris de l'ancien onglet)
-  { id: 'goldEclats', from: { res: 'gold', amt: 1500 }, to: { res: 'essence', amt: 100 } },
-  { id: 'goldSceau', from: { res: 'gold', amt: 8000 }, to: { res: 'sceaux', amt: 1 }, unlockStage: 5 },
-  { id: 'goldOrbe', from: { res: 'gold', amt: 25000 }, to: { res: 'orbes', amt: 1 }, unlockStage: 50 },
-  // Matériaux de craft (le marchand taxe plus fort que l'Alchimiste ◈ Transmutateur)
-  { id: 'eclatsNoyau', from: { res: 'essence', amt: 500 }, to: { res: 'noyau', amt: 1 }, unlockStage: 18 },
-  { id: 'noyauEclats', from: { res: 'noyau', amt: 2 }, to: { res: 'essence', amt: 250 }, unlockStage: 18 },
-  { id: 'eclatsPoussiere', from: { res: 'essence', amt: 700 }, to: { res: 'poussiere', amt: 1 }, unlockStage: 45 },
-  { id: 'poussiereEclats', from: { res: 'poussiere', amt: 1 }, to: { res: 'essence', amt: 170 }, unlockStage: 45 },
-  { id: 'noyauPoussiere', from: { res: 'noyau', amt: 5 }, to: { res: 'poussiere', amt: 1 }, unlockStage: 45 },
-  // Clés : passerelle Sceaux ↔ Orbes
-  { id: 'sceauxOrbe', from: { res: 'sceaux', amt: 4 }, to: { res: 'orbes', amt: 1 }, unlockStage: 50 },
-  { id: 'orbeSceaux', from: { res: 'orbes', amt: 1 }, to: { res: 'sceaux', amt: 2 }, unlockStage: 50 },
-  // Gemmes : appoint de poussière 🔹 pour le Joaillier
-  { id: 'eclatsGemDust', from: { res: 'essence', amt: 400 }, to: { res: 'gemDust', amt: 25 }, unlockStage: 30 },
-  // Trésors de raid : Fragments ↔ Éclat cosmique
-  { id: 'fragmentsCosmic', from: { res: 'fragments', amt: 8 }, to: { res: 'cosmic', amt: 1 }, unlockStage: 50 },
-  { id: 'cosmicFragments', from: { res: 'cosmic', amt: 1 }, to: { res: 'fragments', amt: 4 }, unlockStage: 50 },
-]
-
-export function getMarketTrade(id: string): ResourceTrade | undefined {
-  return MARKET_TRADES.find((t) => t.id === id)
-}
 export interface MysteryBox {
   id: number
   name: string
@@ -1256,6 +1201,33 @@ export const MYSTERY_BOXES: MysteryBox[] = [
   { id: 18, name: 'Coffre du Maillon Faible', icon: '🧩', gold: 150000, count: 2, minTier: 7, maxTier: 11, jackpot: 0.06, weakest: true, desc: 'Analyse ton équipement et cible ton EMPLACEMENT le plus faible (vide ou en retard).' },
   { id: 19, name: 'Coffre du Collectionneur', icon: '📖', gold: 300000, count: 1, minTier: 8, maxTier: 12, jackpot: 0.06, collector: true, costFragments: 3, desc: 'Un objet portant un effet unique JAMAIS DÉCOUVERT — complète le Grimoire.' },
 ]
+
+/**
+ * v0.25 — PRIX EN OR d'un coffre de stuff. Suit (a) la rareté ET (b) ton revenu d'or (record) :
+ * un prix FIXE devenait vite trivial face au revenu exponentiel (« on a tout ce qu'on veut »).
+ * Calé SOUS la croissance du Donjon d'Or (≈1,069^palier) → acheter coûte ~un nombre constant de
+ * runs, qui décroît LENTEMENT (rentable sur le temps, jamais instantané). Lots de ressources
+ * (count 0) & coffres gratuits : prix fixe (l'équation, indexée rareté, ne les concerne pas).
+ */
+const BOX_PRICE_K = 400       // base (~4 runs du Donjon d'Or au niveau courant)
+const BOX_PRICE_RARITY = 2.5  // ×prix par cran de rareté moyenne (raide : « gonfle énormément » en haut)
+const BOX_PRICE_STAGE = 1.06  // ×prix par palier de record (< revenu d'or → rentable sur le temps)
+export function boxGoldPrice(box: MysteryBox, bestStage: number): number {
+  if (box.free || box.count <= 0) return box.gold
+  const tMoy = box.minTier + 1.5
+  return Math.round(BOX_PRICE_K * box.count * Math.pow(BOX_PRICE_RARITY, tMoy - 3) * Math.pow(BOX_PRICE_STAGE, Math.max(1, bestStage)))
+}
+
+/** v0.25 — VERROU rareté×raids : meilleur tier de raid requis pour acheter (Céleste+ = raid only). */
+export function boxRaidGate(box: MysteryBox): number {
+  return Math.max(0, box.maxTier - 10) // maxTier 11→1 · 12→2 · 14→4 · 16→6
+}
+/** Meilleur tier de raid atteint, tous raids confondus. */
+export function bestRaidTier(raidProgress: Record<string, number>): number {
+  let best = 0
+  for (const k in raidProgress) best = Math.max(best, raidProgress[k] ?? 0)
+  return best
+}
 
 /** Prix d'achat d'un objet en échoppe (croît FORTEMENT avec la rareté → vrai puits d'or). */
 export function shopBuyPrice(item: Item): number {
@@ -3787,33 +3759,6 @@ export const useGame = create<GameState>((set, get) => {
       set(next)
     },
 
-    tradeResource: (tradeId, times = 1) => {
-      const s = get()
-      const t = getMarketTrade(tradeId)
-      if (!t) return
-      if (s.bestStage < (t.unlockStage ?? 0)) return
-      const n = Math.max(1, Math.floor(times))
-      const cost = t.from.amt * n
-      const gain = t.to.amt * n
-      const pool: Record<TradeRes, number> = {
-        gold: s.gold, essence: s.essence, noyau: s.noyau, poussiere: s.poussiere,
-        sceaux: s.sceaux, orbes: s.orbes, fragments: s.fragments, cosmic: s.cosmic, gemDust: s.gemDust,
-      }
-      if (pool[t.from.res] < cost) return
-      pool[t.from.res] -= cost
-      pool[t.to.res] += gain
-      const fm = TRADE_RES_META[t.from.res]
-      const tm = TRADE_RES_META[t.to.res]
-      const next = {
-        ...s,
-        gold: pool.gold, essence: pool.essence, noyau: pool.noyau, poussiere: pool.poussiere,
-        sceaux: pool.sceaux, orbes: pool.orbes, fragments: pool.fragments, cosmic: pool.cosmic, gemDust: pool.gemDust,
-        log: pushLog(s.log, `🔄 Échange : ${fm.icon} ${cost.toLocaleString('fr-FR')} → ${tm.icon} ${gain.toLocaleString('fr-FR')}.`, 'gold'),
-      }
-      persist(next)
-      set(next)
-    },
-
     mysteryBox: (id, opts = {}) => {
       const s = get()
       const box = MYSTERY_BOXES[id]
@@ -3823,7 +3768,9 @@ export const useGame = create<GameState>((set, get) => {
       if (box.elementPick && !opts.element) return
       // Achat en gros : ×5 d'un coup → -10% d'or. (Pas de gros sur le gratuit / le Destin.)
       const qty = box.free || box.choice ? 1 : Math.max(1, Math.min(BOX_BULK_QTY, Math.round(opts.qty ?? 1)))
-      const goldCost = Math.round(box.gold * qty * (qty >= BOX_BULK_QTY ? BOX_BULK_DISCOUNT : 1))
+      // v0.25 : verrou rareté×raids — les hautes raretés exigent d'avoir raidé (Céleste+ = raid only).
+      if (bestRaidTier(s.raidProgress) < boxRaidGate(box)) return
+      const goldCost = Math.round(boxGoldPrice(box, s.bestStage) * qty * (qty >= BOX_BULK_QTY ? BOX_BULK_DISCOUNT : 1))
       const fragCost = (box.costFragments ?? 0) * qty
       const cosmicCost = (box.costCosmic ?? 0) * qty
       if (s.gold < goldCost || s.fragments < fragCost || s.cosmic < cosmicCost) return

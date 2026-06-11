@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import {
-  useGame, MYSTERY_BOXES, MARKET_TRADES, TRADE_RES_META, FREE_BOX_COOLDOWN_MS,
+  useGame, MYSTERY_BOXES, FREE_BOX_COOLDOWN_MS,
   BOX_BULK_QTY, BOX_BULK_DISCOUNT, BOX_PITY_STEP, BOX_PITY_CAP,
-  RECRUIT_COST, RECRUIT_POUSSIERE, type MysteryBox, type ResourceTrade, type TradeRes,
+  boxGoldPrice, boxRaidGate, bestRaidTier,
+  RECRUIT_COST, RECRUIT_POUSSIERE, type MysteryBox,
 } from '../game/store'
 import { UPGRADES, UPGRADE_CATEGORIES, upgradeCost, upgradePoussiere, upgradeEclats, isMaxed, type UpgradeCategory } from '../game/upgrades'
 import { RARITY_LIST } from '../game/rarities'
@@ -41,25 +42,20 @@ const BOX_GROUPS: { title: string; hint?: string; test: (b: MysteryBox) => boole
 export function MerchantPanel() {
   const gold = useGame((s) => s.gold)
   const essence = useGame((s) => s.essence)
-  const noyau = useGame((s) => s.noyau)
   const poussiere = useGame((s) => s.poussiere)
-  const sceaux = useGame((s) => s.sceaux)
-  const orbes = useGame((s) => s.orbes)
   const fragments = useGame((s) => s.fragments)
   const cosmic = useGame((s) => s.cosmic)
-  const gemDust = useGame((s) => s.gemDust)
   const bestStage = useGame((s) => s.bestStage)
+  const raidProgress = useGame((s) => s.raidProgress)
   const lastFreeBox = useGame((s) => s.lastFreeBox)
   const boxPity = useGame((s) => s.boxPity)
   const upgrades = useGame((s) => s.upgrades)
   const characters = useGame((s) => s.characters)
   const mysteryBox = useGame((s) => s.mysteryBox)
-  const tradeResource = useGame((s) => s.tradeResource)
   const buyUpgrade = useGame((s) => s.buyUpgrade)
   const recruitCharacter = useGame((s) => s.recruitCharacter)
 
-  const [sub, setSub] = useState<'coffres' | 'echange' | 'ameliorations'>('coffres')
-  const [qty, setQty] = useState(1)
+  const [sub, setSub] = useState<'coffres' | 'ameliorations'>('coffres')
   const [boxQty, setBoxQty] = useState(1)
 
   const recruitIdx = characters.length - 1
@@ -67,8 +63,7 @@ export function MerchantPanel() {
   const recruitPoussiere = RECRUIT_POUSSIERE[recruitIdx] ?? 0
 
   const pityBonus = Math.min(BOX_PITY_CAP, boxPity * BOX_PITY_STEP)
-  const balances: Record<TradeRes, number> = { gold, essence, noyau, poussiere, sceaux, orbes, fragments, cosmic, gemDust }
-  const trades = MARKET_TRADES.filter((t) => bestStage >= (t.unlockStage ?? 0))
+  const raidTier = bestRaidTier(raidProgress)
 
   return (
     <div className="flex h-full flex-col">
@@ -79,7 +74,6 @@ export function MerchantPanel() {
 
       <div className="mb-2 flex gap-1.5">
         <SubTab on={sub === 'coffres'} onClick={() => setSub('coffres')}>🎁 Coffres</SubTab>
-        <SubTab on={sub === 'echange'} onClick={() => setSub('echange')}>🔄 Échange</SubTab>
         <SubTab on={sub === 'ameliorations'} onClick={() => setSub('ameliorations')}>⬆️ Améliorations</SubTab>
       </div>
 
@@ -129,6 +123,7 @@ export function MerchantPanel() {
                         cosmic={cosmic}
                         qty={boxQty}
                         bestStage={bestStage}
+                        raidTier={raidTier}
                         lastFreeBox={lastFreeBox}
                         onBuy={(element) => mysteryBox(b.id, { qty: boxQty, ...(element ? { element } : {}) })}
                       />
@@ -137,32 +132,6 @@ export function MerchantPanel() {
                 </div>
               )
             })}
-          </>
-        )}
-
-        {sub === 'echange' && (
-          <>
-            <p className="mb-2 text-[10px] leading-snug text-slate-500">
-              Troc de ressources <b className="text-slate-300">taxé</b> (aller-retour ≈ ÷4) : un dépannage, jamais
-              l'optimum. L'<b className="text-teal-300">Alchimiste ◈ Transmutateur</b> convertit à de bien meilleurs taux.
-            </p>
-            <div className="mb-2 flex items-center gap-1.5 text-[10px]">
-              <span className="text-slate-500">Quantité</span>
-              {[1, 10, 100].map((q) => (
-                <button
-                  key={q}
-                  onClick={() => setQty(q)}
-                  className={'rounded px-2.5 py-1.5 font-medium ' + (qty === q ? 'bg-cyan-600 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700')}
-                >
-                  ×{q}
-                </button>
-              ))}
-            </div>
-            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-              {trades.map((t) => (
-                <TradeBtn key={t.id} trade={t} qty={qty} have={balances[t.from.res]} onClick={() => tradeResource(t.id, qty)} />
-              ))}
-            </div>
           </>
         )}
 
@@ -216,13 +185,14 @@ function fmtCooldown(ms: number): string {
 }
 
 /** Carte d'un coffre — « scellée » tant que sa monnaie exotique est inconnue du joueur (teaser). */
-function BoxCard({ box: b, gold, fragments, cosmic, qty, bestStage, lastFreeBox, onBuy }: {
+function BoxCard({ box: b, gold, fragments, cosmic, qty, bestStage, raidTier, lastFreeBox, onBuy }: {
   box: MysteryBox
   gold: number
   fragments: number
   cosmic: number
   qty: number
   bestStage: number
+  raidTier: number
   lastFreeBox: number
   onBuy: (element?: DamageType) => void
 }) {
@@ -242,9 +212,25 @@ function BoxCard({ box: b, gold, fragments, cosmic, qty, bestStage, lastFreeBox,
       </div>
     )
   }
+  // v0.25 — VERROU rareté×raids : les hautes raretés exigent d'avoir vaincu un tier de raid (Céleste+
+  // = raid only). On NE PEUT PAS acheter la fin de partie au marché sans raider.
+  const raidGate = boxRaidGate(b)
+  if (raidTier < raidGate) {
+    return (
+      <div className="flex items-center gap-2 rounded-lg border border-rose-900/40 bg-rose-950/10 p-2 opacity-70">
+        <span className="text-2xl grayscale">☠️</span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[12px] font-semibold text-slate-400">{b.icon} {b.name}</span>
+          <span className="block text-[9px] text-rose-300/80">
+            🔒 Exige un <b>tier de raid ≥ {raidGate}</b> (record actuel {raidTier}) — la haute rareté se mérite en raid.
+          </span>
+        </span>
+      </div>
+    )
+  }
   // Gratuit / Destin : toujours à l'unité. Les autres profitent de l'achat en gros (-10% à ×5).
   const effQty = b.free || b.choice ? 1 : qty
-  const goldCost = Math.round(b.gold * effQty * (effQty >= BOX_BULK_QTY ? BOX_BULK_DISCOUNT : 1))
+  const goldCost = Math.round(boxGoldPrice(b, bestStage) * effQty * (effQty >= BOX_BULK_QTY ? BOX_BULK_DISCOUNT : 1))
   const fragCost = (b.costFragments ?? 0) * effQty
   const cosmicCost = (b.costCosmic ?? 0) * effQty
   const cooldownLeft = b.free ? Math.max(0, FREE_BOX_COOLDOWN_MS - (Date.now() - lastFreeBox)) : 0
@@ -308,23 +294,3 @@ function BoxCard({ box: b, gold, fragments, cosmic, qty, bestStage, lastFreeBox,
   )
 }
 
-function TradeBtn({ trade: t, qty, have, onClick }: { trade: ResourceTrade; qty: number; have: number; onClick: () => void }) {
-  const fm = TRADE_RES_META[t.from.res]
-  const tm = TRADE_RES_META[t.to.res]
-  const cost = t.from.amt * qty
-  const gain = t.to.amt * qty
-  return (
-    <button
-      onClick={onClick}
-      disabled={have < cost}
-      title={`${fm.icon} ${fm.name} → ${tm.icon} ${tm.name}`}
-      className="flex items-center justify-between gap-2 rounded-lg border border-cyan-800/50 bg-cyan-950/20 px-2.5 py-2 hover:bg-cyan-900/30 disabled:opacity-40"
-    >
-      <span className={'text-[11px] font-medium ' + (have >= cost ? 'text-slate-200' : 'text-red-400')}>
-        {fm.icon} {cost.toLocaleString('fr-FR')}
-      </span>
-      <span className="text-[10px] text-slate-600">→</span>
-      <span className="text-[11px] font-medium text-cyan-200">{tm.icon} {gain.toLocaleString('fr-FR')}</span>
-    </button>
-  )
-}
