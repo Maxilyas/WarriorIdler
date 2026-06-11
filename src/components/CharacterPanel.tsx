@@ -8,6 +8,8 @@ import { DAMAGE_TYPES, DAMAGE_TYPE_LIST, profileDamageMult } from '../game/damag
 import { charTotalStats, charDerived, charMaxHp, charDamageProfile, charResist, abilityPower, powerScale, dpsBreakdown } from '../game/character'
 import { setBonuses, getSet } from '../game/sets'
 import { getPower, POWER_EFFECT_META, scaleLabel, powerDamageType } from '../game/powers'
+import { RAID_LIST, getRaidDef, raidUnlocked, raidReqs, type RaidId } from '../game/raids'
+import { resistMult } from '../game/resist'
 
 const DMG_EFFECTS: ReadonlySet<string> = new Set(['nuke', 'cleave', 'dot', 'executeNuke', 'megaCleave', 'lifeNuke', 'rupture'])
 // Effets dont la magnitude est une VALEUR affichable (dégâts/PV). Les autres (charge/marque/frénésie/
@@ -34,7 +36,7 @@ const SPEC_INFO: Record<PrimaryStat, string> = {
   endurance: '',
 }
 
-export type CharacterView = 'apercu' | 'stats' | 'capacites'
+export type CharacterView = 'apercu' | 'stats' | 'capacites' | 'resist'
 
 /** Fiche du personnage, éclatée en vues courtes (sous-onglets du hub Héros) :
  *  Aperçu = identité + spé + résumé combat · Stats = le détail chiffré · Capacités = les 5 slots. */
@@ -316,7 +318,101 @@ export function CharacterPanel({ view = 'apercu' }: { view?: CharacterView }) {
       )}
 
       {view === 'capacites' && <PowersSection char={char} />}
+
+      {view === 'resist' && <ResistSection char={char} allChars={characters} />}
     </div>
+  )
+}
+
+/**
+ * PANNEAU RÉSIST (v0.24, DESIGN §6) — la résistance est en POINTS et c'est LE check de stuff
+ * des raids : ce panneau montre tes 7 résistances ET, en face, les EXIGENCES du boss choisi
+ * (raid en cours par défaut) avec le multiplicateur que tu subirais. Boss-aware (option C).
+ */
+function ResistSection({ char, allChars }: { char: Character; allChars: Character[] }) {
+  const raid = useGame((s) => s.raid)
+  const bestStage = useGame((s) => s.bestStage)
+  const raidProgress = useGame((s) => s.raidProgress)
+  const tierUnlocked = useGame((s) => s.raidTierUnlocked)
+  const resist = charResist(char)
+
+  // Raids consultables : débloqués uniquement. Par défaut : le raid EN COURS, sinon le premier.
+  const unlockedRaids = RAID_LIST.filter((d) => raidUnlocked(d, bestStage, raidProgress))
+  const [sel, setSel] = useState<string | null>(null)
+  const selId = (raid?.raidId ?? sel ?? unlockedRaids[0]?.id) as RaidId | undefined
+  const def = selId ? getRaidDef(selId) : undefined
+  const tier = raid && def && raid.raidId === def.id ? raid.tier : def ? (tierUnlocked[def.id] ?? 1) : 1
+  const reqs = def ? raidReqs(def, tier) : {}
+
+  return (
+    <>
+      <div className="rounded-xl border border-slate-800 bg-[#11151f] p-4">
+        <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">🛡 Résistances (points)</div>
+        <p className="mb-2 text-[10.5px] leading-snug text-slate-500">
+          Les boss <b className="text-slate-300">exigent</b> des points de résistance : au cap → dégâts normaux (×1) ;
+          sous le cap → jusqu'à <b className="text-rose-300">×5</b>. ≈0 en farm, modéré en donjon, décisif en raid.
+          Sources : lignes d'objets, talents, effets uniques, sets, Quintessences.
+        </p>
+
+        {/* Sélecteur de boss (raid en cours prioritaire) */}
+        {unlockedRaids.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-1">
+            {unlockedRaids.map((d) => (
+              <button
+                key={d.id}
+                onClick={() => setSel(d.id)}
+                disabled={!!raid}
+                className={'rounded px-2 py-1 text-[10px] font-medium ' + (selId === d.id ? 'text-slate-950' : 'bg-slate-800 text-slate-400')}
+                style={selId === d.id ? { background: d.color } : undefined}
+              >
+                {d.icon} {d.name.replace(/^(La |Le |L')/, '')}
+              </button>
+            ))}
+            {def && <span className="self-center text-[10px] text-slate-500">Tier {tier}{raid && raid.raidId === def.id ? ' (en cours)' : ''}</span>}
+          </div>
+        )}
+
+        <div className="space-y-1">
+          {DAMAGE_TYPE_LIST.map((t) => {
+            const m = DAMAGE_TYPES[t]
+            const have = Math.round(resist[t] ?? 0)
+            const req = Math.round(reqs[t] ?? 0)
+            const mult = req > 0 ? resistMult(req, have) : 1
+            const ok = req > 0 && mult <= 1
+            const danger = req > 0 && mult > 1
+            return (
+              <div key={t} className="flex items-center justify-between text-[12px]">
+                <span style={{ color: m.color }}>{m.icon} {m.name}</span>
+                <span className="tabular-nums">
+                  <span className={have > 0 ? 'font-semibold text-slate-200' : 'text-slate-600'}>{have}</span>
+                  {req > 0 && (
+                    <>
+                      <span className="text-slate-600"> / {req}</span>
+                      {ok && <span className="ml-1.5 text-emerald-400">✓ ×1</span>}
+                      {danger && <span className="ml-1.5 font-semibold text-rose-400">×{mult.toFixed(1)}</span>}
+                    </>
+                  )}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+        {def && (
+          <p className="mt-2 text-[9.5px] leading-snug text-slate-600">
+            Exigences de <span style={{ color: def.color }}>{def.name}</span> · Tier {tier}. Les types sans
+            chiffre ne sont pas utilisés par ce boss.
+          </p>
+        )}
+      </div>
+
+      {/* Égide partagée : si un AUTRE membre partage sa résistance, le signaler. */}
+      {allChars.length > 1 && (
+        <p className="px-1 text-[9.5px] leading-snug text-slate-600">
+          Les exigences frappent chaque membre individuellement (les novas touchent toute l'équipe) —
+          vérifie chaque héros, ou investis dans « Égide partagée » (arbre Égide).
+        </p>
+      )}
+    </>
   )
 }
 

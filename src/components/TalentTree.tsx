@@ -23,7 +23,7 @@ import type { DamageType, StatKey, PowerDef } from '../game/types'
 /*   d'écran noir au déplacement, quelle que soit la limite de texture du GPU.
 /* ------------------------------------------------------------------ */
 
-const RING = 56 // px par anneau de profondeur
+const RING = 66 // px par anneau de profondeur (v0.24 : aéré — 300+ nœuds avec les archétypes)
 
 const CIDX = new Map(CONSTELLATION_LIST.map((c, i) => [c, i]))
 function sortKey(n: TalentNode): number {
@@ -399,6 +399,7 @@ export function TalentTree() {
             node={node}
             x={sx(node.id)}
             y={sy(node.id)}
+            scale={view.scale}
             talents={char.talents}
             selected={selected === node.id}
             dimmed={!!focus && node.constellation !== focus}
@@ -463,11 +464,12 @@ function CtrlBtn({ onClick, label, title }: { onClick: () => void; label: string
 
 /** Nœud sur le canevas : pastille colorée + libellé (pour les nœuds marquants / sélectionné). */
 function CanvasNode({
-  node, x, y, talents, selected, dimmed, showLabel, onSelect,
+  node, x, y, scale, talents, selected, dimmed, showLabel, onSelect,
 }: {
   node: TalentNode
   x: number
   y: number
+  scale: number
   talents: Record<string, number>
   selected: boolean
   dimmed: boolean
@@ -478,7 +480,9 @@ function CanvasNode({
   const allocated = rank > 0
   const reachable = isReachable(node, talents)
   const meta = CONSTELLATIONS[node.constellation]
-  const size = KIND_SIZE[node.kind]
+  // La pastille SUIT (en partie) le zoom : dézoomer ne crée plus un mur de pastilles qui se
+  // chevauchent, zoomer grossit la cible tactile (v0.24).
+  const size = KIND_SIZE[node.kind] * Math.min(1.2, Math.max(0.5, scale * 0.9 + 0.25))
   const emphatic = node.kind !== 'minor'
   const labelShown = (emphatic && showLabel) || selected
   const dmg = nodeDamageTypes(node)

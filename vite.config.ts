@@ -5,6 +5,8 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
   base: '/WarriorIdler/',
+  // Le harnais de preview assigne un port via $PORT (autoPort) — Vite ne le lit pas seul.
+  server: { port: Number(process.env.PORT) || 5173 },
   plugins: [
     react(),
     tailwindcss(),
