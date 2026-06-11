@@ -2,10 +2,11 @@ import { useState, useRef, useLayoutEffect, useEffect, useMemo, useCallback } fr
 import { useGame } from '../game/store'
 import {
   CONSTELLATIONS, CONSTELLATION_LIST, TALENTS, talentsByConstellation, getTalent, canAllocate, isReachable,
+  gateInfo,
   type ConstellationId, type TalentNode,
 } from '../game/talents'
 import { getPower, powerSummary, powerIcon, powerHasDamageType, powerDamageType } from '../game/powers'
-import { Sheet } from './ui'
+import { Sheet, ConfirmButton } from './ui'
 import { charDamageProfile } from '../game/character'
 import { DAMAGE_TYPES } from '../game/damage'
 import { ALL_STAT_META } from '../game/stats'
@@ -160,13 +161,14 @@ const KIND_ICON: Record<TalentNode['kind'], string> = {
 const KIND_LABEL: Record<TalentNode['kind'], string> = {
   minor: 'Passif mineur', notable: 'Passif notable', keystone: 'Keystone', ability: 'Capacité', gateway: 'Passerelle',
 }
-/** Diamètre (px) d'un nœud selon son importance. */
+/** Diamètre (px) d'un nœud selon son importance (v0.24 : cibles tactiles agrandies). */
 const KIND_SIZE: Record<TalentNode['kind'], number> = {
-  minor: 18, notable: 30, ability: 34, keystone: 38, gateway: 34,
+  minor: 22, notable: 32, ability: 36, keystone: 40, gateway: 36,
 }
 
 const MIN_SCALE = 0.32
-const MAX_SCALE = 1.8
+// v0.24 : zoom max relevé (mobile : viser une node précise demandait trop de précision).
+const MAX_SCALE = 2.6
 
 export function TalentTree() {
   const characters = useGame((s) => s.characters)
@@ -405,21 +407,19 @@ export function TalentTree() {
           />
         ))}
 
-        {/* Contrôles zoom */}
-        <div className="absolute bottom-2 right-2 flex flex-col gap-1">
-          <CtrlBtn onClick={() => zoomBy(1.25)} label="+" />
-          <CtrlBtn onClick={() => zoomBy(0.8)} label="−" />
-          <CtrlBtn onClick={center} label="⌖" title="Recentrer" />
-        </div>
         <div className="pointer-events-none absolute left-2 top-2 rounded bg-black/40 px-1.5 py-0.5 text-[9px] text-slate-400">
-          Glisse pour explorer · pince, molette ou +/− pour zoomer
+          Glisse pour explorer · pince ou molette pour zoomer
         </div>
       </div>
 
       {/* Panneau de détail */}
       {selectedNode && <NodeDetail node={selectedNode} char={char} weaponType={weaponType} onClose={() => setSelected(null)} />}
 
+      {/* Barre d'outils SOUS l'arbre (v0.24) : le zoom ne recouvre plus jamais une node. */}
       <div className="mt-2 flex gap-1.5">
+        <CtrlBtn onClick={() => zoomBy(1.25)} label="+" title="Zoomer" />
+        <CtrlBtn onClick={() => zoomBy(0.8)} label="−" title="Dézoomer" />
+        <CtrlBtn onClick={center} label="⌖" title="Recentrer" />
         <PresetsButton />
         <RespecBar char={char} />
       </div>
@@ -596,10 +596,16 @@ function NodeDetail({
   const meta = CONSTELLATIONS[node.constellation]
   const power = node.unlockPower ? getPower(node.unlockPower) : undefined
   const reqNames = (node.requires ?? []).map((r) => getTalent(r)?.name).filter(Boolean).join(', ')
+  // v0.24 : verrous de palier (points dans la voie) et de compétence (prérequis maxés).
+  const gate = gateInfo(node, char.talents)
+  const gateLocked = gate.spent < gate.need
+  const strictLocked = reachable && gate.missingMaxed.length > 0
 
   let btnLabel: string
   if (maxed) btnLabel = `✓ Rang maximum (${rank}/${node.maxRank})`
   else if (!reachable) btnLabel = '🔒 Prérequis manquant'
+  else if (strictLocked) btnLabel = '🔒 Prérequis à maxer'
+  else if (gateLocked) btnLabel = `🔒 Palier : ${gate.spent}/${gate.need} pts au tier ${gate.gateTier}`
   else if (char.talentPoints <= 0) btnLabel = 'Aucun point disponible'
   else btnLabel = node.maxRank > 1 ? `Allouer 1 point  (${rank} → ${rank + 1}/${node.maxRank})` : 'Allouer 1 point'
 
@@ -656,6 +662,16 @@ function NodeDetail({
       {reqNames && !reachable && (
         <p className="mb-1 text-[10px] text-rose-300">🔒 Requiert : {reqNames}</p>
       )}
+      {strictLocked && !maxed && (
+        <p className="mb-1 text-[10px] text-amber-300">
+          ✦ Nœud puissant : il faut d'abord MAXER {gate.missingMaxed.join(', ')}.
+        </p>
+      )}
+      {gateLocked && reachable && !maxed && (
+        <p className="mb-1 text-[10px] text-amber-300">
+          ⛩ Palier d'archétype : dépense {gate.need} pts au tier {gate.gateTier} de {meta.icon} {meta.name} ({gate.spent}/{gate.need}). Répartis-les comme tu veux.
+        </p>
+      )}
 
       <button
         onClick={() => allocateTalent(node.id)}
@@ -675,14 +691,16 @@ function RespecBar({ char }: { char: { level: number; talents: Record<string, nu
   const respecCost = 200 * char.level
   const refundable = Object.values(char.talents).reduce((a, b) => a + b, 0) - (char.talents.co_start ?? 0)
   if (refundable <= 0) return null
+  // v0.24 : CONFIRMATION (double-tap) — une erreur de clic ne vide plus l'arbre.
   return (
-    <button
-      onClick={respecTalents}
+    <ConfirmButton
+      onConfirm={respecTalents}
       disabled={gold < respecCost}
+      confirmLabel={`⚠ Tout réinitialiser ? (${refundable} pts)`}
       className="flex-1 rounded-lg bg-slate-800 py-1.5 text-[11px] text-slate-300 hover:bg-slate-700 disabled:opacity-40"
     >
       Réinitialiser · 💰 {respecCost.toLocaleString('fr-FR')}
-    </button>
+    </ConfirmButton>
   )
 }
 
@@ -738,13 +756,15 @@ function PresetsButton() {
                     <span className="text-[9.5px] text-slate-500">{pts} pts · {nPowers} capacité{nPowers > 1 ? 's' : ''} · spé {p.primaryBias}</span>
                   </div>
                   <div className="mt-1.5 flex gap-1.5 text-[10px]">
-                    <button
+                    {/* v0.24 : appliquer = respec payant → CONFIRMATION (double-tap). */}
+                    <ConfirmButton
                       disabled={gold < applyCost}
-                      onClick={() => { applyBuildPreset(slot); setOpen(false) }}
+                      onConfirm={() => { applyBuildPreset(slot); setOpen(false) }}
+                      confirmLabel="⚠ Respec + appliquer ?"
                       className="flex-1 rounded bg-violet-700/70 py-1.5 font-semibold text-violet-50 hover:bg-violet-600/70 disabled:opacity-40"
                     >
                       Appliquer{applyCost ? ` · 💰 ${applyCost.toLocaleString('fr-FR')}` : ''}
-                    </button>
+                    </ConfirmButton>
                     <button onClick={() => saveBuildPreset(slot, p.name)} className="rounded bg-slate-800 px-2.5 py-1.5 text-slate-300 hover:bg-slate-700" title="Écraser avec le build actuel">
                       💾 Écraser
                     </button>

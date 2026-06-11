@@ -14,6 +14,7 @@ export type ConstellationId =
   | 'coeur' | 'force' | 'agilite' | 'intelligence' | 'bastion' | 'soin' | 'conversion'
   | 'templier' | 'elementaliste' | 'faucheur' | 'duelliste' | 'colosse'
   | 'pestifere' | 'bourreau' | 'spectre' | 'briseur' | 'alchimiste'
+  | 'foudreur' | 'chronomancien' | 'purgateur' | 'sang' | 'lame' | 'egide'
 
 export interface ConstellationMeta {
   id: ConstellationId
@@ -43,12 +44,20 @@ export const CONSTELLATIONS: Record<ConstellationId, ConstellationMeta> = {
   spectre: { id: 'spectre', name: 'Spectre', role: 'Évasion · Précision · Anti-contrôle', color: '#b197fc', icon: '👻', archetype: true },
   briseur: { id: 'briseur', name: 'Briseur', role: 'Multi-cible · Inarrêtable', color: '#e8590c', icon: '🌋', archetype: true },
   alchimiste: { id: 'alchimiste', name: 'Alchimiste', role: 'Transmutation des éléments', color: '#2dd4bf', icon: '⚗️', archetype: true },
+  // --- v0.24 : six archétypes neufs (stats orphelines + gameplays manquants) ---
+  foudreur: { id: 'foudreur', name: 'Foudreur', role: 'Foudre · Arcs · Vitesse', color: '#ffd43b', icon: '⚡', archetype: true },
+  chronomancien: { id: 'chronomancien', name: 'Chronomancien', role: 'Recharges · Spam de sorts', color: '#22d3ee', icon: '⏳', archetype: true },
+  purgateur: { id: 'purgateur', name: 'Purgateur', role: 'Purge · Anti-affliction', color: '#38d9a9', icon: '🜍', archetype: true },
+  sang: { id: 'sang', name: 'Oracle sanglant', role: 'Soin offensif (heal→dégâts)', color: '#f06595', icon: '🩸', archetype: true },
+  lame: { id: 'lame', name: 'Assassin', role: 'Ouverture · Kill rapide', color: '#94a3b8', icon: '🔪', archetype: true },
+  egide: { id: 'egide', name: 'Égide', role: 'Tank · Résistances', color: '#4dabf7', icon: '🛡️', archetype: true },
 }
 
 export const CONSTELLATION_LIST: ConstellationId[] = [
   'coeur', 'force', 'agilite', 'intelligence', 'bastion', 'soin', 'conversion',
   'templier', 'elementaliste', 'faucheur', 'duelliste', 'colosse',
   'pestifere', 'bourreau', 'spectre', 'briseur', 'alchimiste',
+  'foudreur', 'chronomancien', 'purgateur', 'sang', 'lame', 'egide',
 ]
 
 /** Effet fort d'un keystone, résolu par le moteur de combat (extensible). */
@@ -88,6 +97,42 @@ export interface KeystoneEffect {
   lowHpBonus?: { threshold: number; mult: number }
   /** Juggernaut : ×mult de dégâts si les PV du héros sont AU-DESSUS de `threshold`. */
   highHpBonus?: { threshold: number; mult: number }
+
+  /* ---- v0.24 : effets des nouveaux archétypes ---- */
+  /** ORACLE SANGLANT : fraction des SOINS de sorts aussi infligée en dégâts à l'ennemi focus. */
+  healToDamage?: number
+  /** BRISEUR : les auto-attaques éclaboussent TOUS les autres ennemis du pack (fraction). */
+  cleaveAuto?: number
+  /** BRISEUR : +frac de dégâts par ennemi vivant au-delà du premier. */
+  perEnemyBonus?: number
+  /** FAUCHEUR : les DoT que ton équipe inflige TE soignent (fraction du tick). */
+  dotLeech?: number
+  /** PESTIFÉRÉ : ton DoT s'applique AUSSI aux autres ennemis du pack (fraction). */
+  dotAoe?: number
+  /** ASSASSIN : ×mult de dégâts pendant les `seconds` premières secondes face à chaque ennemi. */
+  openerBonus?: { mult: number; seconds: number }
+  /** FOUDREUR : les attaques REBONDISSENT sur `targets` autres ennemis (fraction des dégâts). */
+  chainArc?: { frac: number; targets: number }
+  /** FOUDREUR : toutes les `every` attaques, la suivante frappe ×mult (décharge statique). */
+  staticN?: { every: number; mult: number }
+  /** CHRONOMANCIEN : chaque sort lancé réduit les AUTRES recharges de `cdrOnCast` secondes. */
+  cdrOnCast?: number
+  /** CHRONOMANCIEN : multiplicateur des dégâts de SORTS (actives uniquement). */
+  spellMult?: number
+  /** PURGATEUR : chaque altération SUBIE donne +per de dégâts (cumul capé, durée du combat). */
+  afflictionFuel?: { per: number; cap: number }
+  /** ÉGIDE : le SURPLUS de résist face aux exigences du boss devient des dégâts (jusqu'à +value). */
+  surplusToDamage?: number
+  /** ÉGIDE : être touché par un type donne +gain résist de ce type (20 s, cumul ≤ cap). */
+  adaptiveResist?: { gain: number; cap: number }
+  /** ÉGIDE : les alliés bénéficient de `frac` de TA résistance (aura). */
+  shareResist?: number
+  /** ÉGIDE : régénère jusqu'à `value` ×PV max/s selon ton surplus de résist face au boss. */
+  surplusRegen?: number
+  /** ÉGIDE (Acclimatation) : les exigences de résistance comptent pour `frac` de moins. */
+  reqReduction?: number
+  /** ÉLÉMENTALISTE : +per de dégâts par type ≥ threshold de ton profil (au-delà du premier). */
+  multiTypeBonus?: { per: number; threshold: number }
 }
 
 export type TalentKind = 'minor' | 'notable' | 'keystone' | 'ability' | 'gateway'
@@ -222,7 +267,8 @@ chain('agilite', 'ag_a', 'ag_entry', 1, [
   { name: 'Précision', maxRank: 4, statMods: { critique: 30, degatsCrit: 24 } },
   { name: 'Volée de flèches', kind: 'ability', unlockPower: 'volee_de_fleches', desc: 'Débloque Volée de flèches (cleave, scale FOR/AGI).' },
   { name: 'Œil de lynx', maxRank: 3, statMods: { critique: 35, penetration: 20 } },
-  { name: 'Coup fatal', kind: 'keystone', desc: 'Exécute sous 20% de PV (×3 dégâts).', statMods: { degatsCrit: 40 }, keystone: { executeBonus: { threshold: 0.2, mult: 3 } } },
+  // v0.24 anti-redite : l'exécution est l'identité du BOURREAU — le Rôdeur capstone sur ses poisons.
+  { name: 'Carquois sans fond', kind: 'keystone', desc: 'Capstone : +50 Altération, +30 Critique, +15% de dégâts (le tireur patient).', statMods: { alteration: 50, critique: 30 }, keystone: { damageMult: 1.15 } },
 ])
 chain('agilite', 'ag_b', 'ag_entry', 1, [
   { name: 'Souplesse', maxRank: 5, statMods: { esquive: 26 } },
@@ -380,11 +426,13 @@ chain('templier', 'tp_b', 'tp_entry', 1, [
 
 /* ÉLÉMENTALISTE — tous les éléments */
 single({ id: 'el_entry', name: 'Affinité élémentaire', constellation: 'elementaliste', kind: 'notable', tier: 0, maxRank: 1, requires: ['in_gw_elem'], description: 'Maîtrise naissante des éléments. +50 Intelligence, +20 Pénétration.', statMods: { intelligence: 50, penetration: 20 } })
+// v0.24 anti-redite : l'Élémentaliste n'est plus un sac de +% dégâts génériques — son identité
+// est la RÉACTION ÉLÉMENTAIRE : plus ton profil mêle d'éléments, plus tu frappes fort.
 chain('elementaliste', 'el_a', 'el_entry', 1, [
   { name: 'Catalyse', maxRank: 5, statMods: { intelligence: 20, maitrise: 16 } },
-  { name: 'Trinité élémentaire', kind: 'keystone', desc: 'ARCHÉTYPE : +25% de dégâts (tu manies tous les éléments).', statMods: { maitrise: 30 }, keystone: { damageMult: 1.25 } },
+  { name: 'Réaction élémentaire', kind: 'keystone', desc: 'ARCHÉTYPE : +7% de dégâts PAR élément représentant ≥10% de ton profil (au-delà du premier). Diversifie tes types !', statMods: { maitrise: 30 }, keystone: { multiTypeBonus: { per: 0.07, threshold: 0.10 } } },
   { name: 'Résonance', maxRank: 4, statMods: { penetration: 24, degatsCrit: 20 } },
-  { name: 'Cataclysme', kind: 'keystone', desc: 'Capstone : +90 Intelligence, +28% dégâts, +20 Pénétration.', statMods: { intelligence: 90, penetration: 20 }, keystone: { damageMult: 1.28 } },
+  { name: 'Cataclysme', kind: 'keystone', desc: 'Capstone : +90 Intelligence, +15% dégâts, et +4% de dégâts par élément ≥10% du profil.', statMods: { intelligence: 90, penetration: 20 }, keystone: { damageMult: 1.15, multiTypeBonus: { per: 0.04, threshold: 0.10 } } },
 ])
 chain('elementaliste', 'el_b', 'el_entry', 1, [
   { name: 'Prisme', maxRank: 4, statMods: {}, resistMods: allResist(0.07), desc: '+7% résistance tous types par rang.' },
@@ -408,10 +456,11 @@ chain('faucheur', 'fa_a', 'fa_entry', 1, [
   { name: 'Putréfaction', kind: 'keystone', desc: 'ARCHÉTYPE : tes coups infligent un fort DoT d\'ombre (35% du coup/s, 6 s).', keystone: { dot: { frac: 0.35, duration: 6 } } },
   { name: 'Moisson', kind: 'keystone', desc: 'Convertit 60% des dégâts Physiques en Ombre.', statMods: { maitrise: 30 }, keystone: { convertDamage: { from: 'physique', to: 'ombre', frac: 0.6 } } },
 ])
+// v0.24 anti-redite : le Faucheur = DRAIN/SUSTAIN (ses DoT le soignent) — l'exécution reste au Bourreau.
 chain('faucheur', 'fa_b', 'fa_entry', 1, [
   { name: 'Sangsue', maxRank: 3, statMods: { volDeVie: 18 } },
-  { name: 'Pacte de sang', kind: 'keystone', desc: '+25 Vol de vie, +20% dégâts.', statMods: { volDeVie: 25 }, keystone: { damageMult: 1.2 } },
-  { name: 'Seigneur de la mort', kind: 'keystone', desc: 'Capstone : exécute sous 25% de PV (×3) + 20 Vol de vie.', statMods: { volDeVie: 20 }, keystone: { executeBonus: { threshold: 0.25, mult: 3 } } },
+  { name: 'Pacte de sang', kind: 'keystone', desc: '+25 Vol de vie, +20% dégâts, et tes DoT te soignent (20% du tick).', statMods: { volDeVie: 25 }, keystone: { damageMult: 1.2, dotLeech: 0.2 } },
+  { name: 'Seigneur de la mort', kind: 'keystone', desc: 'Capstone : tes DoT te soignent (30% du tick de plus), +15% dégâts, +20 Vol de vie.', statMods: { volDeVie: 20 }, keystone: { dotLeech: 0.3, damageMult: 1.15 } },
 ])
 
 /* DUELLISTE — multifrappe, burst */
@@ -436,9 +485,11 @@ chain('colosse', 'jc_a', 'jc_entry', 1, [
   { name: 'Masse II', maxRank: 4, statMods: { endurance: 50, reductionDegats: 16 } },
   { name: 'Rouleau compresseur', kind: 'keystone', desc: '+30% de dégâts quand tes PV sont au-dessus de 70%.', keystone: { highHpBonus: { threshold: 0.7, mult: 1.3 } } },
 ])
+// v0.24 anti-redite : les ÉPINES sont l'identité du Briseur — le Colosse, lui, est le roc
+// MONO-CIBLE immuable (anti-CC, régén, dégâts à PV hauts).
 chain('colosse', 'jc_b', 'jc_entry', 1, [
   { name: 'Carapace', maxRank: 4, statMods: { reductionDegats: 24 } },
-  { name: 'Épines de fer', kind: 'keystone', desc: 'Renvoie 30% des dégâts subis à l\'ennemi.', keystone: { thorns: 0.3 } },
+  { name: 'Racines de pierre', kind: 'keystone', desc: 'Inamovible : +40 Ténacité, +30 Régén, -10% de dégâts subis.', statMods: { tenacite: 40, regen: 30 }, keystone: { flatDr: 0.1 } },
   { name: 'Montagne vivante', kind: 'keystone', desc: 'Capstone : +200 Endurance, -15% subis, +20% dégâts au-dessus de 60% PV.', statMods: { endurance: 200 }, keystone: { flatDr: 0.15, highHpBonus: { threshold: 0.6, mult: 1.2 } } },
 ])
 
@@ -454,12 +505,14 @@ single({ id: 'pe_entry', name: 'Étreinte pestilentielle', constellation: 'pesti
 chain('pestifere', 'pe_a', 'pe_entry', 1, [
   { name: 'Virulence', maxRank: 5, statMods: { alteration: 30, intelligence: 12 } },
   { name: 'Contagion', kind: 'keystone', desc: 'ARCHÉTYPE : tes coups infligent une peste (DoT 28% du coup/s, 6 s, amplifié par l\'Altération).', statMods: { alteration: 30 }, keystone: { dot: { frac: 0.28, duration: 6 } } },
-  { name: 'Putréfaction', maxRank: 4, statMods: { alteration: 40 } },
+  { name: 'Nécrose', maxRank: 4, statMods: { alteration: 40 } },
   { name: 'Épidémie', kind: 'keystone', desc: '+30% de dégâts, +40 Altération.', statMods: { alteration: 40 }, keystone: { damageMult: 1.3 } },
 ])
+// v0.24 anti-redite : le Pestiféré = CONTAGION DE PACK (sa peste se propage) — le Fléau d'ombre
+// reste l'exclusivité du Faucheur (drain), et la branche gagne sa vraie mécanique multi-cible.
 chain('pestifere', 'pe_b', 'pe_entry', 1, [
   { name: 'Miasmes', maxRank: 5, statMods: { alteration: 28 } },
-  { name: 'Fléau d\'ombre', kind: 'ability', unlockPower: 'fleau_dombre', desc: 'Débloque Fléau d\'ombre (DoT puissant).' },
+  { name: 'Pandémie', kind: 'keystone', desc: 'Ta peste s\'applique AUSSI aux autres ennemis du pack (50% de l\'intensité).', statMods: { alteration: 20 }, keystone: { dotAoe: 0.5 } },
   { name: 'Corruption', kind: 'keystone', desc: 'Convertit 50% des dégâts Physiques en Ombre.', statMods: { maitrise: 20 }, keystone: { convertDamage: { from: 'physique', to: 'ombre', frac: 0.5 } } },
   { name: 'Avatar de peste', kind: 'keystone', desc: 'Capstone : +80 Intelligence, +60 Altération, +20% de dégâts.', statMods: { intelligence: 80, alteration: 60 }, keystone: { damageMult: 1.2 } },
 ])
@@ -497,16 +550,18 @@ chain('spectre', 'sp_b', 'sp_entry', 1, [
 /* BRISEUR — multi-cible, inarrêtable (Ténacité anti-CC + cleave pour les packs) */
 single({ id: 'ba_gw_briseur', name: '→ Briseur', constellation: 'bastion', kind: 'gateway', tier: 5, maxRank: 1, requires: ['ba_c0'], description: 'Passerelle vers le Briseur (multi-cible). +30 Ténacité.', statMods: { tenacite: 30 } })
 single({ id: 'br_entry', name: 'Rage inarrêtable', constellation: 'briseur', kind: 'notable', tier: 0, maxRank: 1, requires: ['ba_gw_briseur'], description: 'Rien ne t\'arrête. +80 Endurance, +30 Ténacité.', statMods: { endurance: 80, tenacite: 30 } })
+// v0.24 anti-redite : le Briseur devient le VRAI archétype MULTI-CIBLE (éclaboussures + bonus
+// par ennemi vivant) — fini le clone du Colosse. C'est l'archétype des packs de donjon/raid.
 chain('briseur', 'br_a', 'br_entry', 1, [
   { name: 'Déchaînement', maxRank: 5, statMods: { force: 18, endurance: 18 } },
   { name: 'Tourbillon', kind: 'ability', unlockPower: 'tourbillon', desc: 'Débloque Tourbillon (cleave : frappe tout le pack).' },
-  { name: 'Onde de choc', kind: 'keystone', desc: 'ARCHÉTYPE : +30% de dégâts et +40 Ténacité.', statMods: { tenacite: 40 }, keystone: { damageMult: 1.3 } },
+  { name: 'Onde de choc', kind: 'keystone', desc: 'ARCHÉTYPE : tes auto-attaques ÉCLABOUSSENT tous les autres ennemis (40% des dégâts). +40 Ténacité.', statMods: { tenacite: 40 }, keystone: { cleaveAuto: 0.4 } },
   { name: 'Imparable', kind: 'keystone', desc: '+60 Ténacité et -15% de dégâts subis.', statMods: { tenacite: 60 }, keystone: { flatDr: 0.15 } },
 ])
 chain('briseur', 'br_b', 'br_entry', 1, [
   { name: 'Carapace de fer', maxRank: 4, statMods: { reductionDegats: 24 } },
   { name: 'Épines brûlantes', kind: 'keystone', desc: 'Renvoie 30% des dégâts subis à l\'ennemi.', keystone: { thorns: 0.3 } },
-  { name: 'Cataclysme vivant', kind: 'keystone', desc: 'Capstone : +200 Endurance, +40 Ténacité, +20% de dégâts au-dessus de 60% PV.', statMods: { endurance: 200, tenacite: 40 }, keystone: { highHpBonus: { threshold: 0.6, mult: 1.2 } } },
+  { name: 'Cataclysme vivant', kind: 'keystone', desc: 'Capstone : +200 Endurance, +40 Ténacité, +6% de dégâts PAR ennemi vivant au-delà du premier.', statMods: { endurance: 200, tenacite: 40 }, keystone: { perEnemyBonus: 0.06 } },
 ])
 
 /* ================== ALCHIMISTE (archétype v0.19) : transmutation des éléments ==================
@@ -536,6 +591,114 @@ for (const [el, label] of ALCH_EL) {
 // Capstone : l'arme frappe de TOUS les éléments à la fois (le « multi-élément » demandé).
 single({ id: 'al_grand_oeuvre', name: 'Grand Œuvre', constellation: 'alchimiste', kind: 'keystone', tier: 2, maxRank: 1, requires: ['al_entry'],
   description: 'Capstone : ton arme compte AUSSI comme TOUS les autres éléments (30% chacun). +50 Maîtrise.', statMods: { maitrise: 50 }, keystone: { splashFromMainAll: 0.3 } })
+
+/* ================== ARCHÉTYPES v0.24 : six gameplays neufs ==================
+ * Servent les stats ORPHELINES (Purge, Récupération) et les manques identifiés :
+ * Foudre (AGI), spam de sorts (CDR), anti-affliction, heal→dégâts, burst d'ouverture,
+ * tank-résistances (le pendant offensif/défensif du nouveau modèle d'exigences).
+ */
+
+/* FOUDREUR — arcs en chaîne (AoE), décharge statique (vitesse), conductivité (anti-armure).
+ * Rattaché à l'AGILITÉ ; pont INT via le scaling AGI/INT de ses sorts. */
+single({ id: 'ag_gw_foudre', name: '→ Foudreur', constellation: 'agilite', kind: 'gateway', tier: 5, maxRank: 1, requires: ['ag_a1'], description: 'Passerelle vers le Foudreur (foudre/arcs). +25 Hâte.', statMods: { hate: 25 } })
+single({ id: 'fd_entry', name: 'Cœur d\'orage', constellation: 'foudreur', kind: 'notable', tier: 0, maxRank: 1, requires: ['ag_gw_foudre'], description: 'La foudre coule dans tes veines. +30 Agilité, +20 Hâte.', statMods: { agilite: 30, hate: 20 } })
+chain('foudreur', 'fd_a', 'fd_entry', 1, [
+  { name: 'Conducteur', maxRank: 5, statMods: { agilite: 16, hate: 14 } },
+  { name: 'Arc voltaïque', kind: 'ability', unlockPower: 'arc_voltaique', desc: 'Débloque Arc voltaïque (cleave Foudre, scale AGI/INT).' },
+  { name: 'Foudre en chaîne', kind: 'keystone', desc: 'ARCHÉTYPE : tes attaques REBONDISSENT sur 2 autres ennemis (45% des dégâts).', statMods: { hate: 20 }, keystone: { chainArc: { frac: 0.45, targets: 2 } } },
+  { name: 'Haute tension', maxRank: 4, statMods: { hate: 24, penetration: 14 } },
+  { name: 'Orage souverain', kind: 'keystone', desc: 'Capstone : +50 Agilité, +30 Hâte, +18% de dégâts.', statMods: { agilite: 50, hate: 30 }, keystone: { damageMult: 1.18 } },
+])
+chain('foudreur', 'fd_b', 'fd_entry', 1, [
+  { name: 'Charge statique', maxRank: 4, statMods: { hate: 20 } },
+  { name: 'Décharge', kind: 'keystone', desc: 'Toutes les 5 attaques, la suivante frappe ×3 — la vitesse d\'attaque charge l\'orage.', keystone: { staticN: { every: 5, mult: 3 } } },
+  { name: 'Conductivité', maxRank: 4, statMods: { penetration: 22 }, desc: '+22 Pénétration par rang (la foudre ignore le métal).' },
+  { name: 'Paratonnerre vivant', kind: 'keystone', desc: 'Tes dégâts Physiques comptent AUSSI comme Foudre (60%).', statMods: { penetration: 14 }, keystone: { splashType: { from: 'physique', to: 'foudre', frac: 0.6 } } },
+])
+
+/* CHRONOMANCIEN — recharges écrasées : le combat devient un feu d'artifice de sorts. */
+single({ id: 'in_gw_chrono', name: '→ Chronomancien', constellation: 'intelligence', kind: 'gateway', tier: 5, maxRank: 1, requires: ['in_b2'], description: 'Passerelle vers le Chronomancien (recharges). +10 Récupération.', statMods: { recuperation: 10 } })
+single({ id: 'ch_entry', name: 'Maître du tempo', constellation: 'chronomancien', kind: 'notable', tier: 0, maxRank: 1, requires: ['in_gw_chrono'], description: 'Le temps t\'obéit. +30 Intelligence, +12 Récupération.', statMods: { intelligence: 30, recuperation: 12 } })
+chain('chronomancien', 'ch_a', 'ch_entry', 1, [
+  { name: 'Rouages', maxRank: 5, statMods: { recuperation: 10, hate: 12 } },
+  { name: 'Cascade temporelle', kind: 'keystone', desc: 'ARCHÉTYPE : chaque sort lancé réduit les recharges de tes AUTRES sorts de 0,8 s.', keystone: { cdrOnCast: 0.8 } },
+  { name: 'Accélération', maxRank: 4, statMods: { hate: 22, intelligence: 16 } },
+  { name: 'Fracture du temps', kind: 'ability', unlockPower: 'fracture_temporelle', desc: 'Débloque Fracture du temps (nuke arcane, scale INT).' },
+  { name: 'Hors du temps', kind: 'keystone', desc: 'Capstone : +30% de dégâts de SORTS, +20 Récupération.', statMods: { recuperation: 20 }, keystone: { spellMult: 1.3 } },
+])
+chain('chronomancien', 'ch_b', 'ch_entry', 1, [
+  { name: 'Sablier', maxRank: 4, statMods: { recuperation: 8, regen: 14 } },
+  { name: 'Emprunt au futur', kind: 'keystone', desc: 'Chaque sort lancé réduit les autres recharges de 0,5 s de plus. +20 Hâte.', statMods: { hate: 20 }, keystone: { cdrOnCast: 0.5 } },
+  { name: 'Éternité', kind: 'keystone', desc: 'Capstone : +60 Intelligence, +15 Récupération, +15% de dégâts.', statMods: { intelligence: 60, recuperation: 15 }, keystone: { damageMult: 1.15 } },
+])
+
+/* PURGATEUR — encaisse les afflictions et les RETOURNE en puissance. Sert la stat Purge
+ * (et la soupape anti-DoT du modèle d'exigences : la Purge ronge le Req des altérations). */
+single({ id: 'so_gw_purge', name: '→ Purgateur', constellation: 'soin', kind: 'gateway', tier: 4, maxRank: 1, requires: ['so_c1'], description: 'Passerelle vers le Purgateur (anti-affliction). +30 Purge.', statMods: { purge: 30 } })
+single({ id: 'pu_entry', name: 'Serment du purificateur', constellation: 'purgateur', kind: 'notable', tier: 0, maxRank: 1, requires: ['so_gw_purge'], description: 'Le poison des autres devient ta force. +30 Purge, +30 Endurance.', statMods: { purge: 30, endurance: 30 } })
+chain('purgateur', 'pu_a', 'pu_entry', 1, [
+  { name: 'Antidote', maxRank: 5, statMods: { purge: 24, endurance: 16 } },
+  { name: 'Combustion purificatrice', kind: 'keystone', desc: 'ARCHÉTYPE : chaque altération SUBIE te donne +6% de dégâts (cumul 60%, durée du combat).', keystone: { afflictionFuel: { per: 0.06, cap: 0.6 } } },
+  { name: 'Immunisation', maxRank: 4, statMods: { purge: 28, tenacite: 18 } },
+  { name: 'Grand nettoyage', kind: 'keystone', desc: 'Capstone : +40 Purge, +15% de dégâts.', statMods: { purge: 40 }, keystone: { damageMult: 1.15 } },
+])
+chain('purgateur', 'pu_b', 'pu_entry', 1, [
+  { name: 'Peau salée', maxRank: 4, statMods: { purge: 20, reductionDegats: 14 } },
+  { name: 'Digestion vitale', kind: 'keystone', desc: '+30 Régén, +20 Purge, et tes soins sont amplifiés de 20%.', statMods: { regen: 30, purge: 20 }, keystone: { hot: 0.2 } },
+  { name: 'Inaltérable', kind: 'keystone', desc: '+30 Purge, +30 Ténacité, -10% de dégâts subis.', statMods: { purge: 30, tenacite: 30 }, keystone: { flatDr: 0.1 } },
+])
+
+/* ORACLE SANGLANT — heal→dégâts : un hybride OUVERT (scale sur la stat dominante, §3d).
+ * Un DPS peut le splash pour soigner ; un soigneur, pour blesser. */
+single({ id: 'so_gw_sang', name: '→ Oracle sanglant', constellation: 'soin', kind: 'gateway', tier: 4, maxRank: 1, requires: ['so_b1'], description: 'Passerelle vers l\'Oracle sanglant (soin offensif). +10 Vol de vie, +15 Régén.', statMods: { volDeVie: 10, regen: 15 } })
+single({ id: 'sg_entry', name: 'Alliance écarlate', constellation: 'sang', kind: 'notable', tier: 0, maxRank: 1, requires: ['so_gw_sang'], description: 'Soigner et blesser sont le même geste. +25 Régén, +8 Vol de vie.', statMods: { regen: 25, volDeVie: 8 } })
+chain('sang', 'sg_a', 'sg_entry', 1, [
+  { name: 'Communion', maxRank: 5, statMods: { regen: 20, intelligence: 12 } },
+  { name: 'Soins écarlates', kind: 'keystone', desc: 'ARCHÉTYPE : tes sorts de SOIN infligent aussi 60% du soin en dégâts à l\'ennemi.', keystone: { healToDamage: 0.6 } },
+  { name: 'Vague de soin', kind: 'ability', unlockPower: 'vague_de_soin', desc: 'Débloque Vague de soin.' },
+  { name: 'Effusion', maxRank: 4, statMods: { regen: 26, maitrise: 16 } },
+  { name: 'Transsubstantiation', kind: 'keystone', desc: 'Capstone : +40% de heal→dégâts supplémentaires et soins +25%.', keystone: { healToDamage: 0.4, hot: 0.25 } },
+])
+chain('sang', 'sg_b', 'sg_entry', 1, [
+  { name: 'Saignée', maxRank: 4, statMods: { volDeVie: 10, intelligence: 14 } },
+  { name: 'Imposition des mains', kind: 'ability', unlockPower: 'imposition_des_mains', desc: 'Débloque Imposition des mains (soin de groupe).' },
+  { name: 'Eucharistie', kind: 'keystone', desc: '+30 Régén et soins +30%.', statMods: { regen: 30 }, keystone: { hot: 0.3 } },
+])
+
+/* ASSASSIN — l'OUVERTURE : un début de combat dévastateur, récompense le kill rapide
+ * (gameplay AGI distinct du crit soutenu du Rôdeur et de la multifrappe du Duelliste). */
+single({ id: 'ag_gw_lame', name: '→ Assassin', constellation: 'agilite', kind: 'gateway', tier: 5, maxRank: 1, requires: ['ag_c1'], description: 'Passerelle vers l\'Assassin (ouverture/burst). +25 Critique.', statMods: { critique: 25 } })
+single({ id: 'la_entry', name: 'Art de l\'embuscade', constellation: 'lame', kind: 'notable', tier: 0, maxRank: 1, requires: ['ag_gw_lame'], description: 'Le premier coup décide du combat. +30 Agilité, +20 Critique.', statMods: { agilite: 30, critique: 20 } })
+chain('lame', 'la_a', 'la_entry', 1, [
+  { name: 'Approche silencieuse', maxRank: 5, statMods: { agilite: 18, precision: 14 } },
+  { name: 'Frappe d\'ouverture', kind: 'keystone', desc: 'ARCHÉTYPE : ×1,8 dégâts pendant les 5 premières secondes face à chaque ennemi.', keystone: { openerBonus: { mult: 1.8, seconds: 5 } } },
+  { name: 'Embuscade', kind: 'ability', unlockPower: 'embuscade', desc: 'Débloque Embuscade (énorme nuke d\'ouverture, scale AGI).' },
+  { name: 'Lame froide', maxRank: 4, statMods: { degatsCrit: 28, agilite: 16 } },
+  { name: 'Exécution éclair', kind: 'keystone', desc: 'Capstone : la fenêtre d\'ouverture passe à 8 s (×1,4 de plus) et +10% de dégâts.', keystone: { openerBonus: { mult: 1.4, seconds: 8 }, damageMult: 1.1 } },
+])
+chain('lame', 'la_b', 'la_entry', 1, [
+  { name: 'Profiter de la surprise', maxRank: 4, statMods: { critique: 22, hate: 14 } },
+  { name: 'Repli tactique', maxRank: 3, statMods: { esquive: 24, agilite: 14 } },
+  { name: 'Tueur de rois', kind: 'notable', statMods: { degatsBoss: 40, precision: 30 }, desc: '+40 Dégâts boss, +30 Précision : les têtes couronnées d\'abord.' },
+])
+
+/* ÉGIDE — le tank-RÉSISTANCES : la stat-reine défensive du modèle d'exigences devient une
+ * identité de build à part entière (capper = débloquer l'offense, partager, métaboliser). */
+single({ id: 'ba_gw_egide', name: '→ Égide', constellation: 'bastion', kind: 'gateway', tier: 4, maxRank: 1, requires: ['ba_b0'], description: 'Passerelle vers l\'Égide (tank-résistances). +30 Endurance.', statMods: { endurance: 30 } })
+single({ id: 'eg_entry', name: 'Serment de l\'Égide', constellation: 'egide', kind: 'notable', tier: 0, maxRank: 1, requires: ['ba_gw_egide'], description: 'Ton bouclier est fait de résistances. +40 Endurance, +5% résistance tous types.', statMods: { endurance: 40 }, resistMods: allResist(0.05) })
+chain('egide', 'eg_a', 'eg_entry', 1, [
+  { name: 'Bouclier levé', maxRank: 5, statMods: {}, resistMods: allResist(0.04), desc: '+4 points de résistance tous types par rang.' },
+  { name: 'Gardien du seuil', kind: 'keystone', desc: 'ARCHÉTYPE : face à un boss, ton SURPLUS de résistance (au-delà de son exigence) devient des dégâts — jusqu\'à +60%.', keystone: { surplusToDamage: 0.6 } },
+  { name: 'Rempart prismatique', maxRank: 4, statMods: {}, resistMods: allResist(0.05), desc: '+5 points de résistance tous types par rang.' },
+  { name: 'Acclimatation', kind: 'keystone', desc: 'Les exigences de résistance des ennemis comptent pour 15% de moins (la soupape des hybrides).', keystone: { reqReduction: 0.15 } },
+  { name: 'Forteresse intérieure', kind: 'keystone', desc: 'Capstone : +80 Endurance, -10% subis, et +30% de dégâts de surplus supplémentaires.', statMods: { endurance: 80 }, keystone: { surplusToDamage: 0.3, flatDr: 0.1 } },
+])
+chain('egide', 'eg_b', 'eg_entry', 1, [
+  { name: 'Réflexe défensif', maxRank: 4, statMods: { endurance: 25, tenacite: 14 } },
+  { name: 'Aegis adaptatif', kind: 'keystone', desc: 'Être touché par un type te donne +25 résistance de ce type pendant 20 s (cumul 100) — lisse les boss multi-éléments.', keystone: { adaptiveResist: { gain: 25, cap: 100 } } },
+  { name: 'Égide partagée', kind: 'keystone', desc: 'Tes alliés bénéficient de 35% de TA résistance (le tank protège le raid).', keystone: { shareResist: 0.35 } },
+  { name: 'Métaboliseur', kind: 'keystone', desc: 'Régénère jusqu\'à 4% de tes PV/s selon ton surplus de résistance face au boss.', keystone: { surplusRegen: 0.04 } },
+])
 
 /* ================== ULTIMES : 10 sorts surpuissants (nœuds-capacité profonds) ==================
  * Récompenses fortes à long cooldown, ancrées dans la voie thématique de chaque effet.
@@ -620,16 +783,113 @@ export function talentKeystones(talents: Record<string, number>): KeystoneEffect
   return out
 }
 
-/** Peut-on allouer un point dans ce nœud ? (TOUS les prérequis doivent être alloués —
- *  les passerelles d'archétype en ont 2 : il faut les deux branches, pas une seule). */
+/* ------------------------------------------------------------------ */
+/* GATING v0.24 — « Paliers d'archétype » (DESIGN §3.1), deux verrous :
+/*  1. PALIER : un nœud de tier T exige ≥ 5·T points DÉPENSÉS dans sa constellation
+/*     (répartition libre — 5/5 sur une node ou 3+2 sur deux). Clampé à 70% du total
+/*     possible de la constellation (les petites constellations restent finissables).
+/*  2. STRICT : les nœuds FORTS (keystones & capacités) exigent leurs prérequis MAXÉS.
+/* Les allocations existantes (vieilles saves) ne sont jamais reprises — le verrou ne
+/* s'applique qu'aux NOUVELLES allocations.
+/* ------------------------------------------------------------------ */
+
+export const GATE_PER_TIER = 5
+
+/** Points disponibles (somme des maxRank) par TIER d'une constellation — mémoïsé. */
+const tierTotals = new Map<ConstellationId, Map<number, number>>()
+function tierTotalsFor(c: ConstellationId): Map<number, number> {
+  let m = tierTotals.get(c)
+  if (!m) {
+    m = new Map()
+    for (const n of TALENTS) {
+      if (n.constellation !== c) continue
+      m.set(n.tier, (m.get(n.tier) ?? 0) + n.maxRank)
+    }
+    tierTotals.set(c, m)
+  }
+  return m
+}
+
+/** Tier PRÉCÉDENT existant (le plus haut < tier ayant des nœuds) dans la constellation. */
+function previousTier(c: ConstellationId, tier: number): number | null {
+  let best: number | null = null
+  for (const t of tierTotalsFor(c).keys()) {
+    if (t < tier && (best == null || t > best)) best = t
+  }
+  return best
+}
+
+/** Points dépensés dans un TIER précis d'une constellation. */
+export function spentInTier(talents: Record<string, number>, c: ConstellationId, tier: number): number {
+  let spent = 0
+  for (const id in talents) {
+    const node = BY_ID.get(id)
+    if (node?.constellation === c && node.tier === tier) spent += talents[id]
+  }
+  return spent
+}
+
+/**
+ * Verrou de palier d'un nœud : il faut ≥ 5 points dépensés dans le TIER PRÉCÉDENT de la
+ * constellation (clampé aux points réellement disponibles dans ce tier — les chaînes fines
+ * restent finissables). Renvoie le tier visé et le besoin (0 = pas de verrou).
+ */
+export function tierGate(node: TalentNode): { tier: number; need: number } {
+  if (node.tier <= 0 || node.constellation === 'coeur') return { tier: 0, need: 0 }
+  const prev = previousTier(node.constellation, node.tier)
+  if (prev == null) return { tier: 0, need: 0 }
+  const available = tierTotalsFor(node.constellation).get(prev) ?? 0
+  return { tier: prev, need: Math.min(GATE_PER_TIER, available) }
+}
+
+/** Les nœuds FORTS exigent leurs prérequis au rang MAX (verrou de compétence). */
+export function strictRequires(node: TalentNode): boolean {
+  return node.kind === 'keystone' || node.kind === 'ability'
+}
+
+/** Détail du verrouillage d'un nœud (pour l'UI : expliquer POURQUOI c'est fermé). */
+export interface GateInfo {
+  /** Tier dont il faut remplir le palier + points dépensés/requis dedans. */
+  gateTier: number
+  spent: number
+  need: number
+  /** Prérequis non MAXÉS (nœuds forts uniquement). */
+  missingMaxed: string[]
+}
+export function gateInfo(node: TalentNode, talents: Record<string, number>): GateInfo {
+  const missingMaxed: string[] = []
+  if (strictRequires(node)) {
+    for (const r of node.requires ?? []) {
+      const rn = BY_ID.get(r)
+      if (rn && (talents[r] ?? 0) < rn.maxRank) missingMaxed.push(rn.name)
+    }
+  }
+  const g = tierGate(node)
+  return { gateTier: g.tier, spent: g.need > 0 ? spentInTier(talents, node.constellation, g.tier) : 0, need: g.need, missingMaxed }
+}
+
+/** Peut-on allouer un point dans ce nœud ? (prérequis + verrous de palier/compétence). */
 export function canAllocate(node: TalentNode, talents: Record<string, number>, points: number): boolean {
   if (points <= 0) return false
   if ((talents[node.id] ?? 0) >= node.maxRank) return false
-  if (node.requires && node.requires.length && !node.requires.every((r) => (talents[r] ?? 0) > 0)) return false
+  const strict = strictRequires(node)
+  if (node.requires && node.requires.length) {
+    const ok = node.requires.every((r) => {
+      const have = talents[r] ?? 0
+      if (have <= 0) return false
+      if (!strict) return true
+      const rn = BY_ID.get(r)
+      return have >= (rn?.maxRank ?? 1)
+    })
+    if (!ok) return false
+  }
+  const g = tierGate(node)
+  if (g.need > 0 && spentInTier(talents, node.constellation, g.tier) < g.need) return false
   return true
 }
 
-/** Le nœud est-il accessible (TOUS les prérequis remplis), indépendamment des points ? */
+/** Le nœud est-il accessible (TOUS les prérequis remplis), indépendamment des points ?
+ *  (Sert au RENDU des liens — le verrou de palier/maxé est détaillé par gateInfo.) */
 export function isReachable(node: TalentNode, talents: Record<string, number>): boolean {
   if (!node.requires || node.requires.length === 0) return true
   return node.requires.every((r) => (talents[r] ?? 0) > 0)

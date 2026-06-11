@@ -277,13 +277,51 @@ export interface CombatMods {
   execute?: { threshold: number; mult: number }
   lowHp?: { threshold: number; mult: number }
   highHp?: { threshold: number; mult: number }
+  // --- v0.24 : effets des nouveaux archétypes (voir talents.ts / DESIGN §3.4-3.5) ---
+  /** Oracle sanglant : fraction des soins de sorts aussi infligée en dégâts (somme). */
+  healToDamage: number
+  /** Briseur : éclaboussure des auto-attaques sur le pack (somme, capée 0.8). */
+  cleaveAuto: number
+  /** Briseur : +frac dégâts par ennemi vivant au-delà du premier (somme). */
+  perEnemyBonus: number
+  /** Faucheur : les DoT infligés te soignent (somme). */
+  dotLeech: number
+  /** Pestiféré : propagation du DoT au pack (max). */
+  dotAoe: number
+  /** Chronomancien : multiplicateur des dégâts de sorts (produit). */
+  spellMult: number
+  /** Chronomancien : secondes de recharge rendues aux autres sorts par cast (somme). */
+  cdrOnCast: number
+  /** Égide (Acclimatation) : réduction des exigences de résistance (somme, capée 0.5). */
+  reqReduction: number
+  /** Égide : surplus de résist → dégâts (somme = bonus max). */
+  surplusToDamage: number
+  /** Égide : part de ta résist partagée aux alliés (max). */
+  shareResist: number
+  /** Égide : surplus de résist → régén (somme = fraction PV/s max). */
+  surplusRegen: number
+  /** Assassin : fenêtre d'ouverture (mult produit, durée max). */
+  opener?: { mult: number; seconds: number }
+  /** Foudreur : arcs (frac somme capée 0.8, targets max). */
+  chainArc?: { frac: number; targets: number }
+  /** Foudreur : décharge statique (on garde la plus rapide). */
+  staticN?: { every: number; mult: number }
+  /** Égide : résist adaptative (gain somme, cap max). */
+  adaptiveResist?: { gain: number; cap: number }
+  /** Purgateur : carburant d'affliction (per somme, cap max). */
+  afflictionFuel?: { per: number; cap: number }
 }
 
 export function charCombatMods(char: Character): CombatMods {
-  const out: CombatMods = { damageMult: 1, flatDr: 0, hot: 0, thorns: 0, multistrike: 0 }
+  const out: CombatMods = {
+    damageMult: 1, flatDr: 0, hot: 0, thorns: 0, multistrike: 0,
+    healToDamage: 0, cleaveAuto: 0, perEnemyBonus: 0, dotLeech: 0, dotAoe: 0,
+    spellMult: 1, cdrOnCast: 0, reqReduction: 0, surplusToDamage: 0, shareResist: 0, surplusRegen: 0,
+  }
   // Multiplicateur de dégâts des bonus de SET (s'applique aux auto-attaques ET aux sorts,
   // et donc au DPS affiché via charDps — même chemin que les keystones).
   out.damageMult *= setBonuses(char.equipment).damageMult
+  let multiType: { per: number; threshold: number } | undefined
   for (const k of charKeystones(char)) {
     if (k.damageMult) out.damageMult *= k.damageMult
     if (k.flatDr) out.flatDr = 1 - (1 - out.flatDr) * (1 - k.flatDr)
@@ -294,6 +332,54 @@ export function charCombatMods(char: Character): CombatMods {
     if (k.executeBonus) out.execute = k.executeBonus
     if (k.lowHpBonus) out.lowHp = k.lowHpBonus
     if (k.highHpBonus) out.highHp = k.highHpBonus
+    // --- v0.24 ---
+    if (k.healToDamage) out.healToDamage += k.healToDamage
+    if (k.cleaveAuto) out.cleaveAuto = Math.min(0.8, out.cleaveAuto + k.cleaveAuto)
+    if (k.perEnemyBonus) out.perEnemyBonus += k.perEnemyBonus
+    if (k.dotLeech) out.dotLeech += k.dotLeech
+    if (k.dotAoe) out.dotAoe = Math.max(out.dotAoe, k.dotAoe)
+    if (k.spellMult) out.spellMult *= k.spellMult
+    if (k.cdrOnCast) out.cdrOnCast += k.cdrOnCast
+    if (k.reqReduction) out.reqReduction = Math.min(0.5, out.reqReduction + k.reqReduction)
+    if (k.surplusToDamage) out.surplusToDamage += k.surplusToDamage
+    if (k.shareResist) out.shareResist = Math.max(out.shareResist, k.shareResist)
+    if (k.surplusRegen) out.surplusRegen += k.surplusRegen
+    if (k.openerBonus) {
+      out.opener = out.opener
+        ? { mult: out.opener.mult * k.openerBonus.mult, seconds: Math.max(out.opener.seconds, k.openerBonus.seconds) }
+        : { ...k.openerBonus }
+    }
+    if (k.chainArc) {
+      out.chainArc = out.chainArc
+        ? { frac: Math.min(0.8, out.chainArc.frac + k.chainArc.frac), targets: Math.max(out.chainArc.targets, k.chainArc.targets) }
+        : { ...k.chainArc }
+    }
+    if (k.staticN) {
+      if (!out.staticN || k.staticN.every < out.staticN.every) out.staticN = { ...k.staticN }
+    }
+    if (k.adaptiveResist) {
+      out.adaptiveResist = out.adaptiveResist
+        ? { gain: out.adaptiveResist.gain + k.adaptiveResist.gain, cap: Math.max(out.adaptiveResist.cap, k.adaptiveResist.cap) }
+        : { ...k.adaptiveResist }
+    }
+    if (k.afflictionFuel) {
+      out.afflictionFuel = out.afflictionFuel
+        ? { per: out.afflictionFuel.per + k.afflictionFuel.per, cap: Math.max(out.afflictionFuel.cap, k.afflictionFuel.cap) }
+        : { ...k.afflictionFuel }
+    }
+    if (k.multiTypeBonus) {
+      multiType = multiType
+        ? { per: multiType.per + k.multiTypeBonus.per, threshold: Math.min(multiType.threshold, k.multiTypeBonus.threshold) }
+        : { ...k.multiTypeBonus }
+    }
+  }
+  // Élémentaliste « Réaction élémentaire » : +per de dégâts par type ≥ threshold du profil
+  // (au-delà du premier) — replié dans damageMult (affiché dans « Talents & sets »).
+  if (multiType) {
+    const profile = charDamageProfile(char).profile
+    let count = 0
+    for (const t in profile) if ((profile[t as DamageType] ?? 0) >= multiType.threshold) count++
+    if (count > 1) out.damageMult *= 1 + multiType.per * (count - 1)
   }
   return out
 }

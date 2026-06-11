@@ -114,6 +114,22 @@ export const POWERS: PowerDef[] = [
     description: 'Coup mortel sur cible affaiblie. Scale FOR/AGI.',
     unlockLevel: 1, cooldown: 3.5, effect: 'nuke', magnitude: 5, scaleStats: ['force', 'agilite'],
   },
+  // --- Archétypes v0.24 ---
+  {
+    id: 'arc_voltaique', name: 'Arc voltaïque', kind: 'active',
+    description: 'Un éclair qui saute de cible en cible. Scale AGI/INT (la meilleure).',
+    unlockLevel: 1, cooldown: 3.2, effect: 'cleave', magnitude: 3.0, scaleStats: ['agilite', 'intelligence'], damageType: 'foudre',
+  },
+  {
+    id: 'fracture_temporelle', name: 'Fracture du temps', kind: 'active',
+    description: 'Brise un instant en deux : lourde frappe d\'arcane. Scale INT.',
+    unlockLevel: 1, cooldown: 6, effect: 'nuke', magnitude: 5.2, scaleStat: 'intelligence', damageType: 'arcane',
+  },
+  {
+    id: 'embuscade', name: 'Embuscade', kind: 'active',
+    description: 'Un coup d\'ouverture dévastateur — frappe pendant ta fenêtre d\'ouverture pour le maximum. Scale AGI.',
+    unlockLevel: 1, cooldown: 12, effect: 'nuke', magnitude: 7.5, scaleStat: 'agilite',
+  },
   {
     id: 'trait_de_givre', name: 'Trait de givre', kind: 'active',
     description: 'Éclat de glace perçant. Scale INT.',

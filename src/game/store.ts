@@ -3,12 +3,12 @@ import type {
   Equipment, Item, Affix, PrimaryStat, OffensiveStat, SecondaryStat, EquipSlotId, ItemType, Enemy, DamageType, RarityId, Character, PowerDef, EnemyAbility,
 } from './types'
 import { rollHit, incomingDps, genericMitigation } from './combat'
-import { resistMult, enemyReq } from './resist'
+import { resistMult, enemyReq, resistSurplus, RESIST_DSCALE } from './resist'
 import type { DerivedStats } from './stats'
 import {
   makeCharacter, charDerived, charMaxHp, charDamageProfile, charPassives,
   charResist, charCombatMods, abilityPower, powerScale, computeUnlockedPowers, setGlobalCombatMods,
-  talentPointsForLevel,
+  talentPointsForLevel, type CombatMods as CharCombatMods,
 } from './character'
 import { getTalent, canAllocate } from './talents'
 import { getPower } from './powers'
@@ -460,6 +460,91 @@ const gemCounters = new Map<string, number>()
 let boucleAcc = 0
 const sursisReadyAt = new Map<string, number>()
 
+// ---- v0.24 : état transitoire des nouveaux archétypes (non persisté, comme les cooldowns) ----
+
+// ÉGIDE « Aegis adaptatif » : stacks de résist par héros et par type (20 s glissantes).
+const adaptiveStacks = new Map<string, Partial<Record<DamageType, { pts: number; remaining: number }>>>()
+function adaptiveAdd(charId: string, type: DamageType, gain: number, cap: number) {
+  const m = adaptiveStacks.get(charId) ?? {}
+  const cur = m[type]
+  m[type] = { pts: Math.min(cap, (cur?.pts ?? 0) + gain), remaining: 20 }
+  adaptiveStacks.set(charId, m)
+}
+function adaptiveFor(charId: string): Partial<Record<DamageType, number>> {
+  const m = adaptiveStacks.get(charId)
+  if (!m) return {}
+  const out: Partial<Record<DamageType, number>> = {}
+  for (const t in m) {
+    const e = m[t as DamageType]
+    if (e && e.remaining > 0 && e.pts > 0) out[t as DamageType] = e.pts
+  }
+  return out
+}
+function adaptiveTick(dt: number) {
+  for (const m of adaptiveStacks.values()) {
+    for (const t in m) {
+      const e = m[t as DamageType]
+      if (e) e.remaining -= dt
+    }
+  }
+}
+
+// PURGATEUR « Combustion purificatrice » : altérations subies → carburant de dégâts (par héros).
+function fuelAdd(charId: string) {
+  gemCounters.set(`fuel:${charId}`, (gemCounters.get(`fuel:${charId}`) ?? 0) + 1)
+}
+function fuelMult(charId: string, fuel?: { per: number; cap: number }): number {
+  if (!fuel) return 1
+  return 1 + Math.min(fuel.cap, (gemCounters.get(`fuel:${charId}`) ?? 0) * fuel.per)
+}
+/** Remise à zéro du carburant (wipe / fin d'instance — comme le Crescendo). */
+function fuelReset() {
+  for (const k of [...gemCounters.keys()]) if (k.startsWith('fuel:')) gemCounters.delete(k)
+}
+
+/**
+ * ÉGIDE : enrichit les résistances effectives de l'équipe — « Égide partagée » (l'aura du
+ * meilleur porteur profite aux ALLIÉS) + « Aegis adaptatif » (stacks du héros). Mute info[].
+ */
+function enrichResists(
+  chars: Character[],
+  info: ({ resist: Partial<Record<DamageType, number>>; cmods: CharCombatMods } | null)[],
+) {
+  // Aura : pour chaque type, la meilleure part partagée (et son porteur, exclu de sa propre aura).
+  const aura: Partial<Record<DamageType, { v: number; owner: number }>> = {}
+  chars.forEach((_, i) => {
+    const d = info[i]
+    if (!d || d.cmods.shareResist <= 0) return
+    for (const t in d.resist) {
+      const type = t as DamageType
+      const v = (d.resist[type] ?? 0) * d.cmods.shareResist
+      if (v > (aura[type]?.v ?? 0)) aura[type] = { v, owner: i }
+    }
+  })
+  const hasAura = Object.keys(aura).length > 0
+  chars.forEach((c, i) => {
+    const d = info[i]
+    if (!d) return
+    const adaptive = d.cmods.adaptiveResist ? adaptiveFor(c.id) : null
+    if (!hasAura && !adaptive) return
+    const merged: Partial<Record<DamageType, number>> = { ...d.resist }
+    if (hasAura) {
+      for (const t in aura) {
+        const type = t as DamageType
+        const a = aura[type]
+        if (a && a.owner !== i) merged[type] = (merged[type] ?? 0) + a.v
+      }
+    }
+    if (adaptive) {
+      for (const t in adaptive) {
+        const type = t as DamageType
+        merged[type] = (merged[type] ?? 0) + (adaptive[type] ?? 0)
+      }
+    }
+    d.resist = merged
+  })
+}
+
 /** 🔁 Boucle temporelle : remet à zéro TOUTES les recharges des héros donnés. */
 function resetAllCooldowns(chars: Character[]) {
   for (const c of chars) for (const pid of c.powers) if (pid) cooldowns.set(`${c.id}:${pid}`, 0)
@@ -489,6 +574,7 @@ function crescendoAdd(kills: number) {
 }
 function crescendoReset() {
   gemCounters.delete('crescendo')
+  fuelReset() // 🜍 Purgateur : le carburant d'affliction retombe quand l'équipe tombe
 }
 
 /** Trésorerie de guerre : chaque kill blinde un bouclier (2% PV max, cumul capé). */
@@ -1243,7 +1329,7 @@ function enemyVuln(enemy: Enemy): number {
  * Les dégâts des sorts scalent sur le PROFIL DE DÉGÂTS de l'arme/du stuff (profileDamageMult) — comme
  * les auto-attaques — pour qu'un build qui empile un type booste aussi ses sorts.
  */
-function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profile: DamageProfile, chars: Character[], enemy: Enemy, hotBonus: number, dmgMult = 1): number {
+function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profile: DamageProfile, chars: Character[], enemy: Enemy, hotBonus: number, dmgMult = 1, healToDamage = 0): number {
   const base = (p.magnitude ?? 1) * abilityPower(derived, powerScale(p)) // soins (sans profil ni keystones)
   const magDmg = base * profileDamageMult(profile) * dmgMult // dégâts : scalent sur le profil de l'arme + keystones (Carnage…)
   // Boucliers : scalent sur la MEILLEURE de (stat principale, Endurance) → un tank qui empile
@@ -1251,6 +1337,8 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
   const shieldBase = (p.magnitude ?? 1) * Math.max(abilityPower(derived, powerScale(p)), derived.endurancePower)
   const vm = enemyVuln(enemy)
   const hit = (dmg: number): number => { const before = enemy.hp; enemy.hp = Math.max(0, enemy.hp - dmg); return before - enemy.hp }
+  // ORACLE SANGLANT : une fraction du SOIN est aussi infligée en dégâts à l'ennemi focus.
+  const bleedHeal = (healed: number): number => (healToDamage > 0 && enemy.hp > 0 ? hit(healed * healToDamage * vm) : 0)
   switch (p.effect) {
     case 'nuke':
     case 'cleave':
@@ -1286,14 +1374,14 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
         for (const a of allies) if (a.hp / charMaxHp(a) < low.hp / charMaxHp(low)) low = a
         low.hp = Math.min(charMaxHp(low), low.hp + base * (1 + hotBonus))
       }
-      return 0
+      return bleedHeal(base * (1 + hotBonus))
     }
     case 'bigHeal':
       for (const a of chars) if (a.hp > 0) a.hp = Math.min(charMaxHp(a), a.hp + base * (1 + hotBonus))
-      return 0
+      return bleedHeal(base * (1 + hotBonus))
     case 'buffParty':
       for (const a of chars) if (a.hp > 0) a.hp = Math.min(charMaxHp(a), a.hp + base * 0.5 * (1 + hotBonus))
-      return 0
+      return bleedHeal(base * 0.5 * (1 + hotBonus))
     case 'shield':
       // Bouclier runique : absorption sur le porteur (scale stat principale OU Endurance).
       caster.absorb = (caster.absorb ?? 0) + shieldBase
@@ -1337,7 +1425,7 @@ interface AbilityCtx {
   derived: DerivedStats
   resist: Partial<Record<DamageType, number>>
   passives: { threatMult: number; damageReduction: number }
-  cmods: { flatDr: number }
+  cmods: CharCombatMods
 }
 
 /** Applique l'effet d'une technique ennemie à un héros cible (modèle d'exigence + Purge). */
@@ -1346,12 +1434,18 @@ function applyEnemyAbility(ab: EnemyAbility, enemy: Enemy, t: Character, ctx: Ab
   const purge = ctx.derived.purge
   const extra = (1 - ctx.passives.damageReduction) * (1 - ctx.cmods.flatDr)
   const req = enemyReq(enemy, ab.element)
+  // ÉGIDE « Aegis adaptatif » : tout type qui te frappe te rend plus résistant à ce type.
+  if (ctx.cmods.adaptiveResist && (ab.kind === 'dot' || ab.kind === 'burst' || ab.kind === 'drain')) {
+    adaptiveAdd(t.id, ab.element, ctx.cmods.adaptiveResist.gain, ctx.cmods.adaptiveResist.cap)
+  }
+  // PURGATEUR : chaque affliction subie nourrit la Combustion purificatrice.
+  if (ctx.cmods.afflictionFuel && (ab.kind === 'dot' || ab.kind === 'cc' || ab.kind === 'debuff')) fuelAdd(t.id)
   switch (ab.kind) {
     case 'dot': {
       // DoT : ignore armure/esquive. La PURGE réduit intensité + durée ET ronge l'exigence du
       // type sur les altérations (v0.24 §5.3 : Req_eff = Req − Purge×100 — la soupape anti-DoT).
       const reqDot = Math.max(0, req - purge * 100)
-      const dps = Math.max(0, enemy.damage * ab.magnitude * resistMult(reqDot, resist) * (1 - purge))
+      const dps = Math.max(0, enemy.damage * ab.magnitude * resistMult(reqDot, resist, ctx.cmods.reqReduction) * (1 - purge))
       const remaining = (ab.duration ?? 4) * (1 - purge * 0.5)
       if (dps > 0) t.dots = [...(t.dots ?? []), { dps, type: ab.element, remaining }]
       break
@@ -1360,7 +1454,7 @@ function applyEnemyAbility(ab: EnemyAbility, enemy: Enemy, t: Character, ctx: Ab
     case 'drain': {
       // Coup unique télégraphié : multiplicateur d'exigence + atténuation générique bornée,
       // puis passé par l'immunité/bouclier d'absorption du héros.
-      const dmg = incomingDps(enemy.damage * ab.magnitude, ab.element, ctx.derived, ctx.resist, req, extra)
+      const dmg = incomingDps(enemy.damage * ab.magnitude, ab.element, ctx.derived, ctx.resist, req, extra, ctx.cmods.reqReduction)
       const taken = damageHero(t, dmg)
       if (ab.kind === 'drain') enemy.hp = Math.min(enemy.maxHp, enemy.hp + taken * 0.6)
       break
@@ -1412,6 +1506,7 @@ function tickEnemyAbilities(enemy: Enemy, chars: Character[], info: (AbilityCtx 
 
 /** Décompte des statuts transitoires du héros (étourdissement, malédiction, DoT subis). */
 function tickHeroStatuses(chars: Character[], dt: number) {
+  adaptiveTick(dt) // Égide : les stacks adaptatifs s'éventent (20 s glissantes)
   for (const c of chars) {
     if (c.stun && c.stun > 0) c.stun = Math.max(0, c.stun - dt)
     if (c.weaken) { c.weaken.remaining -= dt; if (c.weaken.remaining <= 0) c.weaken = undefined }
@@ -1455,6 +1550,8 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
         }
       : null,
   )
+  // ÉGIDE : aura partagée + stacks adaptatifs → résistances effectives.
+  enrichResists(chars, info)
 
   let totalDealt = 0
 
@@ -1475,7 +1572,15 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
     const acharne = mods?.cond?.acharneCap ? acharneMult(enemy.age ?? 0, mods.cond.acharneCap) : 1
     // 🫁 Second Souffle : le dos au mur (sous 30% PV) rend féroce.
     const souffle = mods?.cond?.souffle && hpFrac <= 0.3 ? 1 + mods.cond.souffle : 1
-    const bonusMult = d.cmods.damageMult * lowHp * highHp * weakenMult * frenzyMult * (mods?.heroMult ?? 1) * acharne * souffle * opportunisteMult
+    // 🔪 ASSASSIN : fenêtre d'OUVERTURE (×mult les premières secondes face à cet ennemi).
+    const opener = d.cmods.opener && (enemy.age ?? 0) <= d.cmods.opener.seconds ? d.cmods.opener.mult : 1
+    // 🜍 PURGATEUR : le carburant d'affliction amplifie les dégâts.
+    const fuel = fuelMult(c.id, d.cmods.afflictionFuel)
+    // 🛡️ ÉGIDE « Gardien du seuil » : le surplus de résist face aux exigences devient des dégâts.
+    const surplusMult = d.cmods.surplusToDamage > 0
+      ? 1 + Math.min(d.cmods.surplusToDamage, (resistSurplus(enemy, d.resist) / RESIST_DSCALE) * d.cmods.surplusToDamage)
+      : 1
+    const bonusMult = d.cmods.damageMult * lowHp * highHp * weakenMult * frenzyMult * (mods?.heroMult ?? 1) * acharne * souffle * opportunisteMult * opener * fuel * surplusMult
     const multistrikeChance = Math.min(0.85, d.derived.multistrike + d.cmods.multistrike)
     const metroN = mods?.cond?.metronomeN
     let healed = 0
@@ -1488,11 +1593,18 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
         const n = (gemCounters.get(mk) ?? 0) + 1
         if (n >= metroN) { forceCrit = true; gemCounters.set(mk, 0) } else gemCounters.set(mk, n)
       }
+      // ⚡ FOUDREUR « Décharge » : toutes les N attaques, la suivante frappe ×mult.
+      let staticMult = 1
+      if (d.cmods.staticN) {
+        const sk = `static:${c.id}`
+        const n = (gemCounters.get(sk) ?? 0) + 1
+        if (n >= d.cmods.staticN.every) { staticMult = d.cmods.staticN.mult; gemCounters.set(sk, 0) } else gemCounters.set(sk, n)
+      }
       // Multifrappe : chance de déclencher un coup supplémentaire.
       const strikes = 1 + (Math.random() < multistrikeChance ? 1 : 0)
       for (let s = 0; s < strikes && enemy.hp > 0; s++) {
         const hit = rollHit(d.derived, d.profile, enemy, { bonusMult, execute: d.cmods.execute, forceCrit: forceCrit && s === 0 })
-        const dmg = hit.damage * enemyVuln(enemy) // Sceau de faiblesse amplifie aussi les auto-attaques
+        const dmg = hit.damage * enemyVuln(enemy) * (s === 0 ? staticMult : 1) // Sceau de faiblesse + Décharge
         if (mods?.cond?.overkill && dmg > enemy.hp) overkill += dmg - enemy.hp
         enemy.hp = Math.max(0, enemy.hp - dmg)
         totalDealt += dmg
@@ -1512,6 +1624,11 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
     totalDealt += dmg
     enemy.dot.remaining -= dt
     if (enemy.dot.remaining <= 0) enemy.dot = undefined
+    // ☠ FAUCHEUR : les DoT te soignent (fraction du tick).
+    chars.forEach((c, i) => {
+      const d = info[i]
+      if (d && c.hp > 0 && d.cmods.dotLeech > 0) c.hp = Math.min(charMaxHp(c), c.hp + dmg * d.cmods.dotLeech)
+    })
   }
   if ((enemy.noRegen ?? 0) > 0) enemy.noRegen = Math.max(0, enemy.noRegen! - dt)
   if (enemy.vuln) { enemy.vuln.remaining -= dt; if (enemy.vuln.remaining <= 0) enemy.vuln = undefined }
@@ -1536,7 +1653,17 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
         cooldowns.set(key, (p.cooldown ?? 3) * (1 - d.derived.cdr) * (1 - pacte))
         if (pacte > 0) c.hp = Math.max(1, c.hp - 0.02 * charMaxHp(c))
         manualFire.delete(key)
-        const dealt = fireActive(p, c, d.derived, d.profile, chars, enemy, d.cmods.hot)
+        // ⏳ CHRONOMANCIEN « Cascade temporelle » : chaque sort lancé rembourse les autres recharges.
+        if (d.cmods.cdrOnCast > 0) {
+          for (const pid2 of c.powers) {
+            if (!pid2 || pid2 === pid) continue
+            const k2 = `${c.id}:${pid2}`
+            cooldowns.set(k2, Math.max(0, (cooldowns.get(k2) ?? 0) - d.cmods.cdrOnCast))
+          }
+        }
+        // Sorts : keystones de dégâts (Carnage…) + ×sorts (Chronomancien) + heal→dégâts (Oracle sanglant).
+        const spellMult = d.cmods.damageMult * d.cmods.spellMult
+        const dealt = fireActive(p, c, d.derived, d.profile, chars, enemy, d.cmods.hot, spellMult, d.cmods.healToDamage)
         // Vengeance différée : compte AUSSI les dégâts des sorts dans le cumul.
         if (c.charge && dealt > 0) c.charge.dealt += dealt
         // 🔔 Pierre d'Écho : tous les N sorts de l'équipe, le suivant résonne une 2e fois (50%).
@@ -1545,7 +1672,7 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
           const n = (gemCounters.get('echo') ?? 0) + 1
           if (n >= echoN) {
             gemCounters.set('echo', 0)
-            const echoDealt = fireActive(p, c, d.derived, d.profile, chars, enemy, d.cmods.hot, 0.5)
+            const echoDealt = fireActive(p, c, d.derived, d.profile, chars, enemy, d.cmods.hot, spellMult * 0.5, d.cmods.healToDamage * 0.5)
             if (c.charge && echoDealt > 0) c.charge.dealt += echoDealt
           } else gemCounters.set('echo', n)
         }
@@ -1598,12 +1725,15 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
       effDmg, enemy.damageType, td.derived, td.resist,
       enemyReq(enemy, enemy.damageType),
       (1 - td.passives.damageReduction) * (1 - td.cmods.flatDr),
+      td.cmods.reqReduction,
     ) * dt
     // Réfléchissant : CAPÉ à 10% des PV max de la cible par seconde — sinon un héros à très gros
     // DPS et petits PV se one-shotait lui-même (400k DPS vs 12k PV…).
     if (mods?.reflect) incoming += Math.min(totalDealt * mods.reflect, charMaxHp(t) * 0.10 * dt)
     // Immunité / bouclier d'absorption du héros (Phase éthérée, Égide titanesque).
     damageHero(t, incoming)
+    // ÉGIDE « Aegis adaptatif » : être frappé par un type endurcit contre ce type.
+    if (td.cmods.adaptiveResist && incoming > 0) adaptiveAdd(t.id, enemy.damageType, td.cmods.adaptiveResist.gain * dt, td.cmods.adaptiveResist.cap)
     // Épines (thorns) : renvoie une fraction de l'attaque à l'ennemi (basée sur le coup, bouclier inclus).
     if (td.cmods.thorns > 0 && enemy.hp > 0) enemy.hp = Math.max(0, enemy.hp - incoming * td.cmods.thorns)
   }
@@ -1617,12 +1747,17 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
   // 5b) 🕊️ Sursis : un héros qui vient de tomber survit à 25% PV (une fois par minute chacun).
   const revived = applySursis(chars, mods?.runes?.sursisCd)
 
-  // 6) Régénération des persos (+ bonus de régén) + clamp.
+  // 6) Régénération des persos (+ bonus de régén + Métaboliseur d'Égide) + clamp.
   chars.forEach((c, i) => {
     const d = info[i]
     if (c.hp > 0 && d) {
       const mh = charMaxHp(c)
-      c.hp = Math.min(mh, c.hp + mh * REGEN_RATE * (1 + d.derived.regenBonus) * regenMult * dt)
+      let regen = mh * REGEN_RATE * (1 + d.derived.regenBonus) * regenMult
+      // 🛡️ ÉGIDE « Métaboliseur » : le surplus de résist face aux exigences devient du soin/s.
+      if (d.cmods.surplusRegen > 0) {
+        regen += mh * Math.min(d.cmods.surplusRegen, (resistSurplus(enemy, d.resist) / RESIST_DSCALE) * d.cmods.surplusRegen)
+      }
+      c.hp = Math.min(mh, c.hp + regen * dt)
     }
     if (c.hp < 0) c.hp = 0
   })
@@ -1658,6 +1793,8 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
       ? { derived: charDerived(c), profile: charDamageProfile(c), passives: charPassives(c), resist: charResist(c), cmods: charCombatMods(c) }
       : null,
   )
+  // ÉGIDE : aura partagée + stacks adaptatifs → résistances effectives.
+  enrichResists(chars, info)
   let totalDealt = 0
   const focus = (): Enemy | undefined => enemies.find((e) => e.hp > 0)
 
@@ -1677,7 +1814,17 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
     const acharne = mods?.cond?.acharneCap ? acharneMult(focus()?.age ?? 0, mods.cond.acharneCap) : 1
     // 🫁 Second Souffle : sous 30% PV, le héros frappe plus fort.
     const souffle = mods?.cond?.souffle && hpFrac <= 0.3 ? 1 + mods.cond.souffle : 1
-    const bonusMult = d.cmods.damageMult * lowHp * highHp * weakenMult * frenzyMult * (mods?.heroMult ?? 1) * nuee * acharne * souffle * opportunisteMult
+    // 🔪 ASSASSIN : fenêtre d'OUVERTURE face à la cible focus (l'âge est par ennemi).
+    const opener = d.cmods.opener && (focus()?.age ?? 99) <= d.cmods.opener.seconds ? d.cmods.opener.mult : 1
+    // 🜍 PURGATEUR : carburant d'affliction. 🌋 BRISEUR : +dégâts par ennemi vivant.
+    const fuel = fuelMult(c.id, d.cmods.afflictionFuel)
+    const perEnemy = 1 + d.cmods.perEnemyBonus * Math.max(0, aliveAtStart - 1)
+    // 🛡️ ÉGIDE « Gardien du seuil » : surplus de résist face à la cible focus → dégâts.
+    const fTarget = focus()
+    const surplusMult = d.cmods.surplusToDamage > 0 && fTarget
+      ? 1 + Math.min(d.cmods.surplusToDamage, (resistSurplus(fTarget, d.resist) / RESIST_DSCALE) * d.cmods.surplusToDamage)
+      : 1
+    const bonusMult = d.cmods.damageMult * lowHp * highHp * weakenMult * frenzyMult * (mods?.heroMult ?? 1) * nuee * acharne * souffle * opportunisteMult * opener * fuel * perEnemy * surplusMult
     const multistrikeChance = Math.min(0.85, d.derived.multistrike + d.cmods.multistrike)
     const metroN = mods?.cond?.metronomeN
     let healed = 0
@@ -1692,12 +1839,19 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
         const n = (gemCounters.get(mk) ?? 0) + 1
         if (n >= metroN) { forceCrit = true; gemCounters.set(mk, 0) } else gemCounters.set(mk, n)
       }
+      // ⚡ FOUDREUR « Décharge » : toutes les N attaques, la suivante frappe ×mult.
+      let staticMult = 1
+      if (d.cmods.staticN) {
+        const sk = `static:${c.id}`
+        const n = (gemCounters.get(sk) ?? 0) + 1
+        if (n >= d.cmods.staticN.every) { staticMult = d.cmods.staticN.mult; gemCounters.set(sk, 0) } else gemCounters.set(sk, n)
+      }
       const strikes = 1 + (Math.random() < multistrikeChance ? 1 : 0)
       for (let st = 0; st < strikes; st++) {
         const t2 = focus()
         if (!t2) break
         const hit = rollHit(d.derived, d.profile, t2, { bonusMult, execute: d.cmods.execute, forceCrit: forceCrit && st === 0 })
-        const dmg = hit.damage * enemyVuln(t2)
+        const dmg = hit.damage * enemyVuln(t2) * (st === 0 ? staticMult : 1)
         // Étoile d'Overkill : l'excédent du coup fatal déborde sur les ennemis suivants du pack
         // (hors totalDealt → n'alimente pas le Réfléchissant).
         if (mods?.cond?.overkill && dmg > t2.hp) {
@@ -1715,7 +1869,31 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
         totalDealt += dmg
         dealtThis += dmg
         healed += hit.heal
-        if (d.cmods.dot) t2.dot = { dps: Math.max(hit.damage * d.cmods.dot.frac * d.derived.alterationMult, t2.dot?.dps ?? 0), remaining: d.cmods.dot.duration }
+        if (d.cmods.dot) {
+          t2.dot = { dps: Math.max(hit.damage * d.cmods.dot.frac * d.derived.alterationMult, t2.dot?.dps ?? 0), remaining: d.cmods.dot.duration }
+          // 🦠 PESTIFÉRÉ « Pandémie » : la peste s'applique aussi au reste du pack (fraction).
+          if (d.cmods.dotAoe > 0) {
+            const spread = hit.damage * d.cmods.dot.frac * d.derived.alterationMult * d.cmods.dotAoe
+            for (const e of enemies) {
+              if (e === t2 || e.hp <= 0) continue
+              e.dot = { dps: Math.max(spread, e.dot?.dps ?? 0), remaining: d.cmods.dot.duration }
+            }
+          }
+        }
+        // 🌋 BRISEUR « Onde de choc » + ⚡ FOUDREUR « Foudre en chaîne » : éclaboussures sur le pack.
+        if ((d.cmods.cleaveAuto > 0 || d.cmods.chainArc) && dmg > 0) {
+          let arcLeft = d.cmods.chainArc?.targets ?? 0
+          for (const e of enemies) {
+            if (e === t2 || e.hp <= 0) continue
+            let frac = d.cmods.cleaveAuto
+            if (arcLeft > 0 && d.cmods.chainArc) { frac = Math.max(frac, d.cmods.chainArc.frac); arcLeft-- }
+            if (frac <= 0) break
+            const splash = dmg * frac
+            e.hp = Math.max(0, e.hp - splash)
+            totalDealt += splash
+            dealtThis += splash
+          }
+        }
       }
     }
     if (c.charge) c.charge.dealt += dealtThis
@@ -1730,6 +1908,11 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
       totalDealt += dmg
       enemy.dot.remaining -= dt
       if (enemy.dot.remaining <= 0) enemy.dot = undefined
+      // ☠ FAUCHEUR : les DoT te soignent (fraction du tick).
+      chars.forEach((c, i) => {
+        const d = info[i]
+        if (d && c.hp > 0 && d.cmods.dotLeech > 0) c.hp = Math.min(charMaxHp(c), c.hp + dmg * d.cmods.dotLeech)
+      })
     }
     if ((enemy.noRegen ?? 0) > 0) enemy.noRegen = Math.max(0, enemy.noRegen! - dt)
     if (enemy.vuln) { enemy.vuln.remaining -= dt; if (enemy.vuln.remaining <= 0) enemy.vuln = undefined }
@@ -1754,12 +1937,21 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
         cooldowns.set(key, (p.cooldown ?? 3) * (1 - d.derived.cdr) * (1 - pacte))
         if (pacte > 0) c.hp = Math.max(1, c.hp - 0.02 * charMaxHp(c))
         manualFire.delete(key)
+        // ⏳ CHRONOMANCIEN « Cascade temporelle » : chaque sort lancé rembourse les autres recharges.
+        if (d.cmods.cdrOnCast > 0) {
+          for (const pid2 of c.powers) {
+            if (!pid2 || pid2 === pid) continue
+            const k2 = `${c.id}:${pid2}`
+            cooldowns.set(k2, Math.max(0, (cooldowns.get(k2) ?? 0) - d.cmods.cdrOnCast))
+          }
+        }
         const cast = (mult: number): number => {
           let dd = 0
+          const sm = d.cmods.damageMult * d.cmods.spellMult * mult
           if (p.effect === 'cleave' || p.effect === 'megaCleave') {
-            for (const e of enemies) if (e.hp > 0) dd += fireActive(p, c, d.derived, d.profile, chars, e, d.cmods.hot, d.cmods.damageMult * mult)
+            for (const e of enemies) if (e.hp > 0) dd += fireActive(p, c, d.derived, d.profile, chars, e, d.cmods.hot, sm, d.cmods.healToDamage)
           } else {
-            dd = fireActive(p, c, d.derived, d.profile, chars, focus() ?? enemies[0], d.cmods.hot, d.cmods.damageMult * mult)
+            dd = fireActive(p, c, d.derived, d.profile, chars, focus() ?? enemies[0], d.cmods.hot, sm, d.cmods.healToDamage)
           }
           return dd
         }
@@ -1819,11 +2011,14 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
       effDmg, enemy.damageType, td.derived, td.resist,
       enemyReq(enemy, enemy.damageType),
       (1 - td.passives.damageReduction) * (1 - td.cmods.flatDr),
+      td.cmods.reqReduction,
     ) * dt
     // Même cap que le combat mono-cible : le renvoi ne dépasse jamais 10% des PV max/s.
     if (mods?.reflect && !reflectApplied) { incoming += Math.min(totalDealt * mods.reflect, charMaxHp(t) * 0.10 * dt); reflectApplied = true }
     // Immunité / bouclier d'absorption du héros (Phase éthérée, Égide titanesque).
     damageHero(t, incoming)
+    // ÉGIDE « Aegis adaptatif » : être frappé par un type endurcit contre ce type.
+    if (td.cmods.adaptiveResist && incoming > 0) adaptiveAdd(t.id, enemy.damageType, td.cmods.adaptiveResist.gain * dt, td.cmods.adaptiveResist.cap)
     if (td.cmods.thorns > 0 && enemy.hp > 0) enemy.hp = Math.max(0, enemy.hp - incoming * td.cmods.thorns)
     // Techniques signature de CET ennemi (sur la plus haute menace).
     tickEnemyAbilities(enemy, chars, info, dt, mods?.runes?.dilatation ?? 0)
@@ -1835,12 +2030,17 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
   // 5b) 🕊️ Sursis : un héros qui vient de tomber survit à 25% PV (une fois par minute chacun).
   const revived = applySursis(chars, mods?.runes?.sursisCd)
 
-  // 6) Régénération des persos + clamp.
+  // 6) Régénération des persos (+ Métaboliseur d'Égide face à la cible focus) + clamp.
   chars.forEach((c, i) => {
     const d = info[i]
     if (c.hp > 0 && d) {
       const mh = charMaxHp(c)
-      c.hp = Math.min(mh, c.hp + mh * REGEN_RATE * (1 + d.derived.regenBonus) * regenMult * dt)
+      let regen = mh * REGEN_RATE * (1 + d.derived.regenBonus) * regenMult
+      const ft = focus()
+      if (d.cmods.surplusRegen > 0 && ft) {
+        regen += mh * Math.min(d.cmods.surplusRegen, (resistSurplus(ft, d.resist) / RESIST_DSCALE) * d.cmods.surplusRegen)
+      }
+      c.hp = Math.min(mh, c.hp + regen * dt)
     }
     if (c.hp < 0) c.hp = 0
   })
@@ -1936,6 +2136,7 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
     if (nextIndex >= d.totalFights) {
       // 🏆 Fragment de Conquête : le boss final du donjon réinitialise les plus longues recharges.
       if (dCond.conquete) resetLongestCooldown(chars)
+      fuelReset() // 🜍 Purgateur : fin d'instance, le carburant retombe
       const rareBonus = d.modifiers.reduce((a, m) => a + (m.rareBonus ?? 0), 0)
       const bias = pickBias(s.characters)
 
@@ -2133,6 +2334,7 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
   if (boss.hp <= 0) {
     // 🏆 Fragment de Conquête : chaque rencontre de boss vaincue réinitialise les longues recharges.
     if (rCond.conquete) resetLongestCooldown(chars)
+    fuelReset() // 🜍 Purgateur : fin d'instance, le carburant retombe
     // 📯 Crescendo & 🛡️ Trésorerie : un boss de raid compte comme un kill.
     crescendoAdd(1)
     tresorerieShield(chars, rCond.tresorerieCap)
