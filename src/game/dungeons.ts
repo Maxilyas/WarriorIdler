@@ -312,18 +312,24 @@ export function dungeonLuckTier(level: number): number {
 }
 
 // Constantes d'équilibrage des donjons (à ajuster facilement).
-const EFF_STAGE_PER_LEVEL = 7 // sert aux RÉCOMPENSES (xp) → économie inchangée.
-// v0.25 — difficulté de COMBAT ANCRÉE au palier de déblocage : le niv 1 d'un donjon ≈ son palier
-// d'ouverture (fini les donjons triviaux à fort unlockStage : Cache 40, Vortex 50, Observatoire 45),
-// puis +DUNGEON_STAGE_STEP paliers de farm par niveau. On calque la COURBE DE FARM (enemies.ts) →
-// PV/dégâts cohérents avec le reste du jeu, la survie suit (dmg 1.115 < hp 1.17).
-const DUNGEON_STAGE_STEP = 2       // paliers de farm gagnés par NIVEAU de donjon
-const FARM_HP_BASE = 40            // = makeEnemy (enemies.ts) : PV d'un normal au palier 1
-const FARM_HP_GROWTH = 1.17        // = makeEnemy : ×PV / palier
-const FARM_DMG_BASE = 7            // = makeEnemy : dégâts d'un normal au palier 1
-const FARM_DMG_GROWTH = 1.115      // = makeEnemy : ×dégâts / palier (plus lent → la survie suit)
+const EFF_STAGE_PER_LEVEL = 7 // sert aux RÉCOMPENSES (xp) et à l'armure → économie inchangée.
+// COURBE DE COMBAT (calée et CONSERVÉE) : PV/dégâts par NIVEAU de donjon + rampe douce par combat.
+const DUNGEON_HP_BASE = 3200       // PV d'un ennemi NORMAL, donjon niv 1, 1er combat (neutre)
+const DUNGEON_HP_PER_LEVEL = 1.42  // ×PV par niveau de donjon (montée douce → progression réelle)
+const DUNGEON_DMG_BASE = 389       // dégâts de base
+const DUNGEON_DMG_PER_LEVEL = 1.26 // ×dégâts par niveau (plus lent que les PV → la survie suit)
 const DUNGEON_FIGHT_RAMP = 1.04    // ×PV & dégâts par combat DANS un run (rampe douce, pas un mur)
 const DUNGEON_BOSS_HP_MULT = 5     // le boss (dernier combat) reste un pic de PV
+// v0.25 — DÉCALAGE DE DÉPART, pour les donjons à fort palier de déblocage UNIQUEMENT. La courbe
+// ci-dessus n'est PAS touchée (progression validée) ; on lève seulement le NIVEAU 1 des donjons qui
+// s'ouvrent tard, pour qu'il vaille leur palier d'ouverture (Cache 40, Vortex 50, Géode 50…). Baseline
+// = palier implicite du niv 1 d'origine (3200 PV ≈ farm palier 29) → offset 0 en dessous : les donjons
+// à faible/moyen déblocage NE BOUGENT PAS d'un poil.
+const DUNGEON_UNLOCK_BASELINE = 29
+const DUNGEON_PALIERS_PER_LEVEL = 2.23 // 1.42 = 1.17^2.23 (paliers de farm ↔ niveaux de donjon)
+function dungeonStartOffset(unlockStage: number): number {
+  return Math.max(0, (unlockStage - DUNGEON_UNLOCK_BASELINE) / DUNGEON_PALIERS_PER_LEVEL)
+}
 
 /** Régénération des ennemis (fraction des PV max/s) imposée par l'identité du donjon. */
 export function dungeonRegen(trait: DungeonTrait): number {
@@ -356,11 +362,13 @@ export function makeDungeonEnemy(
   }
 
   const lvl = level - 1
-  const effStage = level * EFF_STAGE_PER_LEVEL + fightIndex // récompenses (xp) — économie inchangée
-  // Palier de farm EFFECTIF pour la DIFFICULTÉ : ancré au déblocage, +STEP paliers par niveau de donjon.
-  const combatStage = def.unlockStage + lvl * DUNGEON_STAGE_STEP
-  // PV : calqués sur la courbe de farm au palier effectif + rampe douce par COMBAT (1.04).
-  const hpBase = FARM_HP_BASE * Math.pow(FARM_HP_GROWTH, combatStage - 1) * Math.pow(DUNGEON_FIGHT_RAMP, fightIndex)
+  const effStage = level * EFF_STAGE_PER_LEVEL + fightIndex // récompenses (xp) + armure (économie inchangée)
+  // Niveau EFFECTIF sur la courbe = niveau réel + décalage de départ (>0 SEULEMENT pour les donjons à
+  // fort palier de déblocage → leur niv 1 vaut leur palier d'ouverture ; les autres : offset 0, inchangés).
+  const startOff = dungeonStartOffset(def.unlockStage)
+  const effLevel = lvl + startOff
+  // PV : COURBE CONSERVÉE (1.42/niveau) + rampe douce par COMBAT (1.04).
+  const hpBase = DUNGEON_HP_BASE * Math.pow(DUNGEON_HP_PER_LEVEL, effLevel) * Math.pow(DUNGEON_FIGHT_RAMP, fightIndex)
   const maxHp = Math.round(hpBase * (isBoss ? DUNGEON_BOSS_HP_MULT : 1) * hpMult)
   const isElite = cfg.elite && !isBoss
 
@@ -371,9 +379,9 @@ export function makeDungeonEnemy(
     name,
     maxHp,
     hp: maxHp,
-    armor: Math.round(combatStage * 1.5 * armorMult), // = armure de farm (stage×1.5) au palier effectif
-    // Dégâts : courbe de farm au palier effectif (croissance plus lente que les PV → survie suit).
-    damage: Math.round(FARM_DMG_BASE * Math.pow(FARM_DMG_GROWTH, combatStage - 1) * Math.pow(DUNGEON_FIGHT_RAMP, fightIndex) * cfg.dmg * (isBoss ? 1.8 : 1)),
+    armor: Math.round((10 + (level + startOff) * 10) * armorMult),
+    // Dégâts : COURBE CONSERVÉE (1.26/niveau, plus lente que les PV → survie suit) + décalage de départ.
+    damage: Math.round(DUNGEON_DMG_BASE * Math.pow(DUNGEON_DMG_PER_LEVEL, effLevel) * Math.pow(DUNGEON_FIGHT_RAMP, fightIndex) * cfg.dmg * (isBoss ? 1.8 : 1)),
     xp: Math.round(8 * Math.pow(1.12, effStage - 1) * (isBoss ? 5 : 1) * xpMult),
     resist: {},
     damageType: def.element,
