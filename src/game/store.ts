@@ -539,6 +539,15 @@ function freshSave(): SaveData {
   }
 }
 
+/**
+ * Protection des ventes/recyclages DE MASSE : les objets à effet unique de très haute rareté
+ * (Cosmique+) ne partent jamais en lot — recyclage à l'unité uniquement. Les uniques plus communs
+ * (Épique…) restent recyclables en masse : c'est le moteur d'essences du jeu.
+ */
+function bulkProtected(item: Item): boolean {
+  return !!item.unique && RARITIES[item.rarity].tier >= 13
+}
+
 /** Ajoute les uniques portés par des objets au grimoire (sans doublon). */
 function discoverFromItems(codex: string[], items: (Item | undefined)[]): string[] {
   let out = codex
@@ -2298,6 +2307,9 @@ export const useGame = create<GameState>((set, get) => {
       if (enemy.hp <= 0) {
         let { stage, bestStage, gold, sceaux, inventory, poussiere, essence } = s
         const boss = isBossStage(stage)
+        // ⛑️ Résurrection au palier : un héros tombé (raid abandonné, mort isolée…) se relève à
+        // chaque palier RÉSOLU (gagné ici ; perdu = repli plus haut). La mort n'a aucun coût.
+        chars = chars.map((c) => (c.hp <= 0 ? fullHeal(c) : c))
         // 📯 Crescendo & 🛡️ Trésorerie : chaque kill nourrit le cumul / blinde le bouclier.
         crescendoAdd(1)
         tresorerieShield(chars, cond.tresorerieCap)
@@ -2618,7 +2630,7 @@ export const useGame = create<GameState>((set, get) => {
       let count = 0
       const keep: Item[] = []
       for (const item of s.inventory) {
-        if (RARITIES[item.rarity].tier < tier) {
+        if (RARITIES[item.rarity].tier < tier && !bulkProtected(item)) {
           gold += sellValue(item)
           gems = gemStockAdd(gems, item)
           count++
@@ -2642,7 +2654,7 @@ export const useGame = create<GameState>((set, get) => {
       const essences = { ...s.essences }
       const keep: Item[] = []
       for (const item of s.inventory) {
-        if (RARITIES[item.rarity].tier < tier) {
+        if (RARITIES[item.rarity].tier < tier && !bulkProtected(item)) {
           essence += Math.round(recycleValue(item) * mods.recycleMult)
           poussiere += recyclePoussiere(item)
           quint = addQuint(quint, quintRefund(item))
@@ -3121,7 +3133,8 @@ export const useGame = create<GameState>((set, get) => {
     abandonDungeon: () => {
       const s = get()
       if (!s.dungeon) return
-      const next = { ...s, dungeon: null, log: pushLog(s.log, 'Donjon abandonné. Le Sceau est perdu.', 'info') }
+      // Quitter une instance soigne et RESSUSCITE toute l'équipe (sinon un perso mort restait mort).
+      const next = { ...s, characters: s.characters.map(fullHeal), dungeon: null, log: pushLog(s.log, 'Donjon abandonné. Le Sceau est perdu.', 'info') }
       persist(next)
       set(next)
     },
@@ -3148,7 +3161,8 @@ export const useGame = create<GameState>((set, get) => {
     abandonRaid: () => {
       const s = get()
       if (!s.raid) return
-      const next = { ...s, raid: null, log: pushLog(s.log, 'Raid abandonné. L\'Orbe est perdue.', 'info') }
+      // Quitter une instance soigne et RESSUSCITE toute l'équipe (sinon un perso mort restait mort).
+      const next = { ...s, characters: s.characters.map(fullHeal), raid: null, log: pushLog(s.log, 'Raid abandonné. L\'Orbe est perdue.', 'info') }
       persist(next)
       set(next)
     },

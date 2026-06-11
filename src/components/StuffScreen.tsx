@@ -10,6 +10,7 @@ import { PRIMARY_META, SECONDARY_META, SECONDARY_STATS } from '../game/stats'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from '../game/damage'
 import { equipDelta, type EquipDelta } from '../game/character'
 import { rarityTextStyle, rarityNameClass } from './rarityStyle'
+import { ConfirmButton } from './ui'
 import type { DamageType, EquipSlotId, Equipment, Item, ItemType, OffensiveStat, SecondaryStat } from '../game/types'
 
 type SortMode = 'recent' | 'score' | 'rarity'
@@ -335,16 +336,30 @@ export function StuffScreen() {
                 onChange={(e) => setRecycleThreshold(Number(e.target.value))}
                 className="rounded bg-slate-800 px-2 py-1.5 text-slate-200"
               >
-                {RARITY_LIST.filter((r) => r.tier >= 2 && r.tier <= 14).map((r) => (
+                {RARITY_LIST.filter((r) => r.tier >= 2 && r.tier <= 16).map((r) => (
                   <option key={r.id} value={r.tier}>{r.name}</option>
                 ))}
               </select>
-              <button onClick={() => sellAllBelow(recycleThreshold)} className="rounded bg-yellow-900/40 px-2.5 py-1.5 text-yellow-300 hover:bg-yellow-900/60">
-                💰 Vendre
-              </button>
-              <button onClick={() => recycleAllBelow(recycleThreshold)} className="rounded bg-cyan-900/40 px-2.5 py-1.5 text-cyan-300 hover:bg-cyan-900/60">
-                ♻️ Recycler
-              </button>
+              {/* Seuil ≥ Abyssal : la vente/le recyclage de masse engloutit du Cosmique+ → confirmation. */}
+              {recycleThreshold >= 14 ? (
+                <>
+                  <ConfirmButton onConfirm={() => sellAllBelow(recycleThreshold)} className="rounded bg-yellow-900/40 px-2.5 py-1.5 text-yellow-300 hover:bg-yellow-900/60">
+                    💰 Vendre
+                  </ConfirmButton>
+                  <ConfirmButton onConfirm={() => recycleAllBelow(recycleThreshold)} className="rounded bg-cyan-900/40 px-2.5 py-1.5 text-cyan-300 hover:bg-cyan-900/60">
+                    ♻️ Recycler
+                  </ConfirmButton>
+                </>
+              ) : (
+                <>
+                  <button onClick={() => sellAllBelow(recycleThreshold)} className="rounded bg-yellow-900/40 px-2.5 py-1.5 text-yellow-300 hover:bg-yellow-900/60">
+                    💰 Vendre
+                  </button>
+                  <button onClick={() => recycleAllBelow(recycleThreshold)} className="rounded bg-cyan-900/40 px-2.5 py-1.5 text-cyan-300 hover:bg-cyan-900/60">
+                    ♻️ Recycler
+                  </button>
+                </>
+              )}
               <button
                 onClick={toggleAutoRecycle}
                 title="Recycle automatiquement tout butin (non unique) sous le seuil, directement au drop."

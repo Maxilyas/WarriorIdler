@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 
 /**
@@ -24,6 +24,39 @@ export function Sheet({ title, onClose, children }: { title?: ReactNode; onClose
       </div>
     </div>,
     document.body,
+  )
+}
+
+/**
+ * Bouton à CONFIRMATION (double-tap) : le premier clic arme le bouton (« Confirmer ? », 4 s),
+ * le second exécute. Standard mobile du jeu pour les actions destructrices (respec, ventes de
+ * masse en haute rareté…) — pas de modal bloquante, pas de window.confirm.
+ */
+export function ConfirmButton({ onConfirm, className = '', confirmLabel = '⚠ Confirmer ?', disabled, title, children }: {
+  onConfirm: () => void
+  className?: string
+  confirmLabel?: ReactNode
+  disabled?: boolean
+  title?: string
+  children: ReactNode
+}) {
+  const [armed, setArmed] = useState(false)
+  useEffect(() => {
+    if (!armed) return
+    const t = setTimeout(() => setArmed(false), 4000)
+    return () => clearTimeout(t)
+  }, [armed])
+  return (
+    <button
+      disabled={disabled}
+      title={title}
+      onClick={() => {
+        if (armed) { setArmed(false); onConfirm() } else setArmed(true)
+      }}
+      className={className + (armed ? ' !bg-rose-700/70 !text-rose-100 ring-1 ring-rose-400' : '')}
+    >
+      {armed ? confirmLabel : children}
+    </button>
   )
 }
 
