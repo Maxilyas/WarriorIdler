@@ -1,6 +1,7 @@
 import type { DerivedStats } from './stats'
 import type { DamageType, Enemy } from './types'
 import type { DamageProfile } from './damage'
+import { resistMult } from './resist'
 
 /** Réduction de dégâts par l'armure (courbe à rendement décroissant). */
 export function armorMitigation(armor: number, attackerPower: number): number {
@@ -80,9 +81,9 @@ export function theoreticalDps(derived: DerivedStats, profile: DamageProfile, bo
 /**
  * Plafond d'atténuation GÉNÉRIQUE (hors résistances de type) : le joueur encaisse
  * toujours au moins (1 − cap) des dégâts génériques. Empêche l'invincibilité par
- * empilement d'esquive / réduction / maîtrise / polyvalence → il faut survivre, pas
- * juste tanker. Les RÉSISTANCES de type restent le levier stratégique (non capées ici,
- * déjà bornées à RESIST_CAP par type), ce qui les rend déterminantes.
+ * empilement d'esquive / réduction / maîtrise → il faut survivre, pas juste tanker.
+ * Les RÉSISTANCES de type (v0.24, modèle relatif — resist.ts) n'atténuent plus en % :
+ * elles annulent le MULTIPLICATEUR d'exigence des attaques typées (×1 au cap → ×5 à nu).
  */
 export const EFFECTIVE_DR_CAP = 0.8
 
@@ -98,16 +99,19 @@ export function genericMitigation(derived: DerivedStats, extraMitigation = 1): n
 
 /**
  * Dégâts subis par le joueur (par seconde) :
- * - la RÉSISTANCE du héros au type d'attaque réduit d'abord (levier stratégique, non capé ici) ;
- * - puis l'atténuation générique, BORNÉE (esquive/réduction/maîtrise/polyvalence + externes).
+ * - le MULTIPLICATEUR d'exigence du type s'applique d'abord (v0.24 : résist du héros en points
+ *   vs `req` de l'ennemi — ×1 au cap, jusqu'à ×5 à zéro résist, voir resist.ts) ;
+ * - puis l'atténuation générique, BORNÉE (esquive/réduction/maîtrise + externes).
  */
 export function incomingDps(
   enemyDamage: number,
   enemyType: DamageType,
   derived: DerivedStats,
   heroResist: Partial<Record<DamageType, number>>,
+  req = 0,
   extraMitigation = 1,
+  reqReduction = 0,
 ): number {
-  const afterResist = enemyDamage * (1 - (heroResist[enemyType] ?? 0))
+  const afterResist = enemyDamage * resistMult(req, heroResist[enemyType] ?? 0, reqReduction)
   return Math.max(0.5, afterResist * genericMitigation(derived, extraMitigation))
 }

@@ -128,7 +128,10 @@ export function raidUnlocked(def: RaidDef, bestStage: number, progress: Record<R
 
 // ---- Constantes d'équilibrage (DUR mais sans mur — à nudger ici) ----
 const RAID_HP_PREMIUM = 2.5       // PV bruts vs un ennemi de farm de palier équivalent
-const RAID_DMG_PREMIUM = 1.95     // dégâts bruts vs farm équivalent
+// v0.24 : 1.95 → 1.6. La résistance n'atténue plus en % (modèle relatif) : un joueur AU CAP
+// encaisse ×1 (avant : jusqu'à -75%) → on rend une partie de la marge dans les dégâts de base.
+// La vraie menace vient du multiplicateur d'exigence (×5 à zéro résist), pas du chiffre brut.
+const RAID_DMG_PREMIUM = 1.6
 const SOLO_BOSS_MULT = 1.7        // l'unique boss du raid est un vrai morceau (il remplace 3-5 combats)
 /**
  * Pas (en paliers de farm) entre deux tiers — CONSTANT (v0.23). Avant : pas de 8 paliers qui
@@ -591,8 +594,36 @@ export function recommendedEhp(def: RaidDef, tier: number): number {
   return Math.round(dmg * 8 + novaSpike)
 }
 
-/** Multiplicateur de la Nova cataclysmique (AoE périodique) — partagé avec le tick de combat. */
-export const NOVA_MULT = 4.5
+/** Multiplicateur de la Nova cataclysmique (AoE périodique) — partagé avec le tick de combat.
+ *  v0.24 : 4.5 → 3.6 (compense la perte de la résist-réduction ; l'exigence fait le reste). */
+export const NOVA_MULT = 3.6
+
+// ---- Exigences de résistance (v0.24 — LE check de stuff par boss, voir resist.ts) ----
+
+/** Exigence de base d'un raid à un tier (sur ses types d'ATTAQUE). */
+export function raidReq(def: RaidDef, tier: number): number {
+  return Math.round(50 + def.baseDifficulty * 25 + (tier - 1) * 28)
+}
+
+/**
+ * Exigences PAR TYPE du boss d'un tier : types d'attaque (plein Req — adouci si le boss tourne
+ * sur 3 types ou plus) + types du kit télégraphié (70% du Req). C'est la « fiche de boss » :
+ * affichée avant l'engagement pour préparer son stuff de résistance.
+ */
+export function raidReqs(def: RaidDef, tier: number): Partial<Record<DamageType, number>> {
+  const req = raidReq(def, tier)
+  const v = raidBossVariant(def, tier)
+  const out: Partial<Record<DamageType, number>> = {}
+  const attackEls = v.variant.rotate ?? (def.element === 'rotating' ? [...DAMAGE_TYPE_LIST] : [def.element])
+  const broad = attackEls.length >= 3 ? 0.8 : 1 // multi-type : exigence plus large mais moins haute
+  for (const t of attackEls) out[t] = Math.max(out[t] ?? 0, Math.round(req * broad))
+  const kit = [...v.variant.abilities(attackEls[0]), ...(v.variant.partnerAbilities ? v.variant.partnerAbilities() : [])]
+  for (const ab of kit) {
+    if (ab.magnitude <= 0) continue
+    out[ab.element] = Math.max(out[ab.element] ?? 0, Math.round(req * 0.7))
+  }
+  return out
+}
 
 function bossHp(def: RaidDef, tier: number): number {
   const eff = effStage(def, tier)
@@ -629,6 +660,8 @@ export function makeRaidBoss(def: RaidDef, tier: number, element: DamageType): E
     xp: Math.round(8 * Math.pow(1.12, eff - 1) * 6),
     resist,
     damageType: element,
+    // Exigences de résistance du tier (v0.24) : LE check de stuff — affichées en fiche de boss.
+    reqs: raidReqs(def, tier),
     elite: true,
     // Boss de raid : esquive marquée (→ Précision) + étourdissement régulier (→ Ténacité).
     boss: true,
@@ -681,6 +714,10 @@ export function makeRaidEncounter(def: RaidDef, tier: number, element: DamageTyp
 export function makeRaidAdd(def: RaidDef, tier: number, element: DamageType): Enemy {
   const eff = effStage(def, tier)
   const hp = Math.round(40 * Math.pow(1.18, eff - 1) * 0.45 * def.baseDifficulty)
+  // Les renforts exigent moitié moins que le boss (pression de groupe, pas un second check).
+  const reqs: Partial<Record<DamageType, number>> = {}
+  const br = raidReqs(def, tier)
+  for (const t in br) reqs[t as DamageType] = Math.round((br[t as DamageType] ?? 0) * 0.5)
   return {
     name: `${def.icon} Rejeton`,
     maxHp: hp,
@@ -690,6 +727,7 @@ export function makeRaidAdd(def: RaidDef, tier: number, element: DamageType): En
     xp: 0,
     resist: {},
     damageType: element,
+    reqs,
     lifetime: 8,
     add: true,
   }

@@ -166,7 +166,7 @@ export function ComparePanel({ item, char, previewDelta, equipped, occupied, onE
             return (
               <div key={i} className="flex items-center gap-1" style={{ color: m?.color }}>
                 <span style={up > 0 ? { textShadow: `0 0 6px ${m?.color}` } : undefined}>
-                  {a.kind === 'resist' ? '🛡 ' : m?.icon + ' '}+{a.value}% {a.kind === 'resist' ? 'résistance' : 'dégâts'} {m?.name}
+                  {a.kind === 'resist' ? `🛡 +${a.value} résistance` : `${m?.icon} +${a.value}% dégâts`} {m?.name}
                 </span>
                 {up > 0 && (
                   <span className="rounded-full bg-emerald-500/20 px-1 text-[8.5px] font-bold text-emerald-300 ring-1 ring-emerald-400/40" title={`Renforcé ${up}× à la Quintessence`}>
@@ -436,7 +436,9 @@ function QuintessenceSection({ item }: { item: Item }) {
                             key={kind}
                             disabled={!can}
                             onClick={() => enhanceTyped(item.id, t, kind)}
-                            title={aff ? `+${QUINT_GAIN[kind]}% (palier ${level} → ${level + 1})` : `Ajoute +${kind === 'resist' ? 4 : 8}% ${label}`}
+                            title={aff
+                              ? `+${QUINT_GAIN[kind]}${kind === 'resist' ? ' pts' : '%'} (palier ${level} → ${level + 1})`
+                              : `Ajoute +${kind === 'resist' ? '4 pts' : '8%'} ${label}`}
                             className="flex-1 rounded border border-emerald-700/40 px-1 py-1 text-[9.5px] font-medium text-emerald-100 enabled:hover:bg-emerald-900/30 disabled:opacity-40"
                           >
                             {aff ? '⬆' : '+'} {label} · {m.icon}{cost}
@@ -740,7 +742,7 @@ function UniqueBlock({ item }: { item: Item }) {
         {Object.entries(instanceResist(inst)).map(([k, v]) => {
           const m = DAMAGE_TYPES[k as keyof typeof DAMAGE_TYPES]
           return (
-            <span key={k} style={{ color: m.color }}>+{Math.round((v as number) * 100)}% résist. {m.name}</span>
+            <span key={k} style={{ color: m.color }}>+{Math.round((v as number) * 100)} résist. {m.name}</span>
           )
         })}
       </div>
@@ -793,7 +795,7 @@ function EquippedSummary({ item, slotName }: { item: Item; slotName?: string }) 
             const m = a.type ? DAMAGE_TYPES[a.type] : null
             return (
               <span key={i} style={{ color: m?.color }}>
-                {a.kind === 'resist' ? '🛡' : m?.icon} +{a.value}% {a.kind === 'resist' ? 'rés.' : ''} {m?.name}
+                {a.kind === 'resist' ? `🛡 +${a.value} rés.` : `${m?.icon} +${a.value}%`} {m?.name}
               </span>
             )
           })}

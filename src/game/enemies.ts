@@ -2,6 +2,7 @@ import type { Enemy, DamageType, EnemyAbility } from './types'
 import { DAMAGE_TYPE_LIST } from './damage'
 import type { BiomeId } from './biomes'
 import { BIOME_VULN, PREDATION_SELF_RESIST, PREDATION_VULN } from './biomeBonus'
+import { farmReq } from './resist'
 
 /**
  * Technique SIGNATURE par biome (l'« autre chose » qui s'ajoute aux frappes physiques de base).
@@ -162,6 +163,8 @@ export function makeEnemy(stage: number, biome: BiomeId = 'physique'): Enemy {
     resist,
     damageType,
     ...(trait ? { trait: trait.name } : isElite ? { trait: 'Élite' } : isChampion ? { trait: 'Champion ✦' } : {}),
+    // Exigence de résistance (v0.24) sur l'élément du biome — nulle avant le palier 45, douce après.
+    ...(() => { const rq = farmReq(stage); return rq > 0 ? { reqs: { [biome]: rq } as Partial<Record<DamageType, number>> } : {} })(),
     ...(() => { const a = biomeAbilities(biome, isBoss, isElite || isChampion); return a.length ? { abilities: a } : {} })(),
     ...(isElite || isChampion ? { elite: true, dodge: 0.1 } : {}),
     ...(isChampion ? { champion: true } : {}),

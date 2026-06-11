@@ -7,7 +7,7 @@ import {
 import {
   ALL_STAT_META, PRIMARY_META, SECONDARY_META, RATING_PER_PERCENT, RARE_STATS,
 } from '../game/stats'
-import { DAMAGE_TYPES, DAMAGE_TYPE_LIST, RESIST_CAP } from '../game/damage'
+import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from '../game/damage'
 import { EFFECTIVE_DR_CAP } from '../game/combat'
 import { POWERS } from '../game/powers'
 import { TALENTS, CONSTELLATIONS } from '../game/talents'
@@ -114,7 +114,7 @@ function StatsCodex() {
       <Card>
         <Title color="#74c0fc">Survie & résistances — les règles clés</Title>
         <ul className="space-y-1 text-[10.5px] leading-snug text-slate-300">
-          <li>• <b className="text-sky-300">Résistances par type</b> : réduisent les dégâts du type correspondant (plafond {Math.round(RESIST_CAP * 100)} %). C'est le levier <b>stratégique</b> de survie — résiste au type que l'ennemi inflige.</li>
+          <li>• <b className="text-sky-300">Résistances par type</b> (points, sans plafond) : les boss <b>EXIGENT</b> des points de résistance. Au cap de l'exigence → dégâts normaux (×1) ; à zéro résist → jusqu'à <b>×5</b>. ≈0 en farm, modéré en donjon, décisif en raid : prépare ton stuff selon la fiche du boss.</li>
           <li>• <b className="text-amber-300">Atténuation générique</b> (esquive / réduction / maîtrise / polyvalence) : <b>plafonnée à {Math.round(EFFECTIVE_DR_CAP * 100)} %</b>. Tu encaisses TOUJOURS une part — impossible d'être invincible.</li>
           <li>• Conséquence : empiler la tankiness ne suffit pas. Il faut un mélange de <b>résistances</b>, de <b>soin/régén/vol de vie</b> et de <b>dégâts</b> pour passer les paliers.</li>
         </ul>

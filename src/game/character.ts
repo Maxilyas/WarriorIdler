@@ -1,7 +1,7 @@
 import type { Character, StatBlock, StatKey, PrimaryStat, OffensiveStat, PowerDef, DamageType, Item, EquipSlotId } from './types'
 import { computeTotalStats, computeDerived, type DerivedStats } from './stats'
 import { computeDamageProfile, computeResistProfile, profileDamageMult, type DamageProfile } from './damage'
-import { DAMAGE_TYPE_LIST, RESIST_CAP } from './damage'
+import { DAMAGE_TYPE_LIST } from './damage'
 import { setBonuses } from './sets'
 import { getPower, POWER_SLOTS } from './powers'
 import { theoreticalDps } from './combat'
@@ -244,12 +244,12 @@ export function dpsBreakdown(char: Character): DpsBreakdown {
   return { total: auto + spells.reduce((a, s) => a + s.dps, 0), auto, spells, factors, hasConversions }
 }
 
-/** Résistances du héros (équipement + talents + sets), capées. */
+/** Résistances du héros en POINTS (équipement + talents + sets) — non plafonnées (v0.24). */
 export function charResist(char: Character): Partial<Record<DamageType, number>> {
   const r = computeResistProfile(char.equipment, talentResistMods(char.talents ?? {}))
   const sb = setBonuses(char.equipment)
   if (sb.resistAll > 0) {
-    for (const t of DAMAGE_TYPE_LIST) r[t] = Math.min(RESIST_CAP, (r[t] ?? 0) + sb.resistAll)
+    for (const t of DAMAGE_TYPE_LIST) r[t] = (r[t] ?? 0) + sb.resistAll * 100
   }
   return r
 }

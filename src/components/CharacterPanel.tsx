@@ -194,12 +194,13 @@ export function CharacterPanel({ view = 'apercu' }: { view?: CharacterView }) {
             )
           })()}
 
-          {/* Résistances */}
+          {/* Résistances (v0.24 : POINTS — annulent l'exigence des boss, voir resist.ts) */}
           <div className="rounded-xl border border-slate-800 bg-[#11151f] p-4">
             <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Résistances</div>
             {resistTypes.length === 0 ? (
               <p className="text-[11px] italic text-slate-500">
-                Aucune résistance. Équipe des affixes/talents de résistance pour encaisser le type d'attaque de l'ennemi.
+                Aucune résistance. Les boss EXIGENT des points de résistance : sous leur exigence, leurs
+                attaques typées frappent jusqu'à ×5. Équipe des lignes/talents de résistance.
               </p>
             ) : (
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
@@ -207,9 +208,9 @@ export function CharacterPanel({ view = 'apercu' }: { view?: CharacterView }) {
                   const m = DAMAGE_TYPES[t]
                   const v = resist[t] ?? 0
                   return (
-                    <span key={t} title={`-${Math.round(v * 100)}% de dégâts ${m.name} subis`}>
+                    <span key={t} title={`${Math.round(v)} points de résistance ${m.name} (annule l'exigence des boss)`}>
                       <span style={{ color: m.color }}>{m.icon} {m.name}</span>{' '}
-                      <span className="font-semibold text-emerald-300">{Math.round(v * 100)}%</span>
+                      <span className="font-semibold text-emerald-300">{Math.round(v)}</span>
                     </span>
                   )
                 })}

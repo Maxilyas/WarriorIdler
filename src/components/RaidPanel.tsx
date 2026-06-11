@@ -3,11 +3,13 @@ import { useGame } from '../game/store'
 import {
   RAID_LIST, RAID_UNLOCK_STAGE, RAID_MECHANIC_META, getRaidDef, raidUnlocked,
   raidBossVariant, raidIlvl, raidBerserkTime, raidFragments, raidCosmicChance,
-  raidMinTier, raidMaxTier, recommendedDps, recommendedEhp, type RaidDef,
+  raidMinTier, raidMaxTier, raidReqs, recommendedDps, recommendedEhp, type RaidDef,
 } from '../game/raids'
-import { charDps, charMaxHp } from '../game/character'
-import { DAMAGE_TYPES } from '../game/damage'
+import { charDps, charMaxHp, charResist } from '../game/character'
+import { resistMult } from '../game/resist'
+import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from '../game/damage'
 import { RARITY_LIST } from '../game/rarities'
+import type { Character, DamageType } from '../game/types'
 
 /** Valeur « ∞ » du sélecteur de répétitions (limité en pratique par les Orbes disponibles). */
 const INF = 999
@@ -86,6 +88,7 @@ export function RaidPanel() {
               busy={!!raid || !!dungeon}
               partyDps={partyDps}
               partyHp={partyHp}
+              characters={characters}
               onEnter={(tier, rep) => enterRaid(def.id, tier, rep)}
             />
           ))}
@@ -95,7 +98,48 @@ export function RaidPanel() {
   )
 }
 
-function RaidCard({ def, unlocked, cleared, bestStage, orbes, busy, partyDps, partyHp, onEnter }: {
+/**
+ * FICHE DE BOSS (v0.24 §5.4) : exigences de résistance du tier, type par type, face au
+ * MEMBRE LE PLUS FAIBLE de l'équipe (les novas frappent tout le monde). Vert = au cap (×1),
+ * orange = proche, rouge = déficit (le multiplicateur subi est affiché).
+ */
+function BossReqs({ def, tier, characters }: { def: RaidDef; tier: number; characters: Character[] }) {
+  const reqs = raidReqs(def, tier)
+  const types = DAMAGE_TYPE_LIST.filter((t) => (reqs[t] ?? 0) > 0)
+  if (!types.length) return null
+  const resists = characters.map((c) => charResist(c))
+  return (
+    <div className="mt-1.5 rounded-lg border border-slate-800 bg-black/20 px-2 py-1.5">
+      <div className="text-[9.5px] font-semibold uppercase tracking-wide text-slate-500">
+        🛡 Exigences de résistance <span className="normal-case text-slate-600">(vs ton membre le plus exposé)</span>
+      </div>
+      <div className="mt-1 flex flex-wrap gap-1">
+        {types.map((t) => {
+          const req = reqs[t as DamageType] ?? 0
+          const weakest = Math.min(...resists.map((r) => Math.round(r[t as DamageType] ?? 0)))
+          const mult = resistMult(req, weakest)
+          const ok = mult <= 1
+          const close = !ok && weakest >= req * 0.6
+          const m = DAMAGE_TYPES[t as DamageType]
+          return (
+            <span
+              key={t}
+              title={`${m.name} : exigence ${req} · toi ${weakest}${ok ? ' — au cap (×1)' : ` — dégâts subis ×${mult.toFixed(1)}`}`}
+              className={
+                'rounded px-1.5 py-0.5 text-[9.5px] font-medium ' +
+                (ok ? 'bg-emerald-900/30 text-emerald-300' : close ? 'bg-amber-900/30 text-amber-300' : 'bg-rose-900/40 text-rose-300')
+              }
+            >
+              {m.icon} {weakest}/{req}{ok ? ' ✓' : ` ×${mult.toFixed(1)}`}
+            </span>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function RaidCard({ def, unlocked, cleared, bestStage, orbes, busy, partyDps, partyHp, characters, onEnter }: {
   def: RaidDef
   unlocked: boolean
   cleared: number
@@ -104,6 +148,7 @@ function RaidCard({ def, unlocked, cleared, bestStage, orbes, busy, partyDps, pa
   busy: boolean
   partyDps: number
   partyHp: number
+  characters: Character[]
   onEnter: (tier: number, repeat: number) => void
 }) {
   const frontier = cleared + 1
@@ -166,6 +211,9 @@ function RaidCard({ def, unlocked, cleared, bestStage, orbes, busy, partyDps, pa
           ))}
         </div>
       </div>
+
+      {/* Fiche de boss : exigences de résistance du tier (prépare ton stuff) */}
+      <BossReqs def={def} tier={t} characters={characters} />
 
       {/* Recommandations (checks de stuff) */}
       <div className="mt-1.5 grid grid-cols-2 gap-1 text-[10px]">

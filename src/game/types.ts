@@ -369,6 +369,12 @@ export interface Enemy {
   resist: Partial<Record<DamageType, number>>
   /** Type de dégâts infligés par l'ennemi (les résistances du héros le réduisent). */
   damageType: DamageType
+  /**
+   * EXIGENCES de résistance par type (v0.24, points) : si la résist du héros est sous
+   * l'exigence, les attaques de ce type frappent ×M (voir resist.ts). ≈0 en farm,
+   * faible en donjon, c'est LE check de stuff des boss de raid.
+   */
+  reqs?: Partial<Record<DamageType, number>>
   /** DoT actif posé par le héros (saignement/poison), résolu au tick. */
   dot?: { dps: number; remaining: number }
   /** Trait déterministe (texture du combat classique) : nom court affiché. */

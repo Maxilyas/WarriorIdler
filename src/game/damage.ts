@@ -22,8 +22,10 @@ export const DAMAGE_TYPES: Record<DamageType, DamageTypeMeta> = {
 
 export const DAMAGE_TYPE_LIST: DamageType[] = Object.keys(DAMAGE_TYPES) as DamageType[]
 
-/** Résistance maximale d'un héros à un type (cap dur). */
-export const RESIST_CAP = 0.75
+/**
+ * v0.24 : la résistance du héros est en POINTS, NON PLAFONNÉE (modèle relatif — voir resist.ts).
+ * L'ancien cap dur de 75 % est supprimé ; 1 ancien % = 1 point.
+ */
 
 export interface DamageProfile {
   /** Répartition des dégâts par type (somme = 1). */
@@ -139,26 +141,27 @@ export function computeDamageProfile(equipment: Equipment, keystones: KeystoneEf
   return { profile, bonus, mainType }
 }
 
-/** Profil de résistances du héros : affixes `resist` + résistances de talents (capé). */
+/**
+ * Profil de résistances du héros, en POINTS (v0.24, non plafonné — modèle relatif, resist.ts).
+ * Sources : lignes d'objet (1 ancien % = 1 point, telles quelles), talents et effets uniques
+ * (données stockées en fractions → ×100 ici).
+ */
 export function computeResistProfile(
   equipment: Equipment,
   talentResist: Partial<Record<DamageType, number>> = {},
 ): Partial<Record<DamageType, number>> {
-  const resist: Partial<Record<DamageType, number>> = { ...talentResist }
+  const resist: Partial<Record<DamageType, number>> = {}
+  for (const t in talentResist) resist[t as DamageType] = (talentResist[t as DamageType] ?? 0) * 100
   for (const slot in equipment) {
     const item = equipment[slot as keyof Equipment]
     if (!item) continue
     for (const aff of item.affixes) {
-      if (aff.kind === 'resist' && aff.type) resist[aff.type] = (resist[aff.type] ?? 0) + aff.value / 100
+      if (aff.kind === 'resist' && aff.type) resist[aff.type] = (resist[aff.type] ?? 0) + aff.value
     }
     if (item.unique) {
       const ur = instanceResist(item.unique)
-      for (const t in ur) resist[t as DamageType] = (resist[t as DamageType] ?? 0) + (ur[t as DamageType] ?? 0)
+      for (const t in ur) resist[t as DamageType] = (resist[t as DamageType] ?? 0) + (ur[t as DamageType] ?? 0) * 100
     }
-  }
-  for (const t in resist) {
-    const type = t as DamageType
-    resist[type] = Math.min(RESIST_CAP, resist[type] ?? 0)
   }
   return resist
 }

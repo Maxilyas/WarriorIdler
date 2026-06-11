@@ -1,6 +1,7 @@
 import type { DamageType, Enemy } from './types'
 import { DAMAGE_TYPES } from './damage'
 import type { GemFamily } from './condGems'
+import { dungeonReq } from './resist'
 
 /**
  * DONJONS « par RESSOURCE » (refonte v0.17).
@@ -362,6 +363,8 @@ export function makeDungeonEnemy(
     xp: Math.round(8 * Math.pow(1.12, effStage - 1) * (isBoss ? 5 : 1) * xpMult),
     resist: {},
     damageType: def.element,
+    // Exigence de résistance (v0.24) sur l'élément du donjon — modérée (cap ×2.1 à zéro résist).
+    reqs: { [def.element]: dungeonReq(level) },
     ...(isElite ? { elite: true, dodge: 0.1 } : {}),
     ...(isBoss ? { boss: true, dodge: 0.15, ccDur: 1.6, ccCd: 7 } : {}),
   }

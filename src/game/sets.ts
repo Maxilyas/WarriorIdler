@@ -17,7 +17,7 @@ export interface SetBonusTier {
   hpMult?: number
   /** Réduction de recharge additionnelle (additive au cdr, capée par le moteur). */
   cdr?: number
-  /** Résistance à TOUS les types (additive, capée à RESIST_CAP). */
+  /** Résistance à TOUS les types (fraction ; ×100 → points à l'agrégation, v0.24). */
   resistAll?: number
   /** Vol de vie plat (fraction des dégâts). */
   leech?: number

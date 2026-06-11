@@ -3,6 +3,7 @@ import type {
   Equipment, Item, Affix, PrimaryStat, OffensiveStat, SecondaryStat, EquipSlotId, ItemType, Enemy, DamageType, RarityId, Character, PowerDef, EnemyAbility,
 } from './types'
 import { rollHit, incomingDps, genericMitigation } from './combat'
+import { resistMult, enemyReq } from './resist'
 import type { DerivedStats } from './stats'
 import {
   makeCharacter, charDerived, charMaxHp, charDamageProfile, charPassives,
@@ -1317,24 +1318,27 @@ interface AbilityCtx {
   cmods: { flatDr: number }
 }
 
-/** Applique l'effet d'une technique ennemie à un héros cible (déjà atténué par résist + Purge). */
+/** Applique l'effet d'une technique ennemie à un héros cible (modèle d'exigence + Purge). */
 function applyEnemyAbility(ab: EnemyAbility, enemy: Enemy, t: Character, ctx: AbilityCtx) {
   const resist = ctx.resist[ab.element] ?? 0
   const purge = ctx.derived.purge
   const extra = (1 - ctx.passives.damageReduction) * (1 - ctx.cmods.flatDr)
+  const req = enemyReq(enemy, ab.element)
   switch (ab.kind) {
     case 'dot': {
-      // DoT : ignore armure/esquive, mais réduit par la RÉSISTANCE du type et la PURGE (intensité + durée).
-      const dps = Math.max(0, enemy.damage * ab.magnitude * (1 - resist) * (1 - purge))
+      // DoT : ignore armure/esquive. La PURGE réduit intensité + durée ET ronge l'exigence du
+      // type sur les altérations (v0.24 §5.3 : Req_eff = Req − Purge×100 — la soupape anti-DoT).
+      const reqDot = Math.max(0, req - purge * 100)
+      const dps = Math.max(0, enemy.damage * ab.magnitude * resistMult(reqDot, resist) * (1 - purge))
       const remaining = (ab.duration ?? 4) * (1 - purge * 0.5)
       if (dps > 0) t.dots = [...(t.dots ?? []), { dps, type: ab.element, remaining }]
       break
     }
     case 'burst':
     case 'drain': {
-      // Coup unique télégraphié : atténué comme une attaque (résist + esquive/réduction + barrière via PV),
+      // Coup unique télégraphié : multiplicateur d'exigence + atténuation générique bornée,
       // puis passé par l'immunité/bouclier d'absorption du héros.
-      const dmg = incomingDps(enemy.damage * ab.magnitude, ab.element, ctx.derived, ctx.resist, extra)
+      const dmg = incomingDps(enemy.damage * ab.magnitude, ab.element, ctx.derived, ctx.resist, req, extra)
       const taken = damageHero(t, dmg)
       if (ab.kind === 'drain') enemy.hp = Math.min(enemy.maxHp, enemy.hp + taken * 0.6)
       break
@@ -1567,9 +1571,10 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
     }
     const effDmg = enemy.damage * (1 + (mods?.enrage ?? 0) * (mods?.fightTime ?? 0)) * (mods?.dmgMult ?? 1)
     // L'atténuation générique (esquive/réduction/maîtrise + passives/keystones) est BORNÉE
-    // dans incomingDps → on encaisse toujours une part. Les résistances de type restent décisives.
+    // dans incomingDps ; le multiplicateur d'exigence du type (v0.24) s'applique avant.
     let incoming = incomingDps(
       effDmg, enemy.damageType, td.derived, td.resist,
+      enemyReq(enemy, enemy.damageType),
       (1 - td.passives.damageReduction) * (1 - td.cmods.flatDr),
     ) * dt
     // Réfléchissant : CAPÉ à 10% des PV max de la cible par seconde — sinon un héros à très gros
@@ -1790,6 +1795,7 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
     const effDmg = enemy.damage * (1 + (mods?.enrage ?? 0) * (mods?.fightTime ?? 0)) * (mods?.dmgMult ?? 1)
     let incoming = incomingDps(
       effDmg, enemy.damageType, td.derived, td.resist,
+      enemyReq(enemy, enemy.damageType),
       (1 - td.passives.damageReduction) * (1 - td.cmods.flatDr),
     ) * dt
     // Même cap que le combat mono-cible : le renvoi ne dépasse jamais 10% des PV max/s.
@@ -1996,8 +2002,8 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
   set({ ...s, characters: chars, dungeon: { ...d, enemies, fightTime }, log })
 }
 
-/** Dégâts de zone (Nova/adds) sur l'équipe, typés et atténués par chaque perso. */
-function applyAoe(chars: Character[], baseDmg: number, type: DamageType): Character[] {
+/** Dégâts de zone (Nova/adds) sur l'équipe, typés : multiplicateur d'exigence par perso. */
+function applyAoe(chars: Character[], baseDmg: number, type: DamageType, req = 0): Character[] {
   return chars.map((c) => {
     if (c.hp <= 0) return c
     const d = charDerived(c)
@@ -2005,7 +2011,7 @@ function applyAoe(chars: Character[], baseDmg: number, type: DamageType): Charac
     const cm = charCombatMods(c)
     const resist = charResist(c)[type] ?? 0
     // Même plafond d'atténuation que les coups normaux (pas d'invincibilité face aux Novas).
-    const dmg = baseDmg * (1 - resist) * genericMitigation(d, (1 - p.damageReduction) * (1 - cm.flatDr))
+    const dmg = baseDmg * resistMult(req, resist) * genericMitigation(d, (1 - p.damageReduction) * (1 - cm.flatDr))
     if ((c.invuln ?? 0) > 0) return c // Phase éthérée : immunité totale
     let amt = dmg
     let absorb = c.absorb
@@ -2067,7 +2073,7 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
   // du raid est DÉJÀ dans boss.damage (avant, ×4×baseDifficulty la comptait deux fois).
   if (mech.includes('nova') && novaCd <= 0) {
     novaCd = 6
-    chars = applyAoe(chars, boss.damage * NOVA_MULT, element)
+    chars = applyAoe(chars, boss.damage * NOVA_MULT, element, enemyReq(boss, element))
     log = pushLog(log, `☄️ ${boss.name} déchaîne une Nova ${DAMAGE_TYPES[element].name} !`, 'death')
   }
   // Déferlante : fait SURGIR des renforts réels (combat à plusieurs adversaires), plafonnés.
