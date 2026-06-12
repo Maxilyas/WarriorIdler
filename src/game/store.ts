@@ -409,6 +409,28 @@ function gainMetierXp(
   return { metiers, log }
 }
 
+/**
+ * v0.25 — XP IMPLICITE des métiers (fin de donjon/raid) : porter ses gemmes fait travailler le
+ * Joaillier, porter ses runes le Runiste — « les mécaniques s'amènent toutes seules ». Minuscule
+ * (1 XP/gemme sertie portée, cap 5 · 1 XP/rune gravée portée, cap 4) : réel sur la durée, invisible
+ * au quotidien. (L'Alchimiste a déjà ses sources implicites : quintessences + recyclage.)
+ */
+function passiveMetierXp(s: Pick<GameState, 'metiers' | 'characters'>, log: LogEntry[]): { metiers: MetiersState; log: LogEntry[] } {
+  let gems = 0
+  let runes = 0
+  for (const c of s.characters) {
+    for (const slot in c.equipment) {
+      const it = c.equipment[slot as keyof typeof c.equipment]
+      gems += it?.gems?.length ?? 0
+      if (it?.enchant) runes++
+    }
+  }
+  let metiers = s.metiers
+  if (gems > 0) { const g = gainMetierXp({ metiers, log }, 'joaillier', Math.min(5, gems)); metiers = g.metiers; log = g.log }
+  if (runes > 0) { const g = gainMetierXp({ metiers, log }, 'runiste', Math.min(4, runes)); metiers = g.metiers; log = g.log }
+  return { metiers, log }
+}
+
 function xpForLevel(level: number): number {
   // Exponentielle ACCÉLÉRÉE (le taux de croissance augmente avec le niveau) calibrée sur un planning
   // de temps cible « meilleur rendement » : ~10 min au niv 10, ~1 h au 30, ~2 h au 50, ~10 h au 70,
@@ -2176,11 +2198,15 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
         log = pushLog(log, `🪄 RUNE TROUVÉE : ${rd.icon} ${rd.name} !`, 'loot')
       }
 
+      // 🛠️ XP implicite : les gemmes/runes portées font travailler Joaillier & Runiste.
+      const pm = passiveMetierXp(s, log)
+      log = pm.log
+
       const healed: Character[] = chars.map(fullHeal)
       const dungeonProgress = { ...s.dungeonProgress, [d.dungeonId]: Math.max(s.dungeonProgress[d.dungeonId] ?? 0, lv) }
       const repeatLeft = d.repeatLeft ?? 0
       // État avec les pools PAR COMBAT déjà crédités (le coffre est un bonus en plus).
-      const base = { ...s, gold, essence, noyau, poussiere, sceaux, orbes, gemDust, inventory, codex, runesOwned }
+      const base = { ...s, gold, essence, noyau, poussiere, sceaux, orbes, gemDust, inventory, codex, runesOwned, metiers: pm.metiers }
 
       // Auto-farm : on encaisse le coffre directement (sans modal) et on relance.
       if (repeatLeft > 0) {
@@ -2404,6 +2430,10 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
         log = pushLog(log, `🪄 RUNE TROUVÉE : ${rd.icon} ${rd.name} !`, 'loot')
       }
 
+      // 🛠️ XP implicite : les gemmes/runes portées font travailler Joaillier & Runiste.
+      const pm = passiveMetierXp(s, log)
+      log = pm.log
+
       // Auto-raid : s'il reste des relances ET assez d'Orbes, on encaisse le trésor et on relance.
       if (repeatLeft > 0) {
         const credited = applyChestRewards(s, chest)
@@ -2411,7 +2441,7 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
           const nr = generateRaid(r.raidId, tier)
           nr.repeatLeft = repeatLeft - 1
           const log3 = pushLog(log, `🔁 Auto-raid : trésor encaissé${cosmic ? ` (💫 ×${cosmic})` : ''} · ${repeatLeft} relance${repeatLeft > 1 ? 's' : ''} restante${repeatLeft > 1 ? 's' : ''}.`, 'kill')
-          const next = { ...s, ...credited, gems, runesOwned, characters: healed, raidProgress, raidTrophies, orbes: credited.orbes - def.orbeCost, raid: nr, log: log3 }
+          const next = { ...s, ...credited, gems, runesOwned, metiers: pm.metiers, characters: healed, raidProgress, raidTrophies, orbes: credited.orbes - def.orbeCost, raid: nr, log: log3 }
           persist(next)
           set(next)
           return
@@ -2419,7 +2449,7 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
       }
 
       log = pushLog(log, `🏆 RAID VAINCU : ${def.name} (Tier ${tier}) !${cosmic ? ` 💫 Éclat cosmique ×${cosmic} !` : ''} Un trésor t'attend.`, 'kill')
-      const next = { ...s, gems, runesOwned, characters: healed, raid: null, raidProgress, raidTrophies, pendingChest: chest, log }
+      const next = { ...s, gems, runesOwned, metiers: pm.metiers, characters: healed, raid: null, raidProgress, raidTrophies, pendingChest: chest, log }
       persist(next)
       set(next)
       return
@@ -2840,6 +2870,8 @@ export const useGame = create<GameState>((set, get) => {
       }
       const qLog = quintLogSuffix(refund)
       const g = gainMetierXp(s, 'alchimiste', metierXpGain(RARITIES[item.rarity].tier, 'modify'))
+      // v0.25 — XP implicite : fondre le métal nourrit AUSSI le Forgeron (≈30% du gain alchimiste).
+      const g2 = gainMetierXp({ metiers: g.metiers, log: g.log }, 'forgeron', Math.max(1, Math.round(metierXpGain(RARITIES[item.rarity].tier, 'modify') * 0.3)))
       const next = {
         ...s,
         essence: s.essence + gain,
@@ -2847,9 +2879,9 @@ export const useGame = create<GameState>((set, get) => {
         quint: addQuint(s.quint, refund),
         gems: gemStockAdd(s.gems, item),
         essences,
-        metiers: g.metiers,
+        metiers: g2.metiers,
         inventory: s.inventory.filter((i) => i.id !== itemId),
-        log: pushLog(g.log, `Recyclé : ${item.name} (+${gain} éclats${pous ? ` + ${pous} 🌌` : ''}${qLog}${essLog}${item.gems?.length ? ', gemmes rendues' : ''}).`, 'craft'),
+        log: pushLog(g2.log, `Recyclé : ${item.name} (+${gain} éclats${pous ? ` + ${pous} 🌌` : ''}${qLog}${essLog}${item.gems?.length ? ', gemmes rendues' : ''}).`, 'craft'),
       }
       persist(next)
       set(next)
@@ -2898,7 +2930,9 @@ export const useGame = create<GameState>((set, get) => {
       }
       const gained = essence - s.essence
       const g = count ? gainMetierXp(s, 'alchimiste', xp) : { metiers: s.metiers, log: s.log }
-      const next = { ...s, essence, poussiere, quint, gems, essences, metiers: g.metiers, inventory: keep, log: count ? pushLog(g.log, `${count} objet(s) recyclé(s) (+${gained} éclats).`, 'craft') : g.log }
+      // v0.25 — XP implicite : la fonte de masse nourrit aussi le Forgeron (≈30%).
+      const g2 = count ? gainMetierXp({ metiers: g.metiers, log: g.log }, 'forgeron', Math.max(1, Math.round(xp * 0.3))) : g
+      const next = { ...s, essence, poussiere, quint, gems, essences, metiers: g2.metiers, inventory: keep, log: count ? pushLog(g2.log, `${count} objet(s) recyclé(s) (+${gained} éclats).`, 'craft') : g2.log }
       persist(next)
       set(next)
     },
