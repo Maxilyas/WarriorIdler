@@ -248,6 +248,10 @@ export const DUNGEON_MODIFIERS: DungeonModifier[] = [
 // ---- Donjon actif ----
 
 export interface ActiveDungeon {
+  /** 💰 Potion du pillard ARMÉE à l'entrée (v0.26) : bonus de coffre (fraction). */
+  chestPotion?: number
+  /** 📚 Potion de l'érudit ARMÉE à l'entrée (v0.26) : bonus d'XP du run (fraction). */
+  xpPotion?: number
   dungeonId: DungeonId
   level: number
   name: string

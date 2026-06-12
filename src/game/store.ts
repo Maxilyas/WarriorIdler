@@ -48,6 +48,12 @@ import {
   AUTOMATE_MAX, AUTOMATE_COSTS, AUTOMATE_NAMES, AUTOMATE_UPG_MAX,
   type Automate, type AutomateMission,
 } from './automates'
+import {
+  REAGENTS, REAGENT_DROP, getBrew, recipeForPair, EXPERIMENT_COST,
+  BREW_QUALITIES, brewQualityAt, brewKey, parseBrewKey, millesimeChance,
+  DAILY_TRANSMUTE_COST, PHILOSOPHALE_COST, PHILOSOPHALE_MULT,
+  type BrewQuality,
+} from './alchimie'
 import { makeEnemy, isBossStage, stageIlvl, stageLuckTier } from './enemies'
 import { BIOME_IDS, biomeUnlocked, getBiomeDef, type BiomeId } from './biomes'
 import {
@@ -312,6 +318,31 @@ interface SaveData {
   runeFragments: number
   /** v0.26 : exemplaires déjà FORGÉS par rune (le coût croît ×1,5 à chaque exemplaire). */
   runeCrafted: Record<string, number>
+  /* — ⚗️ Officine de l'Alchimiste (v0.26) — */
+  /** Réactifs de biome (1 herbe par type de dégâts). */
+  reagents: Partial<Record<DamageType, number>>
+  /** Brassins en stock (clé `id:qualité` — voir alchimie.ts). */
+  brews: Record<string, number>
+  /** Recettes DÉCOUVERTES par expérimentation (ids de BREWS). */
+  alchemyRecipes: string[]
+  /** Cuves de brassage en cours (maturation en temps réel). */
+  cuvesEnCours: { recipeId: string; startedAt: number }[]
+  /** Élixir d'équipe ACTIF (un seul) — expire en temps réel. */
+  elixirActive: { id: string; quality: number; until: number } | null
+  /** Huile d'arme active (type choisi à l'application). */
+  oilActive: { type: DamageType; pct: number; until: number } | null
+  /** Antidote actif (type choisi). */
+  antidoteActive: { type: DamageType; pct: number; until: number } | null
+  /** Mutagène actif (le sort en a décidé au débouchage). */
+  mutagenActive: { mult: number; until: number } | null
+  /** Potions ARMÉES (consommées à la prochaine entrée du contenu). */
+  armedRaidShield: number | null
+  armedChestBonus: number | null
+  armedXpBonus: number | null
+  /** Jour epoch de la dernière 🌗 Transmutation du jour. */
+  lastTransmute: number
+  /** 🜍 Pierre philosophale forgée (relique de compte : +2% drops de ressources). */
+  philosophale: boolean
   /** v0.26 : version de migration des arbres de métiers (Prodige, etc.). */
   metiersV?: number
   essences: Record<string, number>
@@ -420,6 +451,27 @@ interface GameState extends SaveData {
   forgeRune: (enchantId: string) => void
   /** 🎲 SURCHARGE RUNIQUE (v0.26) : 3 fragments → une rune aléatoire (jamais un pacte). */
   gambleRune: () => void
+  /* — ⚗️ Officine (v0.26) — */
+  /** 🧪 EXPÉRIMENTATION : combine 2 réactifs (3 de chaque) — découvre une recette… ou pas. */
+  experiment: (a: DamageType, b: DamageType) => void
+  /** 🫙 Lance un brassin dans une cuve libre (recette DÉCOUVERTE uniquement). */
+  brewStart: (recipeId: string) => void
+  /** 🫙 Récolte la cuve `idx` — la QUALITÉ dépend du moment (Trouble/Pur/Parfait/Millésime). */
+  brewCollect: (idx: number) => void
+  /** 🧪 Boit un élixir d'équipe (un seul actif — remplace le précédent). */
+  drinkElixir: (key: string) => void
+  /** 🛡️/💰/📚 ARME une potion de contenu (consommée à la prochaine entrée de donjon/raid). */
+  armPotion: (key: string) => void
+  /** 🛢️ Applique une huile d'arme (type au choix). */
+  useOil: (key: string, type: DamageType) => void
+  /** 🧴 Boit un antidote ciblé (type au choix). */
+  useAntidote: (key: string, type: DamageType) => void
+  /** ☣️ Débouche un mutagène — la chimie décide (70/30). */
+  drinkMutagen: (key: string) => void
+  /** 🌗 Transmutation du jour : 4 Quintessences d'un type → 1 du type choisi (1/jour réel). */
+  dailyTransmute: (from: DamageType, to: DamageType) => void
+  /** 🜍 Forge la Pierre philosophale (capstone : réactifs des 7 biomes + un Millésime + 🌌). */
+  craftPhilosophale: () => void
   createItem: (opts: CreateOptions) => void
   /** 🫕 FONDERIE (v0.26) : fond un objet du SAC (Rare+) en Lingots 🧱. */
   smeltItem: (itemId: string) => void
@@ -722,14 +774,52 @@ function crescendoReset() {
   mementoOn = false // 💀 Memento mori : le run s'achève, la rage retombe
 }
 
+/** ⚗️ Buffs d'OFFICINE actifs (élixir, huile, antidote, mutagène) — les expirés sont ignorés. */
+interface BrewBuffs {
+  dmgMult: number
+  goldMult: number
+  hpMult: number
+  speedMult: number
+  oil: { type: DamageType; pct: number } | null
+  antidote: { type: DamageType; pct: number } | null
+}
+
+function activeBrewBuffs(s: Pick<GameState, 'elixirActive' | 'oilActive' | 'antidoteActive' | 'mutagenActive'>): BrewBuffs {
+  const now = Date.now()
+  const out: BrewBuffs = { dmgMult: 1, goldMult: 1, hpMult: 1, speedMult: 1, oil: null, antidote: null }
+  const e = s.elixirActive
+  if (e && e.until > now) {
+    const def = getBrew(e.id)
+    const q = BREW_QUALITIES[Math.max(0, Math.min(3, e.quality)) as BrewQuality].mult
+    if (def?.effect?.dmg) out.dmgMult *= 1 + def.effect.dmg * q
+    if (def?.effect?.gold) out.goldMult *= 1 + def.effect.gold * q
+    if (def?.effect?.hp) out.hpMult *= 1 + def.effect.hp * q
+    if (def?.effect?.speed) out.speedMult *= 1 + def.effect.speed * q
+  }
+  if (s.oilActive && s.oilActive.until > now) out.oil = { type: s.oilActive.type, pct: s.oilActive.pct }
+  if (s.antidoteActive && s.antidoteActive.until > now) out.antidote = { type: s.antidoteActive.type, pct: s.antidoteActive.pct }
+  if (s.mutagenActive && s.mutagenActive.until > now) out.dmgMult *= s.mutagenActive.mult
+  return out
+}
+
 /** v0.26 : calcule les mods de PACTE de l'équipe et synchronise les dérivées globales
- *  (PV, vitesse, vol de vie, esquive — character.ts). À appeler à CHAQUE tick de combat. */
-function teamPactMods(s: Pick<GameState, 'characters' | 'metiers'>, craft: ReturnType<typeof craftMods>): PactMods {
+ *  (PV, vitesse, vol de vie, esquive — character.ts), élixirs d'Officine compris. */
+function teamPactMods(
+  s: Pick<GameState, 'characters' | 'metiers'>,
+  craft: ReturnType<typeof craftMods>,
+  buffs?: BrewBuffs,
+): PactMods {
   const ids = equippedPacts(s.characters)
   const pact = ids.length
     ? pactMods(ids, s.characters.length, craft.pactMalusMult, craft.doublePacte ? 2 : 1)
     : emptyPactMods()
-  setPactDerivedMods({ hpMult: pact.hpMult, apsMult: pact.apsMult, apsForce: pact.apsForce, leechBonus: pact.leechBonus, noDodge: pact.noDodge })
+  setPactDerivedMods({
+    hpMult: pact.hpMult * (buffs?.hpMult ?? 1),
+    apsMult: pact.apsMult * (buffs?.speedMult ?? 1),
+    apsForce: pact.apsForce,
+    leechBonus: pact.leechBonus,
+    noDodge: pact.noDodge,
+  })
   return pact
 }
 
@@ -1119,6 +1209,19 @@ function freshSave(): SaveData {
     lastMasterwork: 0,
     runeFragments: 0,
     runeCrafted: {},
+    reagents: {},
+    brews: {},
+    alchemyRecipes: [],
+    cuvesEnCours: [],
+    elixirActive: null,
+    oilActive: null,
+    antidoteActive: null,
+    mutagenActive: null,
+    armedRaidShield: null,
+    armedChestBonus: null,
+    armedXpBonus: null,
+    lastTransmute: 0,
+    philosophale: false,
     metiersV: 3,
     essences: {},
     sceaux: 0,
@@ -1238,6 +1341,20 @@ function sanitize(save: SaveData): SaveData {
   if (typeof save.lastMasterwork !== 'number') save.lastMasterwork = 0
   if (typeof save.runeFragments !== 'number') save.runeFragments = 0
   if (!save.runeCrafted || typeof save.runeCrafted !== 'object') save.runeCrafted = {}
+  // ⚗️ Officine (v0.26) — défauts des saves antérieures.
+  if (!save.reagents || typeof save.reagents !== 'object') save.reagents = {}
+  if (!save.brews || typeof save.brews !== 'object') save.brews = {}
+  if (!Array.isArray(save.alchemyRecipes)) save.alchemyRecipes = []
+  if (!Array.isArray(save.cuvesEnCours)) save.cuvesEnCours = []
+  if (save.elixirActive === undefined) save.elixirActive = null
+  if (save.oilActive === undefined) save.oilActive = null
+  if (save.antidoteActive === undefined) save.antidoteActive = null
+  if (save.mutagenActive === undefined) save.mutagenActive = null
+  if (save.armedRaidShield === undefined) save.armedRaidShield = null
+  if (save.armedChestBonus === undefined) save.armedChestBonus = null
+  if (save.armedXpBonus === undefined) save.armedXpBonus = null
+  if (typeof save.lastTransmute !== 'number') save.lastTransmute = 0
+  if (typeof save.philosophale !== 'boolean') save.philosophale = false
   // v0.26 — MIGRATION des arbres (metiersV 2) : « Œil du maître » (+4%/rang ×5) devient
   // « Prodige » (+2%/rang ×15) → rangs ×2 (même valeur) ; ◈ Visionnaire (+12% + surillvl +1)
   // devient 6 rangs de Prodige + « Affûtage supérieur ». Personne ne perd un pourcent.
@@ -1617,6 +1734,19 @@ function persist(s: GameState) {
     lastMasterwork: s.lastMasterwork,
     runeFragments: s.runeFragments,
     runeCrafted: s.runeCrafted,
+    reagents: s.reagents,
+    brews: s.brews,
+    alchemyRecipes: s.alchemyRecipes,
+    cuvesEnCours: s.cuvesEnCours,
+    elixirActive: s.elixirActive,
+    oilActive: s.oilActive,
+    antidoteActive: s.antidoteActive,
+    mutagenActive: s.mutagenActive,
+    armedRaidShield: s.armedRaidShield,
+    armedChestBonus: s.armedChestBonus,
+    armedXpBonus: s.armedXpBonus,
+    lastTransmute: s.lastTransmute,
+    philosophale: s.philosophale,
     metiersV: s.metiersV ?? 3,
     essences: s.essences,
     sceaux: s.sceaux,
@@ -1944,6 +2074,8 @@ interface CombatMods {
     resistBonus?: number
     /** Farm : à ≤ 2 paliers du record — Pied du mur (appliqué via heroMult au tick). */
     nearRecord?: boolean
+    /** 🧴 Antidote ciblé (Officine) : −pct des dégâts SUBIS de ce type. */
+    antidote?: { type: DamageType; pct: number }
   }
 }
 
@@ -2060,6 +2192,8 @@ interface AbilityCtx {
   aliveEnemies?: number
   /** 🩸 Pacte(s) actif(s) — dmgIn s'applique aussi aux coups télégraphés. */
   pact?: PactMods
+  /** 🧴 Antidote ciblé (Officine) — réduit les techniques de CE type. */
+  antidote?: { type: DamageType; pct: number }
 }
 
 /** Applique l'effet d'une technique ennemie à un héros cible (modèle d'exigence + Purge). */
@@ -2090,7 +2224,9 @@ function applyEnemyAbility(ab: EnemyAbility, enemy: Enemy, t: Character, ctx: Ab
       // puis la chaîne défensive v0.26 (Sixième sens, Granit, Mémoire de la pierre, Égide,
       // Carapace…) et enfin l'immunité/bouclier d'absorption du héros.
       let dmg = incomingDps(enemy.damage * ab.magnitude, ab.element, ctx.derived, ctx.resist, req, extra, ctx.cmods.reqReduction)
-      dmg *= (ctx.pact?.dmgIn ?? 1) * gemDefenseMult(t, charMaxHp(t), {
+      dmg *= (ctx.pact?.dmgIn ?? 1)
+        * (ctx.antidote && ctx.antidote.type === ab.element ? 1 - ctx.antidote.pct : 1)
+        * gemDefenseMult(t, charMaxHp(t), {
         cond: ctx.cond, surge: ctx.surge, aliveEnemies: ctx.aliveEnemies,
         telegraphed: !!ab.telegraph, tenacity: ctx.derived.tenacity,
       })
@@ -2233,6 +2369,7 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
           derived: charDerived(c), profile: charDamageProfile(c), passives: charPassives(c),
           resist: charResist(c), cmods: charCombatMods(c),
           cond: mods?.cond, surge: mods?.content?.surge, aliveEnemies: 1, pact: mods?.pact,
+          antidote: mods?.content?.antidote,
         }
       : null,
   )
@@ -2497,10 +2634,13 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
       const cc = chars[ci]
       const cd2 = info[ci]
       if (!cd2 || frac <= 0) continue
-      // Chaîne défensive (🪨 Granit, ⚓ Ancrage, 💫 Sixième sens, 🌂 Paratonnerre) + 🍷 pactes…
-      const dmg = incoming * frac * (mods?.pact?.dmgIn ?? 1) * gemDefenseMult(cc, charMaxHp(cc), {
-        cond: mods?.cond, casting: enemyCasting, surge: mods?.content?.surge, aliveEnemies: 1,
-      })
+      // Chaîne défensive (🪨 Granit, ⚓ Ancrage, 💫 Sixième sens, 🌂 Paratonnerre) + 🍷 pactes + 🧴 antidote…
+      const antid = mods?.content?.antidote
+      const dmg = incoming * frac * (mods?.pact?.dmgIn ?? 1)
+        * (antid && antid.type === enemy.damageType ? 1 - antid.pct : 1)
+        * gemDefenseMult(cc, charMaxHp(cc), {
+          cond: mods?.cond, casting: enemyCasting, surge: mods?.content?.surge, aliveEnemies: 1,
+        })
       // …puis Bastion réactif (🔃 Échangeur, 🌵 Cilice) et immunité/bouclier d'absorption.
       const taken = gemDamageHero(cc, dmg, { cond: mods?.cond, attacker: enemy })
       // ÉGIDE « Aegis adaptatif » : être frappé par un type endurcit contre ce type.
@@ -2603,6 +2743,7 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
           derived: charDerived(c), profile: charDamageProfile(c), passives: charPassives(c),
           resist: charResist(c), cmods: charCombatMods(c),
           cond: mods?.cond, surge: mods?.content?.surge, aliveEnemies: aliveAtStart, pact: mods?.pact,
+          antidote: mods?.content?.antidote,
         }
       : null,
   )
@@ -2934,10 +3075,14 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
       const cc = chars[ci]
       const cd2 = info[ci]
       if (!cd2 || frac <= 0) continue
-      // Chaîne défensive (🧱 Rempart, 🪨 Granit, ⚓ Ancrage, 💫 Sixième sens, 🌂 Paratonnerre) + 🍷 pactes…
-      const dmg = incoming * frac * (mods?.pact?.dmgIn ?? 1) * gemDefenseMult(cc, charMaxHp(cc), {
-        cond: mods?.cond, casting: anyCasting, surge: mods?.content?.surge, aliveEnemies: aliveE,
-      })
+      // Chaîne défensive (🧱 Rempart, 🪨 Granit, ⚓ Ancrage, 💫 Sixième sens, 🌂 Paratonnerre)
+      // + 🍷 pactes + 🧴 antidote…
+      const antid = mods?.content?.antidote
+      const dmg = incoming * frac * (mods?.pact?.dmgIn ?? 1)
+        * (antid && antid.type === enemy.damageType ? 1 - antid.pct : 1)
+        * gemDefenseMult(cc, charMaxHp(cc), {
+          cond: mods?.cond, casting: anyCasting, surge: mods?.content?.surge, aliveEnemies: aliveE,
+        })
       // …puis Bastion réactif (🔃 Échangeur, 🌵 Cilice) et immunité/bouclier d'absorption.
       const taken = gemDamageHero(cc, dmg, { cond: mods?.cond, attacker: enemy })
       // ÉGIDE « Aegis adaptatif » : être frappé par un type endurcit contre ce type.
@@ -3063,13 +3208,16 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
   const dCraft = craftMods(s.metiers)
   const dCond = condGemMods(s.characters, dCraft.gemSpec, teamGemOpts(s, dCraft))
   const dRunes = timeRuneMods(equippedTimeRunes(s.characters), dCraft.runisteTempo)
-  const dPact = teamPactMods(s, dCraft)
-  // 🗝️ Pierre de sceau (v0.26) : +X% de dégâts par modificateur actif du donjon.
+  const dBuffs = activeBrewBuffs(s)
+  const dPact = teamPactMods(s, dCraft, dBuffs)
+  // 🗝️ Pierre de sceau (v0.26) : +X% de dégâts par modificateur actif · ⚗️ élixir/🛢️ huile d'Officine.
   const dHeroMult = (1 + maitriseBonus(s.biomeBest)) * (1 + crescendoBonus(dCond.crescendoCap))
     * (dCond.sceauPct ? 1 + dCond.sceauPct * d.modifiers.length : 1)
+    * dBuffs.dmgMult
+    * (dBuffs.oil && dBuffs.oil.type === def.element ? 1 + dBuffs.oil.pct : 1)
   const res = partyCombatStepMulti(s.characters, d.enemies, dt, {
     enrage, reflect, regen, fightTime, heroMult: dHeroMult, cond: dCond, runes: dRunes, pact: dPact,
-    content: { affixCount: d.modifiers.length },
+    content: { affixCount: d.modifiers.length, antidote: dBuffs.antidote ?? undefined },
   })
   let chars = res.chars
   const enemies = res.enemies
@@ -3133,7 +3281,7 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
       case 'sceaux': { const sc = accrue('sceaux', dungeonKeyYield('sceaux', lv) * DUNGEON_YIELD_PERFIGHT_FRAC * rwMult / Math.max(1, d.totalFights)); if (sc) { sceaux += sc; logBit = `+${sc} 🔑` } } break
       case 'orbes': { const ob = accrue('orbes', dungeonKeyYield('orbes', lv) * DUNGEON_YIELD_PERFIGHT_FRAC * rwMult / Math.max(1, d.totalFights)); if (ob) { orbes += ob; logBit = `+${ob} 🔮` } } break
       case 'xp': {
-        const xp = Math.round(packXp * DUNGEON_FIGHT_XP_MULT * eco.xpGain * rwMult)
+        const xp = Math.round(packXp * DUNGEON_FIGHT_XP_MULT * eco.xpGain * rwMult * (1 + (d.xpPotion ?? 0)))
         chars = chars.map((c) => { if (c.hp <= 0) return c; const nc = grantXp(c, xp); if (nc.level > c.level) leveled = true; return nc })
         earned.xp = (earned.xp ?? 0) + xp
         logBit = `+${xp.toLocaleString('fr-FR')} XP`
@@ -3174,9 +3322,10 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
           : pushLog(log, `⏱️ Pressé manqué (${Math.round(runTime)}s/${presse.timerSec}s) — coffre normal.`, 'info')
       }
       // Multiplicateur de COFFRE : affixes payants (rwMult) × défi Pressé réussi
-      // × 🗺️ Cartographe + ◈ Environnement III (v0.26).
+      // × 🗺️ Cartographe + ◈ Environnement III × 💰 Potion du pillard (v0.26).
       const chestMult = rwMult * (presseOk ? 1 + (presse?.timerBonus ?? 0) : 1)
         * (1 + (dCond.cartographePct ?? 0) + (dCond.envChestPct ?? 0))
+        * (1 + (d.chestPotion ?? 0))
 
       // --- Coffre : BONUS de fin (montant ÉLEVÉ) de la ressource du donjon, EN PLUS du par-combat ---
       let items: Item[] = []
@@ -3192,7 +3341,7 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
         case 'orbes': cOrbes = Math.round(dungeonKeyYield('orbes', lv) * chestFrac); break
         case 'sceaux': cSceaux = Math.round(dungeonKeyYield('sceaux', lv) * chestFrac); break
         // (🔑 Clés en double appliquée après le switch — voir plus bas.)
-        case 'xp': { const bonus = Math.round(1200 * lv * Math.pow(1.12, lv) * chestMult); chars = chars.map((c) => (c.hp > 0 ? grantXp(c, bonus) : c)); cXp += bonus; break }
+        case 'xp': { const bonus = Math.round(1200 * lv * Math.pow(1.12, lv) * chestMult * (1 + (d.xpPotion ?? 0))); chars = chars.map((c) => (c.hp > 0 ? grantXp(c, bonus) : c)); cXp += bonus; break }
         case 'stuff': {
           const ilvl = dungeonIlvl(lv, s.bestStage)
           const count = Math.max(1, Math.round((3 + Math.floor(lv / 2)) * chestMult))
@@ -3331,12 +3480,15 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
   const rCraft = craftMods(s.metiers)
   const rCond = condGemMods(s.characters, rCraft.gemSpec, teamGemOpts(s, rCraft))
   const rRunes = timeRuneMods(equippedTimeRunes(s.characters), rCraft.runisteTempo)
-  const rPact = teamPactMods(s, rCraft)
+  const rBuffs = activeBrewBuffs(s)
+  const rPact = teamPactMods(s, rCraft, rBuffs)
   const rHeroMult = (1 + maitriseBonus(s.biomeBest)) * (1 + crescendoBonus(rCond.crescendoCap))
+    * rBuffs.dmgMult
+    * (rBuffs.oil && rBuffs.oil.type === r.element ? 1 + rBuffs.oil.pct : 1)
   const res = partyCombatStepMulti(s.characters, r.enemies, dt, {
     enrage, regen: drain, fightTime, dmgMult, heroMult: rHeroMult, cond: rCond, runes: rRunes, pact: rPact,
     // 🏅 Trophée de guerre (v0.26) : la gemme offre ses points de résist à l'équipe EN RAID.
-    content: { resistBonus: rCond.tropheeRes },
+    content: { resistBonus: rCond.tropheeRes, antidote: rBuffs.antidote ?? undefined },
   })
   let chars = res.chars
   let enemies = res.enemies
@@ -3639,7 +3791,8 @@ export const useGame = create<GameState>((set, get) => {
       const cmodsTick = craftMods(s.metiers)
       const cond = condGemMods(s.characters, cmodsTick.gemSpec, teamGemOpts(s, cmodsTick))
       const runes = timeRuneMods(equippedTimeRunes(s.characters), cmodsTick.runisteTempo)
-      const pact = teamPactMods(s, cmodsTick)
+      const buffs = activeBrewBuffs(s)
+      const pact = teamPactMods(s, cmodsTick, buffs)
       const surgedNow = surgeBiome() === s.activeBiome
       // 🧗 Pied du mur (v0.26) : à ≤ 2 paliers du record, le push frappe plus fort.
       const nearRecord = s.stage >= s.bestStage - 2
@@ -3647,9 +3800,11 @@ export const useGame = create<GameState>((set, get) => {
         * (1 + crescendoBonus(cond.crescendoCap))
         * (surgedNow && cond.orage ? 1 + cond.orage : 1)
         * (nearRecord && cond.piedDuMurPct ? 1 + cond.piedDuMurPct : 1)
+        * buffs.dmgMult
+        * (buffs.oil && buffs.oil.type === s.activeBiome ? 1 + buffs.oil.pct : 1)
       const res = partyCombatStep(s.characters, s.enemy, dt, {
         heroMult, cond, runes, pact,
-        content: { surge: surgedNow, biomeType: s.activeBiome, nearRecord },
+        content: { surge: surgedNow, biomeType: s.activeBiome, nearRecord, antidote: buffs.antidote ?? undefined },
       })
       let chars = res.chars
       const enemy = res.enemy
@@ -3690,7 +3845,9 @@ export const useGame = create<GameState>((set, get) => {
         // (dimanche réel), 👑 Hubris (pacte : récompenses de farm +).
         const dimanche = rules.has('saturnales') && new Date().getDay() === 0 ? 1 + 0.15 * amp : 1
         const hubris = 1 + (pact?.rewardBonus ?? 0)
-        const goldRuleMult = (rules.has('mecene') ? 1 + 0.25 * amp : 1) * (rules.has('bourse') ? 0.9 : 1) * dimanche * hubris
+        // 🍯 Élixir de fortune + 🜍 Pierre philosophale (relique de compte).
+        const philo = s.philosophale ? PHILOSOPHALE_MULT : 1
+        const goldRuleMult = (rules.has('mecene') ? 1 + 0.25 * amp : 1) * (rules.has('bourse') ? 0.9 : 1) * dimanche * hubris * buffs.goldMult * philo
         const xpRuleMult = (rules.has('bourse') ? 1 + 0.25 * amp : 1) * (rules.has('mecene') ? 0.9 : 1) * dimanche * hubris
         // Le combat CLASSIQUE n'est plus qu'un filet d'or/butin : la vraie source = donjons & raids.
         const goldGain = Math.round(enemy.xp * CLASSIC_GOLD_MULT * eco.goldGain * surgeMult * goldRuleMult)
@@ -3770,7 +3927,7 @@ export const useGame = create<GameState>((set, get) => {
           const qBase = boss ? QUINT_DROP.boss : elite ? QUINT_DROP.elite : QUINT_DROP.normal
           // 🪨 Quartzite (v0.26) : les quintessences du biome coulent plus volontiers.
           const quartz = rules.has('quartzite') ? 1 + 0.4 * amp : 1
-          const qChance = qBase * quintTierMult(stage) * (surged ? SURGE_QUINT_MULT : 1) * transmutMult * cmods.quintDropMult * quartz
+          const qChance = qBase * quintTierMult(stage) * (surged ? SURGE_QUINT_MULT : 1) * transmutMult * cmods.quintDropMult * quartz * philo
           if (Math.random() < qChance) {
             const t = s.activeBiome
             quint = { ...quint, [t]: (quint[t] ?? 0) + 1 }
@@ -3786,7 +3943,7 @@ export const useGame = create<GameState>((set, get) => {
           const rank2 = boss ? 'boss' : elite ? 'elite' : 'normal'
           // ⛏️ Veine mère + ⛏️ Prospecteur (v0.26) : les poussières coulent plus souvent/fort.
           const prospecteur = rules.has('prospecteur')
-          const dustC = GEM_DUST_DROP.chance[rank2] * transmutMult * cmods.gemDropMult * (1 + (cond.veineMerePct ?? 0))
+          const dustC = GEM_DUST_DROP.chance[rank2] * transmutMult * cmods.gemDropMult * (1 + (cond.veineMerePct ?? 0)) * philo
           if (Math.random() < dustC) {
             const amt = GEM_DUST_DROP.amount[rank2] * (prospecteur ? 2 : 1)
             gemDust += amt
@@ -3795,7 +3952,7 @@ export const useGame = create<GameState>((set, get) => {
           // Gemme de CONDITION : drop par FAMILLE selon le biome (Feu/Foudre → Rythme,
           // Ombre/Nature → Flux, Arcane/Froid → Environnement, Physique → Bastion).
           // v0.26 : drops ×0,4 — le drop redevient un événement, la TAILLE/FUSION compensent.
-          const gemC = COND_GEM_DROP[rank2] * transmutMult * cmods.gemDropMult * (prospecteur ? 0.5 : 1)
+          const gemC = COND_GEM_DROP[rank2] * transmutMult * cmods.gemDropMult * (prospecteur ? 0.5 : 1) * philo
           if (Math.random() < gemC) {
             const cg = rollCondGem(BIOME_GEM_FAMILY[s.activeBiome])
             // 🧿 Collectionneur : la gemme peut tomber directement au rang 2.
@@ -3811,6 +3968,18 @@ export const useGame = create<GameState>((set, get) => {
               if (!gemsSeen.includes(cg.id)) gemsSeen = [...gemsSeen, cg.id]
               log = pushLog(log, `${cg.icon} GEMME : ${cg.name}${dropRank > 1 ? ` (rang ${dropRank})` : ''} (${cg.family}) — drop de biome !`, 'loot')
             }
+          }
+        }
+
+        // 🌿 RÉACTIF de biome (v0.26, Officine) : l'herbe du coin, pour les cuves de l'Alchimiste.
+        let reagents = s.reagents
+        {
+          const rank2 = boss ? 'boss' : elite ? 'elite' : 'normal'
+          const rChance = REAGENT_DROP[rank2 as 'normal' | 'elite' | 'boss'] * cmods.herboristeMult * philo
+          if (Math.random() < rChance) {
+            const t = s.activeBiome
+            reagents = { ...reagents, [t]: (reagents[t] ?? 0) + 1 }
+            log = pushLog(log, `${REAGENTS[t].icon} Réactif : ${REAGENTS[t].name}.`, 'loot')
           }
         }
 
@@ -3867,7 +4036,7 @@ export const useGame = create<GameState>((set, get) => {
         if (res.overkill > 0) enemyNext.hp = Math.max(1, enemyNext.maxHp - res.overkill)
         if (isBossStage(stage)) log = pushLog(log, `⚔ Un boss vous barre la route : ${enemyNext.name} !`, 'info')
 
-        const next = { ...s, characters, stage, bestStage, biomeBest, conseil, maitrisePoints, gold, sceaux, poussiere, quint, gems, gemDust, gemsSeen, essence, codex, inventory, killsSinceEpic, enemy: enemyNext, log, killCount: s.killCount + 1 }
+        const next = { ...s, characters, stage, bestStage, biomeBest, conseil, maitrisePoints, gold, sceaux, poussiere, quint, gems, gemDust, gemsSeen, reagents, essence, codex, inventory, killsSinceEpic, enemy: enemyNext, log, killCount: s.killCount + 1 }
         persist(next)
         set(next)
         return
@@ -4569,6 +4738,229 @@ export const useGame = create<GameState>((set, get) => {
       set(next)
     },
 
+    experiment: (a, b) => {
+      const s = get()
+      const mods = craftMods(s.metiers)
+      if (!mods.officine) return
+      if ((s.reagents[a] ?? 0) < EXPERIMENT_COST || (s.reagents[b] ?? 0) < EXPERIMENT_COST) return
+      if (a === b && (s.reagents[a] ?? 0) < EXPERIMENT_COST * 2) return
+      const reagents = { ...s.reagents, [a]: (s.reagents[a] ?? 0) - EXPERIMENT_COST }
+      reagents[b] = (reagents[b] ?? 0) - EXPERIMENT_COST
+      const def = recipeForPair(a, b)
+      let log = s.log
+      let alchemyRecipes = s.alchemyRecipes
+      let g = { metiers: s.metiers, log }
+      if (def && !alchemyRecipes.includes(def.id)) {
+        alchemyRecipes = [...alchemyRecipes, def.id]
+        g = gainMetierXp(s, 'alchimiste', metierXpGain(10, 'create', mods.alchimisteXpMult))
+        log = pushLog(g.log, `🧪 EURÊKA ! Recette découverte : ${def.icon} ${def.name} — ${def.desc}`, 'craft')
+      } else if (def) {
+        log = pushLog(log, `🧪 ${REAGENTS[a].icon}+${REAGENTS[b].icon} : tu connais déjà cette recette (${def.name}).`, 'craft')
+      } else {
+        g = gainMetierXp(s, 'alchimiste', metierXpGain(2, 'modify', mods.alchimisteXpMult))
+        log = pushLog(g.log, `🧪 ${REAGENTS[a].icon}+${REAGENTS[b].icon} : fiasco fumant — rien à en tirer.`, 'craft')
+      }
+      const next = { ...s, reagents, alchemyRecipes, metiers: g.metiers, log }
+      persist(next)
+      set(next)
+    },
+
+    brewStart: (recipeId) => {
+      const s = get()
+      const mods = craftMods(s.metiers)
+      if (!mods.officine) return
+      const def = getBrew(recipeId)
+      if (!def || !s.alchemyRecipes.includes(recipeId)) return
+      if (s.cuvesEnCours.length >= mods.cuves) return
+      const [a, b] = def.recipe
+      const needA = def.cost + (a === b ? def.cost : 0)
+      if ((s.reagents[a] ?? 0) < needA || (a !== b && (s.reagents[b] ?? 0) < def.cost)) return
+      // 🔁 Double distillation : chance de ne rien consommer.
+      const free = mods.doubleDistillation > 0 && Math.random() < mods.doubleDistillation
+      const reagents = { ...s.reagents }
+      if (!free) {
+        reagents[a] = (reagents[a] ?? 0) - def.cost
+        reagents[b] = (reagents[b] ?? 0) - def.cost
+      }
+      const next = {
+        ...s, reagents,
+        cuvesEnCours: [...s.cuvesEnCours, { recipeId, startedAt: Date.now() }],
+        log: pushLog(s.log, `🫙 Brassin lancé : ${def.icon} ${def.name} (à point dans ~${Math.round(def.brewMin * mods.brewTimeMult)} min${free ? ' · 🔁 réactifs préservés !' : ''}).`, 'craft'),
+      }
+      persist(next)
+      set(next)
+    },
+
+    brewCollect: (idx) => {
+      const s = get()
+      const mods = craftMods(s.metiers)
+      const cuve = s.cuvesEnCours[idx]
+      if (!cuve) return
+      const def = getBrew(cuve.recipeId)
+      if (!def) {
+        const next = { ...s, cuvesEnCours: s.cuvesEnCours.filter((_, i) => i !== idx) }
+        persist(next)
+        set(next)
+        return
+      }
+      const elapsedMin = (Date.now() - cuve.startedAt) / 60_000
+      let quality = brewQualityAt(def, elapsedMin, mods.brewTimeMult)
+      // ✋ Main du maître brasseur : chance de gagner un cran de qualité.
+      if (quality < 2 && mods.brewCrit > 0 && Math.random() < mods.brewCrit) quality = (quality + 1) as BrewQuality
+      // 🍾 Millésime : seules les récoltes PARFAITES peuvent passer à la postérité.
+      if (quality === 2 && Math.random() < millesimeChance(mods.grandsCrus)) quality = 3
+      const count = def.charges ?? 1
+      const key = brewKey(def.id, quality)
+      const q = BREW_QUALITIES[quality]
+      const gain = metierXpGain(5 + quality * 2, 'create', mods.alchimisteXpMult)
+      const g = gainMetierXp(s, 'alchimiste', gain)
+      const next = {
+        ...s,
+        cuvesEnCours: s.cuvesEnCours.filter((_, i) => i !== idx),
+        brews: { ...s.brews, [key]: (s.brews[key] ?? 0) + count },
+        metiers: g.metiers,
+        log: pushLog(g.log, `${def.icon} Récolte : ${def.name} ${q.mark} ${q.name}${quality === 3 ? ' — MILLÉSIME !' : ''} ×${count} (+${gain} XP ⚗️).`, 'craft'),
+      }
+      persist(next)
+      set(next)
+    },
+
+    drinkElixir: (key) => {
+      const s = get()
+      const parsed = parseBrewKey(key)
+      if (!parsed || parsed.def.kind !== 'elixir' || (s.brews[key] ?? 0) < 1) return
+      const mods = craftMods(s.metiers)
+      const q = BREW_QUALITIES[parsed.quality]
+      // 📖 Pharmacopée : +5% de durée par recette découverte.
+      const durMult = (mods.pharmacopee ? 1 + 0.05 * s.alchemyRecipes.length : 1) * q.mult
+      const brews = { ...s.brews, [key]: (s.brews[key] ?? 0) - 1 }
+      if (brews[key] <= 0) delete brews[key]
+      const until = Date.now() + (parsed.def.durMin ?? 45) * 60_000 * durMult
+      const next = {
+        ...s, brews,
+        elixirActive: { id: parsed.def.id, quality: parsed.quality, until },
+        log: pushLog(s.log, `🧪 ${parsed.def.name} ${q.mark} bu — effet ${q.mult !== 1 ? `×${q.mult} ` : ''}pendant ~${Math.round((until - Date.now()) / 60_000)} min.`, 'craft'),
+      }
+      persist(next)
+      set(next)
+    },
+
+    armPotion: (key) => {
+      const s = get()
+      const parsed = parseBrewKey(key)
+      if (!parsed || parsed.def.kind !== 'potion' || (s.brews[key] ?? 0) < 1) return
+      const q = BREW_QUALITIES[parsed.quality]
+      const brews = { ...s.brews, [key]: (s.brews[key] ?? 0) - 1 }
+      if (brews[key] <= 0) delete brews[key]
+      const patch: Partial<GameState> = {}
+      if (parsed.def.id === 'potionGarde') patch.armedRaidShield = 0.25 * q.mult
+      else if (parsed.def.id === 'potionPillard') patch.armedChestBonus = 0.25 * q.mult
+      else if (parsed.def.id === 'potionErudit') patch.armedXpBonus = 0.3 * q.mult
+      const next = {
+        ...s, brews, ...patch,
+        log: pushLog(s.log, `${parsed.def.icon} ${parsed.def.name} ${q.mark} ARMÉE — consommée à la prochaine entrée.`, 'craft'),
+      }
+      persist(next)
+      set(next)
+    },
+
+    useOil: (key, type) => {
+      const s = get()
+      const parsed = parseBrewKey(key)
+      if (!parsed || parsed.def.kind !== 'huile' || (s.brews[key] ?? 0) < 1) return
+      const mods = craftMods(s.metiers)
+      const q = BREW_QUALITIES[parsed.quality]
+      const durMult = (mods.pharmacopee ? 1 + 0.05 * s.alchemyRecipes.length : 1)
+      const brews = { ...s.brews, [key]: (s.brews[key] ?? 0) - 1 }
+      if (brews[key] <= 0) delete brews[key]
+      const next = {
+        ...s, brews,
+        oilActive: { type, pct: 0.12 * q.mult, until: Date.now() + (parsed.def.durMin ?? 30) * 60_000 * durMult },
+        log: pushLog(s.log, `🛢️ Huile ${DAMAGE_TYPES[type].name} appliquée : +${Math.round(12 * q.mult)}% quand l'élément du contenu correspond.`, 'craft'),
+      }
+      persist(next)
+      set(next)
+    },
+
+    useAntidote: (key, type) => {
+      const s = get()
+      const parsed = parseBrewKey(key)
+      if (!parsed || parsed.def.kind !== 'antidote' || (s.brews[key] ?? 0) < 1) return
+      const mods = craftMods(s.metiers)
+      const q = BREW_QUALITIES[parsed.quality]
+      const durMult = (mods.pharmacopee ? 1 + 0.05 * s.alchemyRecipes.length : 1)
+      const brews = { ...s.brews, [key]: (s.brews[key] ?? 0) - 1 }
+      if (brews[key] <= 0) delete brews[key]
+      const next = {
+        ...s, brews,
+        antidoteActive: { type, pct: Math.min(0.5, 0.15 * q.mult), until: Date.now() + (parsed.def.durMin ?? 30) * 60_000 * durMult },
+        log: pushLog(s.log, `🧴 Antidote ${DAMAGE_TYPES[type].name} bu : −${Math.round(Math.min(50, 15 * q.mult))}% des dégâts ${DAMAGE_TYPES[type].name} subis.`, 'craft'),
+      }
+      persist(next)
+      set(next)
+    },
+
+    drinkMutagen: (key) => {
+      const s = get()
+      const parsed = parseBrewKey(key)
+      if (!parsed || parsed.def.kind !== 'mutagene' || (s.brews[key] ?? 0) < 1) return
+      const q = BREW_QUALITIES[parsed.quality]
+      const brews = { ...s.brews, [key]: (s.brews[key] ?? 0) - 1 }
+      if (brews[key] <= 0) delete brews[key]
+      const lucky = Math.random() < 0.7
+      const mult = lucky ? 1 + 0.12 * q.mult : 1 - 0.08
+      const next = {
+        ...s, brews,
+        mutagenActive: { mult, until: Date.now() + (parsed.def.durMin ?? 20) * 60_000 },
+        log: pushLog(s.log, lucky ? `☣️ Mutagène : ça passe — +${Math.round((mult - 1) * 100)}% de dégâts !` : '☣️ Mutagène : ça pique — −8% de dégâts. La science a un prix.', 'craft'),
+      }
+      persist(next)
+      set(next)
+    },
+
+    dailyTransmute: (from, to) => {
+      const s = get()
+      const mods = craftMods(s.metiers)
+      if (!mods.transmutJour || from === to) return
+      const today = Math.floor(Date.now() / 86_400_000)
+      if (s.lastTransmute >= today) return
+      if ((s.quint[from] ?? 0) < DAILY_TRANSMUTE_COST) return
+      const g = gainMetierXp(s, 'alchimiste', metierXpGain(6, 'modify', mods.alchimisteXpMult))
+      const next = {
+        ...s,
+        quint: { ...s.quint, [from]: s.quint[from] - DAILY_TRANSMUTE_COST, [to]: (s.quint[to] ?? 0) + 1 },
+        lastTransmute: today,
+        metiers: g.metiers,
+        log: pushLog(g.log, `🌗 Transmutation du jour : 4 ${DAMAGE_TYPES[from].icon} → 1 ${DAMAGE_TYPES[to].icon}.`, 'craft'),
+      }
+      persist(next)
+      set(next)
+    },
+
+    craftPhilosophale: () => {
+      const s = get()
+      const mods = craftMods(s.metiers)
+      if (!mods.philosophaleUnlock || s.philosophale) return
+      if (DAMAGE_TYPE_LIST.some((t) => (s.reagents[t] ?? 0) < PHILOSOPHALE_COST.reagentsEach)) return
+      if (s.poussiere < PHILOSOPHALE_COST.poussiere) return
+      const millKey = Object.keys(s.brews).find((k) => k.endsWith(':3') && (s.brews[k] ?? 0) > 0)
+      if (!millKey) return // il faut sacrifier un MILLÉSIME ★
+      const reagents = { ...s.reagents }
+      for (const t of DAMAGE_TYPE_LIST) reagents[t] = (reagents[t] ?? 0) - PHILOSOPHALE_COST.reagentsEach
+      const brews = { ...s.brews, [millKey]: (s.brews[millKey] ?? 0) - 1 }
+      if (brews[millKey] <= 0) delete brews[millKey]
+      const g = gainMetierXp(s, 'alchimiste', metierXpGain(20, 'ascend', mods.alchimisteXpMult))
+      const next = {
+        ...s, reagents, brews,
+        poussiere: s.poussiere - PHILOSOPHALE_COST.poussiere,
+        philosophale: true,
+        metiers: g.metiers,
+        log: pushLog(g.log, `🜍 LE GRAND ŒUVRE EST ACCOMPLI : la Pierre philosophale est tienne (+${Math.round((PHILOSOPHALE_MULT - 1) * 100)}% de drops de ressources, pour toujours).`, 'level'),
+      }
+      persist(next)
+      set(next)
+    },
+
     createItem: (opts) => {
       const s = get()
       const mods = craftMods(s.metiers)
@@ -4881,6 +5273,20 @@ export const useGame = create<GameState>((set, get) => {
       if (level < 1 || level > (s.dungeonProgress[dungeonId] ?? 0) + 1) return
       const dungeon = generateDungeon(dungeonId, level, wing)
       dungeon.repeatLeft = Math.max(0, Math.round(repeat) - 1)
+      // ⚗️ Potions de contenu ARMÉES (Officine v0.26) : consommées à l'entrée.
+      let log = s.log
+      let armedChestBonus = s.armedChestBonus
+      let armedXpBonus = s.armedXpBonus
+      if (armedChestBonus) {
+        dungeon.chestPotion = armedChestBonus
+        armedChestBonus = null
+        log = pushLog(log, `💰 Potion du pillard : le coffre de ce run rendra +${Math.round(dungeon.chestPotion * 100)}%.`, 'craft')
+      }
+      if (armedXpBonus) {
+        dungeon.xpPotion = armedXpBonus
+        armedXpBonus = null
+        log = pushLog(log, `📚 Potion de l'érudit : l'XP de ce run +${Math.round(dungeon.xpPotion * 100)}%.`, 'craft')
+      }
       // Rune de l'Économe : 15% de chance de préserver la clé.
       const saved = def.sceauCost > 0 && equippedRules(s.characters).has('econome') && Math.random() < (craftMods(s.metiers).loiAmplifiee ? 0.25 : 0.15)
       const cost = saved ? 0 : def.sceauCost
@@ -4888,7 +5294,7 @@ export const useGame = create<GameState>((set, get) => {
       // On ENTRE frais : PV pleins + recharges remises à zéro (fini les morts en donjon après un farm low PV).
       const healed = s.characters.map(fullHeal)
       resetAllCooldowns(healed)
-      const next = { ...s, characters: healed, sceaux: s.sceaux - cost, dungeon, log: pushLog(s.log, `🏰 Entrée dans ${dungeon.name} (${dungeon.totalFights} combats${saved ? ', 🗝️ clé préservée !' : cost ? `, -${cost} 🔑` : ', gratuit'}${runs}).`, 'info') }
+      const next = { ...s, characters: healed, sceaux: s.sceaux - cost, dungeon, armedChestBonus, armedXpBonus, log: pushLog(log, `🏰 Entrée dans ${dungeon.name} (${dungeon.totalFights} combats${saved ? ', 🗝️ clé préservée !' : cost ? `, -${cost} 🔑` : ', gratuit'}${runs}).`, 'info') }
       persist(next)
       set(next)
     },
@@ -4918,9 +5324,18 @@ export const useGame = create<GameState>((set, get) => {
       const runs = raid.repeatLeft > 0 ? ` · auto ×${raid.repeatLeft + 1}` : ''
       const boss = raidBossVariant(def, tier)
       // On ENTRE frais : PV pleins + recharges remises à zéro (le boss se prépare à neuf).
-      const healed = s.characters.map(fullHeal)
+      let healed = s.characters.map(fullHeal)
       resetAllCooldowns(healed)
-      const next = { ...s, characters: healed, orbes: s.orbes - (saved ? 0 : def.orbeCost), raid, log: pushLog(s.log, `⚔️ Raid lancé : ${def.name} · Tier ${tier} — ${boss.name}${boss.partnerName ? ` & ${boss.partnerName}` : ''}${saved ? ' · 🗝️ Orbe préservée !' : ''}${runs}.`, 'info') }
+      // 🛡️ Potion de garde ARMÉE (Officine v0.26) : l'équipe entre bardée d'un bouclier.
+      let log = s.log
+      let armedRaidShield = s.armedRaidShield
+      if (armedRaidShield) {
+        const pct = armedRaidShield
+        healed = healed.map((c) => ({ ...c, absorb: Math.max(c.absorb ?? 0, charMaxHp(c) * pct) }))
+        armedRaidShield = null
+        log = pushLog(log, `🛡️ Potion de garde : l'équipe entre avec un bouclier de ${Math.round(pct * 100)}% des PV max.`, 'craft')
+      }
+      const next = { ...s, characters: healed, orbes: s.orbes - (saved ? 0 : def.orbeCost), raid, armedRaidShield, log: pushLog(log, `⚔️ Raid lancé : ${def.name} · Tier ${tier} — ${boss.name}${boss.partnerName ? ` & ${boss.partnerName}` : ''}${saved ? ' · 🗝️ Orbe préservée !' : ''}${runs}.`, 'info') }
       persist(next)
       set(next)
     },
