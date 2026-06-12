@@ -159,7 +159,7 @@ const GAIN_LABELS: Record<string, string> = {
  * assigné à l'Antre des Failles peut donc alimenter les suivants).
  * Renvoie null si aucun automate actif (zéro coût sur le tick).
  */
-export function tickAutomates(input: AutomateEconomy, dt: number, keySaveChance = 0, durMult = 1): AutomateTickResult | null {
+export function tickAutomates(input: AutomateEconomy, dt: number, keySaveChance = 0, durMult = 1, doubleChestChance = 0): AutomateTickResult | null {
   if (!input.automates.some((a) => a.mission && !a.paused)) return null
   const eco: AutomateEconomy = { ...input, automates: input.automates.map((a) => ({ ...a, bank: { ...a.bank } })) }
   const lines: string[] = []
@@ -187,9 +187,11 @@ export function tickAutomates(input: AutomateEconomy, dt: number, keySaveChance 
       }
       a.progress -= duration
       runs++
+      // 🎁 Rune des Coffres doubles (v0.26) : ce run rapporte le double.
+      const chestMult = doubleChestChance > 0 && Math.random() < doubleChestChance ? 2 : 1
       const gains = runGains(a.mission)
       for (const k in gains) {
-        a.bank[k] = (a.bank[k] ?? 0) + gains[k] * eff
+        a.bank[k] = (a.bank[k] ?? 0) + gains[k] * eff * chestMult
       }
     }
     if (runs > 0) {

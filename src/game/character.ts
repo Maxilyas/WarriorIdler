@@ -117,6 +117,13 @@ export function setGlobalCombatMods(m: { power: number; attackSpeed: number; vit
   GLOBAL = m
 }
 
+// 🩸 PACTES (v0.26, runes keystone) : mods dérivés d'ÉQUIPE, recalculés par le store au tick —
+// même mécanique module-niveau que GLOBAL (les pactes portés changent rarement, latence ≤ 1 tick).
+let PACT = { hpMult: 1, apsMult: 1, apsForce: 0, leechBonus: 0, noDodge: false }
+export function setPactDerivedMods(m: { hpMult: number; apsMult: number; apsForce: number; leechBonus: number; noDodge: boolean }) {
+  PACT = m
+}
+
 export function charDerived(char: Character): DerivedStats {
   const d = computeDerived(charTotalStats(char))
   // Bonus de SET (Régalia du Néant…) : PV, recharge et vol de vie passent par le moteur dérivé
@@ -129,10 +136,12 @@ export function charDerived(char: Character): DerivedStats {
     agiPower: d.agiPower * GLOBAL.power,
     intPower: d.intPower * GLOBAL.power,
     endurancePower: d.endurancePower * GLOBAL.power,
-    attacksPerSecond: d.attacksPerSecond * GLOBAL.attackSpeed,
-    hp: d.hp * GLOBAL.vitality * sb.hpMult,
+    // ⛰️ Roc / 🛢️ Plomb / 🗿 Colosse : les pactes pèsent sur les dérivées de TOUTE l'équipe.
+    attacksPerSecond: PACT.apsForce > 0 ? PACT.apsForce : d.attacksPerSecond * GLOBAL.attackSpeed * PACT.apsMult,
+    hp: d.hp * GLOBAL.vitality * sb.hpMult * PACT.hpMult,
     cdr: Math.min(0.75, d.cdr + sb.cdr),
-    leech: Math.min(0.6, d.leech + sb.leech),
+    leech: Math.min(0.95, d.leech + sb.leech + PACT.leechBonus),
+    dodge: PACT.noDodge ? 0 : d.dodge,
   }
 }
 

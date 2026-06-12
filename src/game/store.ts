@@ -8,7 +8,7 @@ import type { DerivedStats } from './stats'
 import {
   makeCharacter, charDerived, charMaxHp, charDamageProfile, charPassives,
   charResist, charCombatMods, abilityPower, powerScale, computeUnlockedPowers, setGlobalCombatMods,
-  talentPointsForLevel, type CombatMods as CharCombatMods,
+  setPactDerivedMods, talentPointsForLevel, type CombatMods as CharCombatMods,
 } from './character'
 import { getTalent, canAllocate } from './talents'
 import { getPower } from './powers'
@@ -29,7 +29,12 @@ import {
   type MetierId, type MetiersState,
 } from './metiers'
 import { itemSockets, unsocketCost, parseGemKey } from './gems'
-import { getEnchant, enchantCost, equippedRules, equippedTimeRunes, timeRuneMods, rollRuneDrop, raidRuneChance, dungeonRuneChance, type TimeRuneMods } from './enchants'
+import {
+  getEnchant, enchantCost, equippedRules, equippedTimeRunes, timeRuneMods, rollRuneDrop,
+  raidRuneChance, dungeonRuneChance,
+  equippedPacts, pactMods, emptyPactMods, eraseFragments, runeForgeCost, RUNE_GAMBLE_COST, ruleAmp,
+  type TimeRuneMods, type PactMods,
+} from './enchants'
 import { getMaitriseNode, getContract, emptyConseil, conseilFresh, currentWeek, type ConseilState, type ContractId } from './maitrise'
 import {
   condGemMods, acharneMult, nueeMult, rollCondGem, condGemKey, parseCondKey, getCondGem, condGemInstance,
@@ -303,6 +308,10 @@ interface SaveData {
   forgeContracts: { day: number; done: boolean[] } | null
   /** v0.26 : semaine epoch du dernier CHEF-D'ŒUVRE (Compagnonnage V, 1/semaine). */
   lastMasterwork: number
+  /** v0.26 : Fragments runiques 🜁 (Effacement → Forge runique / Surcharge). */
+  runeFragments: number
+  /** v0.26 : exemplaires déjà FORGÉS par rune (le coût croît ×1,5 à chaque exemplaire). */
+  runeCrafted: Record<string, number>
   /** v0.26 : version de migration des arbres de métiers (Prodige, etc.). */
   metiersV?: number
   essences: Record<string, number>
@@ -405,6 +414,12 @@ interface GameState extends SaveData {
   tradeGems: (keys: string[], targetId: CondGemId) => void
   /** Grave (ou remplace) la rune d'enchantement d'un objet (coût : Savoir-faire + éclats). */
   enchantItem: (itemId: string, enchantId: string) => void
+  /** 🧽 EFFACEMENT (v0.26) : sacrifie une rune possédée → Fragments runiques 🜁. */
+  eraseRune: (enchantId: string) => void
+  /** 🔨 FORGE RUNIQUE (v0.26) : forge la rune de ton CHOIX (fragments + 🌌 + or, ×1,5/exemplaire). */
+  forgeRune: (enchantId: string) => void
+  /** 🎲 SURCHARGE RUNIQUE (v0.26) : 3 fragments → une rune aléatoire (jamais un pacte). */
+  gambleRune: () => void
   createItem: (opts: CreateOptions) => void
   /** 🫕 FONDERIE (v0.26) : fond un objet du SAC (Rare+) en Lingots 🧱. */
   smeltItem: (itemId: string) => void
@@ -471,10 +486,14 @@ function pushLog(log: LogEntry[], text: string, kind: LogKind): LogEntry[] {
 
 /** Crédite de l'XP de métier et journalise les montées de niveau (1 niveau = 1 point d'arbre). */
 function gainMetierXp(
-  s: Pick<GameState, 'metiers' | 'log'>,
+  s: Pick<GameState, 'metiers' | 'log'> & { characters?: Character[] },
   metier: MetierId,
   amount: number,
 ): { metiers: MetiersState; log: LogEntry[] } {
+  // 🗃️ Rune de l'Archiviste (v0.26) : +15% d'XP pour les quatre métiers (amplifiée Législateur).
+  if (s.characters && equippedRules(s.characters).has('archiviste')) {
+    amount = Math.round(amount * (1 + 0.15 * ruleAmp(craftMods(s.metiers).ruleAmpTier)))
+  }
   const st = s.metiers[metier]
   const before = levelFromXp(st.xp)
   const xp = st.xp + amount
@@ -700,6 +719,18 @@ function crescendoAdd(kills: number) {
 function crescendoReset() {
   gemCounters.delete('crescendo')
   fuelReset() // 🜍 Purgateur : le carburant d'affliction retombe quand l'équipe tombe
+  mementoOn = false // 💀 Memento mori : le run s'achève, la rage retombe
+}
+
+/** v0.26 : calcule les mods de PACTE de l'équipe et synchronise les dérivées globales
+ *  (PV, vitesse, vol de vie, esquive — character.ts). À appeler à CHAQUE tick de combat. */
+function teamPactMods(s: Pick<GameState, 'characters' | 'metiers'>, craft: ReturnType<typeof craftMods>): PactMods {
+  const ids = equippedPacts(s.characters)
+  const pact = ids.length
+    ? pactMods(ids, s.characters.length, craft.pactMalusMult, craft.doublePacte ? 2 : 1)
+    : emptyPactMods()
+  setPactDerivedMods({ hpMult: pact.hpMult, apsMult: pact.apsMult, apsForce: pact.apsForce, leechBonus: pact.leechBonus, noDodge: pact.noDodge })
+  return pact
 }
 
 /** Trésorerie de guerre : chaque kill blinde un bouclier (2% PV max, cumul capé). */
@@ -724,6 +755,12 @@ let testamentLeft = 0     // 📜 Testament : +10% de dégâts après une mort
 let marcheCount = 0       // 🎺 Marche triomphale : combats gagnés sans mort
 let ancrageBroken = false // ⚓ Ancrage : un héros est tombé dans le combat courant
 let carillonReady = false // 🛎️ Carillon : la prochaine recharge est à moitié prix
+// v0.26 — runes de TEMPS & pactes (transitoire, non persisté).
+let hateFunebreLeft = 0   // 🪽 Hâte funèbre : fenêtre de vitesse après un kill
+let echoTempAcc = 0       // 🌀 Écho temporel : horloge des 30 s
+let lastCastGlobal: { charId: string; pid: string } | null = null // dernière capacité lancée (équipe)
+let mementoOn = false     // 💀 Memento mori : un héros est tombé pendant ce run
+const rembUsed = new Set<string>() // ⏪ Rembobinage : héros déjà servis CE combat
 // Par héros (clé charId).
 const verreTimer = new Map<string, number>()    // 🪟 Verre trempé : s sans subir de coup
 const carapaceCdMap = new Map<string, number>() // 🐢 Carapace réactive : recharge (s)
@@ -737,23 +774,90 @@ function marcheBonus(cap?: number): number {
   return cap ? Math.min(cap, 0.005 * marcheCount) : 0
 }
 
-/** v0.26 : réactions d'équipe aux KILLS (🔔 Glas, 🦷 Fièvre, 🎺 Marche). À appeler aux mêmes
- *  endroits que crescendoAdd — `wins` = combats gagnés (1 pack nettoyé = 1). */
-function gemKillEvents(chars: Character[], cond: CondMods | undefined, kills: number, wins: number) {
-  if (!cond || kills <= 0) return
-  if (cond.fievreLeech) fievreLeft = 5
-  if (cond.marcheCap) marcheCount += wins
-  if (cond.glasN) {
+/** v0.26 : réactions d'équipe aux KILLS (🔔 Glas, 🦷 Fièvre, 🎺 Marche, 🪽 Hâte funèbre,
+ *  🍽️ Jeûne). À appeler aux mêmes endroits que crescendoAdd — `wins` = combats gagnés. */
+function gemKillEvents(
+  chars: Character[],
+  cond: CondMods | undefined,
+  kills: number,
+  wins: number,
+  runes?: TimeRuneMods,
+  pact?: PactMods,
+) {
+  if (kills <= 0) return
+  if (cond?.fievreLeech) fievreLeft = 5
+  if (cond?.marcheCap) marcheCount += wins
+  if (runes?.hateFunebre) hateFunebreLeft = 4
+  // 🍽️ Pacte du Jeûne : seul soin restant — chaque kill nourrit l'équipe.
+  if (pact?.killHeal) {
+    for (const c of chars) {
+      if (c.hp <= 0) continue
+      c.hp = Math.min(charMaxHp(c), c.hp + charMaxHp(c) * pact.killHeal * kills)
+    }
+  }
+  if (cond?.glasN) {
     const n = (gemCounters.get('glas') ?? 0) + kills
     const triggers = Math.floor(n / cond.glasN)
     gemCounters.set('glas', n - triggers * cond.glasN)
-    if (triggers > 0) {
+    if (triggers > 0 && !pact?.noHeal) {
       for (const c of chars) {
         if (c.hp <= 0) continue
         c.hp = Math.min(charMaxHp(c), c.hp + charMaxHp(c) * 0.05 * triggers)
       }
     }
   }
+}
+
+/** v0.26 : début de combat côté RUNES — 🔓 Ouverture (plus longue capacité prête),
+ *  🎒 Préparation (recharges avancées), ⏪ Rembobinage réarmé. */
+function runeFightStart(chars: Character[], runes?: TimeRuneMods) {
+  rembUsed.clear()
+  if (!runes) return
+  for (const c of chars) {
+    if (c.hp <= 0) continue
+    if (runes.ouverture) {
+      let bestKey = ''
+      let bestCd = 0
+      for (const pid of c.powers) {
+        if (!pid) continue
+        const p = getPower(pid)
+        if (!p || p.kind !== 'active') continue
+        if ((p.cooldown ?? 0) > bestCd) { bestCd = p.cooldown ?? 0; bestKey = `${c.id}:${pid}` }
+      }
+      if (bestKey) cooldowns.set(bestKey, 0)
+    }
+    if (runes.preparationSec) {
+      for (const pid of c.powers) {
+        if (!pid) continue
+        const k = `${c.id}:${pid}`
+        cooldowns.set(k, Math.max(0, (cooldowns.get(k) ?? 0) - runes.preparationSec))
+      }
+    }
+  }
+}
+
+/** ⏪ Rembobinage : un héros qui passe sous 25% PV récupère X s de recharges (1×/combat). */
+function runeRembobinage(chars: Character[], runes?: TimeRuneMods) {
+  if (!runes?.rembobinageSec) return
+  for (const c of chars) {
+    if (c.hp <= 0 || rembUsed.has(c.id)) continue
+    if (c.hp / charMaxHp(c) >= 0.25) continue
+    rembUsed.add(c.id)
+    for (const pid of c.powers) {
+      if (!pid) continue
+      const k = `${c.id}:${pid}`
+      cooldowns.set(k, Math.max(0, (cooldowns.get(k) ?? 0) - runes.rembobinageSec))
+    }
+  }
+}
+
+/** 🪦 Usure + 💀 Memento + 🩸 pacte : multiplicateur offensif d'équipe dépendant du temps. */
+function runePactOffense(t: number, runes?: TimeRuneMods, pact?: PactMods): number {
+  let m = 1
+  if (runes?.usurePer) m *= 1 + runes.usurePer * Math.min(3, Math.floor(t / 10))
+  if (pact) m *= pact.dmgOut
+  if (mementoOn && pact?.mementoBonus) m *= 1 + pact.mementoBonus
+  return m
 }
 
 /** v0.26 : début de combat — Égide rechargée, Ancrage réarmé, boucliers de départ
@@ -792,12 +896,13 @@ function gemFightStart(
 
 /** v0.26 : un héros est-il tombé pendant ce pas ? (⚓ Ancrage, 🎺 Marche, 📜 Testament).
  *  À appeler APRÈS le Sursis (un héros sauvé in extremis n'est pas « tombé »). */
-function gemDeathEvents(chars: Character[], aliveBefore: boolean[], cond?: CondMods) {
+function gemDeathEvents(chars: Character[], aliveBefore: boolean[], cond?: CondMods, pact?: PactMods) {
   let died = false
   chars.forEach((c, i) => { if (aliveBefore[i] && c.hp <= 0) died = true })
   if (!died) return
   ancrageBroken = true
   marcheCount = 0
+  if (pact?.mementoBonus) mementoOn = true // 💀 Memento mori : le deuil devient rage (fin du run)
   if (cond?.testamentPct) {
     testamentLeft = 10
     for (const c of chars) {
@@ -1012,7 +1117,9 @@ function freshSave(): SaveData {
     mould: null,
     forgeContracts: null,
     lastMasterwork: 0,
-    metiersV: 2,
+    runeFragments: 0,
+    runeCrafted: {},
+    metiersV: 3,
     essences: {},
     sceaux: 0,
     dungeonProgress: emptyDungeonProgress(),
@@ -1129,6 +1236,8 @@ function sanitize(save: SaveData): SaveData {
   if (save.mould === undefined) save.mould = null
   if (save.forgeContracts === undefined) save.forgeContracts = null
   if (typeof save.lastMasterwork !== 'number') save.lastMasterwork = 0
+  if (typeof save.runeFragments !== 'number') save.runeFragments = 0
+  if (!save.runeCrafted || typeof save.runeCrafted !== 'object') save.runeCrafted = {}
   // v0.26 — MIGRATION des arbres (metiersV 2) : « Œil du maître » (+4%/rang ×5) devient
   // « Prodige » (+2%/rang ×15) → rangs ×2 (même valeur) ; ◈ Visionnaire (+12% + surillvl +1)
   // devient 6 rangs de Prodige + « Affûtage supérieur ». Personne ne perd un pourcent.
@@ -1142,6 +1251,22 @@ function sanitize(save: SaveData): SaveData {
     }
     save.metiers = { ...save.metiers, forgeron: { ...save.metiers.forgeron, nodes } }
     save.metiersV = 2
+  }
+  // v0.26 — MIGRATION metiersV 3 : les specs plates (rang 1) deviennent des lignes étagées I→V.
+  // L'ancien rang 1 valait l'étage III (mêmes chiffres : Chronomancien ×1,5, Législateur amplifié…)
+  // → converti en rang 3 pour ne RIEN nerfer (les points en plus sont offerts par la migration).
+  // (Joaillier : l'ancien rang 1 = « +1 rang de famille » = exactement le nouvel étage I → rien à migrer.)
+  if ((save.metiersV ?? 1) < 3 && save.metiers) {
+    for (const mid of ['runiste', 'alchimiste'] as const) {
+      const st = save.metiers[mid]
+      if (!st) continue
+      const nodes = { ...st.nodes }
+      for (const specId of ['specChrono', 'specLegislateur', 'specDistillateur', 'specTransmutateur']) {
+        if (nodes[specId] === 1) nodes[specId] = 3
+      }
+      save.metiers = { ...save.metiers, [mid]: { ...st, nodes } }
+    }
+    save.metiersV = 3
   }
   // v0.26 : 📖 Catalogue — les saves d'avant sont créditées de leurs gemmes déjà possédées
   // (stock + serties), pour ne pas repartir de zéro.
@@ -1490,7 +1615,9 @@ function persist(s: GameState) {
     mould: s.mould,
     forgeContracts: s.forgeContracts,
     lastMasterwork: s.lastMasterwork,
-    metiersV: s.metiersV ?? 2,
+    runeFragments: s.runeFragments,
+    runeCrafted: s.runeCrafted,
+    metiersV: s.metiersV ?? 3,
     essences: s.essences,
     sceaux: s.sceaux,
     dungeonProgress: s.dungeonProgress,
@@ -1803,6 +1930,8 @@ interface CombatMods {
   cond?: CondMods
   /** Runes de TEMPS actives (manipulation des horloges — voir enchants.ts). */
   runes?: TimeRuneMods
+  /** 🩸 Pacte(s) actif(s) (v0.26) — bonus/malus permanents d'équipe (voir enchants.ts). */
+  pact?: PactMods
   /** v0.26 : CONTEXTE de contenu pour les gemmes d'Environnement (où se passe le combat). */
   content?: {
     /** Biome actif (farm) — Prisme d'accord. */
@@ -1828,7 +1957,7 @@ function enemyVuln(enemy: Enemy): number {
  * Les dégâts des sorts scalent sur le PROFIL DE DÉGÂTS de l'arme/du stuff (profileDamageMult) — comme
  * les auto-attaques — pour qu'un build qui empile un type booste aussi ses sorts.
  */
-function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profile: DamageProfile, chars: Character[], enemy: Enemy, hotBonus: number, dmgMult = 1, healToDamage = 0, cond?: CondMods): number {
+function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profile: DamageProfile, chars: Character[], enemy: Enemy, hotBonus: number, dmgMult = 1, healToDamage = 0, cond?: CondMods, pact?: PactMods): number {
   const base = (p.magnitude ?? 1) * abilityPower(derived, powerScale(p)) // soins (sans profil ni keystones)
   const magDmg = base * profileDamageMult(profile) * dmgMult // dégâts : scalent sur le profil de l'arme + keystones (Carnage…)
   // Boucliers : scalent sur la MEILLEURE de (stat principale, Endurance) → un tank qui empile
@@ -1850,7 +1979,7 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
     }
     case 'lifeNuke': {
       const done = hit(magDmg * vm)
-      caster.hp = Math.min(charMaxHp(caster), caster.hp + done * 0.6)
+      if (!pact?.noHeal) caster.hp = Math.min(charMaxHp(caster), caster.hp + done * 0.6)
       return done
     }
     case 'dot':
@@ -1868,7 +1997,7 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
     case 'heal':
     case 'hot': {
       const allies = chars.filter((c) => c.hp > 0)
-      if (allies.length) {
+      if (allies.length && !pact?.noHeal) {
         let low = allies[0]
         for (const a of allies) if (a.hp / charMaxHp(a) < low.hp / charMaxHp(low)) low = a
         gemAbilityHeal(low, base * (1 + hotBonus), cond, chars) // 🏆 Calice + ⚱️ Vases (v0.26)
@@ -1876,10 +2005,10 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
       return bleedHeal(base * (1 + hotBonus))
     }
     case 'bigHeal':
-      for (const a of chars) if (a.hp > 0) gemAbilityHeal(a, base * (1 + hotBonus), cond, chars, false)
+      if (!pact?.noHeal) for (const a of chars) if (a.hp > 0) gemAbilityHeal(a, base * (1 + hotBonus), cond, chars, false)
       return bleedHeal(base * (1 + hotBonus))
     case 'buffParty':
-      for (const a of chars) if (a.hp > 0) gemAbilityHeal(a, base * 0.5 * (1 + hotBonus), cond, chars, false)
+      if (!pact?.noHeal) for (const a of chars) if (a.hp > 0) gemAbilityHeal(a, base * 0.5 * (1 + hotBonus), cond, chars, false)
       return bleedHeal(base * 0.5 * (1 + hotBonus))
     case 'shield':
       // Bouclier runique : absorption sur le porteur (scale stat principale OU Endurance).
@@ -1929,6 +2058,8 @@ interface AbilityCtx {
   cond?: CondMods
   surge?: boolean
   aliveEnemies?: number
+  /** 🩸 Pacte(s) actif(s) — dmgIn s'applique aussi aux coups télégraphés. */
+  pact?: PactMods
 }
 
 /** Applique l'effet d'une technique ennemie à un héros cible (modèle d'exigence + Purge). */
@@ -1959,7 +2090,7 @@ function applyEnemyAbility(ab: EnemyAbility, enemy: Enemy, t: Character, ctx: Ab
       // puis la chaîne défensive v0.26 (Sixième sens, Granit, Mémoire de la pierre, Égide,
       // Carapace…) et enfin l'immunité/bouclier d'absorption du héros.
       let dmg = incomingDps(enemy.damage * ab.magnitude, ab.element, ctx.derived, ctx.resist, req, extra, ctx.cmods.reqReduction)
-      dmg *= gemDefenseMult(t, charMaxHp(t), {
+      dmg *= (ctx.pact?.dmgIn ?? 1) * gemDefenseMult(t, charMaxHp(t), {
         cond: ctx.cond, surge: ctx.surge, aliveEnemies: ctx.aliveEnemies,
         telegraphed: !!ab.telegraph, tenacity: ctx.derived.tenacity,
       })
@@ -1982,12 +2113,13 @@ function applyEnemyAbility(ab: EnemyAbility, enemy: Enemy, t: Character, ctx: Ab
 }
 
 /** Fait progresser les techniques d'un ennemi (cooldown + télégraphe) et applique celles qui tombent.
- *  `dilatation` (🐌 rune) : allonge la durée des télégraphes (plus de temps pour réagir).
+ *  🐌 Dilatation : allonge les télégraphes · ⏳ Grain de sable : 1re incantation des non-boss coupée.
  *  v0.26 : 🗼 Tour de garde peut détourner le coup d'une cible fragile vers le plus endurant. */
-function tickEnemyAbilities(enemy: Enemy, chars: Character[], info: (AbilityCtx | null)[], dt: number, dilatation = 0) {
+function tickEnemyAbilities(enemy: Enemy, chars: Character[], info: (AbilityCtx | null)[], dt: number, runes?: TimeRuneMods) {
   if (!enemy.abilities || enemy.abilities.length === 0 || enemy.hp <= 0) return
   const alive = chars.map((_, i) => i).filter((i) => chars[i].hp > 0 && info[i])
   if (!alive.length) return
+  const dilatation = runes?.dilatation ?? 0
   // Cible = plus haute menace (même logique que l'auto-attaque).
   let ti = alive[0]
   let best = -1
@@ -2010,8 +2142,15 @@ function tickEnemyAbilities(enemy: Enemy, chars: Character[], info: (AbilityCtx 
     } else {
       ab.cd = (ab.cd ?? ab.cooldown) - dt
       if (ab.cd <= 0) {
-        if (ab.telegraph && ab.telegraph > 0) ab.cast = ab.telegraph * (1 + dilatation)
-        else { applyEnemyAbility(ab, enemy, t, ctx); ab.cd = ab.cooldown }
+        if (ab.telegraph && ab.telegraph > 0) {
+          // ⏳ Grain de sable : la PREMIÈRE incantation de chaque non-boss est interrompue net.
+          if (runes?.grainDeSable && !enemy.boss && !enemy.interrupted) {
+            enemy.interrupted = true
+            ab.cd = ab.cooldown
+            continue
+          }
+          ab.cast = ab.telegraph * (1 + dilatation)
+        } else { applyEnemyAbility(ab, enemy, t, ctx); ab.cd = ab.cooldown }
       }
     }
   }
@@ -2020,11 +2159,14 @@ function tickEnemyAbilities(enemy: Enemy, chars: Character[], info: (AbilityCtx 
 /** Décompte des statuts transitoires du héros (étourdissement, malédiction, DoT subis).
  *  v0.26 : minute aussi les fenêtres des gemmes (Fièvre, Testament, Verre trempé, Carapace,
  *  Goutte-à-goutte) et soigne au Garrot quand une altération expire. */
-function tickHeroStatuses(chars: Character[], dt: number, cond?: CondMods) {
+function tickHeroStatuses(chars: Character[], dt: number, cond?: CondMods, pact?: PactMods) {
   adaptiveTick(dt) // Égide : les stacks adaptatifs s'éventent (20 s glissantes)
   if (fievreLeft > 0) fievreLeft = Math.max(0, fievreLeft - dt)
   if (testamentLeft > 0) testamentLeft = Math.max(0, testamentLeft - dt)
+  if (hateFunebreLeft > 0) hateFunebreLeft = Math.max(0, hateFunebreLeft - dt)
   for (const c of chars) {
+    // 🤬 Pacte du Berserk : les PV sont capés (les soins au-delà s'évaporent).
+    if (pact?.hpCap && c.hp > 0) c.hp = Math.min(c.hp, charMaxHp(c) * pact.hpCap)
     if (c.stun && c.stun > 0) c.stun = Math.max(0, c.stun - dt)
     if (c.weaken) { c.weaken.remaining -= dt; if (c.weaken.remaining <= 0) c.weaken = undefined }
     if ((c.invuln ?? 0) > 0) { c.invuln = Math.max(0, c.invuln! - dt); if ((c.invuln ?? 0) <= 0) c.invuln = undefined }
@@ -2034,9 +2176,9 @@ function tickHeroStatuses(chars: Character[], dt: number, cond?: CondMods) {
     verreTimer.set(c.id, (verreTimer.get(c.id) ?? 0) + dt)
     const ccd = carapaceCdMap.get(c.id)
     if (ccd && ccd > 0) carapaceCdMap.set(c.id, Math.max(0, ccd - dt))
-    // 💧 Goutte-à-goutte : la réserve se déverse à 2% des PV max par seconde.
+    // 💧 Goutte-à-goutte : la réserve se déverse à 2% des PV max par seconde (coupée au Jeûne).
     const pool = hotPool.get(c.id) ?? 0
-    if (pool > 0 && c.hp > 0) {
+    if (pool > 0 && c.hp > 0 && !pact?.noHeal) {
       const mh = charMaxHp(c)
       const flow = Math.min(pool, mh * 0.02 * dt)
       c.hp = Math.min(mh, c.hp + flow)
@@ -2084,13 +2226,13 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
   // v0.26 : qui était debout AVANT ce pas (⚓ Ancrage / 🎺 Marche / 📜 Testament).
   const aliveBefore = chars.map((c) => c.hp > 0)
   // Décompte des statuts transitoires (étourdissement, malédiction, DoT subis) avant d'agir.
-  tickHeroStatuses(chars, dt, mods?.cond)
+  tickHeroStatuses(chars, dt, mods?.cond, mods?.pact)
   const info = chars.map((c) =>
     c.hp > 0
       ? {
           derived: charDerived(c), profile: charDamageProfile(c), passives: charPassives(c),
           resist: charResist(c), cmods: charCombatMods(c),
-          cond: mods?.cond, surge: mods?.content?.surge, aliveEnemies: 1,
+          cond: mods?.cond, surge: mods?.content?.surge, aliveEnemies: 1, pact: mods?.pact,
         }
       : null,
   )
@@ -2100,8 +2242,20 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
   if (mods?.cond?.prismePct && mods.content?.biomeType) {
     for (const d of info) if (d) d.profile = shiftProfile(d.profile, mods.content.biomeType, mods.cond.prismePct)
   }
-  // v0.26 : premier tick face à cet ennemi → Égide rechargée, boucliers de départ.
-  if ((enemy.age ?? 0) <= dt + 1e-9) gemFightStart(chars, info, mods?.cond)
+  // 🧵 Pacte des Lignes ley : TOUT le profil bascule sur le type de l'arme (mono-élément).
+  if (mods?.pact?.monoElement) {
+    chars.forEach((c, i) => {
+      const d = info[i]
+      if (!d) return
+      const base = c.equipment.armePrincipale?.damageType ?? 'physique'
+      d.profile = { ...d.profile, profile: { [base]: 1 }, mainType: base }
+    })
+  }
+  // v0.26 : premier tick face à cet ennemi → Égide rechargée, boucliers de départ, runes d'ouverture.
+  if ((enemy.age ?? 0) <= dt + 1e-9) {
+    gemFightStart(chars, info, mods?.cond)
+    runeFightStart(chars, mods?.runes)
+  }
 
   let totalDealt = 0
 
@@ -2109,9 +2263,10 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
   chars.forEach((c, i) => {
     const d = info[i]
     if (!d || (c.stun ?? 0) > 0) return
-    // ⏱️ Premier élan : vitesse d'attaque dopée en début de combat (rune de temps).
+    // ⏱️ Premier élan + 🪽 Hâte funèbre : vitesse d'attaque dopée (runes de temps).
     const elanRune = mods?.runes?.premierElan && (enemy.age ?? 0) <= (mods.runes.premierElanDur ?? 10) ? 1 + mods.runes.premierElan : 1
-    const hits = d.derived.attacksPerSecond * elanRune * dt
+    const hateRune = hateFunebreLeft > 0 && mods?.runes?.hateFunebre ? 1 + mods.runes.hateFunebre : 1
+    const hits = d.derived.attacksPerSecond * elanRune * hateRune * dt
     const whole = Math.floor(hits) + (Math.random() < hits % 1 ? 1 : 0)
     const hpFrac = c.hp / charMaxHp(c)
     const lowHp = d.cmods.lowHp && hpFrac <= d.cmods.lowHp.threshold ? d.cmods.lowHp.mult : 1
@@ -2130,9 +2285,12 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
     const surplusMult = d.cmods.surplusToDamage > 0
       ? 1 + Math.min(d.cmods.surplusToDamage, (resistSurplus(enemy, d.resist) / RESIST_DSCALE) * d.cmods.surplusToDamage)
       : 1
-    // v0.26 : 🎺 Marche, 📜 Testament, ⚡ Sous tension, 🪟 Verre trempé, 🧭 Boussole (champion).
+    // v0.26 : 🎺 Marche, 📜 Testament, ⚡ Sous tension, 🪟 Verre trempé, 🧭 Boussole (champion)
+    // + 🪦 Usure / 🩸 pactes (dégâts, autos, focus — l'ennemi unique EST le focus).
     const gemMult = gemOffenseMult(c, mods?.cond, enemy, false)
-    const bonusMult = d.cmods.damageMult * lowHp * highHp * weakenMult * frenzyMult * (mods?.heroMult ?? 1) * acharne * souffle * opportunisteMult * opener * fuel * surplusMult * gemMult
+    const pactAuto = (mods?.pact?.autoMult ?? 1) * (1 + (mods?.pact?.focusBonus ?? 0))
+    const runePact = runePactOffense(enemy.age ?? 0, mods?.runes, mods?.pact)
+    const bonusMult = d.cmods.damageMult * lowHp * highHp * weakenMult * frenzyMult * (mods?.heroMult ?? 1) * acharne * souffle * opportunisteMult * opener * fuel * surplusMult * gemMult * pactAuto * runePact
     const multistrikeChance = Math.min(0.85, d.derived.multistrike + d.cmods.multistrike)
     const metroN = mods?.cond?.metronomeN
     // 🔁 Da capo : au-delà du seuil, les compteurs de RYTHME avancent ×2.
@@ -2199,15 +2357,17 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
       }
     }
     if (c.charge) c.charge.dealt += dealtThis
-    if (healed) gemLeechHeal(c, healed, mods?.cond) // 💧 Goutte-à-goutte : l'excès est conservé
+    if (healed && !mods?.pact?.noHeal) gemLeechHeal(c, healed, mods?.cond) // 💧 l'excès est conservé
   })
 
   // 2) Dégâts du DoT sur l'ennemi + décompte de ses statuts (vulnérabilité, anti-régén).
+  // ⏩ Avance rapide (rune) : TES altérations tickent plus vite (mêmes dégâts totaux, compressés).
+  const dotHaste = 1 + (mods?.runes?.avanceRapide ?? 0)
   if (enemy.dot && enemy.hp > 0) {
-    const dmg = enemy.dot.dps * dt
+    const dmg = enemy.dot.dps * dt * dotHaste
     enemy.hp = Math.max(0, enemy.hp - dmg)
     totalDealt += dmg
-    enemy.dot.remaining -= dt
+    enemy.dot.remaining -= dt * dotHaste
     if (enemy.dot.remaining <= 0) enemy.dot = undefined
     // ☠ FAUCHEUR : les DoT te soignent (fraction du tick).
     chars.forEach((c, i) => {
@@ -2231,7 +2391,9 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
       const p = getPower(pid)
       if (!p || p.kind !== 'active') return
       const key = `${c.id}:${pid}`
-      const cd = (cooldowns.get(key) ?? 0) - dt
+      // ⌛ Sabliers liés (v0.26) : les recharges défilent plus vite pendant une incantation ennemie.
+      const cdTick = dt * (1 + (enemyCasting && mods?.runes?.sabliers ? mods.runes.sabliers : 0))
+      const cd = (cooldowns.get(key) ?? 0) - cdTick
       const auto = c.powerAuto?.[slot] !== false
       if (cd <= 0 && !stunned && (auto || manualFire.has(key))) {
         // 🩸 Pacte sanglant : recharges raccourcies, mais chaque lancement coûte 2% des PV max.
@@ -2248,9 +2410,11 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
             cooldowns.set(k2, Math.max(0, (cooldowns.get(k2) ?? 0) - d.cmods.cdrOnCast))
           }
         }
-        // Sorts : keystones de dégâts (Carnage…) + ×sorts (Chronomancien) + heal→dégâts (Oracle sanglant).
+        // Sorts : keystones + ×sorts + 🩸 pactes (Pacifiste, Verre) + 🪦 Usure/💀 Memento.
+        lastCastGlobal = { charId: c.id, pid } // 🌀 Écho temporel : mémorise la dernière capacité
         const spellMult = d.cmods.damageMult * d.cmods.spellMult
-        const dealt = fireActive(p, c, d.derived, d.profile, chars, enemy, d.cmods.hot, spellMult, d.cmods.healToDamage, mods?.cond)
+          * (mods?.pact?.spellMult ?? 1) * runePactOffense(enemy.age ?? 0, mods?.runes, mods?.pact)
+        const dealt = fireActive(p, c, d.derived, d.profile, chars, enemy, d.cmods.hot, spellMult, d.cmods.healToDamage, mods?.cond, mods?.pact)
         // Vengeance différée : compte AUSSI les dégâts des sorts dans le cumul.
         if (c.charge && dealt > 0) c.charge.dealt += dealt
         // 💥 Détonation arcanique : le compteur d'équipe avance (l'AoE ne joue qu'en pack — Multi).
@@ -2264,7 +2428,7 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
           const n = (gemCounters.get('echo') ?? 0) + 1
           if (n >= echoN) {
             gemCounters.set('echo', 0)
-            const echoDealt = fireActive(p, c, d.derived, d.profile, chars, enemy, d.cmods.hot, spellMult * 0.5, d.cmods.healToDamage * 0.5, mods?.cond)
+            const echoDealt = fireActive(p, c, d.derived, d.profile, chars, enemy, d.cmods.hot, spellMult * 0.5, d.cmods.healToDamage * 0.5, mods?.cond, mods?.pact)
             if (c.charge && echoDealt > 0) c.charge.dealt += echoDealt
           } else gemCounters.set('echo', n)
         }
@@ -2310,7 +2474,11 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
         t.stun = Math.max(t.stun ?? 0, enemy.ccDur * (1 - td.derived.tenacity))
       }
     }
-    const effDmg = enemy.damage * (1 + (mods?.enrage ?? 0) * (mods?.fightTime ?? 0)) * (mods?.dmgMult ?? 1)
+    // 🧊 Stase (rune) : la montée en puissance ennemie est gelée les X premières secondes.
+    const rampT = Math.max(0, (mods?.fightTime ?? 0) - (mods?.runes?.staseSec ?? 0))
+    let effDmg = enemy.damage * (1 + (mods?.enrage ?? 0) * rampT) * (mods?.dmgMult ?? 1)
+    // 🫧 Latence (rune) : les ennemis frappent moins fort en début de combat.
+    if (mods?.runes?.latence && (enemy.age ?? 0) <= 8) effDmg *= 1 - mods.runes.latence
     // L'atténuation générique (esquive/réduction/maîtrise + passives/keystones) est BORNÉE
     // dans incomingDps ; le multiplicateur d'exigence du type (v0.24) s'applique avant.
     let incoming = incomingDps(
@@ -2329,8 +2497,8 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
       const cc = chars[ci]
       const cd2 = info[ci]
       if (!cd2 || frac <= 0) continue
-      // Chaîne défensive (🪨 Granit, ⚓ Ancrage, 💫 Sixième sens, 🌂 Paratonnerre)…
-      const dmg = incoming * frac * gemDefenseMult(cc, charMaxHp(cc), {
+      // Chaîne défensive (🪨 Granit, ⚓ Ancrage, 💫 Sixième sens, 🌂 Paratonnerre) + 🍷 pactes…
+      const dmg = incoming * frac * (mods?.pact?.dmgIn ?? 1) * gemDefenseMult(cc, charMaxHp(cc), {
         cond: mods?.cond, casting: enemyCasting, surge: mods?.content?.surge, aliveEnemies: 1,
       })
       // …puis Bastion réactif (🔃 Échangeur, 🌵 Cilice) et immunité/bouclier d'absorption.
@@ -2345,15 +2513,32 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
   }
 
   // 4b) Techniques signature de l'ennemi (DoT/burst/CC/debuff/drain) sur la plus haute menace.
-  tickEnemyAbilities(enemy, chars, info, dt, mods?.runes?.dilatation ?? 0)
+  tickEnemyAbilities(enemy, chars, info, dt, mods?.runes)
+  // ⏪ Rembobinage (rune) : un héros au bord du gouffre récupère ses recharges (1×/combat).
+  runeRembobinage(chars, mods?.runes)
+  // 🌀 Écho temporel (rune) : toutes les 30 s, la dernière capacité est relancée gratuitement.
+  if (mods?.runes?.echoTemporel) {
+    echoTempAcc += dt
+    if (echoTempAcc >= 30 && lastCastGlobal && enemy.hp > 0) {
+      echoTempAcc = 0
+      const ci = chars.findIndex((c) => c.id === lastCastGlobal!.charId && c.hp > 0)
+      const d = ci >= 0 ? info[ci] : null
+      const p = getPower(lastCastGlobal.pid)
+      if (d && p && p.kind === 'active') {
+        const dealt = fireActive(p, chars[ci], d.derived, d.profile, chars, enemy, d.cmods.hot,
+          d.cmods.damageMult * d.cmods.spellMult * mods.runes.echoTemporel, 0, mods?.cond, mods?.pact)
+        totalDealt += dealt
+      }
+    }
+  }
 
   // 5) Régénération de l'ennemi (Vampirique) — annulée par « Hémorragie cosmique ».
   if (mods?.regen && enemy.hp > 0 && (enemy.noRegen ?? 0) <= 0) enemy.hp = Math.min(enemy.maxHp, enemy.hp + enemy.maxHp * mods.regen * dt)
 
-  // 5b) 🕊️ Sursis : un héros qui vient de tomber survit à 25% PV (une fois par minute chacun).
-  const revived = applySursis(chars, mods?.runes?.sursisCd)
-  // v0.26 : morts restantes → ⚓ Ancrage brisé, 🎺 Marche perdue, 📜 Testament des survivants.
-  gemDeathEvents(chars, aliveBefore, mods?.cond)
+  // 5b) 🕊️ Sursis : un héros qui vient de tomber survit à 25% PV (👑 Hubris : sans filet).
+  const revived = applySursis(chars, mods?.pact?.noSursis ? undefined : mods?.runes?.sursisCd)
+  // v0.26 : morts restantes → ⚓ Ancrage brisé, 🎺 Marche perdue, 📜 Testament, 💀 Memento.
+  gemDeathEvents(chars, aliveBefore, mods?.cond, mods?.pact)
 
   // 6) Régénération des persos (+ bonus de régén + Métaboliseur d'Égide) + clamp.
   // v0.25.x — RELÈVE (farm uniquement, ce pas de combat ne sert qu'aux paliers) : un héros tombé
@@ -2371,6 +2556,8 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
       }
       // 💉 Perfusion (v0.26) : sous 50% des PV, la régénération s'emballe.
       if (mods?.cond?.perfusionBonus && c.hp / mh < 0.5) regen *= 1 + mods.cond.perfusionBonus
+      // 🍽️ Jeûne / 🧛 Sang vicié : la régénération est coupée.
+      if (mods?.pact?.noHeal || mods?.pact?.noRegen) regen = 0
       c.hp = Math.min(mh, c.hp + regen * dt)
     } else if (c.hp <= 0) {
       c.rez = (c.rez ?? 0) + dt
@@ -2409,13 +2596,13 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
   const opportunisteMult = mods?.cond?.opportuniste && anyCasting ? 1 + mods.cond.opportuniste : 1
   // v0.26 : qui était debout AVANT ce pas (⚓ Ancrage / 🎺 Marche / 📜 Testament).
   const aliveBefore = chars.map((c) => c.hp > 0)
-  tickHeroStatuses(chars, dt, mods?.cond)
+  tickHeroStatuses(chars, dt, mods?.cond, mods?.pact)
   const info = chars.map((c) =>
     c.hp > 0
       ? {
           derived: charDerived(c), profile: charDamageProfile(c), passives: charPassives(c),
           resist: charResist(c), cmods: charCombatMods(c),
-          cond: mods?.cond, surge: mods?.content?.surge, aliveEnemies: aliveAtStart,
+          cond: mods?.cond, surge: mods?.content?.surge, aliveEnemies: aliveAtStart, pact: mods?.pact,
         }
       : null,
   )
@@ -2430,8 +2617,20 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
       d.resist = merged
     }
   }
-  // v0.26 : premier tick de la RENCONTRE → Égide rechargée, boucliers de départ.
-  if ((mods?.fightTime ?? 99) <= dt + 1e-9) gemFightStart(chars, info, mods?.cond)
+  // 🧵 Pacte des Lignes ley : TOUT le profil bascule sur le type de l'arme (mono-élément).
+  if (mods?.pact?.monoElement) {
+    chars.forEach((c, i) => {
+      const d = info[i]
+      if (!d) return
+      const base = c.equipment.armePrincipale?.damageType ?? 'physique'
+      d.profile = { ...d.profile, profile: { [base]: 1 }, mainType: base }
+    })
+  }
+  // v0.26 : premier tick de la RENCONTRE → Égide rechargée, boucliers de départ, runes d'ouverture.
+  if ((mods?.fightTime ?? 99) <= dt + 1e-9) {
+    gemFightStart(chars, info, mods?.cond)
+    runeFightStart(chars, mods?.runes)
+  }
   let totalDealt = 0
   const focus = (): Enemy | undefined => enemies.find((e) => e.hp > 0)
 
@@ -2439,9 +2638,10 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
   chars.forEach((c, i) => {
     const d = info[i]
     if (!d || (c.stun ?? 0) > 0) return
-    // ⏱️ Premier élan : vitesse d'attaque dopée en début de RENCONTRE (fightTime du donjon/raid).
+    // ⏱️ Premier élan + 🪽 Hâte funèbre : vitesse d'attaque dopée (runes de temps).
     const elanRune = mods?.runes?.premierElan && (mods?.fightTime ?? 99) <= (mods.runes.premierElanDur ?? 10) ? 1 + mods.runes.premierElan : 1
-    const hits = d.derived.attacksPerSecond * elanRune * dt
+    const hateRune = hateFunebreLeft > 0 && mods?.runes?.hateFunebre ? 1 + mods.runes.hateFunebre : 1
+    const hits = d.derived.attacksPerSecond * elanRune * hateRune * dt
     const whole = Math.floor(hits) + (Math.random() < hits % 1 ? 1 : 0)
     const hpFrac = c.hp / charMaxHp(c)
     const lowHp = d.cmods.lowHp && hpFrac <= d.cmods.lowHp.threshold ? d.cmods.lowHp.mult : 1
@@ -2466,7 +2666,11 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
     const fTarget0 = focus()
     const firstOfPack = aliveAtStart >= 2 && !!fTarget0 && fTarget0 === enemies[0]
     const gemMult = gemOffenseMult(c, mods?.cond, fTarget0, firstOfPack)
-    const bonusMult = d.cmods.damageMult * lowHp * highHp * weakenMult * frenzyMult * (mods?.heroMult ?? 1) * nuee * acharne * souffle * opportunisteMult * opener * fuel * perEnemy * surplusMult * gemMult
+    // 🩸 Pactes : autos (Pacifiste), bonus focus (Duelliste — les autos frappent le focus),
+    // dégâts globaux (Verre, Meute…) + 🪦 Usure / 💀 Memento.
+    const pactAuto = (mods?.pact?.autoMult ?? 1) * (1 + (mods?.pact?.focusBonus ?? 0))
+    const runePact = runePactOffense(mods?.fightTime ?? 0, mods?.runes, mods?.pact)
+    const bonusMult = d.cmods.damageMult * lowHp * highHp * weakenMult * frenzyMult * (mods?.heroMult ?? 1) * nuee * acharne * souffle * opportunisteMult * opener * fuel * perEnemy * surplusMult * gemMult * pactAuto * runePact
     const multistrikeChance = Math.min(0.85, d.derived.multistrike + d.cmods.multistrike)
     const metroN = mods?.cond?.metronomeN
     // 🔁 Da capo : au-delà du seuil de la RENCONTRE, les compteurs de RYTHME avancent ×2.
@@ -2555,15 +2759,17 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
             }
           }
         }
-        // 🌋 BRISEUR « Onde de choc » + ⚡ FOUDREUR « Foudre en chaîne » : éclaboussures sur le pack.
+        // 🌋 BRISEUR « Onde de choc » + ⚡ FOUDREUR « Foudre en chaîne » : éclaboussures sur le pack
+        // (🤺 Duelliste : les coups hors focus sont amoindris).
         if ((d.cmods.cleaveAuto > 0 || d.cmods.chainArc) && dmg > 0) {
           let arcLeft = d.cmods.chainArc?.targets ?? 0
+          const offFocus = mods?.pact?.offFocusMult ?? 1
           for (const e of enemies) {
             if (e === t2 || e.hp <= 0) continue
             let frac = d.cmods.cleaveAuto
             if (arcLeft > 0 && d.cmods.chainArc) { frac = Math.max(frac, d.cmods.chainArc.frac); arcLeft-- }
             if (frac <= 0) break
-            const splash = dmg * frac
+            const splash = dmg * frac * offFocus
             e.hp = Math.max(0, e.hp - splash)
             totalDealt += splash
             dealtThis += splash
@@ -2572,16 +2778,18 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
       }
     }
     if (c.charge) c.charge.dealt += dealtThis
-    if (healed) gemLeechHeal(c, healed, mods?.cond) // 💧 Goutte-à-goutte : l'excès est conservé
+    if (healed && !mods?.pact?.noHeal) gemLeechHeal(c, healed, mods?.cond) // 💧 l'excès est conservé
   })
 
   // 2) DoT par ennemi + décompte de ses statuts (vulnérabilité, anti-régén, Brèche).
+  // ⏩ Avance rapide (rune) : TES altérations tickent plus vite (compressées, mêmes dégâts totaux).
+  const dotHaste = 1 + (mods?.runes?.avanceRapide ?? 0)
   for (const enemy of enemies) {
     if (enemy.dot && enemy.hp > 0) {
-      const dmg = enemy.dot.dps * dt
+      const dmg = enemy.dot.dps * dt * dotHaste
       enemy.hp = Math.max(0, enemy.hp - dmg)
       totalDealt += dmg
-      enemy.dot.remaining -= dt
+      enemy.dot.remaining -= dt * dotHaste
       if (enemy.dot.remaining <= 0) enemy.dot = undefined
       // ☠ FAUCHEUR : les DoT te soignent (fraction du tick).
       chars.forEach((c, i) => {
@@ -2605,7 +2813,9 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
       const p = getPower(pid)
       if (!p || p.kind !== 'active') return
       const key = `${c.id}:${pid}`
-      const cd = (cooldowns.get(key) ?? 0) - dt
+      // ⌛ Sabliers liés (v0.26) : les recharges défilent plus vite pendant une incantation ennemie.
+      const cdTick = dt * (1 + (anyCasting && mods?.runes?.sabliers ? mods.runes.sabliers : 0))
+      const cd = (cooldowns.get(key) ?? 0) - cdTick
       const auto = c.powerAuto?.[slot] !== false
       if (cd <= 0 && !stunned && (auto || manualFire.has(key))) {
         // 🩸 Pacte sanglant : recharges raccourcies contre 2% des PV max par lancement.
@@ -2622,13 +2832,18 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
             cooldowns.set(k2, Math.max(0, (cooldowns.get(k2) ?? 0) - d.cmods.cdrOnCast))
           }
         }
+        lastCastGlobal = { charId: c.id, pid } // 🌀 Écho temporel : mémorise la dernière capacité
         const cast = (mult: number): number => {
           let dd = 0
+          // 🩸 Pactes : ×sorts (Pacifiste), dégâts globaux + 🪦 Usure / 💀 Memento.
           const sm = d.cmods.damageMult * d.cmods.spellMult * mult
+            * (mods?.pact?.spellMult ?? 1) * runePactOffense(mods?.fightTime ?? 0, mods?.runes, mods?.pact)
           if (p.effect === 'cleave' || p.effect === 'megaCleave') {
-            for (const e of enemies) if (e.hp > 0) dd += fireActive(p, c, d.derived, d.profile, chars, e, d.cmods.hot, sm, d.cmods.healToDamage, mods?.cond)
+            const offFocus = mods?.pact?.offFocusMult ?? 1
+            const f0 = focus()
+            for (const e of enemies) if (e.hp > 0) dd += fireActive(p, c, d.derived, d.profile, chars, e, d.cmods.hot, sm * (e === f0 ? 1 : offFocus), d.cmods.healToDamage, mods?.cond, mods?.pact)
           } else {
-            dd = fireActive(p, c, d.derived, d.profile, chars, focus() ?? enemies[0], d.cmods.hot, sm, d.cmods.healToDamage, mods?.cond)
+            dd = fireActive(p, c, d.derived, d.profile, chars, focus() ?? enemies[0], d.cmods.hot, sm * (1 + (mods?.pact?.focusBonus ?? 0)), d.cmods.healToDamage, mods?.cond, mods?.pact)
           }
           return dd
         }
@@ -2698,7 +2913,11 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
         t.stun = Math.max(t.stun ?? 0, enemy.ccDur * (1 - td.derived.tenacity))
       }
     }
-    const effDmg = enemy.damage * (1 + (mods?.enrage ?? 0) * (mods?.fightTime ?? 0)) * (mods?.dmgMult ?? 1)
+    // 🧊 Stase (rune) : la montée en puissance ennemie est gelée les X premières secondes.
+    const rampT = Math.max(0, (mods?.fightTime ?? 0) - (mods?.runes?.staseSec ?? 0))
+    let effDmg = enemy.damage * (1 + (mods?.enrage ?? 0) * rampT) * (mods?.dmgMult ?? 1)
+    // 🫧 Latence (rune) : les ennemis frappent moins fort en début de rencontre.
+    if (mods?.runes?.latence && (mods?.fightTime ?? 99) <= 8) effDmg *= 1 - mods.runes.latence
     let incoming = incomingDps(
       effDmg, enemy.damageType, td.derived, td.resist,
       enemyReq(enemy, enemy.damageType),
@@ -2715,8 +2934,8 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
       const cc = chars[ci]
       const cd2 = info[ci]
       if (!cd2 || frac <= 0) continue
-      // Chaîne défensive (🧱 Rempart en pack, 🪨 Granit, ⚓ Ancrage, 💫 Sixième sens, 🌂 Paratonnerre)…
-      const dmg = incoming * frac * gemDefenseMult(cc, charMaxHp(cc), {
+      // Chaîne défensive (🧱 Rempart, 🪨 Granit, ⚓ Ancrage, 💫 Sixième sens, 🌂 Paratonnerre) + 🍷 pactes…
+      const dmg = incoming * frac * (mods?.pact?.dmgIn ?? 1) * gemDefenseMult(cc, charMaxHp(cc), {
         cond: mods?.cond, casting: anyCasting, surge: mods?.content?.surge, aliveEnemies: aliveE,
       })
       // …puis Bastion réactif (🔃 Échangeur, 🌵 Cilice) et immunité/bouclier d'absorption.
@@ -2726,7 +2945,24 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
       if (cd2.cmods.thorns > 0 && enemy.hp > 0) enemy.hp = Math.max(0, enemy.hp - dmg * cd2.cmods.thorns)
     }
     // Techniques signature de CET ennemi (sur la plus haute menace).
-    tickEnemyAbilities(enemy, chars, info, dt, mods?.runes?.dilatation ?? 0)
+    tickEnemyAbilities(enemy, chars, info, dt, mods?.runes)
+  }
+  // ⏪ Rembobinage (rune) : un héros au bord du gouffre récupère ses recharges (1×/combat).
+  runeRembobinage(chars, mods?.runes)
+  // 🌀 Écho temporel (rune) : toutes les 30 s, la dernière capacité est relancée gratuitement.
+  if (mods?.runes?.echoTemporel) {
+    echoTempAcc += dt
+    const ft = focus()
+    if (echoTempAcc >= 30 && lastCastGlobal && ft) {
+      echoTempAcc = 0
+      const ci = chars.findIndex((c) => c.id === lastCastGlobal!.charId && c.hp > 0)
+      const d = ci >= 0 ? info[ci] : null
+      const p = getPower(lastCastGlobal.pid)
+      if (d && p && p.kind === 'active') {
+        totalDealt += fireActive(p, chars[ci], d.derived, d.profile, chars, ft, d.cmods.hot,
+          d.cmods.damageMult * d.cmods.spellMult * mods.runes.echoTemporel, 0, mods?.cond, mods?.pact)
+      }
+    }
   }
 
   // 4c) 🤺 Riposte mesurée (v0.26) : le temps sous le feu du pack se mue en contre-attaques (focus).
@@ -2748,10 +2984,10 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
   // 5) Régénération ennemie (Vampirique/Sangsue) — annulée par « Hémorragie cosmique ».
   if (mods?.regen) for (const enemy of enemies) if (enemy.hp > 0 && (enemy.noRegen ?? 0) <= 0) enemy.hp = Math.min(enemy.maxHp, enemy.hp + enemy.maxHp * mods.regen * dt)
 
-  // 5b) 🕊️ Sursis : un héros qui vient de tomber survit à 25% PV (une fois par minute chacun).
-  const revived = applySursis(chars, mods?.runes?.sursisCd)
-  // v0.26 : morts restantes → ⚓ Ancrage brisé, 🎺 Marche perdue, 📜 Testament des survivants.
-  gemDeathEvents(chars, aliveBefore, mods?.cond)
+  // 5b) 🕊️ Sursis : un héros qui vient de tomber survit à 25% PV (👑 Hubris : sans filet).
+  const revived = applySursis(chars, mods?.pact?.noSursis ? undefined : mods?.runes?.sursisCd)
+  // v0.26 : morts restantes → ⚓ Ancrage brisé, 🎺 Marche perdue, 📜 Testament, 💀 Memento.
+  gemDeathEvents(chars, aliveBefore, mods?.cond, mods?.pact)
 
   // 6) Régénération des persos (+ Métaboliseur d'Égide face à la cible focus) + clamp.
   chars.forEach((c, i) => {
@@ -2765,6 +3001,8 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
       }
       // 💉 Perfusion (v0.26) : sous 50% des PV, la régénération s'emballe.
       if (mods?.cond?.perfusionBonus && c.hp / mh < 0.5) regen *= 1 + mods.cond.perfusionBonus
+      // 🍽️ Jeûne / 🧛 Sang vicié : la régénération est coupée.
+      if (mods?.pact?.noHeal || mods?.pact?.noRegen) regen = 0
       c.hp = Math.min(mh, c.hp + regen * dt)
     }
     if (c.hp < 0) c.hp = 0
@@ -2825,11 +3063,12 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
   const dCraft = craftMods(s.metiers)
   const dCond = condGemMods(s.characters, dCraft.gemSpec, teamGemOpts(s, dCraft))
   const dRunes = timeRuneMods(equippedTimeRunes(s.characters), dCraft.runisteTempo)
+  const dPact = teamPactMods(s, dCraft)
   // 🗝️ Pierre de sceau (v0.26) : +X% de dégâts par modificateur actif du donjon.
   const dHeroMult = (1 + maitriseBonus(s.biomeBest)) * (1 + crescendoBonus(dCond.crescendoCap))
     * (dCond.sceauPct ? 1 + dCond.sceauPct * d.modifiers.length : 1)
   const res = partyCombatStepMulti(s.characters, d.enemies, dt, {
-    enrage, reflect, regen, fightTime, heroMult: dHeroMult, cond: dCond, runes: dRunes,
+    enrage, reflect, regen, fightTime, heroMult: dHeroMult, cond: dCond, runes: dRunes, pact: dPact,
     content: { affixCount: d.modifiers.length },
   })
   let chars = res.chars
@@ -2863,7 +3102,7 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
     // 📯 Crescendo & 🛡️ Trésorerie : chaque combat de pack nettoyé compte ses kills.
     crescendoAdd(enemies.length)
     tresorerieShield(chars, dCond.tresorerieCap)
-    gemKillEvents(chars, dCond, enemies.length, 1) // 🔔 Glas · 🦷 Fièvre · 🎺 Marche (v0.26)
+    gemKillEvents(chars, dCond, enemies.length, 1, dRunes, dPact) // 🔔 Glas · 🦷 Fièvre · 🎺 Marche · 🪽 · 🍽️
     const eco = computeGlobalMods(s.upgrades, s.maitrise)
     const lv = d.level
     const packXp = enemies.reduce((a, e) => a + (e.xp ?? 0), 0)
@@ -2922,6 +3161,7 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
       // 🏆 Fragment de Conquête : le boss final du donjon réinitialise les plus longues recharges.
       if (dCond.conquete) resetLongestCooldown(chars)
       fuelReset() // 🜍 Purgateur : fin d'instance, le carburant retombe
+      mementoOn = false // 💀 Memento mori : fin du run
       const rareBonus = d.modifiers.reduce((a, m) => a + (m.rareBonus ?? 0), 0)
       const bias = pickBias(s.characters)
 
@@ -2951,6 +3191,7 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
         case 'poussiere': cPous = Math.round(dungeonRunYield('poussiere', lv) * chestFrac); break
         case 'orbes': cOrbes = Math.round(dungeonKeyYield('orbes', lv) * chestFrac); break
         case 'sceaux': cSceaux = Math.round(dungeonKeyYield('sceaux', lv) * chestFrac); break
+        // (🔑 Clés en double appliquée après le switch — voir plus bas.)
         case 'xp': { const bonus = Math.round(1200 * lv * Math.pow(1.12, lv) * chestMult); chars = chars.map((c) => (c.hp > 0 ? grantXp(c, bonus) : c)); cXp += bonus; break }
         case 'stuff': {
           const ilvl = dungeonIlvl(lv, s.bestStage)
@@ -2981,11 +3222,18 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
           break
         }
       }
+      // 🔑 Clés en double (rune v0.26) : les clés du coffre peuvent être doublées.
+      const dRules = equippedRules(s.characters)
+      if ((cSceaux > 0 || cOrbes > 0) && dRules.has('clesDouble') && Math.random() < 0.15 * ruleAmp(dCraft.ruleAmpTier)) {
+        cSceaux *= 2
+        cOrbes *= 2
+        log = pushLog(log, '🔑 Clés en double : le trousseau du coffre est doublé !', 'loot')
+      }
       const chest: ChestReward = { dungeonName: d.name, level: lv, items, eclats: cEclats, noyau: cNoyau, gold: cGold, sceaux: cSceaux, orbes: cOrbes, poussiere: cPous, xp: cXp, gemDust: cDust, gem: cGem }
 
-      // 🪄 Rune (v0.25) : drop TRÈS rare en fin de run — la vraie source est le raid.
+      // 🪄 Rune (v0.25) : drop TRÈS rare en fin de run — la vraie source est le raid (🖋️ Greffier aide).
       let runesOwned = s.runesOwned
-      if (Math.random() < dungeonRuneChance(lv)) {
+      if (Math.random() < dungeonRuneChance(lv, dCraft.greffierMult)) {
         const rd = rollRuneDrop()
         runesOwned = { ...runesOwned, [rd.id]: (runesOwned[rd.id] ?? 0) + 1 }
         log = pushLog(log, `🪄 RUNE TROUVÉE : ${rd.icon} ${rd.name} !`, 'loot')
@@ -3083,9 +3331,10 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
   const rCraft = craftMods(s.metiers)
   const rCond = condGemMods(s.characters, rCraft.gemSpec, teamGemOpts(s, rCraft))
   const rRunes = timeRuneMods(equippedTimeRunes(s.characters), rCraft.runisteTempo)
+  const rPact = teamPactMods(s, rCraft)
   const rHeroMult = (1 + maitriseBonus(s.biomeBest)) * (1 + crescendoBonus(rCond.crescendoCap))
   const res = partyCombatStepMulti(s.characters, r.enemies, dt, {
-    enrage, regen: drain, fightTime, dmgMult, heroMult: rHeroMult, cond: rCond, runes: rRunes,
+    enrage, regen: drain, fightTime, dmgMult, heroMult: rHeroMult, cond: rCond, runes: rRunes, pact: rPact,
     // 🏅 Trophée de guerre (v0.26) : la gemme offre ses points de résist à l'équipe EN RAID.
     content: { resistBonus: rCond.tropheeRes },
   })
@@ -3167,10 +3416,11 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
     // 🏆 Fragment de Conquête : chaque rencontre de boss vaincue réinitialise les longues recharges.
     if (rCond.conquete) resetLongestCooldown(chars)
     fuelReset() // 🜍 Purgateur : fin d'instance, le carburant retombe
+    mementoOn = false // 💀 Memento mori : fin du run
     // 📯 Crescendo & 🛡️ Trésorerie : un boss de raid compte comme un kill.
     crescendoAdd(1)
     tresorerieShield(chars, rCond.tresorerieCap)
-    gemKillEvents(chars, rCond, 1, 1) // 🔔 Glas · 🦷 Fièvre · 🎺 Marche (v0.26)
+    gemKillEvents(chars, rCond, 1, 1, rRunes, rPact) // 🔔 Glas · 🦷 Fièvre · 🎺 Marche · 🪽 · 🍽️
     // v0.23 : un raid = UN affrontement → le boss (ou duo) vaincu, le trésor tombe directement.
     {
       const tier = r.tier
@@ -3216,7 +3466,13 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
       const healed = chars.map(fullHeal)
       const raidProgress = { ...s.raidProgress, [r.raidId]: Math.max(s.raidProgress[r.raidId] ?? 0, tier) }
       // 🏆 Trophées du raid : la monnaie de passage de tier (≈ 5 clears du tier courant).
-      const trophies = raidTrophyGain(tier)
+      // 🏆 Rune du Trophéiste (v0.26) : chance de doubler la moisson.
+      const rRules = equippedRules(s.characters)
+      let trophies = raidTrophyGain(tier)
+      if (rRules.has('tropheiste') && Math.random() < 0.15 * ruleAmp(rCraft.ruleAmpTier)) {
+        trophies *= 2
+        log = pushLog(log, '🏆 Trophéiste : la moisson de Trophées est DOUBLÉE !', 'loot')
+      }
       const raidTrophies = { ...s.raidTrophies, [r.raidId]: (s.raidTrophies[r.raidId] ?? 0) + trophies }
       log = pushLog(log, `🏆 +${trophies} Trophée${trophies > 1 ? 's' : ''} de ${def.name} (total ${raidTrophies[r.raidId]}).`, 'loot')
       const repeatLeft = r.repeatLeft ?? 0
@@ -3231,9 +3487,9 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
         log = pushLog(log, `${cg.icon} GEMME DE CONDITION : ${cg.name} !`, 'loot')
       }
 
-      // 🪄 Rune (v0.25) : LE raid est la source des runes — chance qui monte avec le tier.
+      // 🪄 Rune (v0.25) : LE raid est la source des runes — chance qui monte avec le tier (🖋️ Greffier aide).
       let runesOwned = s.runesOwned
-      if (Math.random() < raidRuneChance(tier)) {
+      if (Math.random() < raidRuneChance(tier, rCraft.greffierMult)) {
         const rd = rollRuneDrop()
         runesOwned = { ...runesOwned, [rd.id]: (runesOwned[rd.id] ?? 0) + 1 }
         log = pushLog(log, `🪄 RUNE TROUVÉE : ${rd.icon} ${rd.name} !`, 'loot')
@@ -3323,7 +3579,14 @@ export const useGame = create<GameState>((set, get) => {
   // plein régime — ce sont des machines). Les clés sont consommées run par run.
   const autoLogLines: string[] = []
   if (elapsed > 60_000 && save.automates.length > 0) {
-    const ar = tickAutomates(save, Math.min(elapsed, 12 * 3600 * 1000) / 1000, equippedRules(save.characters).has('econome') ? (craftMods(save.metiers).loiAmplifiee ? 0.25 : 0.15) : 0, craftMods(save.metiers).automateDurMult)
+    const offRules = equippedRules(save.characters)
+    const offCraft = craftMods(save.metiers)
+    const ar = tickAutomates(
+      save, Math.min(elapsed, 12 * 3600 * 1000) / 1000,
+      offRules.has('econome') ? (offCraft.loiAmplifiee ? 0.25 : 0.15) : 0,
+      offCraft.automateDurMult,
+      offRules.has('coffresDoubles') ? 0.15 * ruleAmp(offCraft.ruleAmpTier) : 0,
+    )
     if (ar) {
       Object.assign(save, ar.eco)
       if (ar.xpEach > 0) save.characters = save.characters.map((c) => (c.hp > 0 ? grantXp(c, ar.xpEach) : c))
@@ -3345,7 +3608,14 @@ export const useGame = create<GameState>((set, get) => {
       let s = get()
 
       // Automates de forge : avancent en PARALLÈLE de tout le reste (farm, donjon, raid).
-      const ar = tickAutomates(s, dt, equippedRules(s.characters).has('econome') ? (craftMods(s.metiers).loiAmplifiee ? 0.25 : 0.15) : 0, craftMods(s.metiers).automateDurMult)
+      const tickRules = equippedRules(s.characters)
+      const tickCraft = craftMods(s.metiers)
+      const ar = tickAutomates(
+        s, dt,
+        tickRules.has('econome') ? (tickCraft.loiAmplifiee ? 0.25 : 0.15) : 0,
+        tickCraft.automateDurMult,
+        tickRules.has('coffresDoubles') ? 0.15 * ruleAmp(tickCraft.ruleAmpTier) : 0,
+      )
       if (ar) {
         let log = s.log
         for (const line of ar.lines) log = pushLog(log, line, 'craft')
@@ -3369,6 +3639,7 @@ export const useGame = create<GameState>((set, get) => {
       const cmodsTick = craftMods(s.metiers)
       const cond = condGemMods(s.characters, cmodsTick.gemSpec, teamGemOpts(s, cmodsTick))
       const runes = timeRuneMods(equippedTimeRunes(s.characters), cmodsTick.runisteTempo)
+      const pact = teamPactMods(s, cmodsTick)
       const surgedNow = surgeBiome() === s.activeBiome
       // 🧗 Pied du mur (v0.26) : à ≤ 2 paliers du record, le push frappe plus fort.
       const nearRecord = s.stage >= s.bestStage - 2
@@ -3377,7 +3648,7 @@ export const useGame = create<GameState>((set, get) => {
         * (surgedNow && cond.orage ? 1 + cond.orage : 1)
         * (nearRecord && cond.piedDuMurPct ? 1 + cond.piedDuMurPct : 1)
       const res = partyCombatStep(s.characters, s.enemy, dt, {
-        heroMult, cond, runes,
+        heroMult, cond, runes, pact,
         content: { surge: surgedNow, biomeType: s.activeBiome, nearRecord },
       })
       let chars = res.chars
@@ -3406,14 +3677,24 @@ export const useGame = create<GameState>((set, get) => {
         // 📯 Crescendo & 🛡️ Trésorerie : chaque kill nourrit le cumul / blinde le bouclier.
         crescendoAdd(1)
         tresorerieShield(chars, cond.tresorerieCap)
-        gemKillEvents(chars, cond, 1, 1) // 🔔 Glas · 🦷 Fièvre · 🎺 Marche (v0.26)
+        gemKillEvents(chars, cond, 1, 1, runes, pact) // 🔔 Glas · 🦷 Fièvre · 🎺 Marche · 🪽 · 🍽️
         const eco = computeGlobalMods(s.upgrades, s.maitrise)
         // SURCHARGE élémentaire : le biome tournant rapporte +50% or/XP et ×2 quintessence.
         const surged = surgeBiome() === s.activeBiome
         const surgeMult = surged ? SURGE_GOLD_XP_MULT : 1
+        // Runes de RÈGLE portées par l'équipe. ◈ Législateur amplifie (étages III/V : ruleAmp).
+        const rules = equippedRules(s.characters)
+        const loi = cmodsTick.loiAmplifiee
+        const amp = ruleAmp(cmodsTick.ruleAmpTier)
+        // v0.26 — règles économiques : 🫅 Mécène (or+/XP−), 🎓 Bourse (XP+/or−), 🎉 Saturnales
+        // (dimanche réel), 👑 Hubris (pacte : récompenses de farm +).
+        const dimanche = rules.has('saturnales') && new Date().getDay() === 0 ? 1 + 0.15 * amp : 1
+        const hubris = 1 + (pact?.rewardBonus ?? 0)
+        const goldRuleMult = (rules.has('mecene') ? 1 + 0.25 * amp : 1) * (rules.has('bourse') ? 0.9 : 1) * dimanche * hubris
+        const xpRuleMult = (rules.has('bourse') ? 1 + 0.25 * amp : 1) * (rules.has('mecene') ? 0.9 : 1) * dimanche * hubris
         // Le combat CLASSIQUE n'est plus qu'un filet d'or/butin : la vraie source = donjons & raids.
-        const goldGain = Math.round(enemy.xp * CLASSIC_GOLD_MULT * eco.goldGain * surgeMult)
-        const xpGain = Math.round(enemy.xp * eco.xpGain * CLASSIC_XP_MULT * surgeMult)
+        const goldGain = Math.round(enemy.xp * CLASSIC_GOLD_MULT * eco.goldGain * surgeMult * goldRuleMult)
+        const xpGain = Math.round(enemy.xp * eco.xpGain * CLASSIC_XP_MULT * surgeMult * xpRuleMult)
         gold += goldGain
 
         chars = chars.map((c) => {
@@ -3431,22 +3712,29 @@ export const useGame = create<GameState>((set, get) => {
         const champion = enemy.champion === true
         if (champion) log = pushLog(log, '✦ CHAMPION vaincu : butin exceptionnel !', 'kill')
         else if (elite) log = pushLog(log, '◆ Élite vaincue : butin supérieur !', 'kill')
-        // Runes de RÈGLE portées par l'équipe (Karma, Transmutation brute…). ◈ Législateur les amplifie.
-        const rules = equippedRules(s.characters)
-        const loi = cmodsTick.loiAmplifiee
         // Rune du Karma : la malchance s'accumule en chance (+1 cran de rareté / 40 kills sans Épique+, /25 en Législateur).
         const karmaBonus = rules.has('karma') ? Math.min(8, Math.floor(s.killsSinceEpic / (loi ? 25 : 40))) : 0
         // Rune de Transmutation brute : les monstres NORMAUX ne droppent plus d'objets.
         const transmut = rules.has('transmutation')
         // Moins d'objets en combat classique (le farm de stuff se fait en donjon/raid).
-        const drops = transmut && !boss && !elite
+        let drops = transmut && !boss && !elite
           ? 0
           : (boss ? 2 : Math.random() < 0.30 + eco.lootChance ? 1 : 0) + (elite ? 1 : 0) + (champion ? 1 : 0)
+        // 🔍 Monomanie : 2× moins d'objets… mais de meilleure facture (shift plus bas).
+        if (rules.has('monomanie') && drops > 0) drops = Math.random() < 0.5 ? drops : 0
+        // 🦷 Loi du talion : les élites/boss lâchent parfois leur butin DEUX fois.
+        if ((elite || boss) && rules.has('talion') && Math.random() < 0.12 * amp) {
+          drops *= 2
+          log = pushLog(log, '🦷 Loi du talion : le butin tombe DEUX fois !', 'loot')
+        }
         const bias = pickBias(chars)
         // v0.24 : FENÊTRE de rareté du farm (≤ Légendaire). Élite/champion/boss + karma/chance
         // décalent la fenêtre — toujours sous le plafond (la chasse est en donjon/raid).
         const shift = (boss ? 1 : 0) + (elite ? 1 : 0) + (champion ? 2 : 0)
           + Math.min(2, Math.floor(eco.rarityLuck)) + Math.min(2, karmaBonus)
+          + (rules.has('monomanie') ? (amp >= 1.25 ? 2 : 1) : 0)
+        // 🕳️ Tisse-châsse : les drops ont une chance accrue de porter une châsse.
+        const socketLuck = rules.has('tisseChasse') ? 0.15 * amp : 0
         let codex = s.codex
         let autoRec = 0
         let killsSinceEpic = s.killsSinceEpic + 1
@@ -3454,7 +3742,7 @@ export const useGame = create<GameState>((set, get) => {
           // Identité de loot du biome : ~50% dégâts de l'élément, ~25% résistance à l'élément, ~25% neutre.
           const br = Math.random()
           const biomeOpts = br < 0.5 ? { forceDmgType: s.activeBiome } : br < 0.75 ? { biasResist: s.activeBiome } : {}
-          const it = generateItem({ ilvl: stageIlvl(stage), rarity: rollFarmRarity(stage, shift), primaryBias: bias, ...biomeOpts })
+          const it = generateItem({ ilvl: stageIlvl(stage), rarity: rollFarmRarity(stage, shift), primaryBias: bias, socketLuck, ...biomeOpts })
           // Rune du Karma : un drop Épique+ remet le compteur de pitié à zéro.
           if (RARITIES[it.rarity].tier >= 5) killsSinceEpic = 0
           // Recyclage automatique : tout butin commun sous le seuil part directement en éclats (on garde les uniques).
@@ -3480,7 +3768,9 @@ export const useGame = create<GameState>((set, get) => {
         let quint = s.quint
         {
           const qBase = boss ? QUINT_DROP.boss : elite ? QUINT_DROP.elite : QUINT_DROP.normal
-          const qChance = qBase * quintTierMult(stage) * (surged ? SURGE_QUINT_MULT : 1) * transmutMult * cmods.quintDropMult
+          // 🪨 Quartzite (v0.26) : les quintessences du biome coulent plus volontiers.
+          const quartz = rules.has('quartzite') ? 1 + 0.4 * amp : 1
+          const qChance = qBase * quintTierMult(stage) * (surged ? SURGE_QUINT_MULT : 1) * transmutMult * cmods.quintDropMult * quartz
           if (Math.random() < qChance) {
             const t = s.activeBiome
             quint = { ...quint, [t]: (quint[t] ?? 0) + 1 }
@@ -3494,29 +3784,32 @@ export const useGame = create<GameState>((set, get) => {
         let gemsSeen = s.gemsSeen
         {
           const rank2 = boss ? 'boss' : elite ? 'elite' : 'normal'
-          // ⛏️ Veine mère (v0.26) : les poussières coulent plus souvent.
+          // ⛏️ Veine mère + ⛏️ Prospecteur (v0.26) : les poussières coulent plus souvent/fort.
+          const prospecteur = rules.has('prospecteur')
           const dustC = GEM_DUST_DROP.chance[rank2] * transmutMult * cmods.gemDropMult * (1 + (cond.veineMerePct ?? 0))
           if (Math.random() < dustC) {
-            const amt = GEM_DUST_DROP.amount[rank2]
+            const amt = GEM_DUST_DROP.amount[rank2] * (prospecteur ? 2 : 1)
             gemDust += amt
             log = pushLog(log, `🔹 +${amt} poussière de gemme.`, 'loot')
           }
           // Gemme de CONDITION : drop par FAMILLE selon le biome (Feu/Foudre → Rythme,
           // Ombre/Nature → Flux, Arcane/Froid → Environnement, Physique → Bastion).
           // v0.26 : drops ×0,4 — le drop redevient un événement, la TAILLE/FUSION compensent.
-          const gemC = COND_GEM_DROP[rank2] * transmutMult * cmods.gemDropMult
+          const gemC = COND_GEM_DROP[rank2] * transmutMult * cmods.gemDropMult * (prospecteur ? 0.5 : 1)
           if (Math.random() < gemC) {
             const cg = rollCondGem(BIOME_GEM_FAMILY[s.activeBiome])
-            const k = condGemKey(cg.id)
+            // 🧿 Collectionneur : la gemme peut tomber directement au rang 2.
+            const dropRank = rules.has('collectionneur') && Math.random() < 0.2 * amp ? Math.min(2, gemMaxRank(cg)) : 1
+            const k = condGemKey(cg.id, dropRank)
             // 🥅 Tamis : les doublons sont auto-broyés à +20% de poussière.
             if (cmods.tamis && (gems[k] ?? 0) >= 1) {
-              const dust = Math.round(grindDust(1) * 1.2 * cmods.grindMult)
+              const dust = Math.round(grindDust(dropRank) * 1.2 * cmods.grindMult)
               gemDust += dust
               log = pushLog(log, `🥅 Tamis : ${cg.name} en doublon, auto-broyée (+${dust} 🔹).`, 'loot')
             } else {
               gems = { ...gems, [k]: (gems[k] ?? 0) + 1 }
               if (!gemsSeen.includes(cg.id)) gemsSeen = [...gemsSeen, cg.id]
-              log = pushLog(log, `${cg.icon} GEMME : ${cg.name} (${cg.family}) — drop de biome !`, 'loot')
+              log = pushLog(log, `${cg.icon} GEMME : ${cg.name}${dropRank > 1 ? ` (rang ${dropRank})` : ''} (${cg.family}) — drop de biome !`, 'loot')
             }
           }
         }
@@ -3568,7 +3861,8 @@ export const useGame = create<GameState>((set, get) => {
         }
 
         // L'échoppe ne se renouvelle plus au boss : rotation horaire gérée dans `tick`.
-        const enemyNext = makeEnemy(stage, s.activeBiome)
+        // 🍖 Appât à champions (v0.26) : les ✦ rôdent plus souvent.
+        const enemyNext = makeEnemy(stage, s.activeBiome, rules.has('appat') ? 1 + 0.35 * amp : 1)
         // 🌠 Étoile d'Overkill : l'excédent du coup fatal entame l'ennemi suivant.
         if (res.overkill > 0) enemyNext.hp = Math.max(1, enemyNext.maxHp - res.overkill)
         if (isBossStage(stage)) log = pushLog(log, `⚔ Un boss vous barre la route : ${enemyNext.name} !`, 'info')
@@ -4186,6 +4480,13 @@ export const useGame = create<GameState>((set, get) => {
       const item = findItemById(s, itemId)
       if (!def || !item || item.enchant === enchantId) return
       if (def.rule && !mods.ruleRunes) return // runes de RÈGLE : nœud « Lois du monde »
+      // 🩸 Pactes (v0.26) : nœud « Sang d'encre » requis, et UN SEUL pacte actif par équipe
+      // (deux via « Double pacte ») — un pacte différent déjà porté bloque la gravure.
+      if (def.pact) {
+        if (!mods.pactes) return
+        const worn = equippedPacts(s.characters).filter((p) => p !== def.pact)
+        if (worn.length >= (mods.doublePacte ? 2 : 1)) return
+      }
       // v0.25 (option A) : la gravure CONSOMME une rune POSSÉDÉE (drop de raid/donjon).
       if ((s.runesOwned[enchantId] ?? 0) < 1) return
       const raw = enchantCost(def, item)
@@ -4202,6 +4503,67 @@ export const useGame = create<GameState>((set, get) => {
         runesOwned: { ...s.runesOwned, [enchantId]: (s.runesOwned[enchantId] ?? 0) - 1 },
         metiers: g.metiers,
         log: pushLog(g.log, `🪄 Rune gravée : ${def.icon} ${def.name} sur ${item.name} (rune consommée, -${cost.eclats} ♦${cost.poussiere ? `, -${cost.poussiere} 🌌` : ''}, +${gain} XP 🪄).`, 'craft'),
+      }
+      persist(next)
+      set(next)
+    },
+
+    eraseRune: (enchantId) => {
+      const s = get()
+      const mods = craftMods(s.metiers)
+      if (!mods.effacement) return
+      const def = getEnchant(enchantId)
+      if (!def || (s.runesOwned[enchantId] ?? 0) < 1) return
+      const frags = eraseFragments(def)
+      const runesOwned = { ...s.runesOwned, [enchantId]: (s.runesOwned[enchantId] ?? 0) - 1 }
+      if (runesOwned[enchantId] <= 0) delete runesOwned[enchantId]
+      const g = gainMetierXp(s, 'runiste', metierXpGain(3, 'modify', craftMods(s.metiers).runisteXpMult))
+      const next = {
+        ...s, runesOwned, runeFragments: s.runeFragments + frags, metiers: g.metiers,
+        log: pushLog(g.log, `🧽 Effacée : ${def.icon} ${def.name} → +${frags} Fragment${frags > 1 ? 's' : ''} runique${frags > 1 ? 's' : ''} 🜁.`, 'craft'),
+      }
+      persist(next)
+      set(next)
+    },
+
+    forgeRune: (enchantId) => {
+      const s = get()
+      const mods = craftMods(s.metiers)
+      if (!mods.forgeRunique) return
+      const def = getEnchant(enchantId)
+      if (!def) return
+      if (def.pact && !mods.pactes) return // les pactes exigent « Sang d'encre »
+      const crafted = s.runeCrafted[enchantId] ?? 0
+      const cost = runeForgeCost(def, crafted)
+      if (s.runeFragments < cost.fragments || s.poussiere < cost.poussiere || s.gold < cost.gold || s.cosmic < cost.cosmic) return
+      const g = gainMetierXp(s, 'runiste', metierXpGain(def.pact ? 12 : def.rule ? 8 : 6, 'create', mods.runisteXpMult))
+      const next = {
+        ...s,
+        runeFragments: s.runeFragments - cost.fragments,
+        poussiere: s.poussiere - cost.poussiere,
+        gold: s.gold - cost.gold,
+        cosmic: s.cosmic - cost.cosmic,
+        runesOwned: { ...s.runesOwned, [enchantId]: (s.runesOwned[enchantId] ?? 0) + 1 },
+        runeCrafted: { ...s.runeCrafted, [enchantId]: crafted + 1 },
+        metiers: g.metiers,
+        log: pushLog(g.log, `🔨 FORGE RUNIQUE : ${def.icon} ${def.name} ! (prochain exemplaire ×1,5)`, 'craft'),
+      }
+      persist(next)
+      set(next)
+    },
+
+    gambleRune: () => {
+      const s = get()
+      const mods = craftMods(s.metiers)
+      if (!mods.surchargeRunique || s.runeFragments < RUNE_GAMBLE_COST) return
+      const def = rollRuneDrop() // jamais un pacte
+      const g = gainMetierXp(s, 'runiste', metierXpGain(4, 'create', mods.runisteXpMult))
+      const next = {
+        ...s,
+        runeFragments: s.runeFragments - RUNE_GAMBLE_COST,
+        runesOwned: { ...s.runesOwned, [def.id]: (s.runesOwned[def.id] ?? 0) + 1 },
+        metiers: g.metiers,
+        log: pushLog(g.log, `🎲 Surcharge runique : ${def.icon} ${def.name} !`, 'craft'),
       }
       persist(next)
       set(next)
@@ -4279,7 +4641,7 @@ export const useGame = create<GameState>((set, get) => {
           const reward = CONTRACT_LINGOTS + mods.negociant
           lingots += reward
           forgeContracts = { ...forgeContracts, done: forgeContracts.done.map((d2, i) => (i === hitIdx ? true : d2)) }
-          const cg = gainMetierXp({ metiers: g.metiers, log }, 'forgeron', gain * 2)
+          const cg = gainMetierXp({ metiers: g.metiers, log, characters: s.characters }, 'forgeron', gain * 2)
           g.metiers = cg.metiers
           log = pushLog(cg.log, `📋 CONTRAT REMPLI : +${reward} Lingot${reward > 1 ? 's' : ''} 🧱 et double XP !`, 'craft')
         }

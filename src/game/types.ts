@@ -425,6 +425,8 @@ export interface Enemy {
   vuln?: { mult: number; remaining: number }
   /** Brèche (🥁 Tambour de siège v0.26) : fraction d'armure rongée. Transitoire. */
   sunder?: { pct: number; remaining: number }
+  /** ⏳ Grain de sable (rune v0.26) : première incantation déjà interrompue. Transitoire. */
+  interrupted?: boolean
   /** Furie du survivant (duo de boss) : déjà enragé, ne se redéclenche pas. */
   enraged?: boolean
   /** Âge du combat (s) contre cet ennemi — transitoire, pour le Sablier de l'Acharné. */

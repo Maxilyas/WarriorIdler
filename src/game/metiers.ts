@@ -379,19 +379,41 @@ export const METIER_NODES: Record<MetierId, MetierNode[]> = {
     { id: 'catalogue', name: 'Catalogue', icon: '📖', maxRank: 1, minLevel: 30, branch: 'negoce',
       desc: 'Avoir possédé chaque gemme au moins une fois : +2% sur TOUS les paramètres de gemmes.' },
   ],
+  // v0.26 — arbre REFONDU : tronc (gravure, atelier runique) + Chronomancie + Législation
+  // + Pactes. Specs étagées I→V exclusives. ~45 rangs + fillers.
   runiste: [
+    /* — tronc commun — */
     { id: 'gravure', name: 'Gravure', icon: '🪄', maxRank: 1,
       desc: 'Débloque la GRAVURE : une rune par pièce d\'équipement (runes de TEMPS).' },
     { id: 'palimpseste', name: 'Palimpseste', icon: '📜', maxRank: 3, requires: 'gravure',
       desc: '−15% du coût de gravure par rang.' },
     { id: 'calligraphie', name: 'Calligraphie', icon: '✒️', maxRank: 3, minLevel: 5,
       desc: '+20% d\'XP de Runiste par rang.' },
-    { id: 'regles', name: 'Lois du monde', icon: '⚖️', maxRank: 1, minLevel: 8, minStage: 50, requires: 'gravure',
-      desc: 'Débloque les runes de RÈGLE : elles tordent le fonctionnement du jeu (loot, clés, biomes).' },
-    { id: 'specChrono', name: 'Chronomancien', icon: '⏳', maxRank: 1, minLevel: 15, exclusive: 'runiste-spec', requires: 'gravure',
-      desc: 'SPÉCIALISATION : les runes de TEMPS sont +50% efficaces (Premier élan +75%, Boucle 30 s, Sursis 40 s, Dilatation +75%). Exclusif avec Législateur.' },
-    { id: 'specLegislateur', name: 'Législateur', icon: '⚖️', maxRank: 1, minLevel: 15, exclusive: 'runiste-spec', requires: 'regles',
-      desc: 'SPÉCIALISATION : les runes de RÈGLE sont amplifiées (Karma /25 kills, Économe 25%, Transmutation ×3). Exclusif avec Chronomancien.' },
+    { id: 'effacement', name: 'Effacement', icon: '🧽', maxRank: 1, minLevel: 4, requires: 'gravure',
+      desc: 'Débloque l\'EFFACEMENT : sacrifier une rune possédée → Fragments runiques 🜁 (1 temps · 2 règle).' },
+    { id: 'forgeRunique', name: 'Forge runique', icon: '🔨', maxRank: 1, minLevel: 10, requires: 'effacement',
+      desc: 'Débloque la FORGE RUNIQUE : fragments 🜁 + 🌌 + or → la rune de ton CHOIX (coût ×1,5 par exemplaire).' },
+    { id: 'surchargeRunique', name: 'Surcharge runique', icon: '🎲', maxRank: 1, minLevel: 18, requires: 'effacement',
+      desc: 'Débloque la SURCHARGE : 3 fragments 🜁 → une rune ALÉATOIRE (jamais un pacte). Le gamble du Runiste.' },
+    { id: 'greffier', name: 'Greffier', icon: '🖋️', maxRank: 3, minLevel: 7,
+      desc: '+10% de chance de DROP de rune (raids, donjons) par rang.' },
+    /* — ⏳ Chronomancie — */
+    { id: 'specChrono', name: 'Chronomancien', icon: '⏳', maxRank: 5, minLevel: 15, exclusive: 'runiste-spec', requires: 'gravure', branch: 'chrono',
+      desc: '◈ I→V : les runes de TEMPS gagnent +15% / +30% / +50% / +65% / +80% d\'efficacité.' },
+    { id: 'horloger', name: 'Horloger', icon: '🕰️', maxRank: 3, minLevel: 9, requires: 'gravure', branch: 'chrono',
+      desc: '+5% d\'efficacité des runes de TEMPS par rang (se cumule avec le Chronomancien).' },
+    /* — ⚖️ Législation — */
+    { id: 'regles', name: 'Lois du monde', icon: '⚖️', maxRank: 1, minLevel: 8, minStage: 50, requires: 'gravure', branch: 'lois',
+      desc: 'Débloque les runes de RÈGLE : elles tordent le fonctionnement du jeu (loot, clés, économie).' },
+    { id: 'specLegislateur', name: 'Législateur', icon: '🏛️', maxRank: 5, minLevel: 15, exclusive: 'runiste-spec', requires: 'regles', branch: 'lois',
+      desc: '◈ I→V : règles AMPLIFIÉES aux étages III (Karma /25, Économe 25%, Transmutation ×3, knobs +25%) et V (Économe 35%, ×4, knobs +50%).' },
+    /* — 🩸 Pactes — */
+    { id: 'pactes', name: 'Sang d\'encre', icon: '🩸', maxRank: 1, minLevel: 12, minStage: 60, requires: 'gravure', branch: 'pactes',
+      desc: 'Débloque la gravure des PACTES : un keystone bonus/malus, UN SEUL actif par équipe. Forgés, jamais droppés.' },
+    { id: 'specPactiste', name: 'Pactiste', icon: '🖤', maxRank: 5, minLevel: 15, exclusive: 'runiste-spec', requires: 'pactes', branch: 'pactes',
+      desc: '◈ I→V : les MALUS des pactes sont réduits de 5% / 10% / 15% / 20% / 30%.' },
+    { id: 'doublePacte', name: 'Double pacte', icon: '⛓️', maxRank: 1, minLevel: 50, requires: 'specPactiste', requiresRank: 5, branch: 'pactes',
+      desc: 'DEUX pactes actifs simultanément — mais leurs malus repassent ×1,5. Le nœud le plus dangereux du jeu.' },
   ],
   alchimiste: [
     { id: 'quintessence', name: 'Quintessence', icon: '⚗️', maxRank: 1,
@@ -588,10 +610,24 @@ export interface CraftMods {
   ruleRunes: boolean
   enchantCostMult: number
   runisteXpMult: number
-  /** ◈ Chronomancien : efficacité des runes de TEMPS (1 ou 1.5). */
+  /** ◈ Chronomancien I→V + Horloger : efficacité des runes de TEMPS (≥ 1). */
   runisteTempo: number
-  /** ◈ Législateur : runes de RÈGLE amplifiées. */
+  /** ◈ Législateur : étage (0–5) — amplifications aux étages III et V. */
+  ruleAmpTier: number
+  /** Compat : règles amplifiées (étage ≥ 3 du Législateur). */
   loiAmplifiee: boolean
+  /** 🩸 Gravure des Pactes débloquée. */
+  pactes: boolean
+  /** ◈ Pactiste : multiplicateur des MALUS de pacte (≤ 1). */
+  pactMalusMult: number
+  /** ⛓️ Double pacte : 2 pactes actifs (malus ×1,5). */
+  doublePacte: boolean
+  /** Atelier runique : Effacement / Forge / Surcharge débloqués. */
+  effacement: boolean
+  forgeRunique: boolean
+  surchargeRunique: boolean
+  /** Greffier : multiplicateur de chance de drop de rune (≥ 1). */
+  greffierMult: number
   /* Alchimiste */
   quint: boolean
   /** Bonus multiplicatif d'éclats au recyclage (1 = aucun). */
@@ -684,8 +720,17 @@ export function craftMods(metiers: MetiersState): CraftMods {
     ruleRunes: r('runiste', 'regles') > 0,
     enchantCostMult: Math.max(0.4, 1 - r('runiste', 'palimpseste') * 0.15),
     runisteXpMult: 1 + r('runiste', 'calligraphie') * 0.2,
-    runisteTempo: r('runiste', 'specChrono') > 0 ? 1.5 : 1,
-    loiAmplifiee: r('runiste', 'specLegislateur') > 0,
+    // ◈ Chronomancien I→V : 1,15 / 1,3 / 1,5 / 1,65 / 1,8 — + Horloger (+5%/rang).
+    runisteTempo: [1, 1.15, 1.3, 1.5, 1.65, 1.8][Math.min(5, r('runiste', 'specChrono'))] + r('runiste', 'horloger') * 0.05,
+    ruleAmpTier: r('runiste', 'specLegislateur'),
+    loiAmplifiee: r('runiste', 'specLegislateur') >= 3,
+    pactes: r('runiste', 'pactes') > 0,
+    pactMalusMult: 1 - [0, 0.05, 0.1, 0.15, 0.2, 0.3][Math.min(5, r('runiste', 'specPactiste'))],
+    doublePacte: r('runiste', 'doublePacte') > 0,
+    effacement: r('runiste', 'effacement') > 0,
+    forgeRunique: r('runiste', 'forgeRunique') > 0,
+    surchargeRunique: r('runiste', 'surchargeRunique') > 0,
+    greffierMult: 1 + r('runiste', 'greffier') * 0.1,
     quint: r('alchimiste', 'quintessence') > 0,
     recycleMult: (1 + r('alchimiste', 'distillation') * 0.1) * (r('alchimiste', 'specDistillateur') > 0 ? 1.25 : 1),
     quintDropMult: 1 + r('alchimiste', 'condensation') * 0.2,

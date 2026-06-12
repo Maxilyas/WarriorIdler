@@ -146,6 +146,8 @@ export interface GenerateOptions {
   forceStat?: SecondaryStat
   /** Rareté minimale garantie (coffres) : remonte la rareté tirée si trop basse. */
   minTier?: number
+  /** 🕳️ Tisse-châsse (rune v0.26) : chance SUPPLÉMENTAIRE d'ajouter une châsse au drop. */
+  socketLuck?: number
 }
 
 const OFFENSIVE_POOL: OffensiveStat[] = ['force', 'agilite', 'intelligence']
@@ -219,7 +221,8 @@ export function generateItem(opts: GenerateOptions): Item {
     endurance,
     orientation,
     affixes,
-    sockets: rollSockets(rarity.tier), // v0.25 : châsses RARES (roulées), plus déterministes par rareté
+    // v0.25 : châsses RARES (roulées) · v0.26 : 🕳️ Tisse-châsse peut en ajouter une au drop.
+    sockets: Math.min(3, rollSockets(rarity.tier) + (opts.socketLuck && Math.random() < opts.socketLuck ? 1 : 0)),
     ...(damageType ? { damageType } : {}),
     ...(unique ? { unique } : {}),
   }

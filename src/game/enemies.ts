@@ -99,11 +99,12 @@ export function stageResistRamp(stage: number): number {
   return Math.min(RESIST_RAMP_CAP, (stage - RESIST_RAMP_FROM) * RESIST_RAMP_PER_STAGE)
 }
 
-/** Crée l'ennemi correspondant à un palier (stage) dans un biome donné. Boss tous les 10 paliers. */
-export function makeEnemy(stage: number, biome: BiomeId = 'physique'): Enemy {
+/** Crée l'ennemi correspondant à un palier (stage) dans un biome donné. Boss tous les 10 paliers.
+ *  `championMult` (v0.26, 🍖 rune d'Appât) : multiplie la chance d'apparition des champions ✦. */
+export function makeEnemy(stage: number, biome: BiomeId = 'physique', championMult = 1): Enemy {
   const isBoss = stage % 10 === 0
   // Champion ✦ : rencontre rare et ALÉATOIRE (l'imprévu qui casse la routine du farm).
-  const isChampion = !isBoss && stage > 10 && Math.random() < CHAMPION_CHANCE
+  const isChampion = !isBoss && stage > 10 && Math.random() < CHAMPION_CHANCE * championMult
   const isElite = !isBoss && !isChampion && stage % ELITE_EVERY === 0 && stage > ELITE_EVERY
   // Trait déterministe sur certains paliers (cycle), hors boss/élite/champion.
   const trait = !isBoss && !isElite && !isChampion && stage % 3 === 0 ? TRAITS[Math.floor(stage / 3) % TRAITS.length] : undefined

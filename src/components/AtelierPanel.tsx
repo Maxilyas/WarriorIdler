@@ -14,7 +14,7 @@ import {
   CORPS, corpsBonusFor, signatureLingotCost, smeltLingots, MASTERWORK_LINGOTS,
   type MetierId,
 } from '../game/metiers'
-import { ENCHANTS } from '../game/enchants'
+import { ENCHANTS, TIME_RUNES, RULE_RUNES, PACT_RUNES, eraseFragments, runeForgeCost, RUNE_GAMBLE_COST } from '../game/enchants'
 import {
   COND_GEM_LIST, GEM_FAMILIES, GEM_CUT_COST, GEM_FUSE_COUNT, GEM_FUSE_COST, GEM_CORRUPT_COST, GEM_QUALITIES,
   parseCondKey, gemDesc, gemMaxRank, grindDust, corruptOdds, cutQualityOdds,
@@ -980,51 +980,89 @@ function GemWorkshop() {
 function RunisteWorkshop() {
   const metiers = useGame((s) => s.metiers)
   const runesOwned = useGame((s) => s.runesOwned)
+  const runeFragments = useGame((s) => s.runeFragments)
+  const runeCrafted = useGame((s) => s.runeCrafted)
+  const poussiere = useGame((s) => s.poussiere)
+  const gold = useGame((s) => s.gold)
+  const cosmic = useGame((s) => s.cosmic)
+  const eraseRune = useGame((s) => s.eraseRune)
+  const forgeRune = useGame((s) => s.forgeRune)
+  const gambleRune = useGame((s) => s.gambleRune)
   const mods = craftMods(metiers)
-  const timeRunes = ENCHANTS.filter((e) => e.time)
-  const ruleRunes = ENCHANTS.filter((e) => e.rule)
-  const ownedBadge = (id: string) => {
-    const n = runesOwned[id] ?? 0
+  const [forgeOpen, setForgeOpen] = useState(false)
+
+  const runeRow = (e: (typeof ENCHANTS)[number]) => {
+    const n = runesOwned[e.id] ?? 0
+    const cost = runeForgeCost(e, runeCrafted[e.id] ?? 0)
+    const canForge = mods.forgeRunique && runeFragments >= cost.fragments && poussiere >= cost.poussiere && gold >= cost.gold && cosmic >= cost.cosmic
     return (
-      <span className={'shrink-0 rounded px-1 text-[9px] font-semibold ' + (n > 0 ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-800 text-slate-600')}>
-        ×{n}
-      </span>
+      <div key={e.id} className="flex items-center gap-1.5 rounded bg-black/20 px-1.5 py-1 text-[10px]">
+        <span className={'shrink-0 rounded px-1 text-[9px] font-semibold ' + (n > 0 ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-800 text-slate-600')}>×{n}</span>
+        <span className="shrink-0 font-medium text-slate-200">{e.icon} {e.name}</span>
+        <span className="min-w-0 flex-1 truncate text-slate-500" title={e.description}>{e.description}</span>
+        {mods.effacement && n > 0 && (
+          <button
+            onClick={() => eraseRune(e.id)}
+            title={`Effacer → +${eraseFragments(e)} 🜁`}
+            className="shrink-0 rounded bg-slate-800 px-1.5 py-1 text-slate-400 hover:text-purple-200"
+          >
+            🧽 +{eraseFragments(e)} 🜁
+          </button>
+        )}
+        {forgeOpen && mods.forgeRunique && (
+          <button
+            onClick={() => forgeRune(e.id)}
+            disabled={!canForge}
+            title={`Forger : ${cost.fragments} 🜁 + ${cost.poussiere} 🌌 + ${(cost.gold / 1e6).toLocaleString('fr-FR')}M or${cost.cosmic ? ` + ${cost.cosmic} 💫` : ''}`}
+            className="shrink-0 rounded bg-purple-900/40 px-1.5 py-1 font-medium text-purple-200 hover:bg-purple-800/50 disabled:opacity-40"
+          >
+            🔨 {cost.fragments} 🜁
+          </button>
+        )}
+      </div>
     )
   }
 
   return (
     <div className="mb-3 rounded-xl border border-purple-800/40 bg-purple-950/10 p-2.5">
-      <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-purple-300">🪄 Stash de runes</div>
+      <div className="mb-1.5 flex items-center justify-between">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-purple-300">🪄 Atelier runique</span>
+        <span className="text-[10px] text-purple-200">🜁 {runeFragments} fragment{runeFragments > 1 ? 's' : ''}</span>
+      </div>
       <p className="mb-2 text-[9.5px] leading-snug text-slate-500">
-        v0.25 : les runes <b className="text-purple-300">TOMBENT</b> — en ☠️ raid surtout (chance ↑ avec le tier), rarement en
-        donjon ; les runes de RÈGLE sont 2× plus rares. Graver (depuis la fiche d'un objet)
-        <b className="text-amber-300"> consomme</b> l'exemplaire ; écraser ne rembourse pas.
+        Les runes TOMBENT (☠️ raids surtout) ; graver consomme l'exemplaire. v0.26 : 🧽 EFFACER une rune
+        rend des Fragments 🜁 · 🔨 FORGER la rune de ton CHOIX (coût ×1,5 par exemplaire) · les 🩸 PACTES
+        ne tombent jamais — forgés uniquement, un seul actif{mods.doublePacte ? ' (⛓️ deux, malus ×1,5)' : ''}.
         {!mods.enchant && ' 🔒 Apprends « Gravure » ci-dessus pour commencer.'}
       </p>
+      <div className="mb-2 flex flex-wrap gap-1.5">
+        {mods.forgeRunique && (
+          <button onClick={() => setForgeOpen((o) => !o)} className={'rounded px-2 py-1 text-[10px] font-medium ' + (forgeOpen ? 'bg-purple-600 text-slate-50' : 'bg-slate-800 text-slate-300')}>
+            🔨 Forge runique {forgeOpen ? 'ON' : ''}
+          </button>
+        )}
+        {mods.surchargeRunique && (
+          <button
+            onClick={() => gambleRune()}
+            disabled={runeFragments < RUNE_GAMBLE_COST}
+            className="rounded bg-fuchsia-900/40 px-2 py-1 text-[10px] font-medium text-fuchsia-200 hover:bg-fuchsia-800/50 disabled:opacity-40"
+          >
+            🎲 Surcharge · {RUNE_GAMBLE_COST} 🜁 → rune aléatoire
+          </button>
+        )}
+      </div>
       <div className="mb-1 text-[10px] font-semibold text-purple-300/80">
-        ⏳ Runes de TEMPS {mods.runisteTempo > 1 && <span className="font-normal text-emerald-400">— ◈ Chronomancien : +50% d'efficacité</span>}
+        ⏳ Runes de TEMPS {mods.runisteTempo > 1 && <span className="font-normal text-emerald-400">— efficacité ×{mods.runisteTempo.toFixed(2)}</span>}
       </div>
-      <div className="space-y-0.5">
-        {timeRunes.map((e) => (
-          <div key={e.id} className="flex items-center gap-1.5 rounded bg-black/20 px-1.5 py-1 text-[10px]">
-            {ownedBadge(e.id)}
-            <span className="shrink-0 font-medium text-slate-200">{e.icon} {e.name}</span>
-            <span className="min-w-0 flex-1 truncate text-slate-500">{e.description}</span>
-          </div>
-        ))}
-      </div>
+      <div className="space-y-0.5">{TIME_RUNES.map(runeRow)}</div>
       <div className="mt-2 mb-1 text-[10px] font-semibold text-purple-300/80">
-        ⚖️ Runes de RÈGLE {!mods.ruleRunes ? <span className="font-normal text-slate-500">— 🔒 nœud « Lois du monde »</span> : mods.loiAmplifiee ? <span className="font-normal text-emerald-400">— ◈ Législateur : amplifiées</span> : null}
+        ⚖️ Runes de RÈGLE {!mods.ruleRunes ? <span className="font-normal text-slate-500">— 🔒 nœud « Lois du monde »</span> : mods.ruleAmpTier >= 3 ? <span className="font-normal text-emerald-400">— ◈ Législateur {['', 'I', 'II', 'III', 'IV', 'V'][mods.ruleAmpTier]} : amplifiées</span> : null}
       </div>
-      <div className={'space-y-0.5 ' + (mods.ruleRunes ? '' : 'opacity-50')}>
-        {ruleRunes.map((e) => (
-          <div key={e.id} className="flex items-center gap-1.5 rounded bg-black/20 px-1.5 py-1 text-[10px]">
-            {ownedBadge(e.id)}
-            <span className="shrink-0 font-medium text-slate-200">{e.icon} {e.name}</span>
-            <span className="min-w-0 flex-1 truncate text-slate-500">{e.description}</span>
-          </div>
-        ))}
+      <div className={'space-y-0.5 ' + (mods.ruleRunes ? '' : 'opacity-50')}>{RULE_RUNES.map(runeRow)}</div>
+      <div className="mt-2 mb-1 text-[10px] font-semibold text-rose-300/90">
+        🩸 PACTES {!mods.pactes ? <span className="font-normal text-slate-500">— 🔒 nœud « Sang d'encre » (niv 12 · P60)</span> : <span className="font-normal text-slate-400">— un seul actif{mods.pactMalusMult < 1 ? ` · ◈ Pactiste : malus −${Math.round((1 - mods.pactMalusMult) * 100)}%` : ''}</span>}
       </div>
+      <div className={'space-y-0.5 ' + (mods.pactes ? '' : 'opacity-50')}>{PACT_RUNES.map(runeRow)}</div>
     </div>
   )
 }
