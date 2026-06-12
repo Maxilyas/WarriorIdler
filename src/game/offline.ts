@@ -60,7 +60,8 @@ export function simulateOffline(
   const items: Item[] = []
   for (let i = 0; i < dropCount; i++) items.push(generateItem({ ilvl: stageIlvl(stage), rarity: rollFarmRarity(stage, shift) }))
 
-  const sceaux = Math.floor(kills / 50) // ~1 sceau / 50 kills
+  // v0.25 : plus de Sceaux en farm (en ligne comme hors-ligne) — l'Antre des Failles est LA source.
+  const sceaux = 0
   const noyau = Math.floor(kills / 80)
 
   // Quintessence du biome : ~1% des kills, AUGMENTÉ par le palier (même formule que le store :

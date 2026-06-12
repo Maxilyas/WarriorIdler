@@ -2374,7 +2374,8 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
         eclats: Math.round(200 * tier * def.baseDifficulty),
         noyau: 3 + tier,
         gold: Math.round(400 * tier * def.baseDifficulty),
-        sceaux: 1,
+        sceaux: 0, // v0.25 : les Sceaux viennent de l'Antre des Failles, pas des raids
+
         fragments: raidFragments(def, tier),
         poussiere: Math.floor(tier / 2),
         cosmic,
@@ -2677,10 +2678,8 @@ export const useGame = create<GameState>((set, get) => {
           stage += 1
           biomeBest = { ...biomeBest, [s.activeBiome]: Math.max(biomeBest[s.activeBiome] ?? 0, stage) }
           bestStage = Math.max(bestStage, stage)
-          if (stage % 5 === 0) {
-            sceaux += 1
-            log = pushLog(log, '🔑 Sceau de faille obtenu.', 'info')
-          }
+          // (v0.25 : plus de Sceau tous les 5 paliers — l'Antre des Failles est LA source de Sceaux,
+          //  sinon le donjon ne sert à rien. Appoints payants : forge de Sceau, Trousseau du Pilleur.)
           // Déblocage des personnages.
           if (bestStage >= CHAR2_STAGE && characters.length < 2) {
             characters = [...characters, makeCharacter(RECRUE_NAMES[0], highestLevel(characters), 'agilite')]
