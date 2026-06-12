@@ -6,7 +6,7 @@ import type { Character, DamageType, GemInstance } from './types'
  * Plus AUCUNE stat plate : chaque gemme déclenche un COMPORTEMENT de combat. Trois familles :
  *  - 🥁 RYTHME        : compteurs (attaques, sorts, kills) — le tempo du combat.
  *  - 🌊 FLUX          : gestion de ressources (PV, recharges, boucliers).
- *  - 🌍 ENVIRONNEMENT : l'état du monde (télégraphes, Surcharge, Élan, packs).
+ *  - 🌍 ENVIRONNEMENT : l'état du monde (télégraphes, Surcharge, packs).
  *
  * Chaque gemme a UN paramètre chiffré, amélioré par la RECOUPE du Joaillier (rang 1→maxRank,
  * coût en poussière de gemme 💠). Les effets sont agrégés au niveau de l'ÉQUIPE (meilleur rang
@@ -28,7 +28,7 @@ export const GEM_FAMILIES: Record<GemFamily, { name: string; icon: string; color
 export type CondGemId =
   | 'metronome' | 'echo' | 'crescendo' | 'overkill' | 'conquete'
   | 'pacte' | 'souffle' | 'tresorerie' | 'acharne'
-  | 'opportuniste' | 'orage' | 'nomade' | 'nuee'
+  | 'opportuniste' | 'orage' | 'nuee'
 
 export interface CondGemDef {
   id: CondGemId
@@ -103,11 +103,7 @@ export const COND_GEMS: Record<CondGemId, CondGemDef> = {
     values: [15, 20, 25, 32, 40],
     desc: (v) => `Dans le biome en ⚡ Surcharge : +${v}% de dégâts.`,
   },
-  nomade: {
-    id: 'nomade', family: 'environnement', name: 'Semelles du Nomade', icon: '👣', color: '#22d3ee',
-    values: [10, 14, 18, 24, 30],
-    desc: (v) => `Tant que l'🌀 Élan du voyageur est actif : +${v}% de dégâts supplémentaires.`,
-  },
+  // (v0.25 : « Semelles du Nomade » supprimée avec l'Élan du voyageur — migration : broyée en 🔹.)
   nuee: {
     id: 'nuee', family: 'environnement', name: 'Cœur de Nuée', icon: '🐝', color: '#66bb6a',
     values: [7, 8, 9, 10, 12],
@@ -226,8 +222,6 @@ export interface CondMods {
   opportuniste?: number
   /** Chasseur d'orage : bonus dans le biome en Surcharge (fraction). */
   orage?: number
-  /** Nomade : bonus tant que l'Élan est actif (fraction). */
-  nomade?: number
 }
 
 /** Meilleur rang porté par gemme sur TOUTE l'équipe.
@@ -275,7 +269,6 @@ export function condGemMods(characters: Character[], familyBonus?: GemFamily | n
     tresorerieCap: pct('tresorerie'),
     opportuniste: pct('opportuniste'),
     orage: pct('orage'),
-    nomade: pct('nomade'),
   }
 }
 

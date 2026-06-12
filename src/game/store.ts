@@ -40,9 +40,8 @@ import {
 import { makeEnemy, isBossStage, stageIlvl, stageLuckTier } from './enemies'
 import { BIOME_IDS, biomeUnlocked, getBiomeDef, type BiomeId } from './biomes'
 import {
-  maitriseBonus, surgeBiome, elanActive,
-  SURGE_GOLD_XP_MULT, SURGE_QUINT_MULT, ELAN_DMG_MULT,
-  ELAN_VAGABOND_MULT, type ElanState,
+  maitriseBonus, surgeBiome,
+  SURGE_GOLD_XP_MULT, SURGE_QUINT_MULT,
 } from './biomeBonus'
 import { RARITIES, RARITY_LIST } from './rarities'
 import { SECONDARY_STATS } from './stats'
@@ -238,8 +237,6 @@ interface SaveData {
   biomeBest: Record<BiomeId, number>
   /** Verrou de farm : fige la progression au palier courant. */
   farmLock: boolean
-  /** Élan du voyageur : +dégâts temporaires dans le biome fraîchement rejoint. */
-  elan?: ElanState
   gold: number
   essence: number
   noyau: number
@@ -995,7 +992,6 @@ function persist(s: GameState) {
     biomeStages: { ...s.biomeStages, [s.activeBiome]: s.stage },
     biomeBest: s.biomeBest,
     farmLock: s.farmLock,
-    elan: s.elan,
     gold: s.gold,
     essence: s.essence,
     noyau: s.noyau,
@@ -1291,7 +1287,7 @@ interface CombatMods {
   fightTime?: number
   /** Multiplicateur plat des dégâts ennemis (enrage dur / acharnement de raid). */
   dmgMult?: number
-  /** Multiplicateur plat des dégâts du HÉROS (harmonie des biomes, élan, crescendo, environnement). */
+  /** Multiplicateur plat des dégâts du HÉROS (Maîtrise des Zones, crescendo, environnement). */
   heroMult?: number
   /** Gemmes de condition actives sur l'équipe (triggers de combat — voir condGems.ts). */
   cond?: CondMods
@@ -2499,18 +2495,15 @@ export const useGame = create<GameState>((set, get) => {
         return
       }
 
-      // Bonus de biome : harmonie (plus petit record) partout, élan du voyageur dans le biome rejoint.
-      // + gemmes d'ENVIRONNEMENT (🌩️ Orage en Surcharge, 👣 Nomade pendant l'Élan) et 📯 Crescendo.
+      // Bonus de biome : Maîtrise des Zones partout + gemme d'ENVIRONNEMENT (🌩️ Orage en
+      // Surcharge) et 📯 Crescendo. (v0.25 : Élan du voyageur et gemme Nomade supprimés.)
       const cmodsTick = craftMods(s.metiers)
       const cond = condGemMods(s.characters, cmodsTick.gemFamilyBonus)
       const runes = timeRuneMods(equippedTimeRunes(s.characters), cmodsTick.runisteTempo)
       const surgedNow = surgeBiome() === s.activeBiome
-      const elanOn = elanActive(s.elan, s.activeBiome)
       const heroMult = (1 + maitriseBonus(s.biomeBest))
-        * (elanOn ? s.elan?.mult ?? ELAN_DMG_MULT : 1)
         * (1 + crescendoBonus(cond.crescendoCap))
         * (surgedNow && cond.orage ? 1 + cond.orage : 1)
-        * (elanOn && cond.nomade ? 1 + cond.nomade : 1)
       const res = partyCombatStep(s.characters, s.enemy, dt, { heroMult, cond, runes })
       let chars = res.chars
       const enemy = res.enemy
@@ -2710,20 +2703,10 @@ export const useGame = create<GameState>((set, get) => {
       // Mémorise le palier du biome quitté, charge celui du biome rejoint.
       const biomeStages = { ...s.biomeStages, [s.activeBiome]: s.stage }
       const stage = Math.max(1, biomeStages[biome] ?? 1)
-      // ÉLAN DU VOYAGEUR : +20% dégâts 10 min dans le biome rejoint.
-      // Rune du Vagabond : +30%, 20 min — amplifiée par ◈ Législateur : +40%, 30 min.
-      const vagabond = equippedRules(s.characters).has('vagabond')
-      const loiV = vagabond && craftMods(s.metiers).loiAmplifiee
-      const elanMin = loiV ? 30 : vagabond ? 20 : 10
-      const elan: ElanState = {
-        biome,
-        until: Date.now() + elanMin * 60 * 1000,
-        mult: loiV ? 1.4 : vagabond ? ELAN_VAGABOND_MULT : ELAN_DMG_MULT,
-      }
       const next = {
-        ...s, activeBiome: biome, biomeStages, stage, elan,
+        ...s, activeBiome: biome, biomeStages, stage,
         enemy: makeEnemy(stage, biome),
-        log: pushLog(s.log, `🧭 Tu pars pour : ${getBiomeDef(biome).icon} ${getBiomeDef(biome).name} — 🌀 Élan du voyageur : +${Math.round(((elan.mult ?? 1.2) - 1) * 100)}% dégâts (${elanMin} min).`, 'info'),
+        log: pushLog(s.log, `🧭 Tu pars pour : ${getBiomeDef(biome).icon} ${getBiomeDef(biome).name}.`, 'info'),
       }
       persist(next)
       set(next)

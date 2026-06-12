@@ -309,7 +309,7 @@ export function CharacterPanel({ view = 'apercu' }: { view?: CharacterView }) {
                 )}
                 <p className="mt-1.5 text-[9.5px] leading-snug text-slate-600">
                   DPS « de fiche », hors cible : l'armure, les résistances/vulnérabilités, la Pénétration, les
-                  Dégâts aux boss et les bonus conditionnels (PV bas, exécution, harmonie, élan) s'appliquent en combat.
+                  Dégâts aux boss et les bonus conditionnels (PV bas, exécution, Maîtrise des Zones) s'appliquent en combat.
                 </p>
               </div>
             )

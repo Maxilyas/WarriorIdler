@@ -13,7 +13,7 @@ import { RARITIES } from './rarities'
  * ◈ Chronomancien (runes de temps +50% efficaces) ↔ ◈ Législateur (règles amplifiées).
  */
 
-export type RuleId = 'karma' | 'econome' | 'transmutation' | 'vagabond'
+export type RuleId = 'karma' | 'econome' | 'transmutation'
 export type TimeRuneId = 'premierElan' | 'boucle' | 'sursis' | 'dilatation'
 
 export interface EnchantDef {
@@ -46,8 +46,7 @@ export const ENCHANTS: EnchantDef[] = [
     description: '15% de chance de ne PAS consommer la clé (Sceau / Orbe) — pour toi ET tes automates.' },
   { id: 'runeTransmutation', name: 'Rune de Transmutation brute', icon: '⚗️', rare: true, rule: 'transmutation',
     description: 'Les monstres NORMAUX ne droppent plus d\'objets ; en échange, chance de Quintessence et de Gemme ×2. (Boss, élites et champions droppent toujours.)' },
-  { id: 'runeVagabond', name: 'Rune du Vagabond', icon: '🌀', rare: true, rule: 'vagabond',
-    description: 'L\'Élan du voyageur dure 20 minutes (au lieu de 10) et donne +30% de dégâts (au lieu de +20%).' },
+  // (v0.25 : « Rune du Vagabond » supprimée avec l'Élan du voyageur — migration : effacée, +8 🌌.)
 ]
 
 const BY_ID = new Map(ENCHANTS.map((e) => [e.id, e]))

@@ -1,5 +1,4 @@
 import { BIOME_IDS, type BiomeId } from './biomes'
-import type { DamageType } from './types'
 
 /**
  * BONUS DE BIOME (v0.21) — quatre mécaniques qui cassent le « mono-biome » :
@@ -11,13 +10,8 @@ import type { DamageType } from './types'
  *    pas une source de puissance (l'ex-Harmonie min-based donnait jusqu'à +100%).
  * 2. SURCHARGE : un biome tournant (30 min, heure réelle) donne +50% or/XP et ×2
  *    quintessence → la rotation opportuniste est récompensée.
- * 3. ÉLAN DU VOYAGEUR : changer de biome donne +20% de dégâts pendant 10 min dans
- *    le biome rejoint → la carotte du nomade (jamais punitif).
- * 4. PRÉDATION : les ennemis d'un biome élémentaire RÉSISTENT à leur propre élément
- *    et sont VULNÉRABLES à l'élément « prédateur » → le build feu farme mieux la
- *    Toundra (vulnérable au feu) que les Terres de Cendres… où tombent pourtant
- *    le butin et les quintessences de feu. Tension assumée.
- *    (La 5e mécanique — gemmes exclusives par biome — vit dans gems.ts.)
+ * (v0.25 : l'ÉLAN DU VOYAGEUR et la PRÉDATION ont été SUPPRIMÉS — retours joueur : bruit
+ *  sans vrai choix. La 3e mécanique — gemmes exclusives par biome — vit dans condGems.ts.)
  */
 
 // ---- 1) MAÎTRISE DES ZONES (v0.25) — remplace l'ancienne « Harmonie » ----
@@ -66,35 +60,4 @@ export function surgeRemainingMs(now = Date.now()): number {
   return SURGE_INTERVAL_MS - (now % SURGE_INTERVAL_MS)
 }
 
-// ---- 3) Élan du voyageur ----
-
-export const ELAN_DURATION_MS = 10 * 60 * 1000
-export const ELAN_DMG_MULT = 1.2
-/** Rune du Vagabond : élan prolongé et renforcé. */
-export const ELAN_VAGABOND_DURATION_MS = 20 * 60 * 1000
-export const ELAN_VAGABOND_MULT = 1.3
-
-export interface ElanState {
-  biome: BiomeId
-  until: number
-  /** Multiplicateur effectif (1.2 de base, 1.3 avec la Rune du Vagabond). */
-  mult?: number
-}
-
-/** L'élan est-il actif (bon biome + fenêtre temporelle) ? */
-export function elanActive(elan: ElanState | undefined, activeBiome: BiomeId, now = Date.now()): boolean {
-  return !!elan && elan.biome === activeBiome && now < elan.until
-}
-
-// ---- 4) Cycle de prédation ----
-
-/** Résistance des ennemis d'un biome élémentaire à LEUR élément. */
-export const PREDATION_SELF_RESIST = 0.15
-/** Vulnérabilité à l'élément prédateur (négatif = dégâts amplifiés). */
-export const PREDATION_VULN = -0.2
-
-/** Élément qui « chasse » chaque biome (même table que les vulnérabilités de raid). */
-export const BIOME_VULN: Record<DamageType, DamageType> = {
-  physique: 'arcane', feu: 'froid', froid: 'feu', foudre: 'nature',
-  nature: 'foudre', arcane: 'ombre', ombre: 'arcane',
-}
+// (v0.25 : sections « Élan du voyageur » et « Cycle de prédation » supprimées.)

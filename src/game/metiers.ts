@@ -193,9 +193,9 @@ export const METIER_NODES: Record<MetierId, MetierNode[]> = {
     { id: 'regles', name: 'Lois du monde', icon: '⚖️', maxRank: 1, minLevel: 8, minStage: 50, requires: 'gravure',
       desc: 'Débloque les runes de RÈGLE : elles tordent le fonctionnement du jeu (loot, clés, biomes).' },
     { id: 'specChrono', name: 'Chronomancien', icon: '⏳', maxRank: 1, minLevel: 15, exclusive: 'runiste-spec', requires: 'gravure',
-      desc: 'SPÉCIALISATION : les runes de TEMPS sont +50% efficaces (élan +75%, Boucle 30 s, Sursis 40 s, Dilatation +75%). Exclusif avec Législateur.' },
+      desc: 'SPÉCIALISATION : les runes de TEMPS sont +50% efficaces (Premier élan +75%, Boucle 30 s, Sursis 40 s, Dilatation +75%). Exclusif avec Législateur.' },
     { id: 'specLegislateur', name: 'Législateur', icon: '⚖️', maxRank: 1, minLevel: 15, exclusive: 'runiste-spec', requires: 'regles',
-      desc: 'SPÉCIALISATION : les runes de RÈGLE sont amplifiées (Karma /25 kills, Économe 25%, Transmutation ×3, Vagabond +40% / 30 min). Exclusif avec Chronomancien.' },
+      desc: 'SPÉCIALISATION : les runes de RÈGLE sont amplifiées (Karma /25 kills, Économe 25%, Transmutation ×3). Exclusif avec Chronomancien.' },
   ],
   alchimiste: [
     { id: 'quintessence', name: 'Quintessence', icon: '⚗️', maxRank: 1,

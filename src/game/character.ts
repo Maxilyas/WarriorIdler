@@ -203,7 +203,7 @@ export function charDps(char: Character): number {
  * (theoreticalDps + abilityDps), il ne peut donc pas diverger. Sert la transparence : « pourquoi
  * cette pièce monte/baisse mon DPS ? » a toujours une réponse lisible ici.
  * Le DPS de fiche est HORS CIBLE : armure, résistances/vulnérabilités, pénétration, dégâts vs boss
- * et bonus conditionnels (PV bas/hauts, exécution, harmonie, élan) s'appliquent en combat réel.
+ * et bonus conditionnels (PV bas/hauts, exécution, Maîtrise des Zones) s'appliquent en combat réel.
  */
 export interface DpsBreakdown {
   total: number
