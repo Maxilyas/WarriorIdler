@@ -224,6 +224,10 @@ export interface Item {
   reforgeCount?: number
   /** PERÇAGE du Joaillier (v0.26) : une châsse ajoutée à la main — une seule fois par objet. */
   drilled?: boolean
+  /** ⭐ POLISSAGE du Forgeron (v0.26) : qualité de forge 1–5 (budget déjà appliqué). */
+  stars?: number
+  /** 🔥 TREMPE LENTE (v0.26) : nombre d'iLvl déjà gagnés au bac de trempe (5 max par objet). */
+  trempeCount?: number
   /** Pièce de SET (id du registre sets.ts) : bonus à paliers quand plusieurs pièces sont portées. */
   setId?: string
 }

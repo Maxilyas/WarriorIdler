@@ -480,6 +480,31 @@ export function createCost(rarityTier: number, ilvl: number): CraftCost {
   }
 }
 
+/* ---- ⭐ POLISSAGE (v0.26, Forgeron) : qualité de forge 1–5, budget de stats ± ---- */
+
+/** Tire la qualité ⭐ d'une création (« Main de maître » déplace les poids vers le haut). */
+export function rollStars(finRank = 0): number {
+  const w = [Math.max(5, 35 - 8 * finRank), 30, 22 + 2 * finRank, 10 + 3 * finRank, 3 + 3 * finRank]
+  const total = w.reduce((a, b) => a + b, 0)
+  let r = Math.random() * total
+  for (let i = 0; i < 5; i++) { r -= w[i]; if (r <= 0) return i + 1 }
+  return 3
+}
+
+/** Multiplicateur de budget par étoile : ⭐1 ×0,96 … ⭐3 ×1,04 … ⭐5 ×1,12. */
+export function starsMult(stars: number): number {
+  return 0.92 + 0.04 * stars
+}
+
+/** Applique la qualité ⭐ à une création (stats plates rescalées, % intacts) — MUTE l'objet. */
+export function applyStars(item: Item, stars: number): void {
+  const m = starsMult(stars)
+  item.stars = stars
+  item.primaryValue = Math.max(1, Math.round(item.primaryValue * m))
+  item.endurance = Math.max(1, Math.round(item.endurance * m))
+  item.affixes = item.affixes.map((a) => (a.kind === 'stat' ? { ...a, value: Math.max(1, Math.round(a.value * m)) } : a))
+}
+
 /** Rareté suivante, ou null si déjà au maximum. */
 export function nextRarity(r: RarityId): RarityId | null {
   const next = RARITY_LIST.find((x) => x.tier === RARITIES[r].tier + 1)

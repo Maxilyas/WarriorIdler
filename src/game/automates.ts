@@ -41,8 +41,9 @@ export interface Automate {
   waiting?: boolean
 }
 
-export const AUTOMATE_MAX = 3
-export const AUTOMATE_NAMES = ['Rouage', 'Enclume', 'Vigile']
+/** v0.26 : 4 machines — la 4e exige le nœud « Manufacture » (arbre du Forgeron niv 40 + P80). */
+export const AUTOMATE_MAX = 4
+export const AUTOMATE_NAMES = ['Rouage', 'Enclume', 'Vigile', 'Manufacture']
 
 /** Coûts de construction — croissance brutale assumée (sink de très fin de partie).
  *  L'ex-composante Savoir-faire 🔧 est remplacée par un niveau de Forgeron requis (metiers.ts). */
@@ -50,6 +51,7 @@ export const AUTOMATE_COSTS: { gold: number; poussiere: number; fragments: numbe
   { gold: 5_000_000, poussiere: 300, fragments: 100, cosmic: 0 },
   { gold: 25_000_000, poussiere: 1_200, fragments: 400, cosmic: 10 },
   { gold: 120_000_000, poussiere: 5_000, fragments: 1_500, cosmic: 50 },
+  { gold: 500_000_000, poussiere: 18_000, fragments: 5_000, cosmic: 200 },
 ]
 
 /** Efficacité de récolte : 60% de base, +5% par niveau de rendement (max 85%). */

@@ -91,6 +91,7 @@ export function ComparePanel({ item, char, previewDelta, equipped, occupied, onE
           </div>
           <div className="text-[10px] text-slate-400">
             <span style={{ color: rarity.color }}>{rarity.name}</span> · {type.name} · iLvl {item.ilvl}
+            {item.stars ? <span className="text-amber-300" title={`Polissage du Forgeron : qualité ⭐${item.stars}/5`}> · ⭐{item.stars}</span> : null}
             {' · '}
             <span className={item.orientation === 'offensif' ? 'text-rose-300' : item.orientation === 'defensif' ? 'text-emerald-300' : 'text-slate-300'}>
               {item.orientation === 'offensif' ? '⚔ Offensif' : item.orientation === 'defensif' ? '🛡 Défensif' : '⚖ Équilibré'}

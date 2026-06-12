@@ -15,6 +15,8 @@
  * les fonctions — le Savoir-faire 🔧 d'antan devient l'XP du Forgeron (plus une monnaie).
  */
 
+import type { ItemType, SecondaryStat } from './types'
+
 export type MetierId = 'forgeron' | 'joaillier' | 'runiste' | 'alchimiste'
 
 export interface MetierDef {
@@ -26,6 +28,48 @@ export interface MetierDef {
   verb: string
   /** Palier (bestStage) qui ouvre le métier. */
   unlockStage: number
+}
+
+/* ------------------------------------------------------------------ */
+/* Compagnonnages du Forgeron (v0.26) — spécialisation par TYPE de pièce */
+/* ------------------------------------------------------------------ */
+
+export type CorpsId = 'heaumier' | 'cuirassier' | 'equipementier' | 'orfevre'
+
+export interface CorpsDef {
+  id: CorpsId
+  name: string
+  icon: string
+  /** Types de pièces couverts (les ARMES restent hors spé — jugées bien réglées). */
+  types: ItemType[]
+  /** Affixes « Signature » (étage III) : garantis au CHOIX sur ces pièces. */
+  signatures: SecondaryStat[]
+}
+
+export const CORPS: Record<CorpsId, CorpsDef> = {
+  heaumier: { id: 'heaumier', name: 'Heaumier', icon: '🪖', types: ['tete', 'epaules'], signatures: ['critique', 'tenacite'] },
+  cuirassier: { id: 'cuirassier', name: 'Cuirassier', icon: '🥋', types: ['torse', 'jambes', 'armeSecondaire'], signatures: ['reductionDegats', 'barriere'] },
+  equipementier: { id: 'equipementier', name: 'Équipementier', icon: '🧤', types: ['mains', 'poignets', 'taille', 'pieds', 'cape'], signatures: ['hate', 'esquive'] },
+  orfevre: { id: 'orfevre', name: 'Orfèvre', icon: '💍', types: ['cou', 'anneau', 'bijou'], signatures: ['alteration', 'precision'] },
+}
+
+export const CORPS_LIST: CorpsDef[] = Object.values(CORPS)
+
+export function corpsOfType(type: ItemType): CorpsDef | undefined {
+  return CORPS_LIST.find((c) => c.types.includes(type))
+}
+
+/** Coût en Lingots 🧱 de l'affixe Signature (étage III) selon la rareté visée. */
+export function signatureLingotCost(rarityTier: number): number {
+  return Math.max(1, rarityTier - 4)
+}
+
+/** Coût en Lingots 🧱 du Chef-d'œuvre hebdomadaire (étage V). */
+export const MASTERWORK_LINGOTS = 10
+
+/** Lingots 🧱 rendus par la FONTE d'un objet (tier ≥ 4 ; le reste ne vaut pas le feu). */
+export function smeltLingots(rarityTier: number): number {
+  return Math.max(0, rarityTier - 3)
 }
 
 export const METIERS: Record<MetierId, MetierDef> = {
@@ -195,27 +239,75 @@ export function respecBranchCost(state: MetierState): number {
 }
 
 export const METIER_NODES: Record<MetierId, MetierNode[]> = {
+  // v0.26 — arbre REFONDU : tronc + Compagnonnages (corps de métier) + Prodige + Procédés
+  // + Industrialisation. ~62 rangs dépensables. Les ARMES restent hors spé (bien réglées).
   forgeron: [
+    /* — tronc commun — */
     { id: 'econome', name: 'Forge économe', icon: '💰', maxRank: 5,
       desc: '−4% des coûts de craft (éclats & matériaux) par rang.' },
-    { id: 'surillvl', name: 'Maître affûteur', icon: '⬆️', maxRank: 1, minLevel: 2, minStage: 20,
-      desc: 'Débloque le SURILLVL : augmenter l\'iLvl d\'un objet.' },
-    { id: 'transmute', name: 'Transmutateur', icon: '🔄', maxRank: 1, minLevel: 3, minStage: 20,
-      desc: 'Débloque la TRANSMUTATION : changer la stat primaire d\'un objet.' },
     { id: 'pedagogie', name: 'Pédagogie', icon: '📚', maxRank: 3, minLevel: 4,
       desc: '+20% d\'XP de Forgeron par rang.' },
-    { id: 'chance', name: 'Œil du maître', icon: '🎲', maxRank: 5, minLevel: 5,
-      desc: '+4% de chance de forger une rareté SUPÉRIEURE par rang (création).' },
-    { id: 'ascension', name: 'Grand-maître forgeron', icon: '✨', maxRank: 1, minLevel: 10, minStage: 50, requires: 'surillvl',
+    { id: 'specEconome', name: 'Maître Économe', icon: '🪙', maxRank: 1, minLevel: 15,
+      desc: '−15% de coûts de craft supplémentaires.' },
+    /* — 🛠️ Compagnonnages : 1 corps MAJEUR (I→V)… — */
+    { id: 'corpsHeaumier', name: 'Heaumier', icon: '🪖', maxRank: 5, minLevel: 10, exclusive: 'forgeron-corps', branch: 'corps',
+      desc: '◈ Tête & Épaules — I : −15% coûts, +XP · II : +1 iLvl · III : affixe SIGNATURE au choix (crit/ténacité) · IV : +12% rareté sup. · V : Chef-d\'œuvre hebdo.' },
+    { id: 'corpsCuirassier', name: 'Cuirassier', icon: '🥋', maxRank: 5, minLevel: 10, exclusive: 'forgeron-corps', branch: 'corps',
+      desc: '◈ Torse, Jambes & Bouclier — I : −15% coûts, +XP · II : +1 iLvl · III : SIGNATURE (réduction/barrière) · IV : +12% rareté sup. · V : Chef-d\'œuvre hebdo.' },
+    { id: 'corpsEquipementier', name: 'Équipementier', icon: '🧤', maxRank: 5, minLevel: 10, exclusive: 'forgeron-corps', branch: 'corps',
+      desc: '◈ Mains, Poignets, Taille, Pieds & Cape — I : −15% coûts · II : +1 iLvl · III : SIGNATURE (hâte/esquive) · IV : +12% rareté sup. · V : Chef-d\'œuvre hebdo.' },
+    { id: 'corpsOrfevre', name: 'Orfèvre', icon: '💍', maxRank: 5, minLevel: 10, exclusive: 'forgeron-corps', branch: 'corps',
+      desc: '◈ Collier, Anneaux & Bijoux — I : −15% coûts · II : +1 iLvl · III : SIGNATURE (altération/précision) · IV : +12% rareté sup. · V : Chef-d\'œuvre hebdo.' },
+    /* — …et 1 corps MINEUR (I–II) au niveau 35 — */
+    { id: 'mineurHeaumier', name: 'Second corps : Heaumier', icon: '🪖', maxRank: 2, minLevel: 35, exclusive: 'forgeron-corps2', branch: 'corps',
+      desc: 'Compagnonnage MINEUR (choisis un AUTRE corps que le majeur) — I : −15% coûts · II : +1 iLvl.' },
+    { id: 'mineurCuirassier', name: 'Second corps : Cuirassier', icon: '🥋', maxRank: 2, minLevel: 35, exclusive: 'forgeron-corps2', branch: 'corps',
+      desc: 'Compagnonnage MINEUR (choisis un AUTRE corps que le majeur) — I : −15% coûts · II : +1 iLvl.' },
+    { id: 'mineurEquipementier', name: 'Second corps : Équipementier', icon: '🧤', maxRank: 2, minLevel: 35, exclusive: 'forgeron-corps2', branch: 'corps',
+      desc: 'Compagnonnage MINEUR (choisis un AUTRE corps que le majeur) — I : −15% coûts · II : +1 iLvl.' },
+    { id: 'mineurOrfevre', name: 'Second corps : Orfèvre', icon: '💍', maxRank: 2, minLevel: 35, exclusive: 'forgeron-corps2', branch: 'corps',
+      desc: 'Compagnonnage MINEUR (choisis un AUTRE corps que le majeur) — I : −15% coûts · II : +1 iLvl.' },
+    /* — ✨ Prodige : la rareté supérieure devient une voie — */
+    { id: 'chance', name: 'Prodige', icon: '🎲', maxRank: 15, minLevel: 5, branch: 'prodige',
+      desc: '+2% de chance de forger une rareté SUPÉRIEURE par rang (création).' },
+    { id: 'inspiration', name: 'Inspiration', icon: '💡', maxRank: 3, minLevel: 12, requires: 'chance', requiresRank: 5, branch: 'prodige',
+      desc: 'Quand la rareté supérieure proc : +2% par rang que le craft saute DEUX crans (annoncé en fanfare).' },
+    { id: 'serendipite', name: 'Sérendipité', icon: '🍀', maxRank: 3, minLevel: 8, requires: 'chance', branch: 'prodige',
+      desc: 'Les crafts SANS proc de rareté remboursent +8% de leurs coûts par rang.' },
+    /* — ⚙️ Procédés — */
+    { id: 'surillvl', name: 'Maître affûteur', icon: '⬆️', maxRank: 1, minLevel: 2, minStage: 20, branch: 'procedes',
+      desc: 'Débloque le SURILLVL : augmenter l\'iLvl d\'un objet.' },
+    { id: 'affutage', name: 'Affûtage supérieur', icon: '🗡️', maxRank: 1, minLevel: 20, requires: 'surillvl', branch: 'procedes',
+      desc: 'Le surillvl donne +1 iLvl supplémentaire par usage.' },
+    { id: 'transmute', name: 'Transmutateur', icon: '🔄', maxRank: 1, minLevel: 3, minStage: 20, branch: 'procedes',
+      desc: 'Débloque la TRANSMUTATION : changer la stat primaire d\'un objet.' },
+    { id: 'ascension', name: 'Grand-maître forgeron', icon: '✨', maxRank: 1, minLevel: 10, minStage: 50, requires: 'surillvl', branch: 'procedes',
       desc: 'Débloque l\'ASCENSION : monter un objet d\'un cran de rareté.' },
-    { id: 'automates', name: 'Industrialisation', icon: '🤖', maxRank: 1, minLevel: 12, minStage: 65,
+    { id: 'verrous', name: 'Verrous huilés', icon: '🔐', maxRank: 3, minLevel: 7, branch: 'procedes',
+      desc: '−12% du surcoût des VERROUS de reforge par rang (garder ses bonnes lignes coûte moins).' },
+    { id: 'contrats', name: 'Contrats de forge', icon: '📋', maxRank: 1, minLevel: 5, branch: 'procedes',
+      desc: 'Débloque 3 COMMANDES quotidiennes : forger la pièce demandée paie en Lingots 🧱 et grosse XP.' },
+    { id: 'negociant', name: 'Négociant', icon: '🤝', maxRank: 3, minLevel: 14, requires: 'contrats', branch: 'procedes',
+      desc: '+1 Lingot 🧱 par contrat rempli, par rang.' },
+    { id: 'fonderie', name: 'Fonderie', icon: '🫕', maxRank: 1, minLevel: 6, branch: 'procedes',
+      desc: 'Débloque la FONTE : un objet Rare+ → Lingots 🧱 (la matière des Signatures et Chefs-d\'œuvre).' },
+    { id: 'lingotier', name: 'Lingotier', icon: '🧱', maxRank: 3, minLevel: 11, requires: 'fonderie', branch: 'procedes',
+      desc: '+15% de Lingots à la fonte par rang (arrondi au mieux).' },
+    { id: 'trempeLente', name: 'Trempe lente', icon: '🔥', maxRank: 1, minLevel: 8, branch: 'procedes',
+      desc: 'Débloque le BAC DE TREMPE : un objet déposé gagne +1 iLvl par 24 h RÉELLES (5 max par objet).' },
+    { id: 'polissage', name: 'Polissage', icon: '🌟', maxRank: 1, minLevel: 9, branch: 'procedes',
+      desc: 'Tes créations reçoivent une QUALITÉ ⭐1–5 (budget de stats ±8%) — roulée à la forge.' },
+    { id: 'polissageFin', name: 'Main de maître', icon: '🤌', maxRank: 3, minLevel: 16, requires: 'polissage', branch: 'procedes',
+      desc: 'Améliore les chances de hautes étoiles ⭐ par rang.' },
+    { id: 'moules', name: 'Moules', icon: '🧩', maxRank: 1, minLevel: 13, branch: 'procedes',
+      desc: 'Mémorise ton DERNIER craft : re-forger À L\'IDENTIQUE coûte −30%.' },
+    /* — 🤖 Industrialisation — */
+    { id: 'automates', name: 'Industrialisation', icon: '🤖', maxRank: 1, minLevel: 12, minStage: 65, branch: 'industrie',
       desc: 'Débloque la construction d\'AUTOMATES (machines qui refont les donjons/raids battus).' },
-    { id: 'montage', name: 'Chaîne de montage', icon: '⚙️', maxRank: 3, requires: 'automates',
+    { id: 'montage', name: 'Chaîne de montage', icon: '⚙️', maxRank: 3, requires: 'automates', branch: 'industrie',
       desc: '−8% de durée des runs d\'automates par rang.' },
-    { id: 'specEconome', name: 'Maître Économe', icon: '🪙', maxRank: 1, minLevel: 15, exclusive: 'forgeron-spec',
-      desc: 'SPÉCIALISATION : −15% de coûts de craft supplémentaires. Exclusif avec Maître Visionnaire.' },
-    { id: 'specVisionnaire', name: 'Maître Visionnaire', icon: '🔮', maxRank: 1, minLevel: 15, exclusive: 'forgeron-spec',
-      desc: 'SPÉCIALISATION : +12% de chance de rareté supérieure, et le surillvl donne +1 iLvl. Exclusif avec Maître Économe.' },
+    { id: 'automate4', name: 'Manufacture', icon: '🏭', maxRank: 1, minLevel: 40, minStage: 80, requires: 'automates', branch: 'industrie',
+      desc: 'Débloque la construction d\'un QUATRIÈME automate.' },
   ],
   // v0.26 — arbre REFONDU : ~62 rangs dépensables (tronc + 4 branches), specs étagées I→V.
   joaillier: [
@@ -325,8 +417,44 @@ export const METIER_NODES: Record<MetierId, MetierNode[]> = {
   ],
 }
 
-/** Niveau de Forgeron requis pour construire le 1er / 2e / 3e automate (remplace l'ex-coût 🔧). */
-export const AUTOMATE_FORGERON_LEVELS = [12, 16, 20]
+/** Bonus de Compagnonnage applicables au craft d'un TYPE de pièce donné (majeur puis mineur). */
+export interface CorpsBonus {
+  /** Multiplicateur de coût (≤ 1 si le corps couvre la pièce). */
+  costMult: number
+  /** +iLvl plancher à la création (étage II). */
+  ilvlBonus: number
+  /** Affixes Signature proposables (étage III du MAJEUR uniquement), sinon null. */
+  signatures: SecondaryStat[] | null
+  /** Chance de rareté supérieure LOCALE (étage IV du majeur). */
+  luckBonus: number
+  /** Chef-d'œuvre hebdomadaire disponible (étage V du majeur). */
+  masterwork: boolean
+  /** Multiplicateur d'XP de forge sur ces pièces (étage I du majeur). */
+  xpMult: number
+}
+
+export function corpsBonusFor(mods: CraftMods, type: ItemType): CorpsBonus {
+  const out: CorpsBonus = { costMult: 1, ilvlBonus: 0, signatures: null, luckBonus: 0, masterwork: false, xpMult: 1 }
+  const maj = mods.corpsMajeur
+  if (maj && CORPS[maj.corps].types.includes(type)) {
+    out.costMult = 0.85
+    out.xpMult = 1.1
+    if (maj.tier >= 2) out.ilvlBonus = 1
+    if (maj.tier >= 3) out.signatures = CORPS[maj.corps].signatures
+    if (maj.tier >= 4) out.luckBonus = 0.12
+    if (maj.tier >= 5) out.masterwork = true
+    return out
+  }
+  const min = mods.corpsMineur
+  if (min && CORPS[min.corps].types.includes(type)) {
+    out.costMult = 0.85
+    if (min.tier >= 2) out.ilvlBonus = 1
+  }
+  return out
+}
+
+/** Niveau de Forgeron requis pour construire le 1er / 2e / 3e / 4e automate (4e : nœud Manufacture). */
+export const AUTOMATE_FORGERON_LEVELS = [12, 16, 20, 26]
 
 const NODE_BY_ID: Record<MetierId, Map<string, MetierNode>> = {
   forgeron: new Map(METIER_NODES.forgeron.map((n) => [n.id, n])),
@@ -383,7 +511,7 @@ export interface CraftMods {
   /** Chance de forger une rareté +1 cran (création). */
   luckChance: number
   surillvl: boolean
-  /** Gain d'iLvl par surillvl (2, ou 3 en Maître Visionnaire). */
+  /** Gain d'iLvl par surillvl (2, ou 3 avec Affûtage supérieur). */
   surillvlStep: number
   transmute: boolean
   ascend: boolean
@@ -391,6 +519,28 @@ export interface CraftMods {
   /** Multiplicateur de durée des runs d'automates (≤ 1). */
   automateDurMult: number
   forgeronXpMult: number
+  /** ◈ v0.26 — Compagnonnage MAJEUR : corps + étage I→V (null = aucun). */
+  corpsMajeur: { corps: CorpsId; tier: number } | null
+  /** Compagnonnage MINEUR (niv 35) : corps + étage I–II — ignoré s'il duplique le majeur. */
+  corpsMineur: { corps: CorpsId; tier: number } | null
+  /** Inspiration : chance que le proc de rareté saute DEUX crans. */
+  inspiration: number
+  /** Sérendipité : remboursement des crafts sans proc (fraction). */
+  serendipite: number
+  /** Verrous huilés : multiplicateur du surcoût des verrous de reforge (≤ 1). */
+  verrousMult: number
+  contrats: boolean
+  /** Négociant : Lingots bonus par contrat rempli. */
+  negociant: number
+  fonderie: boolean
+  /** Lingotier : multiplicateur de Lingots à la fonte (≥ 1). */
+  lingotierMult: number
+  trempeLente: boolean
+  polissage: boolean
+  /** Main de maître : rangs (qualité ⭐ des créations). */
+  polishFin: number
+  moules: boolean
+  automate4: boolean
   /* Joaillier */
   gems: boolean
   unsocketCostMult: number
@@ -460,17 +610,43 @@ export interface CraftMods {
 
 export function craftMods(metiers: MetiersState): CraftMods {
   const r = (m: MetierId, id: string) => metiers[m].nodes[id] ?? 0
-  const visionnaire = r('forgeron', 'specVisionnaire') > 0
+  // ◈ Compagnonnages (v0.26) : un corps majeur (I→V), un mineur (I–II) au niveau 35.
+  const corpsMajeur: CraftMods['corpsMajeur'] =
+    r('forgeron', 'corpsHeaumier') > 0 ? { corps: 'heaumier', tier: r('forgeron', 'corpsHeaumier') }
+    : r('forgeron', 'corpsCuirassier') > 0 ? { corps: 'cuirassier', tier: r('forgeron', 'corpsCuirassier') }
+    : r('forgeron', 'corpsEquipementier') > 0 ? { corps: 'equipementier', tier: r('forgeron', 'corpsEquipementier') }
+    : r('forgeron', 'corpsOrfevre') > 0 ? { corps: 'orfevre', tier: r('forgeron', 'corpsOrfevre') }
+    : null
+  const corpsMineurRaw: CraftMods['corpsMineur'] =
+    r('forgeron', 'mineurHeaumier') > 0 ? { corps: 'heaumier', tier: r('forgeron', 'mineurHeaumier') }
+    : r('forgeron', 'mineurCuirassier') > 0 ? { corps: 'cuirassier', tier: r('forgeron', 'mineurCuirassier') }
+    : r('forgeron', 'mineurEquipementier') > 0 ? { corps: 'equipementier', tier: r('forgeron', 'mineurEquipementier') }
+    : r('forgeron', 'mineurOrfevre') > 0 ? { corps: 'orfevre', tier: r('forgeron', 'mineurOrfevre') }
+    : null
   return {
     costMult: Math.max(0.4, 1 - r('forgeron', 'econome') * 0.04 - (r('forgeron', 'specEconome') > 0 ? 0.15 : 0)),
-    luckChance: Math.min(0.6, r('forgeron', 'chance') * 0.04 + (visionnaire ? 0.12 : 0)),
+    luckChance: Math.min(0.6, r('forgeron', 'chance') * 0.02),
     surillvl: r('forgeron', 'surillvl') > 0,
-    surillvlStep: visionnaire ? 3 : 2,
+    surillvlStep: r('forgeron', 'affutage') > 0 ? 3 : 2,
     transmute: r('forgeron', 'transmute') > 0,
     ascend: r('forgeron', 'ascension') > 0,
     automates: r('forgeron', 'automates') > 0,
     automateDurMult: 1 - r('forgeron', 'montage') * 0.08,
     forgeronXpMult: 1 + r('forgeron', 'pedagogie') * 0.2,
+    corpsMajeur,
+    corpsMineur: corpsMineurRaw && corpsMajeur && corpsMineurRaw.corps === corpsMajeur.corps ? null : corpsMineurRaw,
+    inspiration: r('forgeron', 'inspiration') * 0.02,
+    serendipite: r('forgeron', 'serendipite') * 0.08,
+    verrousMult: Math.max(0.5, 1 - r('forgeron', 'verrous') * 0.12),
+    contrats: r('forgeron', 'contrats') > 0,
+    negociant: r('forgeron', 'negociant'),
+    fonderie: r('forgeron', 'fonderie') > 0,
+    lingotierMult: 1 + r('forgeron', 'lingotier') * 0.15,
+    trempeLente: r('forgeron', 'trempeLente') > 0,
+    polissage: r('forgeron', 'polissage') > 0,
+    polishFin: r('forgeron', 'polissageFin'),
+    moules: r('forgeron', 'moules') > 0,
+    automate4: r('forgeron', 'automate4') > 0,
     gems: r('joaillier', 'sertissage') > 0,
     unsocketCostMult: Math.max(0.25, 1 - r('joaillier', 'extraction') * 0.25),
     gemDropMult: 1 + r('joaillier', 'prospection') * 0.25,

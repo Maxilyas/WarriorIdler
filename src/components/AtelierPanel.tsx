@@ -1,15 +1,17 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
-import { useGame, bestRaidTier } from '../game/store'
+import { useGame, bestRaidTier, forgeContractsForDay, CONTRACT_LINGOTS } from '../game/store'
 import { ITEM_TYPES } from '../game/slots'
-import { PRIMARY_META } from '../game/stats'
+import { PRIMARY_META, SECONDARY_META } from '../game/stats'
+import { currentWeek } from '../game/maitrise'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from '../game/damage'
-import { RARITY_LIST } from '../game/rarities'
+import { RARITIES, RARITY_LIST } from '../game/rarities'
 import { maxCraftTier, createCost } from '../game/items'
 import {
   METIERS, METIER_LIST, METIER_NODES, METIER_BRANCHES, METIER_MAX_LEVEL, AUTOMATE_FORGERON_LEVELS,
   craftMods, levelFromXp, xpTotalForLevel, pointsAvailable, pointsTotal, canLearnNode, nodeRank,
   respecCost, respecBranchCost, pointsSpentInBranch,
+  CORPS, corpsBonusFor, signatureLingotCost, smeltLingots, MASTERWORK_LINGOTS,
   type MetierId,
 } from '../game/metiers'
 import { ENCHANTS } from '../game/enchants'
@@ -20,13 +22,13 @@ import {
 } from '../game/condGems'
 import {
   missionLabel, automateRunDuration, automateEfficiency, automateUpgradeCost,
-  AUTOMATE_MAX, AUTOMATE_COSTS, AUTOMATE_UPG_MAX, type AutomateMission,
+  AUTOMATE_MAX, AUTOMATE_COSTS, AUTOMATE_NAMES, AUTOMATE_UPG_MAX, type AutomateMission,
 } from '../game/automates'
 import { DUNGEON_LIST } from '../game/dungeons'
 import { RAID_LIST } from '../game/raids'
 import { stageIlvl } from '../game/enemies'
 import { Sheet } from './ui'
-import type { ItemType, OffensiveStat, ItemOrientation, DamageType, RarityId } from '../game/types'
+import type { ItemType, OffensiveStat, ItemOrientation, DamageType, RarityId, SecondaryStat } from '../game/types'
 
 const TYPE_LIST = Object.values(ITEM_TYPES)
 const OFFENSIVE: OffensiveStat[] = ['force', 'agilite', 'intelligence']
@@ -244,11 +246,13 @@ function ForgeronWorkshop() {
   const fragments = useGame((s) => s.fragments)
   const poussiere = useGame((s) => s.poussiere)
   const cosmic = useGame((s) => s.cosmic)
+  const lingots = useGame((s) => s.lingots)
+  const mould = useGame((s) => s.mould)
+  const lastMasterwork = useGame((s) => s.lastMasterwork)
   const createItem = useGame((s) => s.createItem)
   const metiers = useGame((s) => s.metiers)
   const mods = craftMods(metiers)
 
-  const ilvl = stageIlvl(bestStage)
   // v0.25 : double horloge — le palier de farm ET le meilleur tier de raid bornent la rareté.
   const raidTier = bestRaidTier(raidProgress)
   const maxTier = maxCraftTier(bestStage, raidTier)
@@ -260,18 +264,48 @@ function ForgeronWorkshop() {
   const [orientation, setOrientation] = useState<ItemOrientation>('equilibre')
   const [element, setElement] = useState<DamageType>('feu')
   const [rarity, setRarity] = useState<RarityId>(rarities[Math.min(3, rarities.length - 1)].id)
+  const [signature, setSignature] = useState<SecondaryStat | null>(null)
+  const [masterwork, setMasterwork] = useState(false)
 
   const isWeapon = type === 'armePrincipale'
   const tier = RARITY_LIST.find((r) => r.id === rarity)!.tier
+  // ◈ Compagnonnage (v0.26) : bonus du corps couvrant le type sélectionné.
+  const corps = corpsBonusFor(mods, type)
+  const ilvl = stageIlvl(bestStage) + corps.ilvlBonus
+  const activeSignature = signature && corps.signatures?.includes(signature) ? signature : null
+  const signCost = activeSignature ? signatureLingotCost(tier) : 0
+  const mwReady = corps.masterwork && lastMasterwork < currentWeek()
+  const mwOn = masterwork && mwReady
+  const mouldHit = mods.moules && mould
+    && mould.type === type && mould.rarity === rarity && mould.primary === primary
+    && mould.orientation === orientation && mould.element === (isWeapon ? element : undefined)
   const raw = createCost(tier, ilvl)
-  const cm = mods.costMult
+  const cm = mods.costMult * corps.costMult * (mouldHit ? 0.7 : 1) * (mwOn ? 1.5 : 1)
   const cost = { eclats: Math.round(raw.eclats * cm), noyau: Math.round(raw.noyau * cm), fragments: Math.round((raw.fragments ?? 0) * cm), poussiere: Math.round((raw.poussiere ?? 0) * cm), cosmic: Math.round((raw.cosmic ?? 0) * cm) }
-  const canForge = essence >= cost.eclats && noyau >= cost.noyau && fragments >= cost.fragments && poussiere >= cost.poussiere && cosmic >= cost.cosmic
+  const lingotNeed = signCost + (mwOn ? MASTERWORK_LINGOTS : 0)
+  const canForge = essence >= cost.eclats && noyau >= cost.noyau && fragments >= cost.fragments && poussiere >= cost.poussiere && cosmic >= cost.cosmic && lingots >= lingotNeed
+  const corpsName = mods.corpsMajeur ? CORPS[mods.corpsMajeur.corps] : null
 
   return (
     <>
       {/* Automates : la branche Industrialisation du Forgeron */}
       <AutomateWorkshop />
+
+      {/* 📋 Contrats · 🫕 Fonderie · 🔥 Bac de trempe (v0.26) */}
+      <ForgeProcedes />
+
+      {/* ◈ Compagnonnage : où en est ton corps de métier */}
+      {corpsName && mods.corpsMajeur && (
+        <div className="mb-3 rounded-lg border border-amber-700/40 bg-amber-950/10 px-2.5 py-1.5 text-[10px] text-amber-200/90">
+          ◈ {corpsName.icon} <b>{corpsName.name}</b> {['I', 'II', 'III', 'IV', 'V'][mods.corpsMajeur.tier - 1]}
+          <span className="text-slate-400"> — {corpsName.types.map((t) => ITEM_TYPES[t].name).join(', ')} : −15% coûts
+          {mods.corpsMajeur.tier >= 2 && ' · +1 iLvl'}
+          {mods.corpsMajeur.tier >= 3 && ' · ✒️ Signature'}
+          {mods.corpsMajeur.tier >= 4 && ' · 🎲 +12% rareté'}
+          {mods.corpsMajeur.tier >= 5 && ' · 🏆 Chef-d\'œuvre hebdo'}</span>
+          {mods.corpsMineur && <span className="text-slate-400"> · mineur : {CORPS[mods.corpsMineur.corps].icon} {CORPS[mods.corpsMineur.corps].name} {['I', 'II'][mods.corpsMineur.tier - 1]}</span>}
+        </div>
+      )}
 
       {/* Type d'objet */}
       <Section title="Type d'objet">
@@ -377,9 +411,47 @@ function ForgeronWorkshop() {
         )}
       </Section>
 
+      {/* ✒️ Signature (Compagnonnage III) : affixe garanti au choix sur les pièces du corps */}
+      {corps.signatures && (
+        <Section title={`✒️ Signature (${signCost > 0 ? `${signCost} 🧱` : 'choisis une ligne garantie'})`}>
+          <div className="flex flex-wrap gap-1.5">
+            <button
+              onClick={() => setSignature(null)}
+              className={'rounded-lg border px-2.5 py-1.5 text-[11px] ' + (!activeSignature ? 'border-amber-400 bg-amber-900/30 text-amber-200' : 'border-slate-700 text-slate-400')}
+            >
+              Sans
+            </button>
+            {corps.signatures.map((st) => (
+              <button
+                key={st}
+                onClick={() => setSignature(st)}
+                className={'rounded-lg border px-2.5 py-1.5 text-[11px] font-medium ' + (activeSignature === st ? 'border-amber-400 bg-amber-900/30 text-amber-200' : 'border-slate-700 text-slate-300 hover:border-slate-500')}
+              >
+                {SECONDARY_META[st].name} <span className="text-slate-500">· {signatureLingotCost(tier)} 🧱</span>
+              </button>
+            ))}
+          </div>
+        </Section>
+      )}
+
+      {/* 🏆 Chef-d'œuvre hebdomadaire (Compagnonnage V) */}
+      {corps.masterwork && (
+        <button
+          onClick={() => setMasterwork((m2) => !m2)}
+          disabled={!mwReady}
+          className={
+            'mb-3 w-full rounded-lg border py-2 text-[11px] font-semibold ' +
+            (mwOn ? 'border-amber-400 bg-amber-500/20 text-amber-200' : mwReady ? 'border-amber-700/50 text-amber-300/80 hover:bg-amber-900/20' : 'border-slate-800 text-slate-600')
+          }
+        >
+          🏆 Chef-d'œuvre {mwReady ? (mwOn ? 'ACTIVÉ — +1 cran garanti + châsse garantie (×1,5 coûts + 10 🧱)' : '— 1/semaine : +1 cran garanti + châsse garantie') : '— déjà forgé cette semaine'}
+        </button>
+      )}
+
       {/* Récapitulatif + coût */}
       <div className="mt-3 rounded-lg bg-black/30 p-3 text-xs text-slate-400">
-        <div>iLvl de l'objet : <span className="text-slate-200">{ilvl}</span> (lié à ton record de palier)</div>
+        <div>iLvl de l'objet : <span className="text-slate-200">{ilvl}</span> (lié à ton record de palier{corps.ilvlBonus > 0 ? ` · ◈ +${corps.ilvlBonus}` : ''})</div>
+        {mouldHit && <div className="mt-0.5 text-[10.5px] text-emerald-300/80">🧩 Moule actif : ce craft est identique au précédent — coûts −30%.</div>}
         <div className="mt-1 flex flex-wrap items-center gap-3">
           <span>Coût :</span>
           <span className={essence >= cost.eclats ? 'text-cyan-300' : 'text-red-400'}>♦ {cost.eclats}</span>
@@ -395,6 +467,9 @@ function ForgeronWorkshop() {
           {(cost.cosmic ?? 0) > 0 && (
             <span className={cosmic >= (cost.cosmic ?? 0) ? 'text-violet-300' : 'text-red-400'}>💫 {cost.cosmic}</span>
           )}
+          {lingotNeed > 0 && (
+            <span className={lingots >= lingotNeed ? 'text-amber-300' : 'text-red-400'}>🧱 {lingotNeed}</span>
+          )}
         </div>
         {(mods.costMult < 1 || mods.luckChance > 0) && (
           <div className="mt-1 flex flex-wrap gap-x-3 text-[10.5px] text-amber-300/80">
@@ -407,10 +482,15 @@ function ForgeronWorkshop() {
 
       <button
         disabled={!canForge}
-        onClick={() => createItem({ type, primary, rarity, orientation, ...(isWeapon ? { element } : {}) })}
+        onClick={() => createItem({
+          type, primary, rarity, orientation,
+          ...(isWeapon ? { element } : {}),
+          ...(activeSignature ? { signature: activeSignature } : {}),
+          ...(mwOn ? { masterwork: true } : {}),
+        })}
         className="mt-3 w-full rounded-lg bg-amber-600 py-2.5 text-sm font-semibold text-slate-950 hover:bg-amber-500 disabled:opacity-40"
       >
-        Forger {isWeapon ? `${DAMAGE_TYPES[element].icon} ` : ''}{ITEM_TYPES[type].name}
+        {mwOn ? '🏆 Forger le CHEF-D\'ŒUVRE — ' : 'Forger '}{isWeapon ? `${DAMAGE_TYPES[element].icon} ` : ''}{ITEM_TYPES[type].name}
       </button>
       <p className="mt-1.5 pb-2 text-center text-[10px] text-slate-500">L'objet apparaît dans ton Sac. Forger donne de l'XP de Forgeron.</p>
     </>
@@ -509,10 +589,10 @@ function AutomateWorkshop() {
           )
         })}
 
-        {nextCost && mods.automates && (
+        {nextCost && mods.automates && (automates.length < 3 || mods.automate4) && (
           forgeronLvl < lvlReq ? (
             <div className="rounded-lg border border-slate-800 bg-black/20 py-2 text-center text-[10px] text-slate-500">
-              🔒 Prochain automate « {['Rouage', 'Enclume', 'Vigile'][automates.length]} » : Forgeron niveau {lvlReq} requis (actuel : {forgeronLvl}).
+              🔒 Prochain automate « {AUTOMATE_NAMES[automates.length]} » : Forgeron niveau {lvlReq} requis (actuel : {forgeronLvl}).
             </div>
           ) : (
             <button
@@ -520,10 +600,15 @@ function AutomateWorkshop() {
               disabled={gold < nextCost.gold || poussiere < nextCost.poussiere || fragments < nextCost.fragments || cosmic < nextCost.cosmic}
               className="w-full rounded-lg border border-violet-700/50 bg-violet-900/20 py-2 text-[11px] font-medium text-violet-200 hover:bg-violet-800/30 disabled:opacity-40"
             >
-              🛠 Construire « {['Rouage', 'Enclume', 'Vigile'][automates.length]} » · 💰 {nextCost.gold.toLocaleString('fr-FR')} + 🌌 {nextCost.poussiere}
+              🛠 Construire « {AUTOMATE_NAMES[automates.length]} » · 💰 {nextCost.gold.toLocaleString('fr-FR')} + 🌌 {nextCost.poussiere}
               {' '}+ ✨ {nextCost.fragments}{nextCost.cosmic ? ` + 💫 ${nextCost.cosmic}` : ''}
             </button>
           )
+        )}
+        {nextCost && mods.automates && automates.length >= 3 && !mods.automate4 && (
+          <div className="rounded-lg border border-slate-800 bg-black/20 py-2 text-center text-[10px] text-slate-500">
+            🔒 La 4e machine « Manufacture » exige le nœud 🏭 de l'arbre (niv 40 · P80).
+          </div>
         )}
       </div>
 
@@ -573,6 +658,129 @@ function AutomateWorkshop() {
             </button>
           </div>
         </Sheet>
+      )}
+    </div>
+  )
+}
+
+/**
+ * v0.26 — Procédés du Forgeron : 📋 Contrats quotidiens (forge la pièce demandée → Lingots 🧱),
+ * 🫕 Fonderie (objet Rare+ du sac → Lingots) et 🔥 Bac de trempe (+1 iLvl par 24 h réelles).
+ */
+function ForgeProcedes() {
+  const metiers = useGame((s) => s.metiers)
+  const mods = craftMods(metiers)
+  const lingots = useGame((s) => s.lingots)
+  const inventory = useGame((s) => s.inventory)
+  const forgeContracts = useGame((s) => s.forgeContracts)
+  const trempe = useGame((s) => s.trempe)
+  const bestStage = useGame((s) => s.bestStage)
+  const raidProgress = useGame((s) => s.raidProgress)
+  const smeltItem = useGame((s) => s.smeltItem)
+  const startTempering = useGame((s) => s.startTempering)
+  const collectTempering = useGame((s) => s.collectTempering)
+  const [fonderieOpen, setFonderieOpen] = useState(false)
+  const [trempeOpen, setTrempeOpen] = useState(false)
+
+  if (!mods.contrats && !mods.fonderie && !mods.trempeLente) return null
+
+  const today = Math.floor(Date.now() / 86_400_000)
+  const craftCap = maxCraftTier(bestStage, bestRaidTier(raidProgress))
+  const defs = forgeContractsForDay(today, craftCap)
+  const done = forgeContracts && forgeContracts.day === today ? forgeContracts.done : [false, false, false]
+  const smeltable = inventory.filter((i) => RARITIES[i.rarity].tier >= 4).slice(0, 8)
+  const trempables = inventory.filter((i) => (i.trempeCount ?? 0) < 5).slice(0, 8)
+  const trempeItem = trempe ? inventory.find((i) => i.id === trempe.itemId) : undefined
+  const trempeDays = trempe ? Math.floor((Date.now() - trempe.startedAt) / 86_400_000) : 0
+  const trempeNextH = trempe ? Math.ceil((86_400_000 - ((Date.now() - trempe.startedAt) % 86_400_000)) / 3_600_000) : 0
+
+  return (
+    <div className="mb-3 rounded-xl border border-orange-800/40 bg-orange-950/10 p-2.5">
+      <div className="mb-1.5 flex items-center justify-between">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-orange-300">⚒️ Procédés du Forgeron</span>
+        <span className="text-[10px] text-amber-300">🧱 {lingots} lingot{lingots > 1 ? 's' : ''}</span>
+      </div>
+
+      {/* 📋 Contrats quotidiens */}
+      {mods.contrats && (
+        <div className="mb-2">
+          <div className="mb-1 text-[10px] font-semibold text-orange-200/90">📋 Commandes du jour <span className="font-normal text-slate-500">— forge la pièce EXACTE (type + affinité + rareté ≥ exigée)</span></div>
+          <div className="space-y-0.5">
+            {defs.map((d, i) => {
+              const r = RARITY_LIST.find((x) => x.tier === d.minTier)
+              return (
+                <div key={i} className={'flex items-center gap-1.5 rounded px-1.5 py-1 text-[10px] ' + (done[i] ? 'bg-emerald-950/30 text-emerald-300' : 'bg-black/20 text-slate-300')}>
+                  <span className="shrink-0">{done[i] ? '✅' : '⬜'}</span>
+                  <span className="min-w-0 flex-1 truncate">
+                    {ITEM_TYPES[d.type].icon} {ITEM_TYPES[d.type].name} · {PRIMARY_META[d.primary].name} · <span style={{ color: r?.color }}>{r?.name}+</span>
+                  </span>
+                  <span className="shrink-0 text-amber-300/80">+{CONTRACT_LINGOTS + mods.negociant} 🧱</span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* 🫕 Fonderie */}
+      {mods.fonderie && (
+        <div className="mb-2">
+          <button onClick={() => setFonderieOpen((o) => !o)} className="flex w-full items-center justify-between text-[10px] font-semibold text-orange-200/90">
+            <span>🫕 Fonderie <span className="font-normal text-slate-500">— fond un objet Rare+ du sac en Lingots</span></span>
+            <span>{fonderieOpen ? '▾' : '▸'}</span>
+          </button>
+          {fonderieOpen && (
+            <div className="mt-1 space-y-0.5">
+              {smeltable.length === 0 && <div className="text-[9.5px] italic text-slate-500">Rien à fondre (Rare+ uniquement).</div>}
+              {smeltable.map((it) => (
+                <div key={it.id} className="flex items-center gap-1.5 rounded bg-black/20 px-1.5 py-1 text-[10px]">
+                  <span className="min-w-0 flex-1 truncate" style={{ color: RARITIES[it.rarity].color }}>{it.name} <span className="text-slate-500">iLvl {it.ilvl}</span></span>
+                  <button
+                    onClick={() => smeltItem(it.id)}
+                    className="shrink-0 rounded bg-orange-900/40 px-1.5 py-1 font-medium text-orange-200 hover:bg-orange-800/50"
+                  >
+                    🫕 +{Math.max(1, Math.round(smeltLingots(RARITIES[it.rarity].tier) * mods.lingotierMult))} 🧱
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 🔥 Bac de trempe */}
+      {mods.trempeLente && (
+        <div>
+          <button onClick={() => setTrempeOpen((o) => !o)} className="flex w-full items-center justify-between text-[10px] font-semibold text-orange-200/90">
+            <span>🔥 Bac de trempe <span className="font-normal text-slate-500">— +1 iLvl par 24 h réelles (5 max/objet)</span></span>
+            <span>{trempeOpen ? '▾' : '▸'}</span>
+          </button>
+          {trempeOpen && (
+            trempe ? (
+              <div className="mt-1 rounded bg-black/20 px-1.5 py-1.5 text-[10px]">
+                <div className="text-slate-300">
+                  🔥 {trempeItem ? trempeItem.name : 'Objet introuvable (vendu ?)'} — {trempeDays} iLvl mûri{trempeDays > 1 ? 's' : ''}
+                  {trempeDays === 0 && ` · prochain dans ~${trempeNextH} h`}
+                </div>
+                <button onClick={() => collectTempering()} className="mt-1 w-full rounded bg-orange-700/60 py-1 font-medium text-orange-100 hover:bg-orange-600/60">
+                  Récupérer {trempeDays > 0 ? `(+${trempeDays} iLvl)` : '(sans gain)'}
+                </button>
+              </div>
+            ) : (
+              <div className="mt-1 space-y-0.5">
+                {trempables.length === 0 && <div className="text-[9.5px] italic text-slate-500">Aucun objet du sac à tremper.</div>}
+                {trempables.map((it) => (
+                  <div key={it.id} className="flex items-center gap-1.5 rounded bg-black/20 px-1.5 py-1 text-[10px]">
+                    <span className="min-w-0 flex-1 truncate" style={{ color: RARITIES[it.rarity].color }}>{it.name} <span className="text-slate-500">iLvl {it.ilvl} · {5 - (it.trempeCount ?? 0)} restant{5 - (it.trempeCount ?? 0) > 1 ? 's' : ''}</span></span>
+                    <button onClick={() => startTempering(it.id)} className="shrink-0 rounded bg-orange-900/40 px-1.5 py-1 font-medium text-orange-200 hover:bg-orange-800/50">
+                      🔥 Tremper
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )
+          )}
+        </div>
       )}
     </div>
   )
