@@ -1,5 +1,29 @@
 # DESIGN v0.26 — La Grande Refonte des Métiers
 
+> ## ✅ État d'implémentation (12 juin 2026) — PLAN VALIDÉ ET LIVRÉ
+> Tous les lots sont implémentés et commités :
+> **lot 3** cadre (niv 50, branches, respec/branche) · **lot 2+7** Joaillier (40 gemmes
+> jouées, qualité, fusion, corruption, perçage, marché, arbre) · **lot 4** Forgeron
+> (compagnonnages, Prodige, contrats, fonderie, trempe lente, polissage, moules, 4e
+> automate) · **lot 5** Runiste (28 runes jouées, 14 Pactes, atelier runique, specs I→V)
+> · **lot 6** Alchimiste (Officine : réactifs, cuves, découverte, élixirs/potions/huiles/
+> antidotes/mutagène, transmutation du jour, Pierre philosophale). Le lot 1 (dégoulottage)
+> est absorbé par les arbres complets — plus aucun point mort dès le niveau 1.
+>
+> **Adaptations en implémentation** (le moteur a tranché) :
+> - Pas de système de « chasses » dans le code (le terme v0.25.2 désignait les châsses) →
+>   gemme n°21 *Boussole du traqueur* cible les **champions ✦** ; la rune « Pacte de
+>   chasse » est devenue **Rune du Trophéiste** (Trophées de raid ×2 à 15%).
+> - *Riposte mesurée* compte des **secondes sous le feu** (l'ennemi frappe en continu,
+>   pas en coups discrets) ; *Verre trempé* = 4 s sans subir de coup ; l'Égide et la
+>   Carapace ne réagissent qu'aux **coups télégraphés** (anti-burst, par design).
+> - Rune de *Préparation* : recharges avancées à CHAQUE nouveau combat ; *Lignes ley* :
+>   mono-élément de l'**arme** (pas du biome) — fonctionne partout.
+> - Reforge ciblée = verrous existants, rendus moins chers (« Verrous huilés »).
+> - Reporté (idées gardées au chaud) : Gisements, File de taille, Calibrage, Gemmes
+>   signées, Lapidaire de raid, Écrins, Gemme prismatique, capstones 50 exclusifs du
+>   Forgeron, modules d'automate, Laborantin, essences de qualité, étagère à 2 élixirs.
+
 > Retours joueur de juin 2026 (palier 70, Alchimiste 19 avec **11 points morts**,
 > « beaucoup trop » de gemmes, specs jugées plates). Inspirations assumées :
 > **WoW Dragonflight** (spécialisations à sous-arbres, qualité, inspiration,
