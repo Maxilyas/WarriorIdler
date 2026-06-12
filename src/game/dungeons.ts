@@ -38,6 +38,12 @@ export interface DungeonDef {
   element: DamageType
   /** Palier de farm requis pour débloquer. */
   unlockStage: number
+  /**
+   * Ancre de DIFFICULTÉ (sert au décalage de départ) quand elle diffère du palier de déblocage —
+   * même idée que les raids : l'Observatoire est GATÉ au palier 50 (contenu endgame, timing de la
+   * poussière 🌌) mais sa difficulté reste calée sur 45.
+   */
+  anchorStage?: number
   /** Coût d'entrée en Sceaux de faille (0 = gratuit). Le donjon de Sceaux est gratuit ; celui d'Orbes coûte cher. */
   sceauCost: number
 }
@@ -95,7 +101,7 @@ export const DUNGEONS: Record<DungeonId, DungeonDef> = {
     id: 'poussiere', name: 'Observatoire Stellaire', icon: '🌌', color: '#748ffc', reward: 'poussiere',
     lore: 'Au sommet du monde, un colosse stellaire unique condense la Poussière d\'étoile. Un mur de PV à lui seul.',
     trait: 'colosse', traitLabel: 'Un colosse unique : DPS mono-cible massif (et Dégâts vs Boss).',
-    element: 'foudre', unlockStage: 45, sceauCost: 1,
+    element: 'foudre', unlockStage: 50, anchorStage: 45, sceauCost: 1,
   },
 }
 
@@ -133,10 +139,12 @@ export function geodeGemRank(level: number): number {
  */
 export const BUTIN_RARITY_CAP = 7 // Artefact — plafond pratique de la fenêtre normale
 // v0.25 : la Cache se débloque au palier 40 (joueur déjà ~full Légendaire au farm) → elle doit être
-// RELEVANTE dès le rang 1. Pic Rare au rang 1, glisse vers Artefact (~niv 9), feeder du raid T1.
+// RELEVANTE dès le rang 1. Pic Rare au rang 1 qui glisse vers Artefact (~niv 9) — et le PLAFOND est
+// Artefact DÈS LE RANG 1 : la traîne à deux pentes de rollWindowRarity rend Légendaire (~4%) et
+// Artefact (~1%) possibles immédiatement — petits, mais meilleurs que le farm. Feeder du raid T1.
 export function cacheRarityWindow(level: number): { floor: number; peak: number; cap: number } {
   const peak = Math.max(4, Math.min(7, 4 + Math.floor(level / 3)))
-  return { floor: Math.max(2, peak - 2), peak, cap: Math.min(BUTIN_RARITY_CAP, peak + 1) }
+  return { floor: Math.max(2, peak - 2), peak, cap: BUTIN_RARITY_CAP }
 }
 /** Plancher / plafond pratiques (affichage + rendement des automates). */
 export function butinMinTier(level: number): number {
@@ -327,8 +335,12 @@ const DUNGEON_BOSS_HP_MULT = 5     // le boss (dernier combat) reste un pic de P
 // à faible/moyen déblocage NE BOUGENT PAS d'un poil.
 const DUNGEON_UNLOCK_BASELINE = 29
 const DUNGEON_PALIERS_PER_LEVEL = 2.23 // 1.42 = 1.17^2.23 (paliers de farm ↔ niveaux de donjon)
-function dungeonStartOffset(unlockStage: number): number {
-  return Math.max(0, (unlockStage - DUNGEON_UNLOCK_BASELINE) / DUNGEON_PALIERS_PER_LEVEL)
+// v0.25.1 — adoucissement : le premier jet était « un poil trop chaud » (retour joueur). −0,6 niveau
+// effectif sur les SEULS donjons décalés (≈ −19% PV, −13% dégâts) ; n'affecte jamais les autres.
+const DUNGEON_OFFSET_SOFTEN = 0.6
+function dungeonStartOffset(def: DungeonDef): number {
+  const anchor = def.anchorStage ?? def.unlockStage
+  return Math.max(0, (anchor - DUNGEON_UNLOCK_BASELINE) / DUNGEON_PALIERS_PER_LEVEL - DUNGEON_OFFSET_SOFTEN)
 }
 
 /** Régénération des ennemis (fraction des PV max/s) imposée par l'identité du donjon. */
@@ -365,7 +377,7 @@ export function makeDungeonEnemy(
   const effStage = level * EFF_STAGE_PER_LEVEL + fightIndex // récompenses (xp) + armure (économie inchangée)
   // Niveau EFFECTIF sur la courbe = niveau réel + décalage de départ (>0 SEULEMENT pour les donjons à
   // fort palier de déblocage → leur niv 1 vaut leur palier d'ouverture ; les autres : offset 0, inchangés).
-  const startOff = dungeonStartOffset(def.unlockStage)
+  const startOff = dungeonStartOffset(def)
   const effLevel = lvl + startOff
   // PV : COURBE CONSERVÉE (1.42/niveau) + rampe douce par COMBAT (1.04).
   const hpBase = DUNGEON_HP_BASE * Math.pow(DUNGEON_HP_PER_LEVEL, effLevel) * Math.pow(DUNGEON_FIGHT_RAMP, fightIndex)
