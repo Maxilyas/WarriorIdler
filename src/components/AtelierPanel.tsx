@@ -7,8 +7,9 @@ import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from '../game/damage'
 import { RARITY_LIST } from '../game/rarities'
 import { maxCraftTier, createCost } from '../game/items'
 import {
-  METIERS, METIER_LIST, METIER_NODES, METIER_MAX_LEVEL, AUTOMATE_FORGERON_LEVELS,
-  craftMods, levelFromXp, xpTotalForLevel, pointsAvailable, pointsTotal, canLearnNode, nodeRank, respecCost,
+  METIERS, METIER_LIST, METIER_NODES, METIER_BRANCHES, METIER_MAX_LEVEL, AUTOMATE_FORGERON_LEVELS,
+  craftMods, levelFromXp, xpTotalForLevel, pointsAvailable, pointsTotal, canLearnNode, nodeRank,
+  respecCost, respecBranchCost, pointsSpentInBranch,
   type MetierId,
 } from '../game/metiers'
 import { ENCHANTS } from '../game/enchants'
@@ -142,15 +143,24 @@ function MetierHeader({ metier }: { metier: MetierId }) {
   )
 }
 
-/** Arbre du métier : nœuds (déblocages + bonus + spécialisations exclusives). */
+/** Arbre du métier (v0.26) : nœuds groupés PAR BRANCHE, respec ciblé par branche. */
 function MetierTree({ metier }: { metier: MetierId }) {
   const metiers = useGame((s) => s.metiers)
   const bestStage = useGame((s) => s.bestStage)
+  const gold = useGame((s) => s.gold)
   const learn = useGame((s) => s.learnMetierNode)
+  const respecBranch = useGame((s) => s.respecMetierBranch)
   const st = metiers[metier]
   const pts = pointsAvailable(st)
   const [open, setOpen] = useState(pts > 0)
   const def = METIERS[metier]
+
+  // Branches affichées : tronc commun d'abord, puis les branches déclarées qui ont des nœuds.
+  const branches: { id: string; name: string; icon: string }[] = [
+    { id: 'tronc', name: 'Tronc commun', icon: '🌳' },
+    ...METIER_BRANCHES[metier],
+  ].filter((b) => METIER_NODES[metier].some((n) => (n.branch ?? 'tronc') === b.id))
+  const branchCost = respecBranchCost(st)
 
   return (
     <div className="mb-3 rounded-xl border border-slate-800 bg-[#0d111a] p-2.5">
@@ -158,43 +168,65 @@ function MetierTree({ metier }: { metier: MetierId }) {
         <span>🌳 Arbre de compétences {pts > 0 && <span className="ml-1 rounded-full bg-amber-500 px-1.5 text-[9px] text-slate-950">{pts}</span>}</span>
         <span>{open ? '▾' : '▸'}</span>
       </button>
-      {open && (
-        <div className="mt-2 grid grid-cols-1 gap-1 sm:grid-cols-2">
-          {METIER_NODES[metier].map((n) => {
-            const rank = nodeRank(metiers, metier, n.id)
-            const owned = rank >= n.maxRank
-            const check = canLearnNode(metiers, metier, n.id, bestStage)
-            const isSpec = !!n.exclusive
-            return (
-              <button
-                key={n.id}
-                disabled={!check.ok}
-                onClick={() => learn(metier, n.id)}
-                title={check.ok ? n.desc : `${n.desc}\n— ${check.reason}`}
-                className={
-                  'flex items-center gap-2 rounded-lg border px-2 py-1.5 text-left disabled:opacity-60 ' +
-                  (owned ? 'border-emerald-700/50 bg-emerald-950/20' : rank > 0 ? 'border-amber-700/50 bg-amber-950/10' : 'border-slate-700 bg-black/20 enabled:hover:border-amber-600/60')
-                }
-                style={isSpec && rank > 0 ? { borderColor: def.color } : undefined}
-              >
-                <span className="text-base">{n.icon}</span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[11px] font-medium text-slate-200">
-                    {isSpec && <span style={{ color: def.color }}>◈ </span>}{n.name}{n.maxRank > 1 ? <span className="text-slate-500"> {rank}/{n.maxRank}</span> : null}
-                  </span>
-                  <span className="block text-[8.5px] leading-snug text-slate-500">{n.desc}</span>
-                  {!owned && !check.ok && check.reason !== 'Aucun point disponible — pratique ton métier.' && (
-                    <span className="block text-[8.5px] font-medium text-rose-400/80">🔒 {check.reason}</span>
-                  )}
-                </span>
-                <span className="shrink-0 text-[10px] font-semibold">
-                  {owned ? <span className="text-emerald-400">✓</span> : <span className={check.ok ? 'text-amber-300' : 'text-slate-600'}>1 pt</span>}
-                </span>
-              </button>
-            )
-          })}
-        </div>
-      )}
+      {open && branches.map((b) => {
+        const nodes = METIER_NODES[metier].filter((n) => (n.branch ?? 'tronc') === b.id)
+        const spent = pointsSpentInBranch(st, metier, b.id)
+        const max = nodes.reduce((a, n) => a + n.maxRank, 0)
+        return (
+          <div key={b.id} className="mt-2">
+            <div className="mb-1 flex items-center justify-between">
+              <span className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: def.color }}>
+                {b.icon} {b.name} <span className="font-normal text-slate-500">· {spent}/{max} pt{max > 1 ? 's' : ''}</span>
+              </span>
+              {spent > 0 && branches.length > 1 && (
+                <button
+                  disabled={gold < branchCost}
+                  onClick={() => respecBranch(metier, b.id)}
+                  title={`Réinitialise UNIQUEMENT cette branche — ${branchCost.toLocaleString('fr-FR')} or (40% du respec complet)`}
+                  className="rounded bg-slate-800 px-1.5 py-0.5 text-[9px] text-slate-400 hover:text-slate-200 disabled:opacity-40"
+                >
+                  ↺ {(branchCost / 1000).toLocaleString('fr-FR')}k
+                </button>
+              )}
+            </div>
+            <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+              {nodes.map((n) => {
+                const rank = nodeRank(metiers, metier, n.id)
+                const owned = rank >= n.maxRank
+                const check = canLearnNode(metiers, metier, n.id, bestStage)
+                const isSpec = !!n.exclusive
+                return (
+                  <button
+                    key={n.id}
+                    disabled={!check.ok}
+                    onClick={() => learn(metier, n.id)}
+                    title={check.ok ? n.desc : `${n.desc}\n— ${check.reason}`}
+                    className={
+                      'flex items-center gap-2 rounded-lg border px-2 py-1.5 text-left disabled:opacity-60 ' +
+                      (owned ? 'border-emerald-700/50 bg-emerald-950/20' : rank > 0 ? 'border-amber-700/50 bg-amber-950/10' : 'border-slate-700 bg-black/20 enabled:hover:border-amber-600/60')
+                    }
+                    style={isSpec && rank > 0 ? { borderColor: def.color } : undefined}
+                  >
+                    <span className="text-base">{n.icon}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[11px] font-medium text-slate-200">
+                        {isSpec && <span style={{ color: def.color }}>◈ </span>}{n.name}{n.maxRank > 1 ? <span className="text-slate-500"> {rank}/{n.maxRank}</span> : null}
+                      </span>
+                      <span className="block text-[8.5px] leading-snug text-slate-500">{n.desc}</span>
+                      {!owned && !check.ok && check.reason !== 'Aucun point disponible — pratique ton métier.' && (
+                        <span className="block text-[8.5px] font-medium text-rose-400/80">🔒 {check.reason}</span>
+                      )}
+                    </span>
+                    <span className="shrink-0 text-[10px] font-semibold">
+                      {owned ? <span className="text-emerald-400">✓</span> : <span className={check.ok ? 'text-amber-300' : 'text-slate-600'}>1 pt</span>}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }

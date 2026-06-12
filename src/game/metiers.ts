@@ -41,11 +41,15 @@ export const METIER_LIST: MetierDef[] = Object.values(METIERS)
 /* Niveaux & XP                                                        */
 /* ------------------------------------------------------------------ */
 
-export const METIER_MAX_LEVEL = 25
+// v0.26 : 25 → 50. La courbe reste IDENTIQUE jusqu'au niveau 25 (aucun joueur ne perd rien),
+// puis s'adoucit (×1,15/niv au lieu de ×1,22) — les nouveaux niveaux nourrissent des arbres
+// de 70-90 rangs où l'on ne peut PAS tout prendre (vrais choix, respec par branche).
+export const METIER_MAX_LEVEL = 50
 
-/** XP nécessaire pour passer du niveau `level` au suivant (courbe géométrique douce). */
+/** XP nécessaire pour passer du niveau `level` au suivant (géométrique, adoucie après 25). */
 export function xpForNext(level: number): number {
-  return Math.round(60 * Math.pow(1.22, level - 1))
+  if (level < 25) return Math.round(60 * Math.pow(1.22, level - 1))
+  return Math.round(60 * Math.pow(1.22, 24) * Math.pow(1.15, level - 25))
 }
 
 /** XP cumulée nécessaire pour ATTEINDRE `level` (niveau 1 = 0 XP). */
@@ -136,6 +140,58 @@ export interface MetierNode {
   requires?: string
   /** Groupe d'exclusivité : un seul nœud du groupe peut être appris (spécialisation). */
   exclusive?: string
+  /** Branche de l'arbre (v0.26) — absent = tronc commun. Le respec se fait PAR branche. */
+  branch?: string
+  /** Rang minimal requis sur le nœud parent `requires` (lignes étagées I→V : 1 par défaut). */
+  requiresRank?: number
+}
+
+/** Une branche d'arbre (v0.26) : l'UI groupe les nœuds par branche, le respec est par branche. */
+export interface MetierBranch {
+  id: string
+  name: string
+  icon: string
+}
+
+/** Branches par métier ('tronc' implicite en tête : nœuds sans `branch`). */
+export const METIER_BRANCHES: Record<MetierId, MetierBranch[]> = {
+  forgeron: [
+    { id: 'corps', name: 'Compagnonnages', icon: '🛠️' },
+    { id: 'prodige', name: 'Prodige', icon: '✨' },
+    { id: 'procedes', name: 'Procédés', icon: '⚙️' },
+    { id: 'industrie', name: 'Industrialisation', icon: '🤖' },
+  ],
+  joaillier: [
+    { id: 'taille', name: 'Taille & Qualité', icon: '✂️' },
+    { id: 'serti', name: 'Châsses & Sertissage', icon: '💎' },
+    { id: 'familles', name: 'Maîtrises de famille', icon: '◈' },
+    { id: 'negoce', name: 'Négoce & Sources', icon: '⚖️' },
+  ],
+  runiste: [
+    { id: 'chrono', name: 'Chronomancie', icon: '⏳' },
+    { id: 'lois', name: 'Législation', icon: '⚖️' },
+    { id: 'pactes', name: 'Pactes', icon: '🩸' },
+  ],
+  alchimiste: [
+    { id: 'officine', name: 'Officine', icon: '🧪' },
+    { id: 'oeuvre', name: 'Grand Œuvre', icon: '⚗️' },
+    { id: 'matiere', name: 'Matière', icon: '🌿' },
+  ],
+}
+
+/** Points dépensés dans une branche donnée ('tronc' = nœuds sans branche). */
+export function pointsSpentInBranch(state: MetierState, metier: MetierId, branchId: string): number {
+  let total = 0
+  for (const n of METIER_NODES[metier]) {
+    const b = n.branch ?? 'tronc'
+    if (b === branchId) total += state.nodes[n.id] ?? 0
+  }
+  return total
+}
+
+/** Coût (or) du respec d'UNE branche — 40% du respec complet (v0.26 : changer de voie sans tout raser). */
+export function respecBranchCost(state: MetierState): number {
+  return Math.round(respecCost(state) * 0.4)
 }
 
 export const METIER_NODES: Record<MetierId, MetierNode[]> = {
@@ -256,9 +312,10 @@ export function canLearnNode(
   if (pointsAvailable(state) < 1) return { ok: false, reason: 'Aucun point disponible — pratique ton métier.' }
   if (def.minLevel && levelFromXp(state.xp) < def.minLevel) return { ok: false, reason: `Niveau de métier ${def.minLevel} requis.` }
   if (def.minStage && bestStage < def.minStage) return { ok: false, reason: `Palier ${def.minStage} requis.` }
-  if (def.requires && (state.nodes[def.requires] ?? 0) < 1) {
+  const needRank = def.requiresRank ?? 1
+  if (def.requires && (state.nodes[def.requires] ?? 0) < needRank) {
     const parent = getMetierNode(metier, def.requires)
-    return { ok: false, reason: `Requiert « ${parent?.name ?? def.requires} ».` }
+    return { ok: false, reason: `Requiert « ${parent?.name ?? def.requires} »${needRank > 1 ? ` rang ${needRank}` : ''}.` }
   }
   if (def.exclusive) {
     const rival = METIER_NODES[metier].find((n) => n.exclusive === def.exclusive && n.id !== nodeId && (state.nodes[n.id] ?? 0) > 0)

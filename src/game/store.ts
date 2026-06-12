@@ -22,7 +22,8 @@ import {
 } from './items'
 import {
   craftMods, metierXpGain, canLearnNode, getMetierNode, respecCost, emptyMetiers, migrateLegacyForge,
-  levelFromXp, METIERS, METIER_LIST, AUTOMATE_FORGERON_LEVELS,
+  levelFromXp, METIERS, METIER_LIST, METIER_NODES, METIER_BRANCHES, AUTOMATE_FORGERON_LEVELS,
+  pointsSpentInBranch, respecBranchCost,
   type MetierId, type MetiersState,
 } from './metiers'
 import { itemSockets, unsocketCost, parseGemKey } from './gems'
@@ -350,6 +351,8 @@ interface GameState extends SaveData {
   learnMetierNode: (metier: MetierId, nodeId: string) => void
   /** Réinitialise l'arbre d'un métier contre de l'or (XP et niveau conservés). */
   respecMetier: (metier: MetierId) => void
+  /** v0.26 : réinitialise UNE branche de l'arbre (40% du coût complet) — changer de voie sans tout raser. */
+  respecMetierBranch: (metier: MetierId, branchId: string) => void
   /** Construit le prochain automate de forge (3 max, coût croissant brutal). */
   buildAutomate: () => void
   /** Assigne (ou retire) la mission d'un automate — donjon/raid DÉJÀ battu uniquement. */
@@ -3438,6 +3441,28 @@ export const useGame = create<GameState>((set, get) => {
       const next = {
         ...s, metiers, gold: s.gold - cost,
         log: pushLog(s.log, `${m.icon} ${m.name} : arbre réinitialisé (-${cost.toLocaleString('fr-FR')} or). Points rendus.`, 'craft'),
+      }
+      persist(next)
+      set(next)
+    },
+
+    respecMetierBranch: (metier, branchId) => {
+      const s = get()
+      const st = s.metiers[metier]
+      if (pointsSpentInBranch(st, metier, branchId) === 0) return
+      const cost = respecBranchCost(st)
+      if (s.gold < cost) return
+      // Ne rase que les nœuds de la branche ('tronc' = nœuds sans champ branch).
+      const nodes = { ...st.nodes }
+      for (const n of METIER_NODES[metier]) {
+        if ((n.branch ?? 'tronc') === branchId) delete nodes[n.id]
+      }
+      const metiers = { ...s.metiers, [metier]: { ...st, nodes } }
+      const m = METIERS[metier]
+      const bname = branchId === 'tronc' ? 'Tronc commun' : METIER_BRANCHES[metier].find((b) => b.id === branchId)?.name ?? branchId
+      const next = {
+        ...s, metiers, gold: s.gold - cost,
+        log: pushLog(s.log, `${m.icon} ${m.name} : branche « ${bname} » réinitialisée (-${cost.toLocaleString('fr-FR')} or). Points rendus.`, 'craft'),
       }
       persist(next)
       set(next)
