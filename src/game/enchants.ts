@@ -25,7 +25,7 @@ export interface EnchantDef {
   time?: TimeRuneId
   /** Rune de RÈGLE : tord les règles du jeu. */
   rule?: RuleId
-  /** Coût ×3 (toutes les runes de règle le sont). */
+  /** Marqueur « rare » (v0.25 : ne joue plus sur le coût — les règles sont 2× plus rares au DROP). */
   rare?: boolean
 }
 
@@ -102,12 +102,38 @@ export function timeRuneMods(runes: Set<TimeRuneId>, tempo = 1): TimeRuneMods {
   return out
 }
 
-/** Coût de gravure : éclats + 🌌 poussière d'étoile (l'encre du Runiste — thème temps/astres). */
-export function enchantCost(def: EnchantDef, item: Item): { eclats: number; poussiere: number } {
+/**
+ * Coût de gravure : éclats + 🌌 poussière d'étoile (l'encre du Runiste — thème temps/astres).
+ * v0.25 : coût RÉDUIT (÷~3, plus de ×3 « rare ») — la rareté vient désormais du DROP : graver
+ * CONSOMME une rune possédée (voir rollRuneDrop), le coût ne paie plus que l'acte de gravure.
+ */
+export function enchantCost(_def: EnchantDef, item: Item): { eclats: number; poussiere: number } {
   const tier = RARITIES[item.rarity].tier
-  const rareMult = def.rare ? 3 : 1
   return {
-    eclats: Math.round(item.ilvl * 4 * tier * rareMult),
-    poussiere: Math.round(tier * rareMult),
+    eclats: Math.round(item.ilvl * 1.5 * tier),
+    poussiere: Math.max(1, Math.ceil(tier / 2)),
   }
+}
+
+/* ---- v0.25 : RUNES PAR DÉCOUVERTE (option A) ----
+ * Les runes ne se gravent plus à volonté : elles TOMBENT — raids surtout, hauts donjons un peu —
+ * et la gravure CONSOMME l'exemplaire (retirer/écraser ne rembourse pas). Les runes de RÈGLE
+ * sont deux fois plus rares que celles de TEMPS (pondération 1 vs 2). */
+
+/** Tire la rune qui tombe (TEMPS pondérée 2 · RÈGLE pondérée 1). */
+export function rollRuneDrop(): EnchantDef {
+  const total = ENCHANTS.reduce((a, e) => a + (e.rule ? 1 : 2), 0)
+  let r = Math.random() * total
+  for (const e of ENCHANTS) { r -= e.rule ? 1 : 2; if (r <= 0) return e }
+  return ENCHANTS[0]
+}
+
+/** Chance de rune par CLEAR de raid (monte avec le tier, capée). */
+export function raidRuneChance(tier: number): number {
+  return Math.min(0.35, 0.05 + 0.025 * tier)
+}
+
+/** Chance de rune par RUN de donjon terminé (très faible — le raid est la vraie source). */
+export function dungeonRuneChance(level: number): number {
+  return Math.min(0.03, 0.008 + 0.001 * level)
 }

@@ -551,10 +551,11 @@ function GemSection({ item }: { item: Item }) {
   )
 }
 
-/** Rune d'enchantement : grave une stat CHOISIE, qui scale avec l'iLvl. Une rune par pièce. */
+/** Rune : se GRAVE depuis le stash (v0.25 : graver CONSOMME une rune possédée — drop de raid). */
 function EnchantSection({ item }: { item: Item }) {
   const essence = useGame((s) => s.essence)
   const poussiere = useGame((s) => s.poussiere)
+  const runesOwned = useGame((s) => s.runesOwned)
   const enchantItem = useGame((s) => s.enchantItem)
   const mods = craftMods(useGame((s) => s.metiers))
   const [open, setOpen] = useState(false)
@@ -569,7 +570,8 @@ function EnchantSection({ item }: { item: Item }) {
       {open && (
         <div className="mt-1.5">
           <div className="mb-1 text-[9.5px] leading-snug text-slate-500">
-            ⏳ TEMPS (horloges du combat) ou ⚖️ RÈGLE (lois du jeu) — une rune par pièce, remplaçable, effets d'équipe.
+            ⏳ TEMPS (horloges du combat) ou ⚖️ RÈGLE (lois du jeu) — une rune par pièce, effets d'équipe.
+            Graver <b className="text-amber-300">CONSOMME</b> la rune (drop de ☠️ raid surtout) ; écraser ne rembourse pas.
           </div>
           <div className="space-y-0.5">
             {ENCHANTS.map((e) => {
@@ -577,13 +579,14 @@ function EnchantSection({ item }: { item: Item }) {
               const cost = { eclats: Math.round(raw.eclats * mods.enchantCostMult), poussiere: Math.round(raw.poussiere * mods.enchantCostMult) }
               const on = item.enchant === e.id
               const ruleLocked = !!e.rule && !mods.ruleRunes
-              const can = !on && !ruleLocked && essence >= cost.eclats && poussiere >= cost.poussiere
+              const owned = runesOwned[e.id] ?? 0
+              const can = !on && !ruleLocked && owned > 0 && essence >= cost.eclats && poussiere >= cost.poussiere
               return (
                 <button
                   key={e.id}
                   disabled={!can}
                   onClick={() => enchantItem(item.id, e.id)}
-                  title={ruleLocked ? `${e.description}\n— 🔒 nœud « Lois du monde » (arbre du Runiste)` : e.description}
+                  title={ruleLocked ? `${e.description}\n— 🔒 nœud « Lois du monde » (arbre du Runiste)` : owned === 0 && !on ? `${e.description}\n— 🔒 aucune en stock : trouve-la en raid (ou rarement en donjon)` : e.description}
                   className={
                     'flex w-full flex-col gap-0.5 rounded border px-1.5 py-1 text-left text-[10px] disabled:opacity-40 ' +
                     (on ? 'border-amber-400 bg-amber-900/30 text-amber-200' : 'border-slate-700 text-slate-300 enabled:hover:bg-amber-900/20')
@@ -593,8 +596,9 @@ function EnchantSection({ item }: { item: Item }) {
                     <span className="min-w-0 truncate">
                       {on ? '✓ ' : ruleLocked ? '🔒 ' : ''}{e.icon} {e.name}
                       <span className="text-slate-500"> · {e.rule ? '⚖️ RÈGLE' : '⏳ TEMPS'}</span>
+                      <span className={owned > 0 ? 'text-emerald-300' : 'text-slate-600'}> · ×{owned}</span>
                     </span>
-                    {!on && <span className="shrink-0 text-[9px] text-slate-500">♦{cost.eclats}{cost.poussiere ? ` 🌌${cost.poussiere}` : ''}</span>}
+                    {!on && <span className="shrink-0 text-[9px] text-slate-500">{owned === 0 ? '☠️ à trouver' : <>♦{cost.eclats}{cost.poussiere ? ` 🌌${cost.poussiere}` : ''}</>}</span>}
                   </span>
                   <span className="text-[8.5px] leading-snug text-slate-500">{e.description}</span>
                 </button>

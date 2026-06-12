@@ -25,7 +25,7 @@ import {
   type MetierId, type MetiersState,
 } from './metiers'
 import { itemSockets, unsocketCost, parseGemKey } from './gems'
-import { getEnchant, enchantCost, equippedRules, equippedTimeRunes, timeRuneMods, type TimeRuneMods } from './enchants'
+import { getEnchant, enchantCost, equippedRules, equippedTimeRunes, timeRuneMods, rollRuneDrop, raidRuneChance, dungeonRuneChance, type TimeRuneMods } from './enchants'
 import {
   condGemMods, acharneMult, nueeMult, rollCondGem, condGemKey, parseCondKey, getCondGem, condGemInstance,
   gemMaxRank, grindDust, legacyGemDust, recutCost, BIOME_GEM_FAMILY, COND_GEM_DROP, GEM_DUST_DROP, GEM_CUT_COST,
@@ -269,6 +269,9 @@ interface SaveData {
   /** Tier maximal TENTABLE par raid (v0.24) : monte via unlockRaidTier (clear + Trophées). */
   raidTierUnlocked: Partial<Record<RaidId, number>>
   raid: ActiveRaid | null
+  /** 🪄 Runes POSSÉDÉES (v0.25, option A) : id de rune → quantité. Drop rare (raids surtout) ;
+   *  la gravure CONSOMME un exemplaire — retirer/écraser ne rembourse pas. */
+  runesOwned: Record<string, number>
   /** Grimoire : ids des effets uniques déjà découverts. */
   codex: string[]
   /** Améliorations permanentes : id → niveau. */
@@ -615,6 +618,7 @@ function freshSave(): SaveData {
     raidTrophies: {},
     raidTierUnlocked: {},
     raid: null,
+    runesOwned: {},
     codex: [],
     upgrades: {},
     metiers: emptyMetiers(),
@@ -829,6 +833,8 @@ function sanitize(save: SaveData): SaveData {
   // 🏆 Trophées & tiers débloqués (v0.24) : migration — l'accès existant est conservé
   // (tier débloqué = meilleur tier vaincu + 1), les Trophées partent de zéro.
   if (!save.raidTrophies || typeof save.raidTrophies !== 'object') save.raidTrophies = {}
+  // 🪄 Runes possédées (v0.25) : stash vide au départ — les runes déjà GRAVÉES sont conservées.
+  if (!save.runesOwned || typeof save.runesOwned !== 'object') save.runesOwned = {}
   {
     // SEED UNIQUE (v0.24 fix) : si la save n'a pas encore de tiers débloqués (pré-v0.24), on dérive
     // l'accès du meilleur tier vaincu +1. SINON on conserve l'acquis SANS re-bump — avant, ce bloc
@@ -1014,6 +1020,7 @@ function persist(s: GameState) {
     raidTrophies: s.raidTrophies,
     raidTierUnlocked: s.raidTierUnlocked,
     raid: s.raid,
+    runesOwned: s.runesOwned,
     codex: s.codex,
     upgrades: s.upgrades,
     metiers: s.metiers,
@@ -2161,11 +2168,19 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
       }
       const chest: ChestReward = { dungeonName: d.name, level: lv, items, eclats: cEclats, noyau: cNoyau, gold: cGold, sceaux: cSceaux, orbes: cOrbes, poussiere: cPous, xp: cXp, gemDust: cDust, gem: cGem }
 
+      // 🪄 Rune (v0.25) : drop TRÈS rare en fin de run — la vraie source est le raid.
+      let runesOwned = s.runesOwned
+      if (Math.random() < dungeonRuneChance(lv)) {
+        const rd = rollRuneDrop()
+        runesOwned = { ...runesOwned, [rd.id]: (runesOwned[rd.id] ?? 0) + 1 }
+        log = pushLog(log, `🪄 RUNE TROUVÉE : ${rd.icon} ${rd.name} !`, 'loot')
+      }
+
       const healed: Character[] = chars.map(fullHeal)
       const dungeonProgress = { ...s.dungeonProgress, [d.dungeonId]: Math.max(s.dungeonProgress[d.dungeonId] ?? 0, lv) }
       const repeatLeft = d.repeatLeft ?? 0
       // État avec les pools PAR COMBAT déjà crédités (le coffre est un bonus en plus).
-      const base = { ...s, gold, essence, noyau, poussiere, sceaux, orbes, gemDust, inventory, codex }
+      const base = { ...s, gold, essence, noyau, poussiere, sceaux, orbes, gemDust, inventory, codex, runesOwned }
 
       // Auto-farm : on encaisse le coffre directement (sans modal) et on relance.
       if (repeatLeft > 0) {
@@ -2380,6 +2395,14 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
         log = pushLog(log, `${cg.icon} GEMME DE CONDITION : ${cg.name} !`, 'loot')
       }
 
+      // 🪄 Rune (v0.25) : LE raid est la source des runes — chance qui monte avec le tier.
+      let runesOwned = s.runesOwned
+      if (Math.random() < raidRuneChance(tier)) {
+        const rd = rollRuneDrop()
+        runesOwned = { ...runesOwned, [rd.id]: (runesOwned[rd.id] ?? 0) + 1 }
+        log = pushLog(log, `🪄 RUNE TROUVÉE : ${rd.icon} ${rd.name} !`, 'loot')
+      }
+
       // Auto-raid : s'il reste des relances ET assez d'Orbes, on encaisse le trésor et on relance.
       if (repeatLeft > 0) {
         const credited = applyChestRewards(s, chest)
@@ -2387,7 +2410,7 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
           const nr = generateRaid(r.raidId, tier)
           nr.repeatLeft = repeatLeft - 1
           const log3 = pushLog(log, `🔁 Auto-raid : trésor encaissé${cosmic ? ` (💫 ×${cosmic})` : ''} · ${repeatLeft} relance${repeatLeft > 1 ? 's' : ''} restante${repeatLeft > 1 ? 's' : ''}.`, 'kill')
-          const next = { ...s, ...credited, gems, characters: healed, raidProgress, raidTrophies, orbes: credited.orbes - def.orbeCost, raid: nr, log: log3 }
+          const next = { ...s, ...credited, gems, runesOwned, characters: healed, raidProgress, raidTrophies, orbes: credited.orbes - def.orbeCost, raid: nr, log: log3 }
           persist(next)
           set(next)
           return
@@ -2395,7 +2418,7 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
       }
 
       log = pushLog(log, `🏆 RAID VAINCU : ${def.name} (Tier ${tier}) !${cosmic ? ` 💫 Éclat cosmique ×${cosmic} !` : ''} Un trésor t'attend.`, 'kill')
-      const next = { ...s, gems, characters: healed, raid: null, raidProgress, raidTrophies, pendingChest: chest, log }
+      const next = { ...s, gems, runesOwned, characters: healed, raid: null, raidProgress, raidTrophies, pendingChest: chest, log }
       persist(next)
       set(next)
       return
@@ -3137,6 +3160,8 @@ export const useGame = create<GameState>((set, get) => {
       const item = findItemById(s, itemId)
       if (!def || !item || item.enchant === enchantId) return
       if (def.rule && !mods.ruleRunes) return // runes de RÈGLE : nœud « Lois du monde »
+      // v0.25 (option A) : la gravure CONSOMME une rune POSSÉDÉE (drop de raid/donjon).
+      if ((s.runesOwned[enchantId] ?? 0) < 1) return
       const raw = enchantCost(def, item)
       const cost = { eclats: Math.round(raw.eclats * mods.enchantCostMult), poussiere: Math.round(raw.poussiere * mods.enchantCostMult) }
       if (s.essence < cost.eclats || s.poussiere < cost.poussiere) return
@@ -3148,8 +3173,9 @@ export const useGame = create<GameState>((set, get) => {
         ...s, ...upd,
         essence: s.essence - cost.eclats,
         poussiere: s.poussiere - cost.poussiere,
+        runesOwned: { ...s.runesOwned, [enchantId]: (s.runesOwned[enchantId] ?? 0) - 1 },
         metiers: g.metiers,
-        log: pushLog(g.log, `🪄 Rune gravée : ${def.icon} ${def.name} sur ${item.name} (-${cost.eclats} ♦${cost.poussiere ? `, -${cost.poussiere} 🌌` : ''}, +${gain} XP 🪄).`, 'craft'),
+        log: pushLog(g.log, `🪄 Rune gravée : ${def.icon} ${def.name} sur ${item.name} (rune consommée, -${cost.eclats} ♦${cost.poussiere ? `, -${cost.poussiere} 🌌` : ''}, +${gain} XP 🪄).`, 'craft'),
       }
       persist(next)
       set(next)
