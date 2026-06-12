@@ -4,8 +4,9 @@ import { equipDelta, type EquipDelta } from '../game/character'
 import { RARITIES } from '../game/rarities'
 import { ALL_STAT_META } from '../game/stats'
 import {
-  sellValue, recycleValue, itemStatBlock, itemHasRareStat,
+  sellValue, recycleValue, itemStatBlock, itemHasRareStat, itemStatTotals,
   reforgeCost, surillvlCost, ascendCost, nextRarity, transmuteCost, craftRaidGate,
+  SURILLVL_OVER_MARGIN,
   quintCost, QUINT_GAIN,
 } from '../game/items'
 import { craftMods } from '../game/metiers'
@@ -21,8 +22,9 @@ import {
   UNIQUE_EFFECTS, UNIQUE_ROLES, UNIQUE_MAX_RANK, UNIQUE_ACTIVE_RANK,
 } from '../game/uniques'
 import type { UniqueRole } from '../game/types'
-import { useGame, FRAGMENT_INFUSE_COST, CHOOSE_UNIQUE_COST, bestRaidTier } from '../game/store'
+import { useGame, FRAGMENT_INFUSE_COST, CHOOSE_UNIQUE_COST, bestRaidTier, maxContentIlvl } from '../game/store'
 import { rarityTextStyle, rarityCardStyle, rarityNameClass } from './rarityStyle'
+import { GemBadges } from './ItemRow'
 
 /** Libellé/couleur d'affichage d'une ligne d'objet (stat / dégâts / résistance). */
 function affixLabel(a: Affix): { name: string; color: string; pct: boolean } {
@@ -69,6 +71,9 @@ export function ComparePanel({ item, char, previewDelta, equipped, occupied, onE
   const cur = itemStatBlock(item)
   const old = cmp ? itemStatBlock(cmp) : {}
   const keys = orderedKeys(cur, old)
+  // Synthèse chiffrée : nb de stats distinctes + total de points (et Δ vs l'objet équipé).
+  const tot = itemStatTotals(item)
+  const statDelta = cmp ? tot.total - itemStatTotals(cmp).total : null
 
   return (
     <div className="flex flex-col rounded-xl border p-3" style={rarityCardStyle(item.rarity)}>
@@ -90,6 +95,18 @@ export function ComparePanel({ item, char, previewDelta, equipped, occupied, onE
             <span className={item.orientation === 'offensif' ? 'text-rose-300' : item.orientation === 'defensif' ? 'text-emerald-300' : 'text-slate-300'}>
               {item.orientation === 'offensif' ? '⚔ Offensif' : item.orientation === 'defensif' ? '🛡 Défensif' : '⚖ Équilibré'}
             </span>
+          </div>
+          {/* Synthèse chiffrée : lignes · stats distinctes · TOTAL de points (+Δ vs équipé) */}
+          <div className="text-[10px] text-slate-500">
+            {item.affixes.length} ligne{item.affixes.length > 1 ? 's' : ''} · {tot.count} stats
+            {tot.typedLines > 0 && <> (+{tot.typedLines} typée{tot.typedLines > 1 ? 's' : ''})</>}
+            {' · Σ '}
+            <span className="font-medium text-slate-300">{tot.total.toLocaleString('fr-FR')}</span>
+            {statDelta != null && statDelta !== 0 && (
+              <span className={statDelta > 0 ? 'text-emerald-400' : 'text-red-400'}>
+                {' '}{statDelta > 0 ? '▲' : '▼'}{Math.abs(statDelta).toLocaleString('fr-FR')} vs équipé
+              </span>
+            )}
           </div>
         </div>
         {onClose && (
@@ -137,14 +154,23 @@ export function ComparePanel({ item, char, previewDelta, equipped, occupied, onE
         })}
       </div>
 
-      {/* L'IMPACT RÉEL : Δ DPS / Δ PV si on équipe (swap simulé — la vraie métrique d'arbitrage) */}
+      {/* L'IMPACT RÉEL : Δ DPS / Δ PV / Δ SURVIE si on équipe (swap simulé — la vraie métrique d'arbitrage) */}
       {!isEquipped && previewDelta && (
-        <div className="mt-2 grid grid-cols-2 gap-1.5 text-center">
-          <div className={'rounded-lg py-1.5 text-[13px] font-bold tabular-nums ' + (previewDelta.dps >= 0 ? 'bg-emerald-900/30 text-emerald-300' : 'bg-red-900/30 text-red-300')}>
-            ⚔ {fmtSigned(previewDelta.dps)} DPS
+        <div className="mt-2 grid grid-cols-3 gap-1.5 text-center">
+          <div className={'rounded-lg py-1.5 tabular-nums ' + (previewDelta.dps >= 0 ? 'bg-emerald-900/30 text-emerald-300' : 'bg-red-900/30 text-red-300')}>
+            <div className="text-[12px] font-bold">⚔ {fmtSigned(previewDelta.dps)}</div>
+            <div className="text-[8.5px] uppercase tracking-wide opacity-70">DPS</div>
           </div>
-          <div className={'rounded-lg py-1.5 text-[13px] font-bold tabular-nums ' + (previewDelta.hp >= 0 ? 'bg-emerald-900/30 text-emerald-300' : 'bg-red-900/30 text-red-300')}>
-            ❤️ {fmtSigned(previewDelta.hp)} PV
+          <div className={'rounded-lg py-1.5 tabular-nums ' + (previewDelta.hp >= 0 ? 'bg-emerald-900/30 text-emerald-300' : 'bg-red-900/30 text-red-300')}>
+            <div className="text-[12px] font-bold">❤️ {fmtSigned(previewDelta.hp)}</div>
+            <div className="text-[8.5px] uppercase tracking-wide opacity-70">PV</div>
+          </div>
+          <div
+            className={'rounded-lg py-1.5 tabular-nums ' + (previewDelta.ehp >= 0 ? 'bg-sky-900/30 text-sky-300' : 'bg-red-900/30 text-red-300')}
+            title="Survie = PV effectifs : PV max ÷ atténuation (esquive, réduction de dégâts, maîtrise…). Hors résistances élémentaires (relatives à chaque ennemi)."
+          >
+            <div className="text-[12px] font-bold">🛡 {fmtSigned(previewDelta.ehp)}</div>
+            <div className="text-[8.5px] uppercase tracking-wide opacity-70">Survie</div>
           </div>
         </div>
       )}
@@ -213,7 +239,9 @@ export function ComparePanel({ item, char, previewDelta, equipped, occupied, onE
                   <span>Équiper · {slot.name}</span>
                   <span className="text-[10px] font-normal text-emerald-200/80">
                     {inPlace ? `remplace ${RARITIES[inPlace.rarity].name} ` : 'vide '}
-                    <span className={'font-bold tabular-nums ' + (d.dps >= 0 ? 'text-emerald-300' : 'text-red-300')}>{d.dps >= 0 ? '▲' : '▼'}{fmtSigned(d.dps)} DPS</span>
+                    <span className={'font-bold tabular-nums ' + (d.dps >= 0 ? 'text-emerald-300' : 'text-red-300')}>{d.dps >= 0 ? '▲' : '▼'}{fmtSigned(d.dps)}⚔</span>
+                    {' '}
+                    <span className={'font-bold tabular-nums ' + (d.ehp >= 0 ? 'text-sky-300' : 'text-red-300')}>{d.ehp >= 0 ? '▲' : '▼'}{fmtSigned(d.ehp)}🛡</span>
                   </span>
                 </button>
               )
@@ -250,6 +278,7 @@ function CraftSection({ item }: { item: Item }) {
   const transmute = useGame((s) => s.transmute)
   const mods = craftMods(useGame((s) => s.metiers))
   const raidProgress = useGame((s) => s.raidProgress)
+  const bestStage = useGame((s) => s.bestStage)
   const [open, setOpen] = useState(false)
   const [locked, setLocked] = useState<number[]>([])
   const cm = mods.costMult
@@ -258,7 +287,12 @@ function CraftSection({ item }: { item: Item }) {
 
   // v0.25 : le prix de la reforge suit les VERROUS posés et les reforges déjà faites sur l'objet.
   const rCost = Math.round(reforgeCost(item, locked.length) * cm)
-  const sCost = Math.round(surillvlCost(item) * cm)
+  // v0.25.x : surillvl PLAFONNÉ à l'iLvl max du contenu débloqué (+ marge), sur-coût ×4/pas au-dessus.
+  const contentIlvl = maxContentIlvl(bestStage, raidProgress)
+  const surTarget = item.ilvl + mods.surillvlStep
+  const surCapped = surTarget > contentIlvl + SURILLVL_OVER_MARGIN
+  const surOver = Math.max(0, Math.ceil((surTarget - contentIlvl) / mods.surillvlStep))
+  const sCost = Math.round(surillvlCost(item, surOver) * cm)
   const rawA = ascendCost(item)
   const aCost = { eclats: Math.round(rawA.eclats * cm), noyau: Math.round(rawA.noyau * cm), fragments: Math.round((rawA.fragments ?? 0) * cm), poussiere: Math.round((rawA.poussiere ?? 0) * cm), cosmic: Math.round((rawA.cosmic ?? 0) * cm) }
   const nr = nextRarity(item.rarity)
@@ -318,13 +352,22 @@ function CraftSection({ item }: { item: Item }) {
           )}
 
           {mods.surillvl ? (
-            <button
-              disabled={essence < sCost}
-              onClick={() => surillvl(item.id)}
-              className="w-full rounded bg-amber-800/60 py-2 text-[11px] font-medium hover:bg-amber-700/70 disabled:opacity-40"
-            >
-              Surillvl → iLvl {item.ilvl + mods.surillvlStep} · ♦ {sCost}
-            </button>
+            surCapped ? (
+              <div className="rounded border border-amber-900/40 bg-black/20 px-2 py-1.5 text-center text-[10px] leading-snug text-amber-200/60">
+                ⛔ Surillvl plafonné à <b className="text-amber-200">iLvl {contentIlvl + SURILLVL_OVER_MARGIN}</b> — iLvl max
+                de ton contenu ({contentIlvl}) +{SURILLVL_OVER_MARGIN}. Monte des paliers ou des tiers de raid pour repousser le mur.
+              </div>
+            ) : (
+              <button
+                disabled={essence < sCost}
+                onClick={() => surillvl(item.id)}
+                title={surOver > 0 ? `Au-delà de l'iLvl de ton contenu (${contentIlvl}) : sur-coût ×4 par pas — plafond dur à ${contentIlvl + SURILLVL_OVER_MARGIN}.` : undefined}
+                className="w-full rounded bg-amber-800/60 py-2 text-[11px] font-medium hover:bg-amber-700/70 disabled:opacity-40"
+              >
+                Surillvl → iLvl {surTarget} · ♦ {sCost}
+                {surOver > 0 && <span className="text-amber-300"> · ⚠ au-delà du contenu</span>}
+              </button>
+            )
           ) : <Locked label="Surillvl" metier="Forgeron" />}
 
           {/* Transmuter l'affinité (Force/Agi/Int) */}
@@ -798,6 +841,7 @@ function EquippedSummary({ item, slotName }: { item: Item; slotName?: string }) 
           {item.name}
         </span>
         {itemHasRareStat(item) && <span className="text-[10px]" title="Stat RARE">💎</span>}
+        <GemBadges item={item} />
         {item.unique && <span className="text-[10px] text-fuchsia-400" title={uniqueName ?? undefined}>✦</span>}
       </div>
       <div className="text-[9.5px] text-slate-500">

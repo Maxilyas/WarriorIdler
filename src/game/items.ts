@@ -231,8 +231,8 @@ export function generateItem(opts: GenerateOptions): Item {
  *  - sous le pic : `down` par cran (raide — le bas de fenêtre reste minoritaire),
  *  - au-dessus : « épaule » `shoulder` au premier cran, puis traîne `tail` par cran
  *    (TRÈS raide → le haut de fenêtre existe toujours, mais reste un événement).
- * Repère (fenêtre raid T1, pic Épique) : ~57% Épique · 16% Légendaire · 3.5% Artefact ·
- * 0.8% Patrimoine · … · ~0.008% Céleste.
+ * Repère (fenêtre raid T1 v0.25.x, pic Légendaire) : ~56% Légendaire · 17% Artefact ·
+ * 4% Patrimoine · 1% Mythique · … traîne infime jusqu'à Céleste.
  */
 export function rollWindowRarity(
   floor: number, peak: number, cap: number,
@@ -303,6 +303,22 @@ export function itemHasRareStat(item: Item): boolean {
   return item.affixes.some((a) => a.kind === 'stat' && a.stat != null && (RARE_STATS as string[]).includes(a.stat))
 }
 
+/** Synthèse chiffrée d'un objet : nb de STATS distinctes (primaire + endurance + lignes + unique)
+ *  et TOTAL de points de stats. Les lignes typées (+% dégâts / résist) ne sont pas des « points »
+ *  comparables → comptées à part (`typedLines`). Affichée sur la fiche objet. */
+export function itemStatTotals(item: Item): { count: number; total: number; typedLines: number } {
+  const block = itemStatBlock(item)
+  let count = 0
+  let total = 0
+  for (const k in block) {
+    const v = block[k] ?? 0
+    if (v <= 0) continue
+    count++
+    total += v
+  }
+  return { count, total, typedLines: item.affixes.filter((a) => a.kind !== 'stat').length }
+}
+
 /** Score brut d'un objet pour comparer rapidement (somme pondérée). */
 export function itemScore(item: Item): number {
   const block = itemStatBlock(item)
@@ -354,9 +370,22 @@ export function reforgeCost(item: Item, lockedCount = 0): number {
   return Math.round(item.ilvl * 2.5 * RARITIES[item.rarity].tier * (1 + lockedCount) * Math.pow(CRAFT_REPEAT_GROWTH, item.reforgeCount ?? 0))
 }
 
-/** Coût en éclats d'un surillvl (+SURILLVL_STEP ilvl). v0.25 : géométrique par usage. */
-export function surillvlCost(item: Item): number {
-  return Math.round(item.ilvl * 3.5 * RARITIES[item.rarity].tier * Math.pow(CRAFT_REPEAT_GROWTH, item.surCount ?? 0))
+/** Marge d'iLvl tolérée AU-DESSUS de l'iLvl max du contenu débloqué (paliers/donjons/raids).
+ *  v0.25.x : le surillvl est PLAFONNÉ à contenu + marge — l'atelier suit la progression,
+ *  il ne la remplace pas (avant : +30 iLvl au-dessus de tout contenu était accessible). */
+export const SURILLVL_OVER_MARGIN = 6
+/** Sur-coût par pas AU-DESSUS de l'iLvl de contenu : ×4 par pas (×4 → ×16 → ×64) —
+ *  les derniers iLvl de la marge sont un luxe hors de prix, pas une routine. */
+export const SURILLVL_OVER_COST_MULT = 4
+
+/** Coût en éclats d'un surillvl (+SURILLVL_STEP ilvl). v0.25 : géométrique par usage.
+ *  `overSteps` = nb de pas du résultat AU-DESSUS de l'iLvl de contenu (sur-coût ×4 par pas). */
+export function surillvlCost(item: Item, overSteps = 0): number {
+  return Math.round(
+    item.ilvl * 3.5 * RARITIES[item.rarity].tier
+    * Math.pow(CRAFT_REPEAT_GROWTH, item.surCount ?? 0)
+    * Math.pow(SURILLVL_OVER_COST_MULT, Math.max(0, overSteps)),
+  )
 }
 
 export interface CraftCost { eclats: number; noyau: number; fragments?: number; poussiere?: number; cosmic?: number }
@@ -413,12 +442,17 @@ function materialCost(tier: number, ilvl: number, factor: number): Omit<CraftCos
   }
 }
 
-/** Coût d'une ascension de rareté → calé sur le tier CIBLE, à un facteur réduit (l'objet de base existe déjà). */
+/**
+ * Coût d'une ascension de rareté → calé sur le tier CIBLE, à un facteur MAJORÉ (v0.25.x).
+ * Ascensionner GARDE l'objet (lignes, unique, gemmes, rune) et ajoute une ligne : c'est strictement
+ * meilleur qu'une création ALÉATOIRE du même tier → ça doit coûter PLUS cher, pas moitié prix.
+ * Avant : éclats ×0.7 / matériaux ×0.55 — monter son BiS coûtait ~2× moins que forger un inconnu.
+ */
 export function ascendCost(item: Item): CraftCost {
   const nt = RARITIES[item.rarity].tier + 1
   return {
-    eclats: Math.round(craftEclats(nt, item.ilvl) * 0.7),
-    ...materialCost(nt, item.ilvl, 0.55),
+    eclats: Math.round(craftEclats(nt, item.ilvl) * 1.15),
+    ...materialCost(nt, item.ilvl, 1.35),
   }
 }
 

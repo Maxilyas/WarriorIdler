@@ -17,6 +17,7 @@ import {
   generateItem, rollBoxRarity, rollWindowRarity, rollFarmRarity, sellValue, recycleValue, recyclePoussiere, itemScore,
   reforgeItem, surillvlItem, ascendItem,
   reforgeCost, surillvlCost, ascendCost, createCost, transmuteCost, maxCraftTier, craftRaidGate,
+  SURILLVL_OVER_MARGIN,
   enhanceTypedAffixes, quintRefund,
 } from './items'
 import {
@@ -60,7 +61,7 @@ import {
   generateRaid, makeRaidAdd, getRaidDef, raidUnlocked, raidBossVariant,
   raidIlvl, raidRarityWindow, rollRaidLootCount, raidTrophyGain, raidTierUnlockCost,
   raidFragments, raidCosmicChance, raidCosmicQty, pickRaidLootType,
-  PAIR_ENRAGE_MULT, NOVA_MULT, RAIDS, type ActiveRaid, type RaidId,
+  PAIR_ENRAGE_MULT, NOVA_MULT, RAIDS, RAID_LIST, type ActiveRaid, type RaidId,
 } from './raids'
 import { SETS } from './sets'
 import { simulateOffline, type OfflineReport } from './offline'
@@ -1317,6 +1318,21 @@ export function boxRaidGate(box: MysteryBox): number {
 export function bestRaidTier(raidProgress: Record<string, number>): number {
   let best = 0
   for (const k in raidProgress) best = Math.max(best, raidProgress[k] ?? 0)
+  return best
+}
+
+/**
+ * iLvl MAX « de contenu » : le meilleur iLvl lootable dans les contenus DÉBLOQUÉS —
+ * donjons (plafonnés à 125% du record de palier, voir dungeonIlvl) et raids VAINCUS
+ * (iLvl du meilleur tier clear, par raid). Sert de plafond RELATIF au surillvl (v0.25.x) :
+ * l'atelier suit la progression du joueur, il ne la double pas.
+ */
+export function maxContentIlvl(bestStage: number, raidProgress: Record<string, number>): number {
+  let best = Math.round(stageIlvl(Math.max(1, bestStage)) * 1.25)
+  for (const def of RAID_LIST) {
+    const t = raidProgress[def.id] ?? 0
+    if (t >= 1) best = Math.max(best, raidIlvl(def, t))
+  }
   return best
 }
 
@@ -3044,7 +3060,11 @@ export const useGame = create<GameState>((set, get) => {
       if (!mods.surillvl) return // débloqué via l'arbre du Forgeron
       const item = findItemById(s, itemId)
       if (!item) return
-      const cost = Math.round(surillvlCost(item) * mods.costMult)
+      // v0.25.x : plafond RELATIF au contenu débloqué (+ marge), sur-coût ×4 par pas au-dessus.
+      const content = maxContentIlvl(s.bestStage, s.raidProgress)
+      if (item.ilvl + mods.surillvlStep > content + SURILLVL_OVER_MARGIN) return
+      const over = Math.max(0, Math.ceil((item.ilvl + mods.surillvlStep - content) / mods.surillvlStep))
+      const cost = Math.round(surillvlCost(item, over) * mods.costMult)
       if (s.essence < cost) return
       const upd = applyItemPatch(s, itemId, surillvlItem(item, mods.surillvlStep))
       if (!upd) return

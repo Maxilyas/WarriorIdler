@@ -4,7 +4,7 @@ import { computeDamageProfile, computeResistProfile, profileDamageMult, type Dam
 import { DAMAGE_TYPE_LIST } from './damage'
 import { setBonuses } from './sets'
 import { getPower, POWER_SLOTS } from './powers'
-import { theoreticalDps } from './combat'
+import { theoreticalDps, genericMitigation } from './combat'
 import {
   talentStatMods, talentResistMods, talentUnlockedPowers, talentKeystones, type KeystoneEffect,
 } from './talents'
@@ -141,6 +141,19 @@ export function charMaxHp(char: Character): number {
 }
 
 /**
+ * PV EFFECTIFS (« tankiness ») : PV max ÷ atténuation générique (esquive, réduction de dégâts,
+ * maîtrise Force, passives, keystones). La Barrière est déjà dans les PV max. HORS résistances
+ * de type (relatives à l'exigence de CHAQUE ennemi — pas comparables dans l'absolu) et régén.
+ * C'est LA métrique de survie comparable entre deux pièces → affichée sur les objets (Δ Survie).
+ */
+export function charEhp(char: Character): number {
+  const d = charDerived(char)
+  const { damageReduction } = charPassives(char)
+  const extra = (1 - damageReduction) * (1 - charCombatMods(char).flatDr)
+  return d.hp / genericMitigation(d, extra)
+}
+
+/**
  * Puissance d'une capacité selon sa stat de scaling.
  * - stat unique → la puissance de cette stat.
  * - liste de stats → la MEILLEURE d'entre elles (build Force OU Agilité, etc.).
@@ -254,15 +267,16 @@ export function charResist(char: Character): Partial<Record<DamageType, number>>
   return r
 }
 
-/** Impact RÉEL d'un équipement : variation de DPS et de PV si on pose `item` dans `slot`.
- *  Simulation par swap (toute la chaîne : profil de dégâts, conversions, sets…) — c'est LA métrique
- *  d'arbitrage du joueur, bien plus parlante qu'un score de stats. */
-export interface EquipDelta { dps: number; hp: number }
+/** Impact RÉEL d'un équipement : variation de DPS, de PV et de SURVIE (PV effectifs) si on pose
+ *  `item` dans `slot`. Simulation par swap (toute la chaîne : profil de dégâts, conversions, sets…)
+ *  — c'est LA métrique d'arbitrage du joueur, bien plus parlante qu'un score de stats. */
+export interface EquipDelta { dps: number; hp: number; ehp: number }
 export function equipDelta(char: Character, item: Item, slot: EquipSlotId): EquipDelta {
   const after: Character = { ...char, equipment: { ...char.equipment, [slot]: item } }
   return {
     dps: charDps(after) - charDps(char),
     hp: charMaxHp(after) - charMaxHp(char),
+    ehp: charEhp(after) - charEhp(char),
   }
 }
 

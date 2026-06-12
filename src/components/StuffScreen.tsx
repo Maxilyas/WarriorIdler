@@ -405,6 +405,7 @@ export function StuffScreen() {
                 key={item.id}
                 item={item}
                 dpsDelta={deltas.get(item.id)?.dps}
+                ehpDelta={deltas.get(item.id)?.ehp}
                 selected={item.id === selectedItemId}
                 onClick={() => setSelectedItemId(item.id)}
               />
