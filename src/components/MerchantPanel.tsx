@@ -6,6 +6,8 @@ import {
   RECRUIT_COST, RECRUIT_POUSSIERE, type MysteryBox,
 } from '../game/store'
 import { UPGRADES, UPGRADE_CATEGORIES, upgradeCost, upgradePoussiere, upgradeEclats, isMaxed, type UpgradeCategory } from '../game/upgrades'
+import { CONTRACTS, MAITRISE_NODES, MAITRISE_TOTAL_POINTS, conseilFresh, weekRemainingMs } from '../game/maitrise'
+import { RAID_UNLOCK_STAGE } from '../game/raids'
 import { RARITY_LIST } from '../game/rarities'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from '../game/damage'
 import type { DamageType } from '../game/types'
@@ -55,15 +57,23 @@ export function MerchantPanel() {
   const buyUpgrade = useGame((s) => s.buyUpgrade)
   const recruitCharacter = useGame((s) => s.recruitCharacter)
 
-  const [sub, setSub] = useState<'coffres' | 'ameliorations'>('coffres')
+  const [sub, setSub] = useState<'coffres' | 'conseil' | 'ameliorations'>('coffres')
   const [boxQty, setBoxQty] = useState(1)
 
   const recruitIdx = characters.length - 1
   const recruitCost = RECRUIT_COST[recruitIdx] ?? 250000
   const recruitPoussiere = RECRUIT_POUSSIERE[recruitIdx] ?? 0
 
+  const conseilRaw = useGame((s) => s.conseil)
+  const maitrisePoints = useGame((s) => s.maitrisePoints)
+  const maitrise = useGame((s) => s.maitrise)
+  const learnMaitrise = useGame((s) => s.learnMaitrise)
+
   const pityBonus = Math.min(BOX_PITY_CAP, boxPity * BOX_PITY_STEP)
   const raidTier = bestRaidTier(raidProgress)
+  // Affichage SÛRETÉ : si la semaine a tourné depuis la dernière action, montrer des compteurs à zéro.
+  const conseil = conseilFresh(conseilRaw)
+  const spentMaitrise = Object.values(maitrise).reduce((a, b) => a + b, 0)
 
   return (
     <div className="flex h-full flex-col">
@@ -74,6 +84,9 @@ export function MerchantPanel() {
 
       <div className="mb-2 flex gap-1.5">
         <SubTab on={sub === 'coffres'} onClick={() => setSub('coffres')}>🎁 Coffres</SubTab>
+        <SubTab on={sub === 'conseil'} onClick={() => setSub('conseil')}>
+          🏛️ Conseil{maitrisePoints > 0 ? ` (${maitrisePoints})` : ''}
+        </SubTab>
         <SubTab on={sub === 'ameliorations'} onClick={() => setSub('ameliorations')}>⬆️ Améliorations</SubTab>
       </div>
 
@@ -132,6 +145,81 @@ export function MerchantPanel() {
                 </div>
               )
             })}
+          </>
+        )}
+
+        {sub === 'conseil' && (
+          <>
+            <p className="mb-2 text-[10px] leading-snug text-slate-500">
+              🏛️ Le <b className="text-amber-200">Conseil des Maîtrises</b> récompense de <b className="text-slate-300">jouer le contenu</b> :
+              3 contrats par <b className="text-slate-300">semaine réelle</b>, remplis automatiquement en jouant.
+              Chaque contrat rempli = <b className="text-amber-300">+1 Point de Maîtrise</b>, à dépenser dans un arbre
+              aux bonus <b className="text-slate-300">minimes mais permanents</b> (tout maxer ≈ 19 semaines).
+            </p>
+            <div className="mb-2 flex items-center justify-between rounded-lg border border-amber-800/40 bg-amber-950/15 px-2.5 py-1.5 text-[11px]">
+              <span className="font-semibold text-amber-300">★ {maitrisePoints} Point{maitrisePoints > 1 ? 's' : ''} à dépenser</span>
+              {(() => {
+                const ms = weekRemainingMs()
+                const d = Math.floor(ms / 86400000)
+                const h = Math.floor((ms % 86400000) / 3600000)
+                return <span className="text-slate-500">⏳ Nouvelle semaine dans {d > 0 ? `${d} j ` : ''}{h} h</span>
+              })()}
+            </div>
+
+            <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">📜 Contrats de la semaine</div>
+            <div className="mb-3 space-y-1.5">
+              {CONTRACTS.map((c) => {
+                const count = Math.min(c.need, conseil.counts[c.id] ?? 0)
+                const done = conseil.done[c.id]
+                const raidLocked = c.id === 'raids' && bestStage < RAID_UNLOCK_STAGE
+                return (
+                  <div key={c.id} className={'rounded-lg border px-2.5 py-1.5 ' + (done ? 'border-emerald-800/50 bg-emerald-950/15' : 'border-slate-800 bg-black/20')}>
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className={done ? 'font-medium text-emerald-300' : 'font-medium text-slate-200'}>
+                        {done ? '✅' : c.icon} {c.name} <span className="font-normal text-slate-500">— {c.label}</span>
+                      </span>
+                      <span className={done ? 'text-emerald-300' : 'text-slate-400'}>{done ? '+1 ★' : `${count}/${c.need}`}</span>
+                    </div>
+                    <div className="mt-1 h-1.5 overflow-hidden rounded bg-slate-800">
+                      <div className={'h-full transition-all ' + (done ? 'bg-emerald-500' : 'bg-amber-500')} style={{ width: `${(done ? 1 : count / c.need) * 100}%` }} />
+                    </div>
+                    {raidLocked && <div className="mt-0.5 text-[9px] text-slate-600">🔒 Les raids se débloquent au palier {RAID_UNLOCK_STAGE} — ce contrat attendra.</div>}
+                  </div>
+                )
+              })}
+            </div>
+
+            <div className="mb-1 flex items-baseline justify-between">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">🌳 Arbre de Maîtrise</span>
+              <span className="text-[9px] text-slate-600">{spentMaitrise}/{MAITRISE_TOTAL_POINTS} rangs appris</span>
+            </div>
+            <div className="space-y-1">
+              {MAITRISE_NODES.map((n) => {
+                const rank = maitrise[n.id] ?? 0
+                const maxed = rank >= n.maxRank
+                const can = !maxed && maitrisePoints >= 1
+                const bonus = (rank * n.perRank).toFixed(1).replace('.', ',').replace(/,0$/, '')
+                return (
+                  <div key={n.id} className="flex items-center gap-2 rounded-lg border border-slate-800 bg-black/20 px-2 py-1.5">
+                    <span className="text-base">{n.icon}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[11px] font-medium text-slate-200">
+                        {n.name} <span className="text-slate-500">{rank}/{n.maxRank}</span>
+                        {rank > 0 && <span className="ml-1.5 text-emerald-300">+{bonus}%</span>}
+                      </span>
+                      <span className="block truncate text-[9px] text-slate-500">{n.desc}</span>
+                    </span>
+                    <button
+                      disabled={!can}
+                      onClick={() => learnMaitrise(n.id)}
+                      className="shrink-0 rounded bg-amber-600/80 px-2.5 py-1.5 text-[10px] font-semibold text-slate-950 disabled:opacity-40"
+                    >
+                      {maxed ? 'Max' : '+1 ★'}
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
           </>
         )}
 

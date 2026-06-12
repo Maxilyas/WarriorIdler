@@ -26,6 +26,7 @@ import {
 } from './metiers'
 import { itemSockets, unsocketCost, parseGemKey } from './gems'
 import { getEnchant, enchantCost, equippedRules, equippedTimeRunes, timeRuneMods, rollRuneDrop, raidRuneChance, dungeonRuneChance, type TimeRuneMods } from './enchants'
+import { getMaitriseNode, getContract, emptyConseil, conseilFresh, type ConseilState, type ContractId } from './maitrise'
 import {
   condGemMods, acharneMult, nueeMult, rollCondGem, condGemKey, parseCondKey, getCondGem, condGemInstance,
   gemMaxRank, grindDust, legacyGemDust, recutCost, BIOME_GEM_FAMILY, COND_GEM_DROP, GEM_DUST_DROP, GEM_CUT_COST,
@@ -278,6 +279,12 @@ interface SaveData {
   codex: string[]
   /** Améliorations permanentes : id → niveau. */
   upgrades: Record<string, number>
+  /** 🏛️ Conseil des Maîtrises (v0.25) : contrats de la semaine courante. */
+  conseil: ConseilState
+  /** Points de Maîtrise non dépensés (1 par contrat hebdo rempli). */
+  maitrisePoints: number
+  /** Arbre de Maîtrise : id de nœud → rang (bonus minimes via computeGlobalMods). */
+  maitrise: Record<string, number>
   /** Métiers de l'Atelier (v0.22) : XP cumulée + nœuds d'arbre appris, par métier. */
   metiers: MetiersState
   /** Automates de forge : farment en boucle les donjons/raids déjà battus (3 max). */
@@ -381,6 +388,8 @@ interface GameState extends SaveData {
   buyShopItem: (itemId: string) => void
   /** Achète un coffre. `qty` ×5 = achat en gros (-10% d'or) ; `element` requis pour le coffre élémentaire. */
   mysteryBox: (id: number, opts?: { qty?: number; element?: DamageType }) => void
+  /** 🏛️ Dépense un Point de Maîtrise dans un nœud de l'arbre du Conseil. */
+  learnMaitrise: (nodeId: string) => void
   /** Coffre du Destin : garde l'objet à cet index, recycle les autres. */
   chooseFromChoice: (index: number) => void
   recruitCharacter: () => void
@@ -431,6 +440,32 @@ function passiveMetierXp(s: Pick<GameState, 'metiers' | 'characters'>, log: LogE
   if (gems > 0) { const g = gainMetierXp({ metiers, log }, 'joaillier', Math.min(5, gems)); metiers = g.metiers; log = g.log }
   if (runes > 0) { const g = gainMetierXp({ metiers, log }, 'runiste', Math.min(4, runes)); metiers = g.metiers; log = g.log }
   return { metiers, log }
+}
+
+/**
+ * 🏛️ Conseil des Maîtrises (v0.25, DESIGN §3) : avance un contrat hebdo. Gère le ROULEMENT de
+ * semaine (contrats remis à zéro, les Points acquis restent) et crédite AUTOMATIQUEMENT le Point
+ * de Maîtrise au seuil — la progression se fait en jouant, sans clic.
+ */
+function conseilProgress(
+  s: Pick<GameState, 'conseil' | 'maitrisePoints'>,
+  log: LogEntry[],
+  id: ContractId,
+  amount = 1,
+): { conseil: ConseilState; maitrisePoints: number; log: LogEntry[] } {
+  let conseil = conseilFresh(s.conseil)
+  let maitrisePoints = s.maitrisePoints
+  if (conseil.done[id]) return { conseil, maitrisePoints, log }
+  const def = getContract(id)
+  const counts = { ...conseil.counts, [id]: (conseil.counts[id] ?? 0) + amount }
+  let done = conseil.done
+  if (counts[id] >= def.need) {
+    done = { ...done, [id]: true }
+    maitrisePoints += 1
+    log = pushLog(log, `🏛️ Contrat rempli — ${def.icon} ${def.name} : +1 Point de Maîtrise (Marché → 🏛️ Conseil) !`, 'level')
+  }
+  conseil = { ...conseil, counts, done }
+  return { conseil, maitrisePoints, log }
 }
 
 function xpForLevel(level: number): number {
@@ -645,6 +680,9 @@ function freshSave(): SaveData {
     runesOwned: {},
     codex: [],
     upgrades: {},
+    conseil: emptyConseil(),
+    maitrisePoints: 0,
+    maitrise: {},
     metiers: emptyMetiers(),
     automates: [],
     shopStock: [],
@@ -859,6 +897,10 @@ function sanitize(save: SaveData): SaveData {
   if (!save.raidTrophies || typeof save.raidTrophies !== 'object') save.raidTrophies = {}
   // 🪄 Runes possédées (v0.25) : stash vide au départ — les runes déjà GRAVÉES sont conservées.
   if (!save.runesOwned || typeof save.runesOwned !== 'object') save.runesOwned = {}
+  // 🏛️ Conseil des Maîtrises (v0.25) : contrats hebdo + arbre minime.
+  if (!save.conseil || typeof save.conseil !== 'object') save.conseil = emptyConseil()
+  if (typeof save.maitrisePoints !== 'number') save.maitrisePoints = 0
+  if (!save.maitrise || typeof save.maitrise !== 'object') save.maitrise = {}
   // 🏪 v0.25 (DESIGN §1) : améliorations de combat + Sacoches SUPPRIMÉES — remboursement 100%
   // (or + éclats, recalculé depuis les formules de coût d'origine). Durcissement assumé.
   {
@@ -1070,6 +1112,9 @@ function persist(s: GameState) {
     runesOwned: s.runesOwned,
     codex: s.codex,
     upgrades: s.upgrades,
+    conseil: s.conseil,
+    maitrisePoints: s.maitrisePoints,
+    maitrise: s.maitrise,
     metiers: s.metiers,
     automates: s.automates,
     shopStock: s.shopStock,
@@ -2114,7 +2159,7 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
     // 📯 Crescendo & 🛡️ Trésorerie : chaque combat de pack nettoyé compte ses kills.
     crescendoAdd(enemies.length)
     tresorerieShield(chars, dCond.tresorerieCap)
-    const eco = computeGlobalMods(s.upgrades)
+    const eco = computeGlobalMods(s.upgrades, s.maitrise)
     const lv = d.level
     const packXp = enemies.reduce((a, e) => a + (e.xp ?? 0), 0)
     const noGold = d.modifiers.some((m) => m.noGold)
@@ -2225,12 +2270,15 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
       // 🛠️ XP implicite : les gemmes/runes portées font travailler Joaillier & Runiste.
       const pm = passiveMetierXp(s, log)
       log = pm.log
+      // 🏛️ Conseil : un donjon terminé avance le contrat Expéditionnaire.
+      const cp = conseilProgress(s, log, 'donjons')
+      log = cp.log
 
       const healed: Character[] = chars.map(fullHeal)
       const dungeonProgress = { ...s.dungeonProgress, [d.dungeonId]: Math.max(s.dungeonProgress[d.dungeonId] ?? 0, lv) }
       const repeatLeft = d.repeatLeft ?? 0
       // État avec les pools PAR COMBAT déjà crédités (le coffre est un bonus en plus).
-      const base = { ...s, gold, essence, noyau, poussiere, sceaux, orbes, gemDust, inventory, codex, runesOwned, metiers: pm.metiers }
+      const base = { ...s, gold, essence, noyau, poussiere, sceaux, orbes, gemDust, inventory, codex, runesOwned, metiers: pm.metiers, conseil: cp.conseil, maitrisePoints: cp.maitrisePoints }
 
       // Auto-farm : on encaisse le coffre directement (sans modal) et on relance.
       if (repeatLeft > 0) {
@@ -2457,6 +2505,9 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
       // 🛠️ XP implicite : les gemmes/runes portées font travailler Joaillier & Runiste.
       const pm = passiveMetierXp(s, log)
       log = pm.log
+      // 🏛️ Conseil : un raid vaincu avance le contrat Pourfendeur.
+      const cp = conseilProgress(s, log, 'raids')
+      log = cp.log
 
       // Auto-raid : s'il reste des relances ET assez d'Orbes, on encaisse le trésor et on relance.
       if (repeatLeft > 0) {
@@ -2465,7 +2516,7 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
           const nr = generateRaid(r.raidId, tier)
           nr.repeatLeft = repeatLeft - 1
           const log3 = pushLog(log, `🔁 Auto-raid : trésor encaissé${cosmic ? ` (💫 ×${cosmic})` : ''} · ${repeatLeft} relance${repeatLeft > 1 ? 's' : ''} restante${repeatLeft > 1 ? 's' : ''}.`, 'kill')
-          const next = { ...s, ...credited, gems, runesOwned, metiers: pm.metiers, characters: healed, raidProgress, raidTrophies, orbes: credited.orbes - def.orbeCost, raid: nr, log: log3 }
+          const next = { ...s, ...credited, gems, runesOwned, metiers: pm.metiers, conseil: cp.conseil, maitrisePoints: cp.maitrisePoints, characters: healed, raidProgress, raidTrophies, orbes: credited.orbes - def.orbeCost, raid: nr, log: log3 }
           persist(next)
           set(next)
           return
@@ -2473,7 +2524,7 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
       }
 
       log = pushLog(log, `🏆 RAID VAINCU : ${def.name} (Tier ${tier}) !${cosmic ? ` 💫 Éclat cosmique ×${cosmic} !` : ''} Un trésor t'attend.`, 'kill')
-      const next = { ...s, gems, runesOwned, metiers: pm.metiers, characters: healed, raid: null, raidProgress, raidTrophies, pendingChest: chest, log }
+      const next = { ...s, gems, runesOwned, metiers: pm.metiers, conseil: cp.conseil, maitrisePoints: cp.maitrisePoints, characters: healed, raid: null, raidProgress, raidTrophies, pendingChest: chest, log }
       persist(next)
       set(next)
       return
@@ -2510,13 +2561,13 @@ function applyChestRewards(s: GameState, c: ChestReward): Pick<GameState, 'inven
 
 export const useGame = create<GameState>((set, get) => {
   const save = loadSave()
-  refreshGlobals(save.upgrades)
+  refreshGlobals(save.upgrades, save.maitrise)
 
   // Progression hors-ligne : applique les gains accumulés depuis la dernière sauvegarde.
   let pendingOffline: OfflineReport | null = null
   const elapsed = Date.now() - (save.lastSeen ?? Date.now())
   if (elapsed > 0) {
-    const report = simulateOffline(save.characters, save.stage, save.upgrades, elapsed, save.activeBiome)
+    const report = simulateOffline(save.characters, save.stage, save.upgrades, elapsed, save.activeBiome, save.maitrise)
     if (report) {
       pendingOffline = report
       save.gold += report.gold
@@ -2608,7 +2659,7 @@ export const useGame = create<GameState>((set, get) => {
         // 📯 Crescendo & 🛡️ Trésorerie : chaque kill nourrit le cumul / blinde le bouclier.
         crescendoAdd(1)
         tresorerieShield(chars, cond.tresorerieCap)
-        const eco = computeGlobalMods(s.upgrades)
+        const eco = computeGlobalMods(s.upgrades, s.maitrise)
         // SURCHARGE élémentaire : le biome tournant rapporte +50% or/XP et ×2 quintessence.
         const surged = surgeBiome() === s.activeBiome
         const surgeMult = surged ? SURGE_GOLD_XP_MULT : 1
@@ -2728,12 +2779,21 @@ export const useGame = create<GameState>((set, get) => {
         // Le verrou de farm fige la progression au palier courant.
         let characters = chars
         let biomeBest = s.biomeBest
+        let conseil = s.conseil
+        let maitrisePoints = s.maitrisePoints
         if (!s.farmLock) {
           stage += 1
           biomeBest = { ...biomeBest, [s.activeBiome]: Math.max(biomeBest[s.activeBiome] ?? 0, stage) }
           bestStage = Math.max(bestStage, stage)
           // (v0.25 : plus de Sceau tous les 5 paliers — l'Antre des Failles est LA source de Sceaux,
           //  sinon le donjon ne sert à rien. Appoints payants : forge de Sceau, Trousseau du Pilleur.)
+          // 🏛️ Conseil : chaque palier gagné avance le contrat Conquérant.
+          {
+            const cp = conseilProgress({ conseil, maitrisePoints }, log, 'paliers')
+            conseil = cp.conseil
+            maitrisePoints = cp.maitrisePoints
+            log = cp.log
+          }
           // Déblocage des personnages.
           if (bestStage >= CHAR2_STAGE && characters.length < 2) {
             characters = [...characters, makeCharacter(RECRUE_NAMES[0], highestLevel(characters), 'agilite')]
@@ -2751,7 +2811,7 @@ export const useGame = create<GameState>((set, get) => {
         if (res.overkill > 0) enemyNext.hp = Math.max(1, enemyNext.maxHp - res.overkill)
         if (isBossStage(stage)) log = pushLog(log, `⚔ Un boss vous barre la route : ${enemyNext.name} !`, 'info')
 
-        const next = { ...s, characters, stage, bestStage, biomeBest, gold, sceaux, poussiere, quint, gems, gemDust, essence, codex, inventory, killsSinceEpic, enemy: enemyNext, log, killCount: s.killCount + 1 }
+        const next = { ...s, characters, stage, bestStage, biomeBest, conseil, maitrisePoints, gold, sceaux, poussiere, quint, gems, gemDust, essence, codex, inventory, killsSinceEpic, enemy: enemyNext, log, killCount: s.killCount + 1 }
         persist(next)
         set(next)
         return
@@ -3797,7 +3857,7 @@ export const useGame = create<GameState>((set, get) => {
       const upgrades = { ...s.upgrades, [id]: level + 1 }
       let characters = s.characters
       if (id === 'talentBonus') characters = characters.map((c) => ({ ...c, talentPoints: c.talentPoints + 1 }))
-      refreshGlobals(upgrades)
+      refreshGlobals(upgrades, s.maitrise)
       const next = { ...s, gold: s.gold - cost, poussiere: s.poussiere - pous, essence: s.essence - ecl, upgrades, characters, log: pushLog(s.log, `Amélioration : ${def.name} niv. ${level + 1} (-${cost.toLocaleString('fr-FR')} or${ecl ? `, -${ecl} ♦` : ''}${pous ? `, -${pous} 🌌` : ''}).`, 'gold') }
       persist(next)
       set(next)
@@ -3826,6 +3886,22 @@ export const useGame = create<GameState>((set, get) => {
         inventory: [item, ...s.inventory].slice(0, invMax),
         codex: discoverFromItems(s.codex, [item]),
         log: pushLog(s.log, `Acheté : ${item.name} (-${price} or).`, 'gold'),
+      }
+      persist(next)
+      set(next)
+    },
+
+    learnMaitrise: (nodeId) => {
+      const s = get()
+      const def = getMaitriseNode(nodeId)
+      if (!def) return
+      const rank = s.maitrise[nodeId] ?? 0
+      if (rank >= def.maxRank || s.maitrisePoints < 1) return
+      const maitrise = { ...s.maitrise, [nodeId]: rank + 1 }
+      refreshGlobals(s.upgrades, maitrise)
+      const next = {
+        ...s, maitrise, maitrisePoints: s.maitrisePoints - 1,
+        log: pushLog(s.log, `🏛️ Maîtrise : ${def.icon} ${def.name} rang ${rank + 1}/${def.maxRank}.`, 'level'),
       }
       persist(next)
       set(next)
@@ -3982,7 +4058,7 @@ export const useGame = create<GameState>((set, get) => {
       const fresh = freshSave()
       localStorage.removeItem(SAVE_KEY)
       cooldowns.clear()
-      refreshGlobals(fresh.upgrades)
+      refreshGlobals(fresh.upgrades, fresh.maitrise)
       set({
         ...fresh,
         enemy: makeEnemy(fresh.stage, fresh.activeBiome),
