@@ -12,7 +12,7 @@ import {
 } from './character'
 import { getTalent, canAllocate } from './talents'
 import { getPower } from './powers'
-import { getUpgrade, upgradeCost as accountUpgradeCost, upgradePoussiere, upgradeEclats, isMaxed, computeGlobalMods } from './upgrades'
+import { getUpgrade, upgradeCost as accountUpgradeCost, upgradePoussiere, upgradeEclats, isMaxed, computeGlobalMods, REMOVED_UPGRADES } from './upgrades'
 import {
   generateItem, rollBoxRarity, rollWindowRarity, rollFarmRarity, sellValue, recycleValue, recyclePoussiere, itemScore,
   reforgeItem, surillvlItem, ascendItem,
@@ -67,8 +67,10 @@ import { simulateOffline, type OfflineReport } from './offline'
 
 const SAVE_KEY = 'warrior-idler-save-v1'
 const MAX_LOG = 40
-const INV_BASE = 80
-let invMax = INV_BASE // ajusté par l'amélioration "Sacoches"
+// v0.25 (DESIGN §2) : inventaire ILLIMITÉ (Sacoches supprimée) — borne purement technique.
+// Le tri se fait par l'auto-recyclage (seuil de rareté) et les outils de masse.
+const INV_BASE = 100000
+let invMax = INV_BASE
 let regenMult = 1 // ajusté par l'amélioration "Régénération"
 const REGEN_RATE = 0.05
 const RETREAT_STAGES = 2
@@ -857,6 +859,29 @@ function sanitize(save: SaveData): SaveData {
   if (!save.raidTrophies || typeof save.raidTrophies !== 'object') save.raidTrophies = {}
   // 🪄 Runes possédées (v0.25) : stash vide au départ — les runes déjà GRAVÉES sont conservées.
   if (!save.runesOwned || typeof save.runesOwned !== 'object') save.runesOwned = {}
+  // 🏪 v0.25 (DESIGN §1) : améliorations de combat + Sacoches SUPPRIMÉES — remboursement 100%
+  // (or + éclats, recalculé depuis les formules de coût d'origine). Durcissement assumé.
+  {
+    const up = (save.upgrades ?? {}) as Record<string, number>
+    let refundGold = 0
+    let refundEclats = 0
+    for (const id in REMOVED_UPGRADES) {
+      const lvl = up[id] ?? 0
+      if (lvl > 0) {
+        const def = REMOVED_UPGRADES[id]
+        for (let i = 0; i < lvl; i++) {
+          const c = Math.round(def.baseCost * Math.pow(def.growth, i))
+          refundGold += c
+          refundEclats += Math.round(c * (def.eclatsFrac ?? 0))
+        }
+      }
+      delete up[id]
+    }
+    if (refundGold > 0) {
+      save.gold += refundGold
+      save.essence += refundEclats
+    }
+  }
   {
     // SEED UNIQUE (v0.24 fix) : si la save n'a pas encore de tiers débloqués (pré-v0.24), on dérive
     // l'accès du meilleur tier vaincu +1. SINON on conserve l'acquis SANS re-bump — avant, ce bloc
@@ -1113,11 +1138,10 @@ function fullHeal(c: Character): Character {
   return { ...c, hp: charMaxHp(c), stun: 0, dots: undefined, weaken: undefined }
 }
 
-/** Met à jour les multiplicateurs globaux (combat, inventaire, régén) depuis les améliorations. */
-function refreshGlobals(upgrades: Record<string, number>) {
-  const m = computeGlobalMods(upgrades)
+/** Met à jour les multiplicateurs globaux (combat, régén) — améliorations + 🏛️ Maîtrise (v0.25). */
+function refreshGlobals(upgrades: Record<string, number>, maitrise: Record<string, number> = {}) {
+  const m = computeGlobalMods(upgrades, maitrise)
   setGlobalCombatMods({ power: m.power, attackSpeed: m.attackSpeed, vitality: m.vitality })
-  invMax = INV_BASE + m.inventoryBonus
   regenMult = m.regen
 }
 

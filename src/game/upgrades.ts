@@ -25,7 +25,13 @@ export const UPGRADE_CATEGORIES: Record<UpgradeCategory, { name: string; color: 
   confort: { name: 'Confort', color: '#4dabf7' },
 }
 
-/** Améliorations permanentes de compte (puits d'or + Éclats à coûts croissants). Data-driven. */
+/**
+ * Améliorations permanentes de compte (puits d'or + Éclats à coûts croissants). Data-driven.
+ * v0.25 (DESIGN §1) — le Marché est VIDÉ de sa puissance : Puissance/Vivacité/Vitalité/Régénération
+ * supprimées (pas chères + grosses différences = inéquilibrables), Sacoches supprimée (inventaire
+ * illimité). La progression de compte passe au 🏛️ Conseil des Maîtrises (time-gaté, bonus minimes).
+ * Seule puissance restante : la Forge stellaire — puits SOMMITAL infini, cher, gaté 🌌.
+ */
 export const UPGRADES: UpgradeDef[] = [
   // Économie
   { id: 'goldGain', name: 'Cupidité', description: "Augmente l'or gagné en combat.", category: 'economie', icon: '💰', baseCost: 500, growth: 1.6, perLevel: 0.1, unit: 'pct', eclatsFrac: 0.25 },
@@ -37,16 +43,18 @@ export const UPGRADES: UpgradeDef[] = [
   { id: 'xpGain', name: 'Érudition', description: "Augmente l'XP gagnée.", category: 'progression', icon: '⬆', baseCost: 600, growth: 1.6, perLevel: 0.1, unit: 'pct', eclatsFrac: 0.2 },
   { id: 'talentBonus', name: 'Sagesse innée', description: 'Points de talent supplémentaires par personnage (immédiat).', category: 'progression', icon: '🌟', baseCost: 8000, growth: 2.4, perLevel: 1, unit: 'flat', maxLevel: 12 },
 
-  // Combat
-  { id: 'power', name: 'Puissance', description: "Augmente la puissance de toute l'équipe.", category: 'combat', icon: '⚔', baseCost: 1200, growth: 1.6, perLevel: 0.05, unit: 'pct', eclatsFrac: 0.35 },
-  { id: 'attackSpeed', name: 'Vivacité', description: "Augmente la vitesse d'attaque de l'équipe.", category: 'combat', icon: '⚡', baseCost: 1500, growth: 1.62, perLevel: 0.04, unit: 'pct', maxLevel: 25, eclatsFrac: 0.35 },
-  { id: 'vitality', name: 'Vitalité', description: "Augmente les PV de toute l'équipe.", category: 'combat', icon: '❤', baseCost: 1200, growth: 1.6, perLevel: 0.08, unit: 'pct', eclatsFrac: 0.35 },
-  { id: 'regen', name: 'Régénération', description: "Augmente la régénération de l'équipe.", category: 'combat', icon: '✚', baseCost: 1000, growth: 1.6, perLevel: 0.1, unit: 'pct', eclatsFrac: 0.3 },
+  // Combat — uniquement le puits sommital (cher, gaté par la Poussière d'étoile)
   { id: 'forgeStellaire', name: 'Forge stellaire', description: 'Puits sommital infini : +4% de puissance/niveau (or + Poussière d\'étoile).', category: 'combat', icon: '🌌', baseCost: 50000, growth: 1.7, perLevel: 0.04, unit: 'pct', poussierePerLevel: 2, eclatsFrac: 0.4 },
-
-  // Confort
-  { id: 'inventory', name: 'Sacoches', description: "Augmente la taille de l'inventaire (+10/niveau).", category: 'confort', icon: '🎒', baseCost: 600, growth: 1.6, perLevel: 10, unit: 'flat', maxLevel: 20 },
 ]
+
+/** v0.25 — améliorations SUPPRIMÉES (migration : remboursement 100% or + éclats depuis ces formules). */
+export const REMOVED_UPGRADES: Record<string, { baseCost: number; growth: number; eclatsFrac?: number }> = {
+  power: { baseCost: 1200, growth: 1.6, eclatsFrac: 0.35 },
+  attackSpeed: { baseCost: 1500, growth: 1.62, eclatsFrac: 0.35 },
+  vitality: { baseCost: 1200, growth: 1.6, eclatsFrac: 0.35 },
+  regen: { baseCost: 1000, growth: 1.6, eclatsFrac: 0.3 },
+  inventory: { baseCost: 600, growth: 1.6 },
+}
 
 const BY_ID = new Map(UPGRADES.map((u) => [u.id, u]))
 export function getUpgrade(id: string): UpgradeDef | undefined {
@@ -92,20 +100,26 @@ export interface GlobalMods {
   talentBonus: number
 }
 
-/** Calcule tous les multiplicateurs/bonus globaux issus des améliorations. */
-export function computeGlobalMods(upgrades: Record<string, number>): GlobalMods {
+/**
+ * Calcule tous les multiplicateurs/bonus globaux issus des améliorations — et, v0.25, de l'arbre
+ * du 🏛️ Conseil des Maîtrises (`maitrise` : rangs par nœud, bonus minimes appliqués partout).
+ */
+export function computeGlobalMods(upgrades: Record<string, number>, maitrise: Record<string, number> = {}): GlobalMods {
   const lv = (id: string) => upgrades[id] ?? 0
+  const mr = (id: string) => maitrise[id] ?? 0
   return {
-    power: 1 + lv('power') * 0.05 + lv('forgeStellaire') * 0.04,
-    attackSpeed: 1 + lv('attackSpeed') * 0.04,
-    vitality: 1 + lv('vitality') * 0.08,
-    regen: 1 + lv('regen') * 0.1,
-    goldGain: 1 + lv('goldGain') * 0.1,
-    xpGain: 1 + lv('xpGain') * 0.1,
+    // v0.25 : Puissance/Vivacité/Vitalité/Régénération supprimées — seule la Forge stellaire
+    // (puits sommital) et la Maîtrise (minime) portent encore du combat.
+    power: (1 + lv('forgeStellaire') * 0.04) * (1 + mr('frappe') * 0.004),
+    attackSpeed: 1 + mr('celerite') * 0.003,
+    vitality: 1 + mr('vigueur') * 0.005,
+    regen: 1,
+    goldGain: (1 + lv('goldGain') * 0.1) * (1 + mr('fortune') * 0.01),
+    xpGain: (1 + lv('xpGain') * 0.1) * (1 + mr('savoir') * 0.01),
     eclatGain: 1 + lv('eclatGain') * 0.12,
-    lootChance: lv('lootQty') * 0.08,
+    lootChance: lv('lootQty') * 0.08 + mr('flair') * 0.005,
     rarityLuck: lv('rarityLuck') * 0.3,
-    inventoryBonus: lv('inventory') * 10,
+    inventoryBonus: 0, // v0.25 : inventaire illimité (Sacoches supprimée)
     talentBonus: lv('talentBonus'),
   }
 }
