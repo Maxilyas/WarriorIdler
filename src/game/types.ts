@@ -138,6 +138,8 @@ export interface GemInstance {
   tier: number
   cond?: string
   rank?: number
+  /** Qualité (v0.26) : 0 = Éclatée, 1/absent = Polie, 2 = Parfaite — roulée à la TAILLE. */
+  quality?: number
 }
 
 // ---- Équipement ----
@@ -220,6 +222,8 @@ export interface Item {
   surCount?: number
   /** Nombre de REFORGES déjà appliquées (v0.25 : même logique anti-spam). */
   reforgeCount?: number
+  /** PERÇAGE du Joaillier (v0.26) : une châsse ajoutée à la main — une seule fois par objet. */
+  drilled?: boolean
   /** Pièce de SET (id du registre sets.ts) : bonus à paliers quand plusieurs pièces sont portées. */
   setId?: string
 }
@@ -321,8 +325,9 @@ export interface Character {
   rez?: number
   /** Étourdissement restant (s) — transitoire, posé par les contrôles ennemis ; n'attaque pas tant que > 0. */
   stun?: number
-  /** Altérations subies (DoT ennemis) — transitoire, dps déjà atténué (résist + Purge). */
-  dots?: { dps: number; type: DamageType; remaining: number }[]
+  /** Altérations subies (DoT ennemis) — transitoire, dps déjà atténué (résist + Purge).
+   *  `dealt` (v0.26) : dégâts déjà infligés par cette altération (🪢 Garrot soigne à l'expiration). */
+  dots?: { dps: number; type: DamageType; remaining: number; dealt?: number }[]
   /** Affaiblissement (malédiction) — transitoire : multiplie les dégâts du héros tant que remaining > 0. */
   weaken?: { mult: number; remaining: number }
   /** Bouclier d'absorption (sort « Égide titanesque ») — soaké AVANT les PV. Transitoire. */
@@ -414,6 +419,8 @@ export interface Enemy {
   noRegen?: number
   /** Vulnérabilité — multiplicateur de dégâts SUBIS, posé par « Sceau de faiblesse ». Transitoire. */
   vuln?: { mult: number; remaining: number }
+  /** Brèche (🥁 Tambour de siège v0.26) : fraction d'armure rongée. Transitoire. */
+  sunder?: { pct: number; remaining: number }
   /** Furie du survivant (duo de boss) : déjà enragé, ne se redéclenche pas. */
   enraged?: boolean
   /** Âge du combat (s) contre cet ennemi — transitoire, pour le Sablier de l'Acharné. */

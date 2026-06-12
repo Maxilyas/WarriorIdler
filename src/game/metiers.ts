@@ -217,27 +217,75 @@ export const METIER_NODES: Record<MetierId, MetierNode[]> = {
     { id: 'specVisionnaire', name: 'Maître Visionnaire', icon: '🔮', maxRank: 1, minLevel: 15, exclusive: 'forgeron-spec',
       desc: 'SPÉCIALISATION : +12% de chance de rareté supérieure, et le surillvl donne +1 iLvl. Exclusif avec Maître Économe.' },
   ],
+  // v0.26 — arbre REFONDU : ~62 rangs dépensables (tronc + 4 branches), specs étagées I→V.
   joaillier: [
+    /* — tronc commun — */
     { id: 'sertissage', name: 'Sertissage', icon: '💎', maxRank: 1,
       desc: 'Débloque le SERTISSAGE : poser des gemmes dans les châsses (Rare+).' },
     { id: 'extraction', name: 'Extraction propre', icon: '🪛', maxRank: 3, requires: 'sertissage',
       desc: '−25% du coût de désertissage par rang.' },
-    { id: 'prospection', name: 'Œil du prospecteur', icon: '🔍', maxRank: 3, minLevel: 3,
-      desc: '+25% de chance de drop de gemme par rang.' },
-    { id: 'broyage', name: 'Broyage', icon: '⚒️', maxRank: 1, minLevel: 5,
-      desc: 'Débloque le BROYAGE : réduire une gemme en poussière de gemme.' },
-    { id: 'taille', name: 'Taille', icon: '✂️', maxRank: 1, minLevel: 8, requires: 'broyage',
-      desc: 'Débloque la TAILLE : façonner la gemme de ton CHOIX contre de la poussière.' },
-    { id: 'recoupe', name: 'Recoupe', icon: '🔬', maxRank: 1, minLevel: 12, requires: 'taille',
-      desc: 'Débloque la RECOUPE : améliorer les paramètres d\'une gemme, cran par cran.' },
-    { id: 'chasseArme', name: 'Châsse forcée', icon: '🕳️', maxRank: 1, minLevel: 20,
+    { id: 'broyage', name: 'Broyage', icon: '⚒️', maxRank: 1, minLevel: 3,
+      desc: 'Débloque le BROYAGE : réduire une gemme en poussière de gemme 💠.' },
+    { id: 'lustrage', name: 'Lustrage', icon: '🧽', maxRank: 3, minLevel: 4,
+      desc: '+20% d\'XP de Joaillier par rang.' },
+    /* — ✂️ Taille & Qualité — */
+    { id: 'taille', name: 'Taille', icon: '✂️', maxRank: 1, minLevel: 6, requires: 'broyage', branch: 'taille',
+      desc: 'Débloque la TAILLE : façonner la gemme de ton CHOIX contre de la poussière (qualité roulée).' },
+    { id: 'recoupe', name: 'Recoupe', icon: '🔬', maxRank: 1, minLevel: 10, requires: 'taille', branch: 'taille',
+      desc: 'Débloque la RECOUPE : monter le RANG d\'une gemme sertie, cran par cran.' },
+    { id: 'mainSure', name: 'Main sûre', icon: '🤲', maxRank: 5, minLevel: 8, requires: 'taille', branch: 'taille',
+      desc: '+4% de chance de tailler une gemme PARFAITE ▴ par rang (et moins d\'Éclatées ▾).' },
+    { id: 'inspirationJ', name: 'Inspiration', icon: '💡', maxRank: 5, minLevel: 12, requires: 'taille', branch: 'taille',
+      desc: '+2% de chance par rang de tailler directement au RANG 2.' },
+    { id: 'multitaille', name: 'Multitaille', icon: '✌️', maxRank: 3, minLevel: 16, requires: 'taille', branch: 'taille',
+      desc: '+3% de chance par rang de produire une SECONDE gemme (aléatoire, même famille).' },
+    { id: 'economat', name: 'Économat', icon: '🧮', maxRank: 5, minLevel: 5, requires: 'broyage', branch: 'taille',
+      desc: '+6% de poussière au broyage par rang.' },
+    { id: 'tailleEco', name: 'Geste précis', icon: '🫳', maxRank: 3, minLevel: 9, requires: 'taille', branch: 'taille',
+      desc: '−10% du coût de la taille par rang.' },
+    { id: 'fusion', name: 'Fusion', icon: '🔥', maxRank: 1, minLevel: 7, branch: 'taille',
+      desc: 'Débloque la FUSION : 3 gemmes identiques → 1 gemme au rang SUPÉRIEUR. Résorbe ton stock.' },
+    { id: 'fusionPropre', name: 'Fusion propre', icon: '♻️', maxRank: 3, minLevel: 11, requires: 'fusion', branch: 'taille',
+      desc: '−20% des frais de fusion par rang.' },
+    { id: 'corruption', name: 'Corruption', icon: '🫦', maxRank: 1, minLevel: 14, requires: 'taille', branch: 'taille',
+      desc: 'Débloque la CORRUPTION : retaille risquée — 45% rang +1 · 35% rien · 20% broyée.' },
+    { id: 'pacteLapidaire', name: 'Pacte du lapidaire', icon: '🤝', maxRank: 3, minLevel: 18, requires: 'corruption', branch: 'taille',
+      desc: 'Améliore les chances de la corruption par rang (jusqu\'à ~55% / 30% / 15%).' },
+    { id: 'stabilisation', name: 'Stabilisation', icon: '🧊', maxRank: 1, minLevel: 26, requires: 'pacteLapidaire', branch: 'taille',
+      desc: 'La corruption ne peut PLUS détruire la gemme (échec = rien), mais coûte le double.' },
+    /* — 💎 Châsses & Sertissage — */
+    { id: 'chasseArme', name: 'Châsse forcée', icon: '🕳️', maxRank: 1, minLevel: 20, branch: 'serti',
       desc: 'Les ARMES gagnent une châsse supplémentaire.' },
-    { id: 'specRythme', name: 'Maître du Rythme', icon: '🥁', maxRank: 1, minLevel: 15, exclusive: 'joaillier-spec', requires: 'sertissage',
-      desc: 'SPÉCIALISATION : les gemmes de RYTHME portées comptent +1 rang (jusqu\'au max). Exclusif avec les autres familles.' },
-    { id: 'specFlux', name: 'Maître du Flux', icon: '🌊', maxRank: 1, minLevel: 15, exclusive: 'joaillier-spec', requires: 'sertissage',
-      desc: 'SPÉCIALISATION : les gemmes de FLUX portées comptent +1 rang (jusqu\'au max). Exclusif avec les autres familles.' },
-    { id: 'specEnv', name: 'Maître de l\'Environnement', icon: '🌍', maxRank: 1, minLevel: 15, exclusive: 'joaillier-spec', requires: 'sertissage',
-      desc: 'SPÉCIALISATION : les gemmes d\'ENVIRONNEMENT portées comptent +1 rang (jusqu\'au max). Exclusif avec les autres familles.' },
+    { id: 'chasseRoyale', name: 'Châsse royale', icon: '👑', maxRank: 1, minLevel: 22, requires: 'chasseArme', branch: 'serti',
+      desc: 'La gemme sertie dans l\'ARME PRINCIPALE compte +1 rang (jusqu\'au max).' },
+    { id: 'sertiConducteur', name: 'Serti conducteur', icon: '🔗', maxRank: 3, minLevel: 13, requires: 'sertissage', branch: 'serti',
+      desc: 'Un héros portant 2+ gemmes de la MÊME famille : +4% sur leurs paramètres par rang.' },
+    { id: 'mosaique', name: 'Mosaïque', icon: '🪩', maxRank: 3, minLevel: 17, requires: 'sertissage', branch: 'serti',
+      desc: 'Si l\'équipe porte 3+ FAMILLES différentes : +3% sur TOUS les paramètres par rang.' },
+    { id: 'percage', name: 'Perçage', icon: '🪛', maxRank: 1, minLevel: 24, minStage: 60, requires: 'sertissage', branch: 'serti',
+      desc: 'Débloque le PERÇAGE : ajouter UNE châsse à un objet (très cher, une seule fois par objet).' },
+    /* — ◈ Maîtrises de famille (lignes étagées I→V, une seule) — */
+    { id: 'specRythme', name: 'Maître du Rythme', icon: '🥁', maxRank: 5, minLevel: 15, exclusive: 'joaillier-spec', requires: 'sertissage', branch: 'familles',
+      desc: '◈ I : Rythme +1 rang · II : +10% paramètres · III : compteurs −1 · IV : +2 rangs · V : +15% et compteurs −2.' },
+    { id: 'specFlux', name: 'Maître du Flux', icon: '🌊', maxRank: 5, minLevel: 15, exclusive: 'joaillier-spec', requires: 'sertissage', branch: 'familles',
+      desc: '◈ I : Flux +1 rang · II : +10% paramètres · III : boucliers de gemmes +25% · IV : +2 rangs · V : « Marée » (caps +50%).' },
+    { id: 'specEnv', name: 'Maître de l\'Environnement', icon: '🌍', maxRank: 5, minLevel: 15, exclusive: 'joaillier-spec', requires: 'sertissage', branch: 'familles',
+      desc: '◈ I : Environnement +1 rang · II : +10% · III : coffres +10% · IV : +2 rangs · V : effets d\'Environnement +33%.' },
+    { id: 'specBastion', name: 'Maître du Bastion', icon: '🛡️', maxRank: 5, minLevel: 15, exclusive: 'joaillier-spec', requires: 'sertissage', branch: 'familles',
+      desc: '◈ I : Bastion +1 rang · II : +10% · III : les DoT subis −15% · IV : +2 rangs · V : « Citadelle » (l\'Égide couvre 2 coups).' },
+    { id: 'doubleAllegeance', name: 'Double allégeance', icon: '🎭', maxRank: 1, minLevel: 45, branch: 'familles',
+      desc: 'Ta famille la plus portée HORS spécialisation gagne +1 rang (jamais la profondeur I→V).' },
+    /* — ⚖️ Négoce & Sources — */
+    { id: 'prospection', name: 'Œil du prospecteur', icon: '🔍', maxRank: 3, minLevel: 3, branch: 'negoce',
+      desc: '+25% de chance de drop de gemme par rang.' },
+    { id: 'tamis', name: 'Tamis', icon: '🥅', maxRank: 1, minLevel: 10, requires: 'broyage', branch: 'negoce',
+      desc: 'Les gemmes droppées en DOUBLON (déjà en stock) sont auto-broyées à +20% de poussière.' },
+    { id: 'nezLapidaire', name: 'Nez du lapidaire', icon: '👃', maxRank: 1, minLevel: 16, branch: 'negoce',
+      desc: 'Les gemmes droppées par les CHAMPIONS ✦ sont toujours au rang 2 minimum.' },
+    { id: 'marcheAuxPierres', name: 'Marché aux pierres', icon: '⚖️', maxRank: 1, minLevel: 24, branch: 'negoce',
+      desc: '1 échange par JOUR : 3 gemmes quelconques → 1 gemme au CHOIX (rang = min des 3).' },
+    { id: 'catalogue', name: 'Catalogue', icon: '📖', maxRank: 1, minLevel: 30, branch: 'negoce',
+      desc: 'Avoir possédé chaque gemme au moins une fois : +2% sur TOUS les paramètres de gemmes.' },
   ],
   runiste: [
     { id: 'gravure', name: 'Gravure', icon: '🪄', maxRank: 1,
@@ -352,8 +400,39 @@ export interface CraftMods {
   broyage: boolean
   taille: boolean
   recoupe: boolean
-  /** ◈ Spécialisation de famille : les gemmes portées de cette famille comptent +1 rang. */
-  gemFamilyBonus: 'rythme' | 'flux' | 'environnement' | null
+  /** ◈ v0.26 — Maîtrise de famille étagée : famille choisie + étage I→V (null = aucune). */
+  gemSpec: { family: 'rythme' | 'flux' | 'environnement' | 'bastion'; tier: number } | null
+  /** Double allégeance (niv 45) : une 2e famille (la plus portée) gagne +1 rang. */
+  doubleAllegeance: boolean
+  joaillierXpMult: number
+  /** Main sûre : rangs (chance de Parfaite à la taille). */
+  mainSure: number
+  /** Inspiration : chance de tailler directement au rang 2. */
+  tailleRank2: number
+  /** Multitaille : chance de produire une 2e gemme. */
+  multitaille: number
+  /** Économat : multiplicateur de poussière au broyage (≥ 1). */
+  grindMult: number
+  /** Geste précis : multiplicateur du coût de taille (≤ 1). */
+  tailleCostMult: number
+  fusion: boolean
+  /** Multiplicateur des frais de fusion (≤ 1). */
+  fuseCostMult: number
+  corruption: boolean
+  /** Pacte du lapidaire : rangs (odds de corruption). */
+  pacteLapidaire: number
+  /** Stabilisation : la corruption ne détruit plus (coût ×2). */
+  corruptSafe: boolean
+  chasseRoyale: boolean
+  /** Serti conducteur : bonus par rang si 2+ gemmes de même famille sur un héros (fraction). */
+  sertiConducteur: number
+  /** Mosaïque : bonus par rang si 3+ familles portées (fraction). */
+  mosaique: number
+  percage: boolean
+  tamis: boolean
+  nezLapidaire: boolean
+  marcheAuxPierres: boolean
+  catalogue: boolean
   /* Runiste */
   enchant: boolean
   ruleRunes: boolean
@@ -399,7 +478,32 @@ export function craftMods(metiers: MetiersState): CraftMods {
     broyage: r('joaillier', 'broyage') > 0,
     taille: r('joaillier', 'taille') > 0,
     recoupe: r('joaillier', 'recoupe') > 0,
-    gemFamilyBonus: r('joaillier', 'specRythme') > 0 ? 'rythme' : r('joaillier', 'specFlux') > 0 ? 'flux' : r('joaillier', 'specEnv') > 0 ? 'environnement' : null,
+    gemSpec:
+      r('joaillier', 'specRythme') > 0 ? { family: 'rythme', tier: r('joaillier', 'specRythme') }
+      : r('joaillier', 'specFlux') > 0 ? { family: 'flux', tier: r('joaillier', 'specFlux') }
+      : r('joaillier', 'specEnv') > 0 ? { family: 'environnement', tier: r('joaillier', 'specEnv') }
+      : r('joaillier', 'specBastion') > 0 ? { family: 'bastion', tier: r('joaillier', 'specBastion') }
+      : null,
+    doubleAllegeance: r('joaillier', 'doubleAllegeance') > 0,
+    joaillierXpMult: 1 + r('joaillier', 'lustrage') * 0.2,
+    mainSure: r('joaillier', 'mainSure'),
+    tailleRank2: r('joaillier', 'inspirationJ') * 0.02,
+    multitaille: r('joaillier', 'multitaille') * 0.03,
+    grindMult: 1 + r('joaillier', 'economat') * 0.06,
+    tailleCostMult: Math.max(0.5, 1 - r('joaillier', 'tailleEco') * 0.1),
+    fusion: r('joaillier', 'fusion') > 0,
+    fuseCostMult: Math.max(0.2, 1 - r('joaillier', 'fusionPropre') * 0.2),
+    corruption: r('joaillier', 'corruption') > 0,
+    pacteLapidaire: r('joaillier', 'pacteLapidaire'),
+    corruptSafe: r('joaillier', 'stabilisation') > 0,
+    chasseRoyale: r('joaillier', 'chasseRoyale') > 0,
+    sertiConducteur: r('joaillier', 'sertiConducteur') * 0.04,
+    mosaique: r('joaillier', 'mosaique') * 0.03,
+    percage: r('joaillier', 'percage') > 0,
+    tamis: r('joaillier', 'tamis') > 0,
+    nezLapidaire: r('joaillier', 'nezLapidaire') > 0,
+    marcheAuxPierres: r('joaillier', 'marcheAuxPierres') > 0,
+    catalogue: r('joaillier', 'catalogue') > 0,
     enchant: r('runiste', 'gravure') > 0,
     ruleRunes: r('runiste', 'regles') > 0,
     enchantCostMult: Math.max(0.4, 1 - r('runiste', 'palimpseste') * 0.15),

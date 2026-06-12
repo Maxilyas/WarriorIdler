@@ -111,9 +111,10 @@ export const DUNGEON_LIST: DungeonDef[] = [
 
 // ---- La Géode : ailes (famille de gemme) + rendements ----
 
-/** Élément des golems de chaque aile (assorti aux biomes de drop de la famille). */
+/** Élément des golems de chaque aile (assorti aux biomes de drop de la famille).
+ *  v0.26 : 4e aile — le Bastion vient du Physique. */
 export const GEODE_WING_ELEMENT: Record<GemFamily, DamageType> = {
-  rythme: 'feu', flux: 'ombre', environnement: 'froid',
+  rythme: 'feu', flux: 'ombre', environnement: 'froid', bastion: 'physique',
 }
 
 /** Poussière de gemme 🔹 par run (par-combat + coffre, avant efficacité d'automate). */

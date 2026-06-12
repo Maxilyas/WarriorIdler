@@ -116,6 +116,8 @@ export interface DerivedStats {
   flatDr: number // 0..1 réduction plate supplémentaire
   dodge: number // 0..1 chance d'esquive
   regenBonus: number // ajouté au taux de régén PV
+  /** Fraction de PV effectifs issue de la Barrière (v0.26 : sert à la Doctrine du bouclier). */
+  shieldPct: number
   // --- stats rares ---
   overpower: number // multiplicateur de dégâts (Surpuissance)
   multistrike: number // 0..1 chance de double frappe (Multifrappe)
@@ -208,6 +210,7 @@ export function computeDerived(total: StatBlock): DerivedStats {
     bossDamageMult: 1 + softCap((total.degatsBoss ?? 0) / PER_PCT, 2.5, 4.5),
     tenacity: softCap((total.tenacite ?? 0) / PER_PCT, 0.85, 0.96),
     purge: softCap((total.purge ?? 0) / PER_PCT, 0.8, 0.93),
+    shieldPct,
     flatDr: softCap((total.reductionDegats ?? 0) / PER_PCT, 0.5, 0.72),
     dodge: softCap((total.esquive ?? 0) / PER_PCT, 0.4, 0.62),
     regenBonus: (total.regen ?? 0) / PER_PCT,

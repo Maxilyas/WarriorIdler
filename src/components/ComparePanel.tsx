@@ -11,7 +11,7 @@ import {
 } from '../game/items'
 import { craftMods } from '../game/metiers'
 import { itemSockets, unsocketCost } from '../game/gems'
-import { getCondGem, parseCondKey, gemDesc, gemValue, gemMaxRank, recutCost, GEM_FAMILIES } from '../game/condGems'
+import { getCondGem, parseCondKey, gemDesc, gemValueQ, gemMaxRank, recutCost, drillCost, GEM_FAMILIES, GEM_QUALITIES } from '../game/condGems'
 import { getSet } from '../game/sets'
 import { ENCHANTS, getEnchant, enchantCost } from '../game/enchants'
 import type { OffensiveStat } from '../game/types'
@@ -521,20 +521,25 @@ function QuintessenceSection({ item }: { item: Item }) {
 function GemSection({ item }: { item: Item }) {
   const gems = useGame((s) => s.gems)
   const gemDust = useGame((s) => s.gemDust)
+  const gold = useGame((s) => s.gold)
   const essence = useGame((s) => s.essence)
   const socketCondGem = useGame((s) => s.socketCondGem)
   const unsocketGem = useGame((s) => s.unsocketGem)
   const recutGem = useGame((s) => s.recutGem)
+  const drillSocket = useGame((s) => s.drillSocket)
   const mods = craftMods(useGame((s) => s.metiers))
   const [open, setOpen] = useState(false)
 
   const sockets = itemSockets(item, mods.weaponSocketBonus)
   const filled = item.gems ?? []
   const unsocket = Math.round(unsocketCost() * mods.unsocketCostMult)
+  const dCost = drillCost(RARITIES[item.rarity].tier)
+  const canDrill = mods.percage && !item.drilled && itemSockets(item, 0) < 3
   const condStock = Object.entries(gems)
     .filter(([, n]) => n > 0)
     .map(([k, n]) => ({ key: k, parsed: parseCondKey(k), n }))
     .filter((x): x is { key: string; parsed: NonNullable<ReturnType<typeof parseCondKey>>; n: number } => !!x.parsed)
+  const qMark = (q: 0 | 1 | 2) => (q !== 1 ? ` ${GEM_QUALITIES[q].mark}` : '')
 
   return (
     <div className="rounded border border-sky-800/40 bg-sky-950/10 p-2">
@@ -548,6 +553,7 @@ function GemSection({ item }: { item: Item }) {
             const cond = g.cond ? getCondGem(g.cond) : undefined
             if (!cond) return null
             const rank = g.rank ?? 1
+            const quality = ((g.quality === 0 || g.quality === 2) ? g.quality : 1) as 0 | 1 | 2
             const maxR = gemMaxRank(cond)
             const rCost = recutCost(rank)
             return (
@@ -555,24 +561,25 @@ function GemSection({ item }: { item: Item }) {
                 <span className="min-w-0 flex-1" style={{ color: cond.color }}>
                   <span className="block truncate font-medium">
                     {GEM_FAMILIES[cond.family].icon} {cond.icon} {cond.name}
+                    {quality !== 1 && <span style={{ color: GEM_QUALITIES[quality].color }}> {GEM_QUALITIES[quality].mark} {GEM_QUALITIES[quality].name}</span>}
                     {maxR > 1 && <span className="text-slate-400"> · rang {rank}/{maxR}</span>}
                   </span>
-                  <span className="block text-[9px] leading-snug text-slate-400">{gemDesc(cond, rank)}</span>
+                  <span className="block text-[9px] leading-snug text-slate-400">{gemDesc(cond, rank, quality)}</span>
                 </span>
                 {mods.recoupe && rank < maxR && (
                   <button
                     disabled={gemDust < rCost}
                     onClick={() => recutGem(item.id, i)}
-                    title={`Recoupe → rang ${rank + 1} : ${gemDesc(cond, rank + 1)} (-${rCost} 🔹)`}
+                    title={`Recoupe → rang ${rank + 1} : ${gemDesc(cond, rank + 1, quality)} (-${rCost} 🔹)`}
                     className="shrink-0 rounded border border-sky-700/40 px-1.5 py-1 font-medium text-sky-200 hover:bg-sky-900/30 disabled:opacity-40"
                   >
-                    🔬 {gemValue(cond, rank + 1)} · {rCost} 🔹
+                    🔬 {gemValueQ(cond, rank + 1, quality)} · {rCost} 🔹
                   </button>
                 )}
                 <button
                   disabled={essence < unsocket}
                   onClick={() => unsocketGem(item.id, i)}
-                  title={`Désertir (-${unsocket} éclats, gemme rendue avec son rang)`}
+                  title={`Désertir (-${unsocket} éclats, gemme rendue avec rang et qualité)`}
                   className="shrink-0 rounded bg-slate-800 px-1.5 py-1 text-slate-400 hover:text-red-400 disabled:opacity-40"
                 >
                   ✕ ♦{unsocket}
@@ -590,17 +597,29 @@ function GemSection({ item }: { item: Item }) {
                 {condStock.map(({ key, parsed, n }) => (
                   <button
                     key={key}
-                    onClick={() => socketCondGem(item.id, parsed.def.id, parsed.rank)}
-                    title={gemDesc(parsed.def, parsed.rank)}
+                    onClick={() => socketCondGem(item.id, parsed.def.id, parsed.rank, parsed.quality)}
+                    title={gemDesc(parsed.def, parsed.rank, parsed.quality)}
                     className="rounded border px-2 py-1 text-[10px] font-medium hover:bg-white/5"
                     style={{ color: parsed.def.color, borderColor: parsed.def.color + '66' }}
                   >
-                    {parsed.def.icon} {parsed.def.name}{parsed.rank > 1 ? ` R${parsed.rank}` : ''} ×{n}
+                    {parsed.def.icon} {parsed.def.name}{parsed.rank > 1 ? ` R${parsed.rank}` : ''}{qMark(parsed.quality)} ×{n}
                   </button>
                 ))}
               </div>
             )
           )}
+          {/* 🪛 PERÇAGE (v0.26) : une châsse de plus, une seule fois par objet — très cher. */}
+          {canDrill && (
+            <button
+              disabled={gemDust < dCost.dust || gold < dCost.gold}
+              onClick={() => drillSocket(item.id)}
+              title="Ajoute UNE châsse à cet objet (une seule fois par objet)."
+              className="w-full rounded border border-sky-600/50 bg-sky-900/20 py-1.5 text-[10px] font-medium text-sky-200 hover:bg-sky-800/30 disabled:opacity-40"
+            >
+              🪛 Percer une châsse · {dCost.dust} 🔹 + 💰 {dCost.gold.toLocaleString('fr-FR')}
+            </button>
+          )}
+          {item.drilled && <div className="text-right text-[9px] text-slate-500">🪛 déjà percé (1 max par objet)</div>}
         </div>
       )}
     </div>

@@ -24,6 +24,8 @@ export interface HitOpts {
   execute?: { threshold: number; mult: number }
   /** 🎼 Métronome : critique GARANTI sur ce coup (ignore l'esquive ennemie aussi). */
   forceCrit?: boolean
+  /** 🎻 Ostinato (v0.26) : chance de critique ADDITIONNELLE sur ce coup (fraction). */
+  bonusCrit?: number
 }
 
 /**
@@ -38,7 +40,7 @@ export function rollHit(derived: DerivedStats, profile: DamageProfile, enemy: En
   const effDodge = Math.max(0, (enemy.dodge ?? 0) - derived.precision)
   if (!opts.forceCrit && effDodge > 0 && Math.random() < effDodge) return { damage: 0, crit: false, heal: 0, miss: true }
 
-  const crit = opts.forceCrit || Math.random() < derived.critChance
+  const crit = opts.forceCrit || Math.random() < Math.min(0.98, derived.critChance + (opts.bonusCrit ?? 0))
   const critMult = crit ? derived.critMult : 1
   let raw = derived.power * derived.masteryMult * derived.overpower * critMult * (opts.bonusMult ?? 1)
   // Dégâts vs Boss : bonus contre boss & élites uniquement.
@@ -46,7 +48,9 @@ export function rollHit(derived: DerivedStats, profile: DamageProfile, enemy: En
   if (opts.execute && enemy.maxHp > 0 && enemy.hp / enemy.maxHp <= opts.execute.threshold) raw *= opts.execute.mult
 
   const pen = derived.penetration
-  const armorMit = armorMitigation(enemy.armor * (1 - pen), derived.power)
+  // 🥁 Tambour de siège (v0.26) : la Brèche ampute l'armure de l'ennemi.
+  const sunder = enemy.sunder && enemy.sunder.remaining > 0 ? enemy.sunder.pct : 0
+  const armorMit = armorMitigation(enemy.armor * (1 - pen) * (1 - sunder), derived.power)
   let total = 0
   for (const t in profile.profile) {
     const type = t as DamageType
