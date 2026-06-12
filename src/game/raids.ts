@@ -208,11 +208,14 @@ export function raidIlvl(def: RaidDef, tier: number): number {
 
 /**
  * Rareté du butin de raid (v0.24, DESIGN §4.3) : FENÊTRE À PIC par tier (rollWindowRarity).
- * Le pic reste « banal » (Épique au T1) ; le haut de fenêtre est une TRAÎNE très rare —
- * looter au-dessus du pic doit faire dire « c'est un truc de fou ». Les raids sont la SEULE
- * source de Céleste → Transcendant.
+ * v0.25.x — fenêtre DÉCALÉE À DROITE (+1/+2 crans, retour joueur) : au rythme où l'ascension/
+ * le craft montent le perso, le pic Épique du T1-T2 ne « droppait » plus que du recyclage
+ * (~90% des objets sous le stuff porté). Le pic colle désormais au stuff ATTENDU du tier
+ * (T1 Légendaire · T2-T3 Artefact · T4-T5 Patrimoine…) → un clear reste majoritairement du
+ * même cran que toi, l'épaule (+1 cran ≈ 17%) est le VRAI up régulier, la traîne l'événement.
+ * Les raids restent la SEULE source de Céleste → Transcendant.
  */
-const RAID_WINDOW_FLOOR = [3, 3, 4, 4, 6, 6, 7, 7, 7, 8]   // T1..T10 : Inhabituel → Patrimoine
+const RAID_WINDOW_FLOOR = [4, 5, 5, 6, 6, 7, 7, 8, 8, 9]   // T1..T10 : Rare → Mythique (pic = +2)
 const RAID_WINDOW_CAP = [11, 11, 12, 12, 13, 13, 14, 14, 15, 16] // T1..T10 : Céleste → Transcendant
 
 export function raidRarityWindow(_def: RaidDef, tier: number): { floor: number; peak: number; cap: number } {
