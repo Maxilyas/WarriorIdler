@@ -400,12 +400,12 @@ chain('conversion', 'cv_d', 'cv_entry', 1, [
 ])
 // EMPREINTE — variantes « le Physique compte aussi comme … » vers les types non couverts par
 // l'Élémentaliste (Ombre/Arcane/Nature), pour un build hybride physique-multitype.
-chain('conversion', 'cv_c', 'cv_entry', 1, [
-  { name: 'Empreinte d\'ombre', kind: 'keystone', statMods: { maitrise: 16 }, desc: 'Tes dégâts Physiques comptent AUSSI comme Ombre (50%).', keystone: { splashType: { from: 'physique', to: 'ombre', frac: 0.5 } } },
-  { name: 'Empreinte arcanique', kind: 'keystone', statMods: { maitrise: 16 }, desc: 'Tes dégâts Physiques comptent AUSSI comme Arcane (50%).', keystone: { splashType: { from: 'physique', to: 'arcane', frac: 0.5 } } },
-  { name: 'Empreinte sylvestre', kind: 'keystone', statMods: { maitrise: 16 }, desc: 'Tes dégâts Physiques comptent AUSSI comme Nature (50%).', keystone: { splashType: { from: 'physique', to: 'nature', frac: 0.5 } } },
-  { name: 'Polymorphie', kind: 'keystone', statMods: { force: 30, agilite: 30, intelligence: 30 }, desc: 'Capstone : +30 à chaque stat offensive, +18% de dégâts.', keystone: { damageMult: 1.18 } },
-])
+// v0.25 : EN PARALLÈLE depuis l'entrée (avant : en chaîne — il fallait acheter l'Ombre ET l'Arcane
+// pour atteindre la Nature). Polymorphie au tier au-dessus (le palier cumulé fait le pacing).
+single({ id: 'cv_c0', name: 'Empreinte d\'ombre', constellation: 'conversion', kind: 'keystone', tier: 1, maxRank: 1, requires: ['cv_entry'], description: 'Tes dégâts Physiques comptent AUSSI comme Ombre (50%).', statMods: { maitrise: 16 }, keystone: { splashType: { from: 'physique', to: 'ombre', frac: 0.5 } } })
+single({ id: 'cv_c1', name: 'Empreinte arcanique', constellation: 'conversion', kind: 'keystone', tier: 1, maxRank: 1, requires: ['cv_entry'], description: 'Tes dégâts Physiques comptent AUSSI comme Arcane (50%).', statMods: { maitrise: 16 }, keystone: { splashType: { from: 'physique', to: 'arcane', frac: 0.5 } } })
+single({ id: 'cv_c2', name: 'Empreinte sylvestre', constellation: 'conversion', kind: 'keystone', tier: 1, maxRank: 1, requires: ['cv_entry'], description: 'Tes dégâts Physiques comptent AUSSI comme Nature (50%).', statMods: { maitrise: 16 }, keystone: { splashType: { from: 'physique', to: 'nature', frac: 0.5 } } })
+single({ id: 'cv_c3', name: 'Polymorphie', constellation: 'conversion', kind: 'keystone', tier: 2, maxRank: 1, requires: ['cv_entry'], description: 'Capstone : +30 à chaque stat offensive, +18% de dégâts.', statMods: { force: 30, agilite: 30, intelligence: 30 }, keystone: { damageMult: 1.18 } })
 single({ id: 'cv_gw_faucheur', name: '→ Faucheur', constellation: 'conversion', kind: 'gateway', tier: 2, maxRank: 1, requires: ['cv_b1'], description: 'Passerelle vers le Faucheur (ombre/DoT). +30 Intelligence.', statMods: { intelligence: 30 } })
 
 /* ================== ARCHÉTYPES ================== */
@@ -441,12 +441,11 @@ chain('elementaliste', 'el_b', 'el_entry', 1, [
 ])
 // DIFFUSION — « ton type de base compte AUSSI comme un élément » (ajoute sans retirer → diversifie
 // ton profil pour contourner les résistances typées des ennemis). Empilables : couvre plusieurs types.
-chain('elementaliste', 'el_c', 'el_entry', 1, [
-  { name: 'Diffusion ardente', kind: 'keystone', statMods: { penetration: 14 }, desc: 'Tes dégâts Physiques comptent AUSSI comme Feu (50%).', keystone: { splashType: { from: 'physique', to: 'feu', frac: 0.5 } } },
-  { name: 'Diffusion givrée', kind: 'keystone', statMods: { penetration: 14 }, desc: 'Tes dégâts Physiques comptent AUSSI comme Froid (50%).', keystone: { splashType: { from: 'physique', to: 'froid', frac: 0.5 } } },
-  { name: 'Diffusion fulgurante', kind: 'keystone', statMods: { penetration: 14 }, desc: 'Tes dégâts Physiques comptent AUSSI comme Foudre (50%).', keystone: { splashType: { from: 'physique', to: 'foudre', frac: 0.5 } } },
-  { name: 'Prisme parfait', kind: 'keystone', statMods: { penetration: 30, intelligence: 30 }, desc: 'Capstone : +30 Pénétration/Intelligence, +20% de dégâts.', keystone: { damageMult: 1.2 } },
-])
+// v0.25 : EN PARALLÈLE depuis l'entrée (avant : en chaîne — il fallait le Feu pour avoir le Froid).
+single({ id: 'el_c0', name: 'Diffusion ardente', constellation: 'elementaliste', kind: 'keystone', tier: 1, maxRank: 1, requires: ['el_entry'], description: 'Tes dégâts Physiques comptent AUSSI comme Feu (50%).', statMods: { penetration: 14 }, keystone: { splashType: { from: 'physique', to: 'feu', frac: 0.5 } } })
+single({ id: 'el_c1', name: 'Diffusion givrée', constellation: 'elementaliste', kind: 'keystone', tier: 1, maxRank: 1, requires: ['el_entry'], description: 'Tes dégâts Physiques comptent AUSSI comme Froid (50%).', statMods: { penetration: 14 }, keystone: { splashType: { from: 'physique', to: 'froid', frac: 0.5 } } })
+single({ id: 'el_c2', name: 'Diffusion fulgurante', constellation: 'elementaliste', kind: 'keystone', tier: 1, maxRank: 1, requires: ['el_entry'], description: 'Tes dégâts Physiques comptent AUSSI comme Foudre (50%).', statMods: { penetration: 14 }, keystone: { splashType: { from: 'physique', to: 'foudre', frac: 0.5 } } })
+single({ id: 'el_c3', name: 'Prisme parfait', constellation: 'elementaliste', kind: 'keystone', tier: 2, maxRank: 1, requires: ['el_entry'], description: 'Capstone : +30 Pénétration/Intelligence, +20% de dégâts.', statMods: { penetration: 30, intelligence: 30 }, keystone: { damageMult: 1.2 } })
 
 /* FAUCHEUR — ombre, DoT, drain */
 single({ id: 'fa_entry', name: 'Étreinte du vide', constellation: 'faucheur', kind: 'notable', tier: 0, maxRank: 1, requires: ['cv_gw_faucheur'], description: 'Le néant t\'accueille. +40 Intelligence, +15 Vol de vie.', statMods: { intelligence: 40, volDeVie: 15 } })
@@ -575,21 +574,32 @@ chain('briseur', 'br_b', 'br_entry', 1, [
 single({ id: 'cv_gw_alchimiste', name: '→ Alchimiste', constellation: 'conversion', kind: 'gateway', tier: 3, maxRank: 1, requires: ['cv_entry'], description: 'Passerelle vers l\'Alchimiste (transmutation des éléments). +30 Maîtrise.', statMods: { maitrise: 30 } })
 single({ id: 'al_entry', name: 'Œuvre alchimique', constellation: 'alchimiste', kind: 'notable', tier: 0, maxRank: 1, requires: ['cv_gw_alchimiste'], description: 'L\'art de transmuter les éléments de ton arme. +40 Maîtrise, +20 à chaque stat offensive.', statMods: { maitrise: 40, force: 20, agilite: 20, intelligence: 20 } })
 
-// Un sous-arbre PAR élément cible : Diffusion (splash 50%) → Transmutation partielle (50%) → totale (100%).
+// v0.25 — REMODELÉ. Avant : chaînes Diffusion→partielle→totale PAR élément — contradictoires (la
+// totale ANNULE la diffusion achetée avant) et sans nœuds à rangs (le palier forçait à acheter ~5
+// diffusions d'éléments différents !). Désormais :
+//  - tier 1 : SUPPORT à rangs (Maîtrise/Pénétration/Altération — nourrit le palier sans déchet)
+//    + le CHOIX par élément, deux philosophies EN PARALLÈLE : Diffusion (bi-élément, splash) OU
+//    Transmutation partielle (déplace 50%) ;
+//  - tier 2 : Transmutation totale (requiert la partielle du MÊME élément seulement) ;
+//  - tier 3 : Grand Œuvre. L'élément se choisit pour matcher les EXIGENCES de résist des boss.
+single({ id: 'al_athanor', name: 'Athanor', constellation: 'alchimiste', kind: 'minor', tier: 1, maxRank: 5, requires: ['al_entry'], description: '+14 Maîtrise par rang (le four de l\'œuvre).', statMods: { maitrise: 14 } })
+single({ id: 'al_solvant', name: 'Solvant universel', constellation: 'alchimiste', kind: 'minor', tier: 1, maxRank: 4, requires: ['al_entry'], description: '+16 Pénétration par rang (rien ne lui résiste).', statMods: { penetration: 16 } })
+single({ id: 'al_mordant', name: 'Mordant', constellation: 'alchimiste', kind: 'minor', tier: 1, maxRank: 4, requires: ['al_entry'], description: '+14 Altération par rang (l\'acide ronge).', statMods: { alteration: 14 } })
+
 const ALCH_EL: [DamageType, string][] = [
   ['feu', 'de Feu'], ['froid', 'de Givre'], ['foudre', 'de Foudre'], ['arcane', 'd\'Arcane'],
   ['ombre', 'd\'Ombre'], ['nature', 'de Nature'], ['physique', 'Physique'],
 ]
 for (const [el, label] of ALCH_EL) {
   single({ id: `al_diff_${el}`, name: `Diffusion ${label}`, constellation: 'alchimiste', kind: 'keystone', tier: 1, maxRank: 1, requires: ['al_entry'],
-    description: `Ton arme compte AUSSI comme ${label} (50%) — sans rien retirer (frappe les 2 résistances).`, statMods: { maitrise: 10 }, keystone: { splashFromMain: { to: el, frac: 0.5 } } })
-  single({ id: `al_half_${el}`, name: `Transmutation partielle ${label}`, constellation: 'alchimiste', kind: 'keystone', tier: 2, maxRank: 1, requires: [`al_diff_${el}`],
-    description: `Convertit 50% du type de ton arme en ${label} (déplace).`, statMods: { maitrise: 12 }, keystone: { convertFromMain: { to: el, frac: 0.5 } } })
-  single({ id: `al_full_${el}`, name: `Transmutation totale ${label}`, constellation: 'alchimiste', kind: 'keystone', tier: 3, maxRank: 1, requires: [`al_half_${el}`],
+    description: `Ton arme compte AUSSI comme ${label} (50%) — sans rien retirer (frappe les 2 résistances). Philosophie BI-ÉLÉMENT.`, statMods: { maitrise: 10 }, keystone: { splashFromMain: { to: el, frac: 0.5 } } })
+  single({ id: `al_half_${el}`, name: `Transmutation partielle ${label}`, constellation: 'alchimiste', kind: 'keystone', tier: 1, maxRank: 1, requires: ['al_entry'],
+    description: `Convertit 50% du type de ton arme en ${label} (déplace). Philosophie CHANGEMENT d'élément.`, statMods: { maitrise: 12 }, keystone: { convertFromMain: { to: el, frac: 0.5 } } })
+  single({ id: `al_full_${el}`, name: `Transmutation totale ${label}`, constellation: 'alchimiste', kind: 'keystone', tier: 2, maxRank: 1, requires: [`al_half_${el}`],
     description: `Convertit 100% du type de ton arme en ${label} : l'arme DEVIENT cet élément.`, statMods: { maitrise: 14 }, keystone: { convertFromMain: { to: el, frac: 1 } } })
 }
 // Capstone : l'arme frappe de TOUS les éléments à la fois (le « multi-élément » demandé).
-single({ id: 'al_grand_oeuvre', name: 'Grand Œuvre', constellation: 'alchimiste', kind: 'keystone', tier: 2, maxRank: 1, requires: ['al_entry'],
+single({ id: 'al_grand_oeuvre', name: 'Grand Œuvre', constellation: 'alchimiste', kind: 'keystone', tier: 3, maxRank: 1, requires: ['al_entry'],
   description: 'Capstone : ton arme compte AUSSI comme TOUS les autres éléments (30% chacun). +50 Maîtrise.', statMods: { maitrise: 50 }, keystone: { splashFromMainAll: 0.3 } })
 
 /* ================== ARCHÉTYPES v0.24 : six gameplays neufs ==================
