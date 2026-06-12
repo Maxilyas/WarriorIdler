@@ -8,7 +8,7 @@ import { getPower, powerIcon } from '../game/powers'
 import { DAMAGE_TYPES } from '../game/damage'
 import { RAID_MECHANIC_META } from '../game/raids'
 import { BIOME_LIST, biomeUnlocked, biomeUnlockHint, getBiomeDef } from '../game/biomes'
-import { harmonyBonus, harmonyStage, surgeBiome, surgeRemainingMs, elanActive } from '../game/biomeBonus'
+import { maitriseBonus, maitriseSum, surgeBiome, surgeRemainingMs, elanActive } from '../game/biomeBonus'
 import type { DamageType, Enemy, EnemyAbility, PowerDef } from '../game/types'
 
 /** Filtres du journal plein écran (catégories de LogKind). */
@@ -71,7 +71,7 @@ export function CombatPanel() {
   const surge = surgeBiome()
   const surgeOn = surge === activeBiome
   const elanOn = elanActive(elan, activeBiome)
-  const harmony = harmonyBonus(biomeBest)
+  const maitrise = maitriseBonus(biomeBest)
 
   // Donjons/raids = combat à PLUSIEURS adversaires. En combat classique, un seul ennemi.
   const enemies: Enemy[] = raid ? raid.enemies : dungeon ? dungeon.enemies : [normalEnemy]
@@ -198,7 +198,7 @@ export function CombatPanel() {
       )}
 
       {/* Bonus de biome actifs (surcharge / élan / harmonie) */}
-      {!dungeon && !raid && (surgeOn || elanOn || harmony > 0) && (
+      {!dungeon && !raid && (surgeOn || elanOn || maitrise > 0) && (
         <div className="flex flex-wrap gap-1.5 text-[10px]">
           {surgeOn && (
             <span className="rounded bg-amber-500/15 px-1.5 py-0.5 font-medium text-amber-300">⚡ Surcharge : +50% or & XP · quintessence ×2</span>
@@ -208,8 +208,8 @@ export function CombatPanel() {
               🌀 Élan du voyageur : +20% dégâts ({Math.max(1, Math.ceil((elan.until - Date.now()) / 60000))} min)
             </span>
           )}
-          {harmony > 0 && (
-            <span className="rounded bg-violet-500/15 px-1.5 py-0.5 font-medium text-violet-300">🎼 Harmonie : +{Math.round(harmony * 100)}% dégâts</span>
+          {maitrise > 0 && (
+            <span className="rounded bg-violet-500/15 px-1.5 py-0.5 font-medium text-violet-300">🗺️ Maîtrise des Zones : +{(maitrise * 100).toFixed(1)}% dégâts</span>
           )}
         </div>
       )}
@@ -295,8 +295,8 @@ export function CombatPanel() {
               <span className="text-slate-400"> — +50% or & XP, quintessence ×2 · change dans {Math.max(1, Math.ceil(surgeRemainingMs() / 60000))} min</span>
             </div>
             <div className="text-violet-300">
-              🎼 Harmonie : <span className="font-semibold">+{Math.round(harmony * 100)}% dégâts</span>
-              <span className="text-slate-400"> partout (plus petit record : {harmonyStage(biomeBest)} — monte TOUS les biomes)</span>
+              🗺️ Maîtrise des Zones : <span className="font-semibold">+{(maitrise * 100).toFixed(1)}% dégâts</span>
+              <span className="text-slate-400"> partout (somme des records : {maitriseSum(biomeBest)} / {7 * 150} — monte TOUS les biomes, ~5% à fond)</span>
             </div>
             <div className="text-cyan-300">
               🌀 Élan du voyageur : <span className="text-slate-400">changer de biome donne +20% dégâts pendant 10 min.</span>

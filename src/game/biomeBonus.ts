@@ -6,8 +6,9 @@ import type { DamageType } from './types'
  * un build qui empile un seul élément et campe un seul biome perdait tout intérêt
  * pour les six autres. Chaque mécanique tire dans une direction différente :
  *
- * 1. HARMONIE : bonus global indexé sur le PLUS PETIT record des 7 biomes → monter
- *    tous les biomes paie, pour tous les builds (collection).
+ * 1. MAÎTRISE DES ZONES (v0.25, ex-Harmonie) : petit bonus de dégâts global indexé sur la SOMME
+ *    des records des 7 biomes (~5% à fond) → monter chaque zone paie, mais c'est de la collection,
+ *    pas une source de puissance (l'ex-Harmonie min-based donnait jusqu'à +100%).
  * 2. SURCHARGE : un biome tournant (30 min, heure réelle) donne +50% or/XP et ×2
  *    quintessence → la rotation opportuniste est récompensée.
  * 3. ÉLAN DU VOYAGEUR : changer de biome donne +20% de dégâts pendant 10 min dans
@@ -19,23 +20,32 @@ import type { DamageType } from './types'
  *    (La 5e mécanique — gemmes exclusives par biome — vit dans gems.ts.)
  */
 
-// ---- 1) Harmonie des biomes ----
+// ---- 1) MAÎTRISE DES ZONES (v0.25) — remplace l'ancienne « Harmonie » ----
+//
+// L'ancienne Harmonie donnait jusqu'à +100% de dégâts, indexée sur le PLUS PETIT record (min) des 7
+// biomes → un multiplicateur de puissance majeur et punitif (ta zone la plus faible bloquait tout).
+// La Maîtrise des Zones la remplace par un bonus VOLONTAIREMENT MINIME, indexé sur la SOMME des
+// records (récompense de pousser CHAQUE zone, pas seulement la plus faible). Toujours appliqué à TOUT
+// le contenu (farm/donjon/raid). C'est de la collection, plus une source de puissance.
 
-/** Bonus de dégâts par palier d'harmonie (plus petit record parmi les 7 biomes). */
-export const HARMONY_PER_STAGE = 0.01
-/** Plafond du bonus d'harmonie (+100%). */
-export const HARMONY_CAP = 1.0
+/** Bonus de dégâts cible quand TOUS les biomes atteignent le palier de référence. */
+export const MAITRISE_TARGET = 0.05
+/** Palier de référence par biome (≈ plafond pratique des paliers de farm). */
+export const MAITRISE_REF_STAGE = 150
+/** Garde-fou si l'on dépasse la référence sur tous les biomes. */
+export const MAITRISE_CAP = 0.10
 
-/** Palier d'harmonie = plus petit record parmi TOUS les biomes (0 tant qu'un biome est vierge). */
-export function harmonyStage(biomeBest: Record<BiomeId, number>): number {
-  let min = Infinity
-  for (const id of BIOME_IDS) min = Math.min(min, biomeBest[id] ?? 0)
-  return Number.isFinite(min) ? Math.max(0, min) : 0
+/** Somme des records de TOUS les biomes (0 si tout est vierge). */
+export function maitriseSum(biomeBest: Record<BiomeId, number>): number {
+  let sum = 0
+  for (const id of BIOME_IDS) sum += Math.max(0, biomeBest[id] ?? 0)
+  return sum
 }
 
-/** Bonus de dégâts global (0 → HARMONY_CAP) issu de l'harmonie. */
-export function harmonyBonus(biomeBest: Record<BiomeId, number>): number {
-  return Math.min(HARMONY_CAP, harmonyStage(biomeBest) * HARMONY_PER_STAGE)
+/** Bonus de dégâts global (0 → MAITRISE_CAP) — ~5% quand les 7 biomes sont au palier 150. */
+export function maitriseBonus(biomeBest: Record<BiomeId, number>): number {
+  const ref = BIOME_IDS.length * MAITRISE_REF_STAGE // 7 × 150 = 1050
+  return Math.min(MAITRISE_CAP, maitriseSum(biomeBest) * (MAITRISE_TARGET / ref))
 }
 
 // ---- 2) Surcharge élémentaire (rotation horaire réelle) ----

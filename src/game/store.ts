@@ -40,7 +40,7 @@ import {
 import { makeEnemy, isBossStage, stageIlvl, stageLuckTier } from './enemies'
 import { BIOME_IDS, biomeUnlocked, getBiomeDef, type BiomeId } from './biomes'
 import {
-  harmonyBonus, surgeBiome, elanActive,
+  maitriseBonus, surgeBiome, elanActive,
   SURGE_GOLD_XP_MULT, SURGE_QUINT_MULT, ELAN_DMG_MULT,
   ELAN_VAGABOND_MULT, type ElanState,
 } from './biomeBonus'
@@ -2044,7 +2044,7 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
   const dCraft = craftMods(s.metiers)
   const dCond = condGemMods(s.characters, dCraft.gemFamilyBonus)
   const dRunes = timeRuneMods(equippedTimeRunes(s.characters), dCraft.runisteTempo)
-  const dHeroMult = (1 + harmonyBonus(s.biomeBest)) * (1 + crescendoBonus(dCond.crescendoCap))
+  const dHeroMult = (1 + maitriseBonus(s.biomeBest)) * (1 + crescendoBonus(dCond.crescendoCap))
   const res = partyCombatStepMulti(s.characters, d.enemies, dt, { enrage, reflect, regen, fightTime, heroMult: dHeroMult, cond: dCond, runes: dRunes })
   let chars = res.chars
   const enemies = res.enemies
@@ -2247,7 +2247,7 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
   const rCraft = craftMods(s.metiers)
   const rCond = condGemMods(s.characters, rCraft.gemFamilyBonus)
   const rRunes = timeRuneMods(equippedTimeRunes(s.characters), rCraft.runisteTempo)
-  const rHeroMult = (1 + harmonyBonus(s.biomeBest)) * (1 + crescendoBonus(rCond.crescendoCap))
+  const rHeroMult = (1 + maitriseBonus(s.biomeBest)) * (1 + crescendoBonus(rCond.crescendoCap))
   const res = partyCombatStepMulti(s.characters, r.enemies, dt, { enrage, regen: drain, fightTime, dmgMult, heroMult: rHeroMult, cond: rCond, runes: rRunes })
   let chars = res.chars
   let enemies = res.enemies
@@ -2506,7 +2506,7 @@ export const useGame = create<GameState>((set, get) => {
       const runes = timeRuneMods(equippedTimeRunes(s.characters), cmodsTick.runisteTempo)
       const surgedNow = surgeBiome() === s.activeBiome
       const elanOn = elanActive(s.elan, s.activeBiome)
-      const heroMult = (1 + harmonyBonus(s.biomeBest))
+      const heroMult = (1 + maitriseBonus(s.biomeBest))
         * (elanOn ? s.elan?.mult ?? ELAN_DMG_MULT : 1)
         * (1 + crescendoBonus(cond.crescendoCap))
         * (surgedNow && cond.orage ? 1 + cond.orage : 1)
