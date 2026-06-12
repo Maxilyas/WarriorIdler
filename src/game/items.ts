@@ -343,14 +343,20 @@ export function recyclePoussiere(item: Item): number {
 
 export const SURILLVL_STEP = 2
 
-/** Coût en éclats d'une reforge. */
-export function reforgeCost(item: Item): number {
-  return Math.round(item.ilvl * 2.5 * RARITIES[item.rarity].tier)
+/** Croissance du coût par USAGE répété sur le même objet (reforge/surillvl) — v0.25.
+ *  Sans elle, spammer à coût constant jusqu'au god-roll était l'optimum sans fond :
+ *  ×1,18 par usage ≈ ×27 au 20e — une borne naturelle, pas un mur. */
+export const CRAFT_REPEAT_GROWTH = 1.18
+
+/** Coût en éclats d'une reforge. v0.25 : chaque ligne VERROUILLÉE multiplie le prix (+100%/verrou —
+ *  cibler le god-roll se paie) et chaque reforge renchérit la suivante sur cet objet. */
+export function reforgeCost(item: Item, lockedCount = 0): number {
+  return Math.round(item.ilvl * 2.5 * RARITIES[item.rarity].tier * (1 + lockedCount) * Math.pow(CRAFT_REPEAT_GROWTH, item.reforgeCount ?? 0))
 }
 
-/** Coût en éclats d'un surillvl (+SURILLVL_STEP ilvl). */
+/** Coût en éclats d'un surillvl (+SURILLVL_STEP ilvl). v0.25 : géométrique par usage. */
 export function surillvlCost(item: Item): number {
-  return Math.round(item.ilvl * 3.5 * RARITIES[item.rarity].tier)
+  return Math.round(item.ilvl * 3.5 * RARITIES[item.rarity].tier * Math.pow(CRAFT_REPEAT_GROWTH, item.surCount ?? 0))
 }
 
 export interface CraftCost { eclats: number; noyau: number; fragments?: number; poussiere?: number; cosmic?: number }
@@ -371,7 +377,11 @@ export function maxRarityTierForIlvl(ilvl: number): number {
  */
 const CRAFT_NOYAU: Record<number, number> = { 4: 10, 5: 50, 6: 200, 7: 600, 8: 1500, 9: 3500, 10: 7000, 11: 13000, 12: 24000, 13: 42000, 14: 70000, 15: 115000, 16: 180000 }
 const CRAFT_POUSSIERE: Record<number, number> = { 6: 10, 7: 30, 8: 80, 9: 200, 10: 450, 11: 900, 12: 1700, 13: 3000, 14: 5000, 15: 8000, 16: 13000 }
-const CRAFT_FRAGMENTS: Record<number, number> = { 9: 5, 10: 15, 11: 40, 12: 90, 13: 180, 14: 320, 15: 550, 16: 900 }
+// v0.25 — FRAGMENTS RECALÉS sur le principe « un craft de rareté r ≈ 5 clears du raid dont le PIC
+// de loot est r » (revenu ✨ ≈ tier+1/clear). Avant : t9 = 5 ✨ → ~2 clears T1 offraient un objet
+// 4 crans AU-DESSUS de la fenêtre du contenu (pic Épique). Démarre désormais à t8 (les fragments
+// n'existent qu'en raid → le craft t8+ est arrimé aux raids).
+const CRAFT_FRAGMENTS: Record<number, number> = { 8: 15, 9: 40, 10: 70, 11: 120, 12: 200, 13: 320, 14: 500, 15: 750, 16: 1100 }
 const CRAFT_COSMIC: Record<number, number> = { 13: 5, 14: 20, 15: 50, 16: 120 }
 
 /** Multiplicateur d'iLvl appliqué aux matériaux (forger un iLvl élevé coûte plus — doux, ~×1 à 60, ~×3 à 540). */
@@ -414,9 +424,18 @@ export function ascendCost(item: Item): CraftCost {
 
 // ---- Craft : créer un objet ----
 
-/** Rareté max forgeable selon la meilleure progression (mêmes paliers que le loot). */
-export function maxCraftTier(bestStage: number): number {
-  return Math.min(16, 8 + Math.floor(bestStage / 8))
+/**
+ * v0.25 — VERROU RAID du craft (miroir du marché, boxRaidGate) : crafter/ascensionner un cran t
+ * exige d'avoir vaincu un tier de raid ≥ t−8 (Mythique→T1 … Céleste→T3 … Transcendant→T8).
+ * Même en STOCKANT des fragments, un tas de ✨ n'achète jamais un cran au-dessus de ton contenu.
+ */
+export function craftRaidGate(rarityTier: number): number {
+  return Math.max(0, rarityTier - 8)
+}
+
+/** Rareté max forgeable : double horloge — palier de farm ET meilleur tier de raid vaincu. */
+export function maxCraftTier(bestStage: number, bestRaidTier = 0): number {
+  return Math.min(16, 8 + Math.floor(bestStage / 8), 8 + bestRaidTier)
 }
 
 /** Coût de création d'un objet d'une rareté/ilvl donnés (éclats scalent rareté+iLvl ; matériaux par table). */
@@ -455,7 +474,7 @@ export function reforgeItem(item: Item, locked: number[]): Affix[] {
 }
 
 /** Augmente l'ilvl de l'objet et rescale ses stats (les lignes % ne scalent pas). */
-export function surillvlItem(item: Item, step = SURILLVL_STEP): Pick<Item, 'ilvl' | 'primaryValue' | 'endurance' | 'affixes'> {
+export function surillvlItem(item: Item, step = SURILLVL_STEP): Pick<Item, 'ilvl' | 'primaryValue' | 'endurance' | 'affixes' | 'surCount'> {
   const newIlvl = item.ilvl + step
   const ratio = newIlvl / item.ilvl
   return {
@@ -463,6 +482,7 @@ export function surillvlItem(item: Item, step = SURILLVL_STEP): Pick<Item, 'ilvl
     primaryValue: Math.round(item.primaryValue * ratio),
     endurance: Math.round(item.endurance * ratio),
     affixes: item.affixes.map((a) => (a.kind === 'stat' ? { ...a, value: Math.round(a.value * ratio) } : a)),
+    surCount: (item.surCount ?? 0) + 1, // v0.25 : renchérit le prochain surillvl (×1,18)
   }
 }
 

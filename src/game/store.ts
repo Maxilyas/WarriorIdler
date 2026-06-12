@@ -16,7 +16,7 @@ import { getUpgrade, upgradeCost as accountUpgradeCost, upgradePoussiere, upgrad
 import {
   generateItem, rollBoxRarity, rollWindowRarity, rollFarmRarity, sellValue, recycleValue, recyclePoussiere, itemScore,
   reforgeItem, surillvlItem, ascendItem,
-  reforgeCost, surillvlCost, ascendCost, createCost, transmuteCost, maxCraftTier,
+  reforgeCost, surillvlCost, ascendCost, createCost, transmuteCost, maxCraftTier, craftRaidGate,
   enhanceTypedAffixes, quintRefund,
 } from './items'
 import {
@@ -2908,12 +2908,13 @@ export const useGame = create<GameState>((set, get) => {
       const item = findItemById(s, itemId)
       if (!item) return
       const mods = craftMods(s.metiers)
-      const cost = Math.round(reforgeCost(item) * mods.costMult)
+      // v0.25 : le prix monte avec les VERROUS choisis (+100%/verrou) et les reforges déjà faites.
+      const cost = Math.round(reforgeCost(item, locked.length) * mods.costMult)
       if (s.essence < cost) return
-      // Les lignes renforcées à la Quintessence sont protégées (jamais re-tirées).
+      // Les lignes renforcées à la Quintessence sont protégées (jamais re-tirées, pas facturées).
       const enhanced = item.affixes.map((a, i) => ((a.upgraded ?? 0) > 0 ? i : -1)).filter((i) => i >= 0)
       const allLocked = [...new Set([...locked, ...enhanced])]
-      const upd = applyItemPatch(s, itemId, { affixes: reforgeItem(item, allLocked) })
+      const upd = applyItemPatch(s, itemId, { affixes: reforgeItem(item, allLocked), reforgeCount: (item.reforgeCount ?? 0) + 1 })
       if (!upd) return
       const gain = metierXpGain(RARITIES[item.rarity].tier, 'modify', mods.forgeronXpMult)
       const g = gainMetierXp(s, 'forgeron', gain)
@@ -2945,6 +2946,8 @@ export const useGame = create<GameState>((set, get) => {
       if (!mods.ascend) return // débloqué via l'arbre du Forgeron
       const item = findItemById(s, itemId)
       if (!item) return
+      // v0.25 : verrou raid — ascensionner VERS un cran t exige un tier de raid ≥ t−8.
+      if (craftRaidGate(RARITIES[item.rarity].tier + 1) > bestRaidTier(s.raidProgress)) return
       const patch = ascendItem(item)
       if (!patch) return
       const c = ascendCost(item)
@@ -3185,12 +3188,15 @@ export const useGame = create<GameState>((set, get) => {
       const mods = craftMods(s.metiers)
       const tier = RARITIES[opts.rarity].tier
       const ilvl = stageIlvl(s.bestStage)
+      // v0.25 : double horloge — la rareté craftable est bornée par le palier ET le tier de raid.
+      const craftCap = maxCraftTier(s.bestStage, bestRaidTier(s.raidProgress))
+      if (tier > craftCap) return
       // Coût de la rareté CHOISIE, réduit par le métier (Forgeron économe).
       const c = createCost(tier, ilvl); const m = mods.costMult
       const cost = { eclats: Math.round(c.eclats * m), noyau: Math.round(c.noyau * m), fragments: Math.round((c.fragments ?? 0) * m), poussiere: Math.round((c.poussiere ?? 0) * m), cosmic: Math.round((c.cosmic ?? 0) * m) }
       if (s.essence < cost.eclats || s.noyau < cost.noyau || s.fragments < cost.fragments || s.poussiere < cost.poussiere || s.cosmic < cost.cosmic) return
       // Œil du joaillier : chance de forger une rareté SUPÉRIEURE (gratuit), capée au max craftable.
-      const lucky = Math.random() < mods.luckChance && tier < maxCraftTier(s.bestStage)
+      const lucky = Math.random() < mods.luckChance && tier < craftCap
       const prodTier = lucky ? tier + 1 : tier
       const rarityId = RARITY_LIST.find((r) => r.tier === prodTier)?.id ?? opts.rarity
       const item = generateItem({ ilvl, type: opts.type, rarity: rarityId, primary: opts.primary, ...(opts.orientation ? { orientation: opts.orientation } : {}), ...(opts.element ? { element: opts.element } : {}) })

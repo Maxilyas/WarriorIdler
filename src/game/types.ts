@@ -216,6 +216,10 @@ export interface Item {
   gems?: GemInstance[]
   /** Enchantement runique (id du registre enchants.ts) — une seule rune par pièce. */
   enchant?: string
+  /** Nombre de SURILLVL déjà appliqués (v0.25 : chaque usage renchérit le suivant ×1,18). */
+  surCount?: number
+  /** Nombre de REFORGES déjà appliquées (v0.25 : même logique anti-spam). */
+  reforgeCount?: number
   /** Pièce de SET (id du registre sets.ts) : bonus à paliers quand plusieurs pièces sont portées. */
   setId?: string
 }

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
-import { useGame } from '../game/store'
+import { useGame, bestRaidTier } from '../game/store'
 import { ITEM_TYPES } from '../game/slots'
 import { PRIMARY_META } from '../game/stats'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from '../game/damage'
@@ -205,6 +205,7 @@ function MetierTree({ metier }: { metier: MetierId }) {
 
 function ForgeronWorkshop() {
   const bestStage = useGame((s) => s.bestStage)
+  const raidProgress = useGame((s) => s.raidProgress)
   const essence = useGame((s) => s.essence)
   const noyau = useGame((s) => s.noyau)
   const fragments = useGame((s) => s.fragments)
@@ -215,7 +216,10 @@ function ForgeronWorkshop() {
   const mods = craftMods(metiers)
 
   const ilvl = stageIlvl(bestStage)
-  const maxTier = maxCraftTier(bestStage)
+  // v0.25 : double horloge — le palier de farm ET le meilleur tier de raid bornent la rareté.
+  const raidTier = bestRaidTier(raidProgress)
+  const maxTier = maxCraftTier(bestStage, raidTier)
+  const raidCapped = maxTier < maxCraftTier(bestStage) // le raid est la borne ACTIVE
   const rarities = RARITY_LIST.filter((r) => r.tier <= maxTier)
 
   const [type, setType] = useState<ItemType>('armePrincipale')
@@ -333,6 +337,11 @@ function ForgeronWorkshop() {
             </button>
           ))}
         </div>
+        {raidCapped && (
+          <p className="mt-1 text-[9.5px] leading-snug text-rose-300/80">
+            ☠️ Le cran suivant exige un <b>tier de raid ≥ {raidTier + 1}</b> (record : {raidTier}) — la haute rareté se forge au rythme de tes raids.
+          </p>
+        )}
       </Section>
 
       {/* Récapitulatif + coût */}

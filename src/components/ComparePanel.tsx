@@ -5,7 +5,7 @@ import { RARITIES } from '../game/rarities'
 import { ALL_STAT_META } from '../game/stats'
 import {
   sellValue, recycleValue, itemStatBlock, itemHasRareStat,
-  reforgeCost, surillvlCost, ascendCost, nextRarity, transmuteCost,
+  reforgeCost, surillvlCost, ascendCost, nextRarity, transmuteCost, craftRaidGate,
   quintCost, QUINT_GAIN,
 } from '../game/items'
 import { craftMods } from '../game/metiers'
@@ -21,7 +21,7 @@ import {
   UNIQUE_EFFECTS, UNIQUE_ROLES, UNIQUE_MAX_RANK, UNIQUE_ACTIVE_RANK,
 } from '../game/uniques'
 import type { UniqueRole } from '../game/types'
-import { useGame, FRAGMENT_INFUSE_COST, CHOOSE_UNIQUE_COST } from '../game/store'
+import { useGame, FRAGMENT_INFUSE_COST, CHOOSE_UNIQUE_COST, bestRaidTier } from '../game/store'
 import { rarityTextStyle, rarityCardStyle, rarityNameClass } from './rarityStyle'
 
 /** Libellé/couleur d'affichage d'une ligne d'objet (stat / dégâts / résistance). */
@@ -249,17 +249,22 @@ function CraftSection({ item }: { item: Item }) {
   const infuseUnique = useGame((s) => s.infuseUnique)
   const transmute = useGame((s) => s.transmute)
   const mods = craftMods(useGame((s) => s.metiers))
+  const raidProgress = useGame((s) => s.raidProgress)
   const [open, setOpen] = useState(false)
   const [locked, setLocked] = useState<number[]>([])
   const cm = mods.costMult
   const tCost = Math.round(transmuteCost(item) * cm)
   const OFFENSIVE: OffensiveStat[] = ['force', 'agilite', 'intelligence']
 
-  const rCost = Math.round(reforgeCost(item) * cm)
+  // v0.25 : le prix de la reforge suit les VERROUS posés et les reforges déjà faites sur l'objet.
+  const rCost = Math.round(reforgeCost(item, locked.length) * cm)
   const sCost = Math.round(surillvlCost(item) * cm)
   const rawA = ascendCost(item)
   const aCost = { eclats: Math.round(rawA.eclats * cm), noyau: Math.round(rawA.noyau * cm), fragments: Math.round((rawA.fragments ?? 0) * cm), poussiere: Math.round((rawA.poussiere ?? 0) * cm), cosmic: Math.round((rawA.cosmic ?? 0) * cm) }
   const nr = nextRarity(item.rarity)
+  // v0.25 : verrou raid sur l'Ascension (miroir du craft) — tier cible − 8.
+  const ascGate = nr ? craftRaidGate(RARITIES[nr].tier) : 0
+  const ascRaidOk = ascGate <= bestRaidTier(raidProgress)
   const Locked = ({ label, metier }: { label: string; metier: string }) => (
     <div className="rounded border border-slate-800 bg-black/20 py-1.5 text-center text-[10px] text-slate-500">🔒 {label} — à apprendre dans l'arbre du {metier} (onglet 🔨 Atelier)</div>
   )
@@ -347,6 +352,11 @@ function CraftSection({ item }: { item: Item }) {
           ) : <Locked label="Transmutation" metier="Forgeron" />}
 
           {!mods.ascend ? <Locked label="Ascension" metier="Forgeron" /> : nr ? (
+            !ascRaidOk ? (
+              <div className="rounded border border-rose-900/40 bg-rose-950/10 py-1.5 text-center text-[10px] text-rose-300/80">
+                ☠️ Ascension → <span style={{ color: RARITIES[nr].color }}>{RARITIES[nr].name}</span> : vaincs un raid <b>tier ≥ {ascGate}</b> (record {bestRaidTier(raidProgress)}).
+              </div>
+            ) : (
             <button
               disabled={essence < aCost.eclats || noyau < aCost.noyau || fragments < aCost.fragments || poussiere < aCost.poussiere || cosmic < aCost.cosmic}
               onClick={() => ascend(item.id)}
@@ -355,6 +365,7 @@ function CraftSection({ item }: { item: Item }) {
               Ascension → {RARITIES[nr].name} · 💠 {aCost.noyau} + ♦ {aCost.eclats}
               {aCost.poussiere ? ` + 🌌 ${aCost.poussiere}` : ''}{aCost.fragments ? ` + ✨ ${aCost.fragments}` : ''}{aCost.cosmic ? ` + 💫 ${aCost.cosmic}` : ''}
             </button>
+            )
           ) : (
             <div className="text-center text-[10px] italic text-slate-600">Rareté maximale atteinte.</div>
           )}
