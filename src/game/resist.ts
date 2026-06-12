@@ -13,18 +13,23 @@ import type { DamageType, Enemy } from './types'
  *
  *  - résist ≥ req  → M = ×1 (au cap du monstre : dégâts normaux) ;
  *  - résist = 0    → M monte avec l'AMPLEUR ABSOLUE du déficit, borné à ×(1+KMAX) :
- *      · farm (req ≈ 0-60)   → ×1 … ×1.4  (jamais contraignant)
- *      · donjon (req ≈ 25-120) → ×1.2 … ×2  (un peu plus)
- *      · raid (req ≈ 75-330+) → ×1.6 … ×5  (LE check de stuff par boss)
+ *      · farm (req ≈ 0-60)    → ×1 … ×1.7  (sensible sans être un mur)
+ *      · donjon (req ≈ 25-120) → ×1.4 … ×2.9 (un vrai levier)
+ *      · raid (req ≈ 100-430+) → ×2.5 … ×6  (LE check de stuff par boss — v0.25.x : OBLIGATOIRE)
  *
  * Migration : 1 ancien % de résistance = 1 point (lignes d'objet inchangées ; talents,
  * uniques et sets ×100 à l'agrégation). L'ancien cap de 75 % est SUPPRIMÉ.
  */
 
-/** Punition maximale : ×(1+KMAX) à déficit total. */
-export const RESIST_KMAX = 4
-/** Forme de la courbe (>1 = indulgent : un peu de résist aide déjà beaucoup). */
-export const RESIST_P = 1.6
+/** Punition maximale : ×(1+KMAX) à déficit total.
+ *  v0.25.x : 4 → 5 (retour joueur : on clear les raids à ×2,3 sans une ligne de résist — le
+ *  check doit OBLIGER à se stuffer). */
+export const RESIST_KMAX = 5
+/** Forme de la courbe (>1 = indulgent : un peu de résist aide déjà beaucoup).
+ *  v0.25.x : 1.6 → 1.35 — les déficits MOYENS piquent bien plus tôt (à mi-déficit : ×2,3 → ×3,4
+ *  avec le nouveau KMAX). Impact farm contenu (req ≤ 60 → ×1,7 max au lieu de ×1,4) ;
+ *  donjons à zéro résist : ×2,1 → ×2,9 max. */
+export const RESIST_P = 1.35
 /** Déficit (points) qui déclenche la punition maximale. */
 export const RESIST_DSCALE = 250
 
@@ -62,13 +67,13 @@ export function resistSurplus(enemy: Enemy, resist: Partial<Record<DamageType, n
 
 /* ---- Exigences par contenu (gradation §5.2 : ≈0 farm < donjon < raid) ---- */
 
-/** Farm : exigence sur l'élément du biome, nulle avant le palier 45 puis douce (cap 60 → ×1.4 max). */
+/** Farm : exigence sur l'élément du biome, nulle avant le palier 45 puis douce (cap 60 → ×1.7 max). */
 export function farmReq(stage: number): number {
   if (stage < 45) return 0
   return Math.min(60, Math.round((stage - 45) * 1.2))
 }
 
-/** Donjon : exigence sur l'élément du donjon (cap 120 → ×2.1 max à zéro résist). */
+/** Donjon : exigence sur l'élément du donjon (cap 120 → ×2.9 max à zéro résist). */
 export function dungeonReq(level: number): number {
   return Math.min(120, 20 + level * 6)
 }

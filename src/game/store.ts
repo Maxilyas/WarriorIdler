@@ -50,7 +50,7 @@ import { DAMAGE_TYPE_LIST, DAMAGE_TYPES, profileDamageMult, type DamageProfile }
 import { equipSlotsForType, slotAccepts, EQUIP_SLOTS } from './slots'
 import { essenceGain, upgradeCost, insertCost, getUnique, UNIQUE_MAX_RANK, randomUniqueInstance, undiscoveredUnique } from './uniques'
 import {
-  generateDungeon, makeDungeonPack, dungeonIlvl, dungeonRegen, getDungeonDef,
+  generateDungeon, makeDungeonPack, dungeonIlvl, dungeonRegen, getDungeonDef, dungeonLuckTier,
   cacheRarityWindow, butinOverChance, butinOverTier, BUTIN_RARITY_CAP,
   dungeonRunYield, dungeonKeyYield, DUNGEON_YIELD_PERFIGHT_FRAC,
   geodeDustYield, geodeGemChance, geodeGemRank,
@@ -58,7 +58,7 @@ import {
 } from './dungeons'
 import type { GemFamily } from './condGems'
 import {
-  generateRaid, makeRaidAdd, getRaidDef, raidUnlocked, raidBossVariant,
+  generateRaid, makeRaidAdd, raidMaxAdds, getRaidDef, raidUnlocked, raidBossVariant,
   raidIlvl, raidRarityWindow, rollRaidLootCount, raidTrophyGain, raidTierUnlockCost,
   raidFragments, raidCosmicChance, raidCosmicQty, pickRaidLootType,
   PAIR_ENRAGE_MULT, NOVA_MULT, RAIDS, RAID_LIST, type ActiveRaid, type RaidId,
@@ -74,6 +74,8 @@ const INV_BASE = 100000
 let invMax = INV_BASE
 let regenMult = 1 // ajusté par l'amélioration "Régénération"
 const REGEN_RATE = 0.05
+/** v0.25.x — RELÈVE en farm : un héros tombé se relève après ce délai (s), à 35% de ses PV. */
+const FARM_REZ_DELAY = 20
 const RETREAT_STAGES = 2
 /** Intervalle (s) entre deux étourdissements d'un boss (après le 1er, cadencé par ccCd). */
 const CC_INTERVAL = 8
@@ -1010,6 +1012,7 @@ function sanitize(save: SaveData): SaveData {
     const mh = charMaxHp(c)
     c.hp = c.hp > 0 ? Math.min(c.hp, mh) : mh
     // Statuts de combat transitoires : ne pas les conserver entre deux sessions.
+    c.rez = undefined
     c.stun = 0
     c.dots = undefined
     c.weaken = undefined
@@ -1178,7 +1181,7 @@ function highestLevel(chars: Character[]): number {
 
 /** Soin complet + purge des statuts de combat transitoires (mort, repli, fin de donjon/raid). */
 function fullHeal(c: Character): Character {
-  return { ...c, hp: charMaxHp(c), stun: 0, dots: undefined, weaken: undefined }
+  return { ...c, hp: charMaxHp(c), rez: undefined, stun: 0, dots: undefined, weaken: undefined }
 }
 
 /** Met à jour les multiplicateurs globaux (combat, régén) — améliorations + 🏛️ Maîtrise (v0.25). */
@@ -1835,6 +1838,10 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
   const revived = applySursis(chars, mods?.runes?.sursisCd)
 
   // 6) Régénération des persos (+ bonus de régén + Métaboliseur d'Égide) + clamp.
+  // v0.25.x — RELÈVE (farm uniquement, ce pas de combat ne sert qu'aux paliers) : un héros tombé
+  // se relève après FARM_REZ_DELAY à 35% de ses PV. Avant, hors wipe d'équipe, un mort restait
+  // mort pour toujours (la régén ne touchait que les vivants) — c'était le « perso pas rez ».
+  const rezzed: string[] = []
   chars.forEach((c, i) => {
     const d = info[i]
     if (c.hp > 0 && d) {
@@ -1845,11 +1852,18 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
         regen += mh * Math.min(d.cmods.surplusRegen, (resistSurplus(enemy, d.resist) / RESIST_DSCALE) * d.cmods.surplusRegen)
       }
       c.hp = Math.min(mh, c.hp + regen * dt)
+    } else if (c.hp <= 0) {
+      c.rez = (c.rez ?? 0) + dt
+      if (c.rez >= FARM_REZ_DELAY) {
+        c.hp = Math.round(charMaxHp(c) * 0.35)
+        c.rez = undefined
+        rezzed.push(c.name)
+      }
     }
     if (c.hp < 0) c.hp = 0
   })
 
-  return { chars, enemy, anyAlive: chars.some((c) => c.hp > 0), totalDealt, overkill, revived }
+  return { chars, enemy, anyAlive: chars.some((c) => c.hp > 0), totalDealt, overkill, revived, rezzed }
 }
 
 /**
@@ -2139,14 +2153,18 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
   const d = s.dungeon!
   const def = getDungeonDef(d.dungeonId)
   const fightTime = d.fightTime + dt
+  const runTime = (d.runTime ?? 0) + dt // horloge du run (défi « Pressé »)
   let enrage = 0
   let reflect = 0
   let regen = dungeonRegen(d.trait) // identité 'regen' : les ennemis se régénèrent (→ il faut du burst)
   for (const m of d.modifiers) {
     if (m.enrageRampPerSec) enrage += m.enrageRampPerSec
-    if (m.reflectPct) reflect += m.reflectPct
+    if (m.reflectPct) reflect += m.reflectPct // vestige « Réfléchissant » (runs antérieurs à v0.25.x)
     if (m.regenPct) regen += m.regenPct
   }
+  // v0.25.x (A) : les affixes de difficulté PAIENT — multiplicateur de récompenses du run.
+  const rwMult = d.modifiers.reduce((a, m) => a * (m.rewardMult ?? 1), 1)
+  const explodePct = d.modifiers.reduce((a, m) => a + (m.explodePct ?? 0), 0)
 
   const dCraft = craftMods(s.metiers)
   const dCond = condGemMods(s.characters, dCraft.gemFamilyBonus)
@@ -2157,6 +2175,18 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
   const enemies = res.enemies
   let log = s.log
   for (const n of res.revived ?? []) log = pushLog(log, `🕊️ Sursis : ${n} survit in extremis !`, 'info')
+
+  // 💥 Volatile : chaque ennemi mort CE TICK explose (AoE typée sur l'équipe, exigence comprise).
+  if (explodePct > 0) {
+    let booms = 0
+    for (let i = 0; i < enemies.length; i++) {
+      if ((d.enemies[i]?.hp ?? 0) > 0 && enemies[i].hp <= 0) {
+        chars = applyAoe(chars, enemies[i].damage * explodePct, enemies[i].damageType, enemyReq(enemies[i], enemies[i].damageType))
+        booms++
+      }
+    }
+    if (booms > 0) log = pushLog(log, `💥 Volatile : ${booms} explosion${booms > 1 ? 's' : ''} !`, 'death')
+  }
 
   if (!res.anyAlive) {
     crescendoReset() // 📯 Crescendo : l'équipe tombe, le cumul retombe
@@ -2189,8 +2219,9 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
     const fightItems: Item[] = []
     let logBit = ''
     let leveled = false
-    // Rendement par combat = part PERFIGHT du rendement total mappé sur les coûts (voir dungeons.ts).
-    const perFight = (r: 'gold' | 'eclats' | 'noyau' | 'poussiere') => dungeonRunYield(r, lv) * DUNGEON_YIELD_PERFIGHT_FRAC / Math.max(1, d.totalFights)
+    // Rendement par combat = part PERFIGHT du rendement total mappé sur les coûts (voir dungeons.ts),
+    // × rwMult (v0.25.x : les affixes paient).
+    const perFight = (r: 'gold' | 'eclats' | 'noyau' | 'poussiere') => dungeonRunYield(r, lv) * DUNGEON_YIELD_PERFIGHT_FRAC * rwMult / Math.max(1, d.totalFights)
     switch (def.reward) {
       case 'gold': { if (!noGold) { const g = Math.round(perFight('gold') * eco.goldGain); gold += g; logBit = `+${g.toLocaleString('fr-FR')} or` } break }
       case 'eclats': { const e2 = Math.round(perFight('eclats')); essence += e2; logBit = `+${e2.toLocaleString('fr-FR')} éclats` } break
@@ -2198,10 +2229,10 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
       case 'poussiere': { const pq = accrue('poussiere', perFight('poussiere')); if (pq) { poussiere += pq; logBit = `+${pq} 🌌` } } break
       // Clés : mêmes règles que les autres ressources (40% au fil des combats, 60% au coffre) —
       // fini le fil exponentiel indexé sur l'XP du pack qui rendait le coffre ridicule.
-      case 'sceaux': { const sc = accrue('sceaux', dungeonKeyYield('sceaux', lv) * DUNGEON_YIELD_PERFIGHT_FRAC / Math.max(1, d.totalFights)); if (sc) { sceaux += sc; logBit = `+${sc} 🔑` } } break
-      case 'orbes': { const ob = accrue('orbes', dungeonKeyYield('orbes', lv) * DUNGEON_YIELD_PERFIGHT_FRAC / Math.max(1, d.totalFights)); if (ob) { orbes += ob; logBit = `+${ob} 🔮` } } break
+      case 'sceaux': { const sc = accrue('sceaux', dungeonKeyYield('sceaux', lv) * DUNGEON_YIELD_PERFIGHT_FRAC * rwMult / Math.max(1, d.totalFights)); if (sc) { sceaux += sc; logBit = `+${sc} 🔑` } } break
+      case 'orbes': { const ob = accrue('orbes', dungeonKeyYield('orbes', lv) * DUNGEON_YIELD_PERFIGHT_FRAC * rwMult / Math.max(1, d.totalFights)); if (ob) { orbes += ob; logBit = `+${ob} 🔮` } } break
       case 'xp': {
-        const xp = Math.round(packXp * DUNGEON_FIGHT_XP_MULT * eco.xpGain)
+        const xp = Math.round(packXp * DUNGEON_FIGHT_XP_MULT * eco.xpGain * rwMult)
         chars = chars.map((c) => { if (c.hp <= 0) return c; const nc = grantXp(c, xp); if (nc.level > c.level) leveled = true; return nc })
         earned.xp = (earned.xp ?? 0) + xp
         logBit = `+${xp.toLocaleString('fr-FR')} XP`
@@ -2210,7 +2241,12 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
       // Cache du Pilleur, drops PAR COMBAT : même fenêtre que le coffre (pic ≤ Légendaire, plafond Artefact).
       case 'stuff': { if (Math.random() < 0.4) { const cw = cacheRarityWindow(lv); fightItems.push(generateItem({ ilvl: dungeonIlvl(lv, s.bestStage), rarity: rollWindowRarity(cw.floor, cw.peak, cw.cap), primaryBias: pickBias(s.characters) })); logBit = '+1 objet' } break }
       // La Géode : la poussière 🔹 coule à chaque combat (la gemme, elle, attend le coffre).
-      case 'gemmes': { const gd = accrue('gemDust', geodeDustYield(lv) * DUNGEON_YIELD_PERFIGHT_FRAC / Math.max(1, d.totalFights)); if (gd) { gemDust += gd; logBit = `+${gd} 🔹` } } break
+      case 'gemmes': { const gd = accrue('gemDust', geodeDustYield(lv) * DUNGEON_YIELD_PERFIGHT_FRAC * rwMult / Math.max(1, d.totalFights)); if (gd) { gemDust += gd; logBit = `+${gd} 🔹` } } break
+    }
+    // ✦ Hanté : le Champion du pack vient de tomber → objet de haute rareté (Légendaire garanti, mieux possible).
+    if (enemies.some((e) => e.champion)) {
+      fightItems.push(generateItem({ ilvl: dungeonIlvl(lv, s.bestStage), luckTier: dungeonLuckTier(lv) + 4, minTier: 6, primaryBias: pickBias(s.characters) }))
+      log = pushLog(log, '✦ Champion abattu — son trésor tombe !', 'loot')
     }
     log = pushLog(log, `⚔️ ${def.icon} Combat ${d.current + 1}/${d.totalFights}${logBit ? ` · ${logBit}` : ''}.`, 'kill')
     if (leveled) log = pushLog(log, '⬆ Niveau gagné !', 'level')
@@ -2227,12 +2263,23 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
       const rareBonus = d.modifiers.reduce((a, m) => a + (m.rareBonus ?? 0), 0)
       const bias = pickBias(s.characters)
 
+      // ⏱️ Pressé : coffre bonifié si le run est bouclé dans le temps imparti (runTime ≤ timerSec).
+      const presse = d.modifiers.find((m) => m.timerBonus)
+      const presseOk = !!presse && runTime <= (presse.timerSec ?? 0)
+      if (presse) {
+        log = presseOk
+          ? pushLog(log, `⏱️ Pressé RÉUSSI (${Math.round(runTime)}s/${presse.timerSec}s) : coffre +${Math.round((presse.timerBonus ?? 0) * 100)}% !`, 'loot')
+          : pushLog(log, `⏱️ Pressé manqué (${Math.round(runTime)}s/${presse.timerSec}s) — coffre normal.`, 'info')
+      }
+      // Multiplicateur de COFFRE : affixes payants (rwMult) × défi Pressé réussi.
+      const chestMult = rwMult * (presseOk ? 1 + (presse?.timerBonus ?? 0) : 1)
+
       // --- Coffre : BONUS de fin (montant ÉLEVÉ) de la ressource du donjon, EN PLUS du par-combat ---
       let items: Item[] = []
       let cGold = 0, cEclats = 0, cNoyau = 0, cPous = 0, cSceaux = 0, cOrbes = 0, cXp = earned.xp ?? 0
       let cDust = 0
       let cGem: { id: CondGemId; rank: number } | undefined
-      const chestFrac = 1 - DUNGEON_YIELD_PERFIGHT_FRAC // 60% du rendement mappé tombe dans le coffre
+      const chestFrac = (1 - DUNGEON_YIELD_PERFIGHT_FRAC) * chestMult // 60% du rendement mappé, × affixes
       switch (def.reward) {
         case 'gold': cGold = noGold ? 0 : Math.round(dungeonRunYield('gold', lv) * chestFrac * eco.goldGain); break
         case 'eclats': cEclats = Math.round(dungeonRunYield('eclats', lv) * chestFrac); break
@@ -2240,10 +2287,10 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
         case 'poussiere': cPous = Math.round(dungeonRunYield('poussiere', lv) * chestFrac); break
         case 'orbes': cOrbes = Math.round(dungeonKeyYield('orbes', lv) * chestFrac); break
         case 'sceaux': cSceaux = Math.round(dungeonKeyYield('sceaux', lv) * chestFrac); break
-        case 'xp': { const bonus = Math.round(1200 * lv * Math.pow(1.12, lv)); chars = chars.map((c) => (c.hp > 0 ? grantXp(c, bonus) : c)); cXp += bonus; break }
+        case 'xp': { const bonus = Math.round(1200 * lv * Math.pow(1.12, lv) * chestMult); chars = chars.map((c) => (c.hp > 0 ? grantXp(c, bonus) : c)); cXp += bonus; break }
         case 'stuff': {
           const ilvl = dungeonIlvl(lv, s.bestStage)
-          const count = 3 + Math.floor(lv / 2)
+          const count = Math.max(1, Math.round((3 + Math.floor(lv / 2)) * chestMult))
           // v0.24 : FENÊTRE de la Cache (pic ≤ Légendaire, plafond pratique Artefact — même
           // « Avare » ne le perce pas). Au-dessus, seul le « voile » (infime, → Éternel max).
           const cw = cacheRarityWindow(lv)
@@ -2315,20 +2362,23 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
     }
 
     // Avance au combat suivant (pools par-combat crédités + accumulateur conservé).
+    // ✦ Hanté : le Champion surgit au combat marqué (championAt).
     const nd: ActiveDungeon = {
       ...d,
       current: nextIndex,
-      enemies: makeDungeonPack(def, d.level, nextIndex, d.totalFights, d.modifiers),
+      enemies: makeDungeonPack(def, d.level, nextIndex, d.totalFights, d.modifiers, nextIndex === d.championAt),
       fightTime: 0,
+      runTime,
       earned,
     }
+    if (nextIndex === d.championAt) log = pushLog(log, '✦ Un Champion vous barre la route !', 'death')
     const next = { ...s, characters: chars, gold, essence, noyau, poussiere, sceaux, orbes, gemDust, inventory, codex, dungeon: nd, log }
     persist(next)
     set(next)
     return
   }
 
-  set({ ...s, characters: chars, dungeon: { ...d, enemies, fightTime }, log })
+  set({ ...s, characters: chars, dungeon: { ...d, enemies, fightTime, runTime }, log })
 }
 
 /** Dégâts de zone (Nova/adds) sur l'équipe, typés : multiplicateur d'exigence par perso. */
@@ -2405,17 +2455,19 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
     chars = applyAoe(chars, boss.damage * NOVA_MULT, element, enemyReq(boss, element))
     log = pushLog(log, `☄️ ${boss.name} déchaîne une Nova ${DAMAGE_TYPES[element].name} !`, 'death')
   }
-  // Déferlante : fait SURGIR des renforts réels (combat à plusieurs adversaires), plafonnés.
+  // Déferlante : fait SURGIR des renforts réels (combat à plusieurs adversaires).
+  // v0.25.x : les rejetons PERSISTENT jusqu'à leur mort (plus d'expiration) — le plafond
+  // simultané monte avec le tier (raidMaxAdds) : les ignorer laisse la pression s'empiler.
   if (mech.includes('swarm') && swarmCd <= 0) {
     swarmCd = 5
     const liveAdds = enemies.filter((e) => e.add && e.hp > 0).length
-    const toSpawn = Math.max(0, Math.min(2, 3 - liveAdds))
+    const toSpawn = Math.max(0, Math.min(2, raidMaxAdds(r.tier) - liveAdds))
     // uid stable (1001+ pour ne JAMAIS percuter l'index des boss en [0]/[1]) + numérotation :
-    // sans ça, la liste keyée par index faisait « sauter » les barres quand un rejeton expirait.
+    // sans ça, la liste keyée par index faisait « sauter » les barres quand un rejeton tombait.
     const ADD_TAGS = ['α', 'β', 'γ', 'δ', 'ε', 'ζ']
     let uid = enemies.reduce((m, e) => Math.max(m, e.uid ?? 0), 1000)
     for (let k = 0; k < toSpawn; k++) {
-      const add = makeRaidAdd(def, r.tier, element)
+      const add = makeRaidAdd(def, r.tier, element, s.characters.length)
       add.uid = ++uid
       add.name = `${add.name} ${ADD_TAGS[(uid - 1001) % ADD_TAGS.length]}`
       enemies.push(add)
@@ -2423,7 +2475,8 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
     if (toSpawn > 0) log = pushLog(log, `🐛 ${toSpawn} renfort(s) surgissent !`, 'death')
   }
 
-  // Renforts : décompte de durée de vie + nettoyage (le boss en [0] est toujours conservé).
+  // Renforts : nettoyage des morts (le boss en [0] est toujours conservé). Le décompte de
+  // `lifetime` ne s'applique plus qu'aux rejetons d'anciennes sauvegardes (pré-v0.25.x).
   enemies = enemies.filter((e, idx) => {
     if (idx === 0) return true
     if (e.hp <= 0) return false
@@ -2526,7 +2579,7 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
       if (repeatLeft > 0) {
         const credited = applyChestRewards(s, chest)
         if (credited.orbes >= def.orbeCost) {
-          const nr = generateRaid(r.raidId, tier)
+          const nr = generateRaid(r.raidId, tier, s.characters.length)
           nr.repeatLeft = repeatLeft - 1
           const log3 = pushLog(log, `🔁 Auto-raid : trésor encaissé${cosmic ? ` (💫 ×${cosmic})` : ''} · ${repeatLeft} relance${repeatLeft > 1 ? 's' : ''} restante${repeatLeft > 1 ? 's' : ''}.`, 'kill')
           const next = { ...s, ...credited, gems, runesOwned, metiers: pm.metiers, conseil: cp.conseil, maitrisePoints: cp.maitrisePoints, characters: healed, raidProgress, raidTrophies, orbes: credited.orbes - def.orbeCost, raid: nr, log: log3 }
@@ -2651,6 +2704,7 @@ export const useGame = create<GameState>((set, get) => {
       const enemy = res.enemy
       let log = s.log
       for (const n of res.revived ?? []) log = pushLog(log, `🕊️ Sursis : ${n} survit in extremis !`, 'info')
+      for (const n of res.rezzed ?? []) log = pushLog(log, `⛑️ ${n} se relève (35% PV) !`, 'info')
 
       if (!res.anyAlive) {
         crescendoReset() // 📯 Crescendo : l'équipe tombe, le cumul retombe
@@ -3502,7 +3556,7 @@ export const useGame = create<GameState>((set, get) => {
       const maxTier = s.raidTierUnlocked[raidId] ?? 1
       if (tier < 1 || tier > maxTier) return
       if (s.orbes < def.orbeCost) return
-      const raid = generateRaid(raidId, tier)
+      const raid = generateRaid(raidId, tier, s.characters.length)
       raid.repeatLeft = Math.max(0, Math.round(repeat) - 1)
       // Rune de l'Économe : 15% de chance de préserver l'Orbe.
       const saved = equippedRules(s.characters).has('econome') && Math.random() < (craftMods(s.metiers).loiAmplifiee ? 0.25 : 0.15)

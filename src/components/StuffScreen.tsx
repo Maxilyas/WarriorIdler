@@ -8,6 +8,7 @@ import { RARITIES, RARITY_LIST } from '../game/rarities'
 import { itemScore, itemHasRareStat, itemStatBlock } from '../game/items'
 import { PRIMARY_META, SECONDARY_META, SECONDARY_STATS } from '../game/stats'
 import { getCondGem } from '../game/condGems'
+import { itemSockets } from '../game/gems'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from '../game/damage'
 import { equipDelta, type EquipDelta } from '../game/character'
 import { rarityTextStyle, rarityNameClass } from './rarityStyle'
@@ -174,7 +175,11 @@ export function StuffScreen() {
             const rarity = item ? RARITIES[item.rarity] : null
             const active = selectedSlot === slot.id
             // Gemmes serties : un objet gemmé est un NET AVANTAGE → on le fait SORTIR DU LOT (halo).
+            // v0.25.x : les châsses VIDES s'affichent aussi (◇ en pointillés) — on voit d'un coup
+            // d'œil le potentiel de sertissage inexploité de son équipement porté.
             const gems = item?.gems ?? []
+            const sockets = item ? itemSockets(item) : 0
+            const emptySockets = Math.max(0, sockets - gems.length)
             const gemColor = gems.length ? getCondGem(gems[0].cond ?? '')?.color ?? '#a78bfa' : null
             return (
               <button
@@ -195,8 +200,8 @@ export function StuffScreen() {
                 }
                 style={item && rarity ? { borderColor: gemColor ?? rarity.color + '55', ...(gemColor ? { boxShadow: `0 0 9px 0 ${gemColor}aa` } : {}) } : undefined}
               >
-                {/* Gemme(s) INCRUSTÉE(S) dans le coin haut-droit, lumineuse(s) — l'objet brille. */}
-                {gems.length > 0 && (
+                {/* Gemme(s) INCRUSTÉE(S) + châsses VIDES (◇) dans le coin haut-droit. */}
+                {(gems.length > 0 || emptySockets > 0) && (
                   <span className="pointer-events-none absolute -right-1.5 -top-1.5 flex gap-0.5">
                     {gems.map((g, i) => {
                       const cg = g.cond ? getCondGem(g.cond) : undefined
@@ -212,6 +217,16 @@ export function StuffScreen() {
                         </span>
                       )
                     })}
+                    {Array.from({ length: emptySockets }).map((_, i) => (
+                      <span
+                        key={`e${i}`}
+                        title="Châsse VIDE — sertis-y une gemme (objet → 💎 Châsses)"
+                        className="flex h-4 w-4 items-center justify-center rounded-full text-[9px] leading-none text-sky-300/80"
+                        style={{ background: '#0ea5e91a', border: '1px dashed #38bdf8aa' }}
+                      >
+                        ◇
+                      </span>
+                    ))}
                   </span>
                 )}
                 <div className="text-[9px] uppercase tracking-wide text-slate-500">{slot.name}</div>

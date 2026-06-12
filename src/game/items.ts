@@ -89,7 +89,7 @@ function rollLineValue(spec: LineSpec, ilvl: number, statMult: number, tier: num
   }
   if (spec.kind === 'dmgType') return Math.round((DMG_LINE_BASE + Math.random() * DMG_LINE_RANGE) * (1 + tier * DMG_LINE_TIER_GROWTH))
   // Résistance en POINTS (v0.24, plus de cap %) : scale avec la rareté — la course à l'armement
-  // des raids se gagne en empilant ces lignes (Req des boss : ~75 au T1 → ~330 au T10).
+  // des raids se gagne en empilant ces lignes (Req des boss v0.25.x : ~100 au T1 → ~430 au T10).
   return Math.round((6 + Math.random() * 10) * (1 + tier * 0.09))
 }
 

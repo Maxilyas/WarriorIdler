@@ -3,7 +3,7 @@ import { useGame } from '../game/store'
 import {
   RAID_LIST, RAID_UNLOCK_STAGE, RAID_MECHANIC_META, getRaidDef, raidUnlocked,
   raidBossVariant, raidIlvl, raidBerserkTime, raidFragments, raidCosmicChance,
-  raidMinTier, raidMaxTier, raidReqs, raidTierUnlockCost, recommendedDps, recommendedEhp, type RaidDef,
+  raidMinTier, raidMaxTier, raidReqs, raidTierUnlockCost, recommendedDps, recommendedEhp, raidPartyHpMult, type RaidDef,
 } from '../game/raids'
 import { charDps, charMaxHp, charResist } from '../game/character'
 import { resistMult } from '../game/resist'
@@ -190,13 +190,15 @@ function RaidCard({ def, unlocked, cleared, maxTier, trophies, bestStage, orbes,
     )
   }
 
-  const recDps = recommendedDps(def, t)
+  // v0.25.x : les PV des boss scalent avec la TAILLE de l'équipe → le DPS conseillé aussi.
+  const recDps = recommendedDps(def, t, characters.length)
   const recEhp = recommendedEhp(def, t)
   const dpsOk = partyDps >= recDps
   const ehpOk = partyHp >= recEhp
   const canEnter = !busy && orbes >= def.orbeCost
   const isNew = t === frontier && t > 1
   const boss = raidBossVariant(def, t)
+  const partyMult = raidPartyHpMult(characters.length)
 
   return (
     <div className="rounded-lg border bg-[#11151f] p-2.5" style={{ borderColor: def.color + '40' }}>
@@ -240,7 +242,10 @@ function RaidCard({ def, unlocked, cleared, maxTier, trophies, bestStage, orbes,
         <div className={'rounded px-1.5 py-1 ' + (dpsOk ? 'bg-emerald-900/20' : 'bg-rose-900/20')}>
           <span className="text-slate-500">DPS conseillé </span>
           <span className={dpsOk ? 'text-emerald-300' : 'text-rose-300'}>{fmt(recDps)} {dpsOk ? '✓' : '✗'}</span>
-          <span className="block text-[8.5px] text-slate-600">timer enrage {Math.round(raidBerserkTime(def, t))}s</span>
+          <span className="block text-[8.5px] text-slate-600">
+            timer enrage {Math.round(raidBerserkTime(def, t))}s
+            {partyMult > 1 && <> · 👥 PV boss ×{partyMult.toFixed(2).replace('.', ',')}</>}
+          </span>
         </div>
         <div className={'rounded px-1.5 py-1 ' + (ehpOk ? 'bg-emerald-900/20' : 'bg-rose-900/20')}>
           <span className="text-slate-500">PV conseillés </span>

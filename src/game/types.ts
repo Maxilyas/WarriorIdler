@@ -316,6 +316,9 @@ export interface Character {
   buildPresets?: (BuildPreset | null)[]
   /** PV courants (les PV max sont dérivés du stuff). */
   hp: number
+  /** Compteur de RELÈVE (s) — transitoire : un héros tombé en FARM se relève après un délai
+   *  (v0.25.x — avant, un mort hors wipe d'équipe restait mort indéfiniment). */
+  rez?: number
   /** Étourdissement restant (s) — transitoire, posé par les contrôles ennemis ; n'attaque pas tant que > 0. */
   stun?: number
   /** Altérations subies (DoT ennemis) — transitoire, dps déjà atténué (résist + Purge). */

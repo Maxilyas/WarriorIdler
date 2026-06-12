@@ -194,6 +194,15 @@ export function getDungeonDef(id: DungeonId): DungeonDef {
 }
 
 // ---- Modificateurs (style Mythique+) : épice aléatoire en plus de l'identité du donjon ----
+//
+// v0.25.x — REFONTE (retour joueur) : la variance se JOUE au lieu d'être subie.
+//  (A) chaque affixe de difficulté PAIE : `rewardMult` multiplie les récompenses (par-combat + coffre),
+//      affiché dans la description → un tirage dur est une opportunité, pas une loterie ;
+//  (C) anti-synergies BANNIES : `excludeTraits` empêche les doubles murs (Blindé sur un donjon
+//      déjà « armure », Colossal sur le colosse unique ou les régénérants, Enragé sur les cogneurs) ;
+//  (+) affixes « fun d'abord » : Pressé (défi de temps, zéro difficulté ajoutée), Hanté (champion
+//      jackpot), Volatile (un peu plus dur, payé). « Réfléchissant » est SUPPRIMÉ du tirage
+//      (anti-fun pur : punissait le DPS sans contrepartie) — les runs en cours restent gérés.
 
 export interface DungeonModifier {
   id: string
@@ -205,17 +214,34 @@ export interface DungeonModifier {
   noGold?: boolean
   rareBonus?: number
   enrageRampPerSec?: number
+  /** Vestige (« Réfléchissant », retiré du tirage v0.25.x) — encore appliqué aux runs en cours. */
   reflectPct?: number
   regenPct?: number
+  /** (A) Multiplicateur de RÉCOMPENSES du donjon (par-combat + coffre) — le risque paie. */
+  rewardMult?: number
+  /** Volatile : à sa mort, l'ennemi explose (fraction de ses dégâts, AoE typée sur l'équipe). */
+  explodePct?: number
+  /** Pressé : bonus de COFFRE si le run est bouclé en moins de `timerSec` (posé à la génération). */
+  timerBonus?: number
+  timerSec?: number
+  /** Hanté : un Champion ✦ rôde dans le run — objet de haute rareté à sa mort. */
+  champion?: boolean
+  /** (C) Identités de donjon où cet affixe ne tombe JAMAIS (anti-synergies). */
+  excludeTraits?: DungeonTrait[]
+  /** Réservé à la ressource indiquée (Érudit → donjon d'XP uniquement). */
+  onlyReward?: DungeonReward
 }
 
 export const DUNGEON_MODIFIERS: DungeonModifier[] = [
-  { id: 'colossal', name: 'Colossal', description: '+40% de PV des ennemis.', hpMult: 1.4 },
-  { id: 'blinde', name: 'Blindé', description: 'Armure doublée.', armorMult: 2 },
-  { id: 'enrage', name: 'Enragé', description: 'Les ennemis frappent de plus en plus fort avec le temps.', enrageRampPerSec: 0.08 },
-  { id: 'reflectif', name: 'Réfléchissant', description: 'Renvoie une partie de tes dégâts (capé à 10% de tes PV max par seconde).', reflectPct: 0.10 },
-  { id: 'erudit', name: 'Érudit', description: '+100% XP, mais ennemis plus coriaces.', xpMult: 2, hpMult: 1.5 },
+  { id: 'colossal', name: 'Colossal', description: '+40% de PV des ennemis · récompenses +15%.', hpMult: 1.4, rewardMult: 1.15, excludeTraits: ['colosse', 'regen'] },
+  { id: 'blinde', name: 'Blindé', description: 'Armure doublée · récompenses +15%.', armorMult: 2, rewardMult: 1.15, excludeTraits: ['armure'] },
+  { id: 'enrage', name: 'Enragé', description: 'Les ennemis frappent de plus en plus fort avec le temps · récompenses +25%.', enrageRampPerSec: 0.08, rewardMult: 1.25, excludeTraits: ['rapide'] },
+  { id: 'erudit', name: 'Érudit', description: '+100% XP, mais ennemis plus coriaces.', xpMult: 2, hpMult: 1.5, onlyReward: 'xp' },
   { id: 'avare', name: 'Avare', description: 'Aucun or, mais davantage d\'objets rares.', noGold: true, rareBonus: 1 },
+  // --- v0.25.x : le fun d'abord ---
+  { id: 'volatile', name: 'Volatile', description: 'Les ennemis explosent à leur mort (dégâts typés à l\'équipe) · récompenses +20%.', explodePct: 1.3, rewardMult: 1.2 },
+  { id: 'presse', name: 'Pressé', description: 'Boucle le donjon dans le temps imparti : coffre +30%.', timerBonus: 0.3 },
+  { id: 'hante', name: 'Hanté', description: 'Un Champion ✦ rôde dans ce donjon : abats-le pour un objet de haute rareté.', champion: true },
 ]
 
 // ---- Donjon actif ----
@@ -236,6 +262,10 @@ export interface ActiveDungeon {
   /** Le combat courant : un pack d'ennemis. */
   enemies: Enemy[]
   fightTime: number
+  /** Temps TOTAL écoulé dans le run (s) — sert au défi « Pressé ». */
+  runTime?: number
+  /** Hanté : index du combat où rôde le Champion ✦ (absent = pas de champion). */
+  championAt?: number
   /** Accumulateur fractionnaire des ressources gagnées PAR COMBAT (crédité en unités entières au fil de l'eau). */
   earned?: Record<string, number>
   /** Relances automatiques restantes (auto-farm) : à la fin du run, on relance si > 0 et Sceaux suffisants. */
@@ -404,25 +434,49 @@ export function makeDungeonEnemy(
   }
 }
 
-/** Construit le PACK d'ennemis d'un combat (plusieurs adversaires simultanés selon l'identité). */
+/** Titres du Champion ✦ de l'affixe « Hanté ». */
+const HAUNT_TITLES = ['le Hanteur', 'l\'Écorcheur', 'la Calamité', 'le Maudit', 'l\'Insaisissable']
+
+/** Construit le PACK d'ennemis d'un combat (plusieurs adversaires simultanés selon l'identité).
+ *  `champion` (affixe Hanté) : un membre du pack devient un Champion ✦ — plus coriace, jackpot à sa mort. */
 export function makeDungeonPack(
   def: DungeonDef,
   level: number,
   fightIndex: number,
   totalFights: number,
   modifiers: DungeonModifier[],
+  champion = false,
 ): Enemy[] {
   const size = dungeonPackSize(def.trait, fightIndex, totalFights)
-  if (size <= 1) return [makeDungeonEnemy(def, level, fightIndex, totalFights, modifiers)]
   const pack: Enemy[] = []
-  for (let i = 0; i < size; i++) {
-    const e = makeDungeonEnemy(def, level, fightIndex, totalFights, modifiers)
-    e.maxHp = Math.max(1, Math.round(e.maxHp * 0.72))
-    e.hp = e.maxHp
-    e.name = `${e.name} ${PACK_TAGS[i] ?? i + 1}`
-    pack.push(e)
+  if (size <= 1) {
+    pack.push(makeDungeonEnemy(def, level, fightIndex, totalFights, modifiers))
+  } else {
+    for (let i = 0; i < size; i++) {
+      const e = makeDungeonEnemy(def, level, fightIndex, totalFights, modifiers)
+      e.maxHp = Math.max(1, Math.round(e.maxHp * 0.72))
+      e.hp = e.maxHp
+      e.name = `${e.name} ${PACK_TAGS[i] ?? i + 1}`
+      pack.push(e)
+    }
+  }
+  if (champion) {
+    const c = pack[0]
+    c.maxHp = Math.round(c.maxHp * 1.7)
+    c.hp = c.maxHp
+    c.damage = Math.round(c.damage * 1.2)
+    c.name = `✦ ${c.name.replace(/^[★◆] /, '')} ${pick(HAUNT_TITLES)}`
+    c.elite = true
+    c.champion = true
+    c.dodge = Math.max(c.dodge ?? 0, 0.1)
+    c.trait = 'Champion ✦'
   }
   return pack
+}
+
+/** Temps imparti (s) du défi « Pressé » : ~28 s par combat (+ marge par niveau, les packs gonflent). */
+export function presseTimer(level: number, totalFights: number): number {
+  return Math.round(totalFights * (28 + level * 0.8))
 }
 
 /** Génère un donjon prêt à jouer. `wing` (La Géode) : aile choisie → famille farmée + élément. */
@@ -432,13 +486,27 @@ export function generateDungeon(dungeonId: DungeonId, level: number, wing?: GemF
     : DUNGEONS[dungeonId]
   const totalFights = dungeonFights(level)
 
-  // 1 modificateur, +1 à partir du niveau 4. Le donjon d'OR exclut « Avare » (sinon zéro or — bug).
+  // 1 modificateur, +1 à partir du niveau 4. v0.25.x (C) : le tirage respecte l'identité du donjon —
+  // pas d'Avare sur le donjon d'or, pas de double mur (excludeTraits), Érudit réservé à l'XP.
   const count = level >= 4 ? 2 : 1
-  const pool = DUNGEON_MODIFIERS.filter((m) => !(def.reward === 'gold' && m.noGold))
+  const pool = DUNGEON_MODIFIERS.filter((m) =>
+    !(def.reward === 'gold' && m.noGold)
+    && !m.excludeTraits?.includes(def.trait)
+    && (!m.onlyReward || m.onlyReward === def.reward))
   const modifiers: DungeonModifier[] = []
   for (let i = 0; i < count && pool.length; i++) {
-    modifiers.push({ ...pool.splice(Math.floor(Math.random() * pool.length), 1)[0] })
+    const m = { ...pool.splice(Math.floor(Math.random() * pool.length), 1)[0] }
+    // Pressé : le temps imparti est figé à la génération et écrit dans la description (lisible en jeu).
+    if (m.timerBonus) {
+      m.timerSec = presseTimer(level, totalFights)
+      m.description = `Boucle le donjon en moins de ${m.timerSec}s : coffre +${Math.round(m.timerBonus * 100)}%.`
+    }
+    modifiers.push(m)
   }
+  // Hanté : le Champion ✦ rôde dans un combat aléatoire HORS boss final.
+  const championAt = modifiers.some((m) => m.champion)
+    ? Math.floor(Math.random() * Math.max(1, totalFights - 1))
+    : undefined
 
   return {
     dungeonId,
@@ -451,8 +519,10 @@ export function generateDungeon(dungeonId: DungeonId, level: number, wing?: GemF
     modifiers,
     totalFights,
     current: 0,
-    enemies: makeDungeonPack(def, level, 0, totalFights, modifiers),
+    enemies: makeDungeonPack(def, level, 0, totalFights, modifiers, championAt === 0),
     fightTime: 0,
+    runTime: 0,
+    ...(championAt !== undefined ? { championAt } : {}),
     earned: {},
   }
 }

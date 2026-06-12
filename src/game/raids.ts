@@ -127,7 +127,9 @@ export function raidUnlocked(def: RaidDef, bestStage: number, progress: Record<R
 }
 
 // ---- Constantes d'équilibrage (DUR mais sans mur — à nudger ici) ----
-const RAID_HP_PREMIUM = 2.5       // PV bruts vs un ennemi de farm de palier équivalent
+// v0.25.x : 2.5 → 3.2 (retour joueur). Les boss mouraient avant d'avoir lancé leurs capacités →
+// les combats doivent DURER assez pour que les télégraphes et le check de résistance s'expriment.
+const RAID_HP_PREMIUM = 3.2       // PV bruts vs un ennemi de farm de palier équivalent
 // v0.24 : 1.95 → 1.6. La résistance n'atténue plus en % (modèle relatif) : un joueur AU CAP
 // encaisse ×1 (avant : jusqu'à -75%) → on rend une partie de la marge dans les dégâts de base.
 // La vraie menace vient du multiplicateur d'exigence (×5 à zéro résist), pas du chiffre brut.
@@ -188,6 +190,15 @@ export interface ActiveRaid {
 /** Palier de farm « effectif » du boss d'un tier (sert à toutes les courbes). */
 function effStage(def: RaidDef, tier: number): number {
   return (def.anchorStage ?? def.unlockStage) + tierStageOffset(tier)
+}
+
+/**
+ * v0.25.x — SCALING MULTI-PERSO (tous les raids) : +55% de PV de boss par héros au-delà du premier
+ * (×1,55 à 2 héros, ×2,1 à 3). Les DÉGÂTS ne scalent pas : la pression vient des capacités et du
+ * check de résistance, le pool de PV garantit que le combat dure assez pour qu'ils s'expriment.
+ */
+export function raidPartyHpMult(partySize: number): number {
+  return 1 + 0.55 * Math.max(0, partySize - 1)
 }
 
 /** Délai d'enrage dur (s) — rétrécit doucement avec le tier → exige toujours plus de DPS. */
@@ -605,9 +616,10 @@ export function raidMechanics(def: RaidDef, tier: number): RaidMechanicKind[] {
   return raidBossVariant(def, tier).mechanics
 }
 
-/** DPS recommandé (contre le timer d'enrage). L'Abîme = duo (+10% de PV totaux). */
-export function recommendedDps(def: RaidDef, tier: number): number {
-  const hp = bossHp(def, tier) * (def.id === 'abysse' ? PAIR_HP_TOTAL : 1)
+/** DPS recommandé (contre le timer d'enrage). L'Abîme = duo (+10% de PV totaux).
+ *  `partySize` : les PV du boss scalent avec l'équipe → le DPS demandé aussi. */
+export function recommendedDps(def: RaidDef, tier: number, partySize = 1): number {
+  const hp = bossHp(def, tier, partySize) * (def.id === 'abysse' ? PAIR_HP_TOTAL : 1)
   return Math.round(hp / raidBerserkTime(def, tier))
 }
 
@@ -624,9 +636,11 @@ export const NOVA_MULT = 3.6
 
 // ---- Exigences de résistance (v0.24 — LE check de stuff par boss, voir resist.ts) ----
 
-/** Exigence de base d'un raid à un tier (sur ses types d'ATTAQUE). */
+/** Exigence de base d'un raid à un tier (sur ses types d'ATTAQUE).
+ *  v0.25.x : relevée (~+30%) — le joueur battait les boss à ×2,3 subis sans une ligne de résist.
+ *  L'exigence doit être LE projet de stuff du tier, pas une taxe ignorable. */
 export function raidReq(def: RaidDef, tier: number): number {
-  return Math.round(50 + def.baseDifficulty * 25 + (tier - 1) * 28)
+  return Math.round(70 + def.baseDifficulty * 30 + (tier - 1) * 34)
 }
 
 /**
@@ -649,10 +663,10 @@ export function raidReqs(def: RaidDef, tier: number): Partial<Record<DamageType,
   return out
 }
 
-function bossHp(def: RaidDef, tier: number): number {
+function bossHp(def: RaidDef, tier: number, partySize = 1): number {
   const eff = effStage(def, tier)
   const v = raidBossVariant(def, tier)
-  return Math.round(40 * Math.pow(1.18, eff - 1) * RAID_HP_PREMIUM * def.baseDifficulty * SOLO_BOSS_MULT * v.hpMult)
+  return Math.round(40 * Math.pow(1.18, eff - 1) * RAID_HP_PREMIUM * def.baseDifficulty * SOLO_BOSS_MULT * v.hpMult * raidPartyHpMult(partySize))
 }
 
 function bossDamage(def: RaidDef, tier: number): number {
@@ -662,10 +676,10 @@ function bossDamage(def: RaidDef, tier: number): number {
 }
 
 /** Construit le boss du tier. `element` = type d'attaque courant (pour les raids 'rotating'). */
-export function makeRaidBoss(def: RaidDef, tier: number, element: DamageType): Enemy {
+export function makeRaidBoss(def: RaidDef, tier: number, element: DamageType, partySize = 1): Enemy {
   const eff = effStage(def, tier)
   const v = raidBossVariant(def, tier)
-  const maxHp = bossHp(def, tier)
+  const maxHp = bossHp(def, tier, partySize)
 
   // Le boss RÉSISTE à son thème (élément maison), avec une vulnérabilité = porte de sortie.
   const home: DamageType = def.element === 'rotating' ? 'arcane' : def.element
@@ -712,8 +726,8 @@ export const PAIR_ENRAGE_MULT = 1.5
  * simultanés aux pouvoirs distincts (burst télégraphié d'un côté, contrôle/drain de l'autre).
  * Quand l'un tombe, l'autre entre en FURIE (+50% dégâts) → l'ordre de kill et les contres comptent.
  */
-export function makeRaidEncounter(def: RaidDef, tier: number, element: DamageType): Enemy[] {
-  const main = makeRaidBoss(def, tier, element)
+export function makeRaidEncounter(def: RaidDef, tier: number, element: DamageType, partySize = 1): Enemy[] {
+  const main = makeRaidBoss(def, tier, element, partySize)
   const v = raidBossVariant(def, tier)
   if (def.id !== 'abysse' || !v.partnerName) return [main]
   const partner: Enemy = {
@@ -731,13 +745,20 @@ export function makeRaidEncounter(def: RaidDef, tier: number, element: DamageTyp
   return [main, partner]
 }
 
+/** Plafond de rejetons SIMULTANÉS de la Déferlante — monte avec le tier (la « difficulté »).
+ *  v0.25.x : les rejetons ne disparaissent plus tout seuls (plus de lifetime) → ils s'accumulent
+ *  jusqu'au plafond tant qu'on ne les tue pas. Les ignorer devient un vrai choix de pression. */
+export function raidMaxAdds(tier: number): number {
+  return 2 + Math.floor(tier / 4) // T1-3 : 2 · T4-7 : 3 · T8+ : 4
+}
+
 /**
- * Crée un RENFORT de raid (mécanique Déferlante) : un add temporaire qui frappe l'équipe puis
- * disparaît (`lifetime`). Délivre le « combat à plusieurs adversaires » sans casser le combat de boss.
+ * Crée un RENFORT de raid (mécanique Déferlante) : un add PERSISTANT (v0.25.x — il reste jusqu'à
+ * sa mort, plus d'expiration) qui frappe l'équipe. Le nombre simultané est plafonné (raidMaxAdds).
  */
-export function makeRaidAdd(def: RaidDef, tier: number, element: DamageType): Enemy {
+export function makeRaidAdd(def: RaidDef, tier: number, element: DamageType, partySize = 1): Enemy {
   const eff = effStage(def, tier)
-  const hp = Math.round(40 * Math.pow(1.18, eff - 1) * 0.45 * def.baseDifficulty)
+  const hp = Math.round(40 * Math.pow(1.18, eff - 1) * 0.45 * def.baseDifficulty * raidPartyHpMult(partySize))
   // Les renforts exigent moitié moins que le boss (pression de groupe, pas un second check).
   const reqs: Partial<Record<DamageType, number>> = {}
   const br = raidReqs(def, tier)
@@ -752,7 +773,6 @@ export function makeRaidAdd(def: RaidDef, tier: number, element: DamageType): En
     resist: {},
     damageType: element,
     reqs,
-    lifetime: 8,
     add: true,
   }
 }
@@ -766,8 +786,9 @@ function rotateListFor(def: RaidDef, tier: number): DamageType[] {
   return [def.element]
 }
 
-/** Génère un raid prêt à jouer : UN affrontement contre le boss du tier. */
-export function generateRaid(raidId: RaidId, tier: number): ActiveRaid {
+/** Génère un raid prêt à jouer : UN affrontement contre le boss du tier.
+ *  `partySize` : nombre de héros — les PV du boss scalent (raidPartyHpMult). */
+export function generateRaid(raidId: RaidId, tier: number, partySize = 1): ActiveRaid {
   const def = RAIDS[raidId]
   const v = raidBossVariant(def, tier)
   const rotateList = rotateListFor(def, tier)
@@ -778,7 +799,7 @@ export function generateRaid(raidId: RaidId, tier: number): ActiveRaid {
     name: `${def.name} · Tier ${tier}`,
     current: 0,
     totalBosses: 1,
-    enemies: makeRaidEncounter(def, tier, startEl),
+    enemies: makeRaidEncounter(def, tier, startEl, partySize),
     mechanics: v.mechanics,
     element: startEl,
     rotateList,
