@@ -201,8 +201,9 @@ export function getDungeonDef(id: DungeonId): DungeonDef {
 //  (C) anti-synergies BANNIES : `excludeTraits` empêche les doubles murs (Blindé sur un donjon
 //      déjà « armure », Colossal sur le colosse unique ou les régénérants, Enragé sur les cogneurs) ;
 //  (+) affixes « fun d'abord » : Pressé (défi de temps, zéro difficulté ajoutée), Hanté (champion
-//      jackpot), Volatile (un peu plus dur, payé). « Réfléchissant » est SUPPRIMÉ du tirage
-//      (anti-fun pur : punissait le DPS sans contrepartie) — les runs en cours restent gérés.
+//      jackpot). « Réfléchissant » est SUPPRIMÉ du tirage (anti-fun pur : punissait le DPS sans
+//      contrepartie) ; « Volatile » est SUPPRIMÉ à son tour (v0.26, retour joueur : les explosions
+//      en chaîne sur les packs one-shotaient l'équipe) — les runs en cours restent gérés.
 
 export interface DungeonModifier {
   id: string
@@ -219,7 +220,7 @@ export interface DungeonModifier {
   regenPct?: number
   /** (A) Multiplicateur de RÉCOMPENSES du donjon (par-combat + coffre) — le risque paie. */
   rewardMult?: number
-  /** Volatile : à sa mort, l'ennemi explose (fraction de ses dégâts, AoE typée sur l'équipe). */
+  /** Vestige (« Volatile », retiré du tirage v0.26) — encore appliqué aux runs en cours. */
   explodePct?: number
   /** Pressé : bonus de COFFRE si le run est bouclé en moins de `timerSec` (posé à la génération). */
   timerBonus?: number
@@ -238,8 +239,7 @@ export const DUNGEON_MODIFIERS: DungeonModifier[] = [
   { id: 'enrage', name: 'Enragé', description: 'Les ennemis frappent de plus en plus fort avec le temps · récompenses +25%.', enrageRampPerSec: 0.08, rewardMult: 1.25, excludeTraits: ['rapide'] },
   { id: 'erudit', name: 'Érudit', description: '+100% XP, mais ennemis plus coriaces.', xpMult: 2, hpMult: 1.5, onlyReward: 'xp' },
   { id: 'avare', name: 'Avare', description: 'Aucun or, mais davantage d\'objets rares.', noGold: true, rareBonus: 1 },
-  // --- v0.25.x : le fun d'abord ---
-  { id: 'volatile', name: 'Volatile', description: 'Les ennemis explosent à leur mort (dégâts typés à l\'équipe) · récompenses +20%.', explodePct: 1.3, rewardMult: 1.2 },
+  // --- v0.25.x : le fun d'abord --- (« Volatile » retiré du tirage en v0.26 : one-shots de packs)
   { id: 'presse', name: 'Pressé', description: 'Boucle le donjon dans le temps imparti : coffre +30%.', timerBonus: 0.3 },
   { id: 'hante', name: 'Hanté', description: 'Un Champion ✦ rôde dans ce donjon : abats-le pour un objet de haute rareté.', champion: true },
 ]
