@@ -282,6 +282,13 @@ export function TalentTree() {
 
   if (!char) return null
   const selectedNode = selected ? TALENTS.find((n) => n.id === selected) ?? null : null
+  // v0.25 : si le nœud sélectionné est verrouillé par un PALIER, surligner sur l'arbre les nœuds
+  // où les points comptent (même constellation, tiers ≤ tier-plafond) — fini le « où investir ? ».
+  const gateTarget = useMemo(() => {
+    if (!selectedNode) return null
+    const g = gateInfo(selectedNode, char.talents)
+    return g.need > 0 && g.spent < g.need ? { c: selectedNode.constellation, tier: g.gateTier } : null
+  }, [selectedNode, char.talents])
   const sx = (id: string) => view.panX + (layout.pos.get(id)?.x ?? 0) * view.scale
   const sy = (id: string) => view.panY + (layout.pos.get(id)?.y ?? 0) * view.scale
   const showLabels = view.scale >= 0.55
@@ -403,6 +410,7 @@ export function TalentTree() {
             talents={char.talents}
             selected={selected === node.id}
             dimmed={!!focus && node.constellation !== focus}
+            gateHighlight={!!gateTarget && node.constellation === gateTarget.c && node.tier <= gateTarget.tier}
             showLabel={showLabels}
             onSelect={() => { if (!drag.current?.moved) setSelected(node.id) }}
           />
@@ -464,7 +472,7 @@ function CtrlBtn({ onClick, label, title }: { onClick: () => void; label: string
 
 /** Nœud sur le canevas : pastille colorée + libellé (pour les nœuds marquants / sélectionné). */
 function CanvasNode({
-  node, x, y, scale, talents, selected, dimmed, showLabel, onSelect,
+  node, x, y, scale, talents, selected, dimmed, gateHighlight, showLabel, onSelect,
 }: {
   node: TalentNode
   x: number
@@ -473,6 +481,8 @@ function CanvasNode({
   talents: Record<string, number>
   selected: boolean
   dimmed: boolean
+  /** v0.25 : nœud où investir pour ouvrir le palier du nœud sélectionné (surligné ambre + tier). */
+  gateHighlight: boolean
   showLabel: boolean
   onSelect: () => void
 }) {
@@ -500,9 +510,9 @@ function CanvasNode({
       style={{
         left: x, top: y, transform: 'translate(-50%, -50%)',
         opacity: dimmed ? 0.2 : 1,
-        zIndex: selected ? 30 : emphatic ? 20 : 10,
+        zIndex: selected ? 30 : gateHighlight ? 25 : emphatic ? 20 : 10,
       }}
-      title={`${node.name} — ${KIND_LABEL[node.kind]}`}
+      title={`${node.name} — ${KIND_LABEL[node.kind]} · Tier ${node.tier}`}
     >
       <span
         className="flex items-center justify-center rounded-full border transition-colors"
@@ -511,20 +521,28 @@ function CanvasNode({
           fontSize: size * 0.5,
           color: allocated ? '#0b1120' : color,
           background: allocated ? meta.color : reachable ? '#1e293b' : '#0f172a',
-          borderColor: selected ? '#fff' : color,
-          borderWidth: selected ? 2 : 1,
+          borderColor: selected ? '#fff' : gateHighlight ? '#f59e0b' : color,
+          borderWidth: selected || gateHighlight ? 2 : 1,
           boxShadow: selected
             ? `0 0 0 2px ${meta.color}, 0 0 14px ${meta.color}`
+            : gateHighlight ? '0 0 0 1px #f59e0b88, 0 0 10px #f59e0b88'
             : allocated && emphatic ? `0 0 10px ${meta.color}aa` : 'none',
         }}
       >
         {!reachable && !allocated ? '🔒' : glyph}
       </span>
+      {/* Surlignage de palier : tier affiché sous les nœuds éligibles (même sans libellé). */}
+      {gateHighlight && !labelShown && (
+        <span className="pointer-events-none mt-0.5 rounded bg-amber-500/20 px-1 text-[8px] font-bold leading-tight text-amber-300">
+          T{node.tier}{node.maxRank > 1 ? ` · ${rank}/${node.maxRank}` : ''}
+        </span>
+      )}
       {labelShown && (
         <span
           className="pointer-events-none mt-0.5 max-w-[88px] truncate text-center text-[8.5px] font-semibold leading-tight"
           style={{ color: allocated || reachable ? meta.color : '#64748b' }}
         >
+          <span className={gateHighlight ? 'text-amber-300' : 'text-slate-500'}>T{node.tier} · </span>
           {node.name}
           {node.maxRank > 1 && <span className="text-slate-400"> {rank}/{node.maxRank}</span>}
         </span>
@@ -609,7 +627,7 @@ function NodeDetail({
   if (maxed) btnLabel = `✓ Rang maximum (${rank}/${node.maxRank})`
   else if (!reachable) btnLabel = '🔒 Prérequis manquant'
   else if (strictLocked) btnLabel = '🔒 Prérequis à maxer'
-  else if (gateLocked) btnLabel = `🔒 Palier : ${gate.spent}/${gate.need} pts au tier ${gate.gateTier}`
+  else if (gateLocked) btnLabel = `🔒 Palier : ${gate.spent}/${gate.need} pts dans les tiers ≤ ${gate.gateTier}`
   else if (char.talentPoints <= 0) btnLabel = 'Aucun point disponible'
   else btnLabel = node.maxRank > 1 ? `Allouer 1 point  (${rank} → ${rank + 1}/${node.maxRank})` : 'Allouer 1 point'
 
@@ -629,6 +647,7 @@ function NodeDetail({
           >
             {KIND_LABEL[node.kind]}
           </span>
+          <span className="rounded-full bg-slate-800 px-1.5 py-0.5 text-[9px] font-semibold text-slate-300" title="Tier du nœud dans sa constellation">T{node.tier}</span>
           <span className="text-[9px] text-slate-500">{meta.icon} {meta.name}</span>
         </div>
         <button onClick={onClose} className="shrink-0 text-xs text-slate-500 hover:text-slate-300" aria-label="Fermer">✕</button>
@@ -673,7 +692,8 @@ function NodeDetail({
       )}
       {gateLocked && reachable && !maxed && (
         <p className="mb-1 text-[10px] text-amber-300">
-          ⛩ Palier d'archétype : dépense {gate.need} pts au tier {gate.gateTier} de {meta.icon} {meta.name} ({gate.spent}/{gate.need}). Répartis-les comme tu veux.
+          ⛩ Palier d'archétype : dépense {gate.need} pts CUMULÉS dans les tiers ≤ {gate.gateTier} de {meta.icon} {meta.name} ({gate.spent}/{gate.need}) — n'importe quelle branche.
+          <span className="text-amber-200/70"> Les nœuds éligibles sont surlignés sur l'arbre.</span>
         </p>
       )}
 

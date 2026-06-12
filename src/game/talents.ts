@@ -784,10 +784,12 @@ export function talentKeystones(talents: Record<string, number>): KeystoneEffect
 }
 
 /* ------------------------------------------------------------------ */
-/* GATING v0.24 — « Paliers d'archétype » (DESIGN §3.1), deux verrous :
-/*  1. PALIER : un nœud de tier T exige ≥ 5·T points DÉPENSÉS dans sa constellation
-/*     (répartition libre — 5/5 sur une node ou 3+2 sur deux). Clampé à 70% du total
-/*     possible de la constellation (les petites constellations restent finissables).
+/* GATING — « Paliers d'archétype », deux verrous :
+/*  1. PALIER (v0.25 : CUMULATIF) : un nœud exige 5 points par tier de profondeur, dépensés
+/*     N'IMPORTE OÙ dans les tiers INFÉRIEURS de sa constellation (avant : 5 pts dans le tier
+/*     précédent EXACT → les branches fines forçaient à gaver l'autre embranchement). Le total
+/*     exigé est clampé aux points réellement disponibles en dessous (constellations fines
+/*     toujours finissables). Même pacing global, placement libre.
 /*  2. STRICT : les nœuds FORTS (keystones & capacités) exigent leurs prérequis MAXÉS.
 /* Les allocations existantes (vieilles saves) ne sont jamais reprises — le verrou ne
 /* s'applique qu'aux NOUVELLES allocations.
@@ -819,27 +821,33 @@ function previousTier(c: ConstellationId, tier: number): number | null {
   return best
 }
 
-/** Points dépensés dans un TIER précis d'une constellation. */
+/** Points dépensés dans TOUS les tiers ≤ `tier` d'une constellation (cumulatif, v0.25). */
 export function spentInTier(talents: Record<string, number>, c: ConstellationId, tier: number): number {
   let spent = 0
   for (const id in talents) {
     const node = BY_ID.get(id)
-    if (node?.constellation === c && node.tier === tier) spent += talents[id]
+    if (node?.constellation === c && node.tier <= tier) spent += talents[id]
   }
   return spent
 }
 
 /**
- * Verrou de palier d'un nœud : il faut ≥ 5 points dépensés dans le TIER PRÉCÉDENT de la
- * constellation (clampé aux points réellement disponibles dans ce tier — les chaînes fines
- * restent finissables). Renvoie le tier visé et le besoin (0 = pas de verrou).
+ * Verrou de palier d'un nœud (v0.25, CUMULATIF) : 5 points PAR TIER DE PROFONDEUR, dépensés
+ * n'importe où dans les tiers ≤ tier précédent de la constellation — répartition libre entre
+ * branches. Clampé aux points réellement disponibles en dessous (chaînes fines finissables).
+ * Renvoie le tier-plafond visé et le besoin cumulé (0 = pas de verrou).
  */
 export function tierGate(node: TalentNode): { tier: number; need: number } {
   if (node.tier <= 0 || node.constellation === 'coeur') return { tier: 0, need: 0 }
   const prev = previousTier(node.constellation, node.tier)
   if (prev == null) return { tier: 0, need: 0 }
-  const available = tierTotalsFor(node.constellation).get(prev) ?? 0
-  return { tier: prev, need: Math.min(GATE_PER_TIER, available) }
+  const totals = tierTotalsFor(node.constellation)
+  let depth = 0
+  let available = 0
+  for (const [t, total] of totals) {
+    if (t < node.tier) { depth++; available += total }
+  }
+  return { tier: prev, need: Math.min(GATE_PER_TIER * depth, available) }
 }
 
 /** Les nœuds FORTS exigent leurs prérequis au rang MAX (verrou de compétence). */
