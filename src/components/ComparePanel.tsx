@@ -405,6 +405,7 @@ function CraftSection({ item }: { item: Item }) {
 function QuintessenceSection({ item }: { item: Item }) {
   const quint = useGame((s) => s.quint)
   const enhanceTyped = useGame((s) => s.enhanceTyped)
+  const qMods = craftMods(useGame((s) => s.metiers))
   const [open, setOpen] = useState(false)
 
   // Types pertinents : ceux dont on a des Quintessences, ou déjà présents sur l'objet.
@@ -423,7 +424,8 @@ function QuintessenceSection({ item }: { item: Item }) {
       {open && (
         <div className="mt-1.5">
           <div className="mb-1 text-[9.5px] leading-snug text-emerald-200/60">
-            Ajoute ou renforce une ligne typée. Coût exponentiel par palier · 75% remboursé au recyclage.
+            Ajoute ou renforce une ligne typée. Coût exponentiel par palier · {qMods.quintRefundFull ? '◈ 100%' : '75%'} remboursé au recyclage.
+            {qMods.quintCostMult < 1 && <span className="text-emerald-300"> ◈ Catalyseur : −25%.</span>}
           </div>
           {types.length === 0 ? (
             <div className="text-[10px] italic text-slate-500">Aucune Quintessence — farme les biomes (drop ultra-rare ~1%).</div>
@@ -440,7 +442,7 @@ function QuintessenceSection({ item }: { item: Item }) {
                       {(['dmgType', 'resist'] as const).map((kind) => {
                         const aff = find(t, kind)
                         const level = aff?.upgraded ?? 0
-                        const cost = quintCost(level)
+                        const cost = Math.max(1, Math.round(quintCost(level) * qMods.quintCostMult))
                         const can = owned >= cost
                         const label = kind === 'resist' ? 'Résist.' : 'Dégâts'
                         return (

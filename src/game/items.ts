@@ -557,11 +557,12 @@ export function quintInvested(item: Item): Partial<Record<DamageType, number>> {
   return out
 }
 
-/** Quintessences remboursées au recyclage d'un objet (75% de l'investi), par type. */
-export function quintRefund(item: Item): Partial<Record<DamageType, number>> {
+/** Quintessences remboursées au recyclage (75% de l'investi — 100% en ◈ Catalyseur), par type. */
+export function quintRefund(item: Item, full = false): Partial<Record<DamageType, number>> {
   const inv = quintInvested(item)
+  const rate = full ? 1 : QUINT_RECYCLE_REFUND
   const out: Partial<Record<DamageType, number>> = {}
-  for (const t in inv) out[t as DamageType] = Math.floor((inv[t as DamageType] ?? 0) * QUINT_RECYCLE_REFUND)
+  for (const t in inv) out[t as DamageType] = Math.floor((inv[t as DamageType] ?? 0) * rate)
   return out
 }
 

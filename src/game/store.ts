@@ -32,7 +32,6 @@ import {
   gemMaxRank, grindDust, legacyGemDust, recutCost, BIOME_GEM_FAMILY, COND_GEM_DROP, GEM_DUST_DROP, GEM_CUT_COST,
   type CondGemId, type CondMods,
 } from './condGems'
-import { getConversion, type ConvRes } from './metiers'
 import {
   tickAutomates, missionLabel, automateUpgradeCost,
   AUTOMATE_MAX, AUTOMATE_COSTS, AUTOMATE_NAMES, AUTOMATE_UPG_MAX,
@@ -348,8 +347,6 @@ interface GameState extends SaveData {
   learnMetierNode: (metier: MetierId, nodeId: string) => void
   /** Réinitialise l'arbre d'un métier contre de l'or (XP et niveau conservés). */
   respecMetier: (metier: MetierId) => void
-  /** ◈ Transmutateur : convertit des ressources (à perte). `quintType` requis pour ♦ → ⚗️. */
-  convertResource: (conversionId: string, times?: number, quintType?: DamageType) => void
   /** Construit le prochain automate de forge (3 max, coût croissant brutal). */
   buildAutomate: () => void
   /** Assigne (ou retire) la mission d'un automate — donjon/raid DÉJÀ battu uniquement. */
@@ -2943,7 +2940,7 @@ export const useGame = create<GameState>((set, get) => {
       const mods = craftMods(s.metiers)
       const gain = Math.round(recycleValue(item) * computeGlobalMods(s.upgrades).eclatGain * mods.recycleMult)
       const pous = recyclePoussiere(item)
-      const refund = quintRefund(item)
+      const refund = quintRefund(item, mods.quintRefundFull) // ◈ Catalyseur : 100%
       const essences = { ...s.essences }
       let essLog = ''
       if (item.unique) {
@@ -3005,7 +3002,7 @@ export const useGame = create<GameState>((set, get) => {
         if (RARITIES[item.rarity].tier < tier && !bulkProtected(item)) {
           essence += Math.round(recycleValue(item) * mods.recycleMult)
           poussiere += recyclePoussiere(item)
-          quint = addQuint(quint, quintRefund(item))
+          quint = addQuint(quint, quintRefund(item, mods.quintRefundFull))
           gems = gemStockAdd(gems, item)
           if (item.unique) essences[item.unique.id] = (essences[item.unique.id] ?? 0) + essenceGain(RARITIES[item.rarity].tier, item.unique.rank) * (mods.distillateur ? 2 : 1)
           xp += metierXpGain(RARITIES[item.rarity].tier, 'modify')
@@ -3141,8 +3138,10 @@ export const useGame = create<GameState>((set, get) => {
       if (!item) return
       const res = enhanceTypedAffixes(item, type, kind)
       if (!res) return
+      // ◈ Catalyseur (v0.25) : les améliorations à la Quintessence coûtent −25%.
+      const cost = Math.max(1, Math.round(res.cost * mods.quintCostMult))
       const have = s.quint[type] ?? 0
-      if (have < res.cost) return
+      if (have < cost) return
       const upd = applyItemPatch(s, itemId, { affixes: res.affixes })
       if (!upd) return
       const m = DAMAGE_TYPES[type]
@@ -3152,9 +3151,9 @@ export const useGame = create<GameState>((set, get) => {
       const next = {
         ...s,
         ...upd,
-        quint: { ...s.quint, [type]: have - res.cost },
+        quint: { ...s.quint, [type]: have - cost },
         metiers: g.metiers,
-        log: pushLog(g.log, `${m.icon} Ligne ${kind === 'resist' ? 'Résist.' : 'Dégâts'} ${m.name} ${verb} (-${res.cost} Quintessence, +${gain} XP ⚗️).`, 'craft'),
+        log: pushLog(g.log, `${m.icon} Ligne ${kind === 'resist' ? 'Résist.' : 'Dégâts'} ${m.name} ${verb} (-${cost} Quintessence, +${gain} XP ⚗️).`, 'craft'),
       }
       persist(next)
       set(next)
@@ -3365,33 +3364,6 @@ export const useGame = create<GameState>((set, get) => {
       const next = {
         ...s, metiers, gold: s.gold - cost,
         log: pushLog(s.log, `${m.icon} ${m.name} : arbre réinitialisé (-${cost.toLocaleString('fr-FR')} or). Points rendus.`, 'craft'),
-      }
-      persist(next)
-      set(next)
-    },
-
-    convertResource: (conversionId, times = 1, quintType) => {
-      const s = get()
-      const mods = craftMods(s.metiers)
-      if (!mods.transmutateur) return // ◈ spécialisation Transmutateur de l'Alchimiste
-      const def = getConversion(conversionId)
-      const n = Math.max(1, Math.round(times))
-      if (!def) return
-      if (def.to.res === 'quint' && !quintType) return
-      const pool: Record<ConvRes, number> = { essence: s.essence, poussiere: s.poussiere, noyau: s.noyau, quint: 0 }
-      const cost = def.from.amt * n
-      if (pool[def.from.res] < cost) return
-      const gainAmt = def.to.amt * n
-      const next = {
-        ...s,
-        essence: s.essence + (def.to.res === 'essence' ? gainAmt : 0) - (def.from.res === 'essence' ? cost : 0),
-        poussiere: s.poussiere + (def.to.res === 'poussiere' ? gainAmt : 0) - (def.from.res === 'poussiere' ? cost : 0),
-        noyau: s.noyau + (def.to.res === 'noyau' ? gainAmt : 0) - (def.from.res === 'noyau' ? cost : 0),
-        quint: def.to.res === 'quint' && quintType ? { ...s.quint, [quintType]: (s.quint[quintType] ?? 0) + gainAmt } : s.quint,
-        ...(() => {
-          const g = gainMetierXp(s, 'alchimiste', metierXpGain(3, 'modify'))
-          return { metiers: g.metiers, log: pushLog(g.log, `⚗️ Transmutation : ${def.name}${quintType ? ` (${DAMAGE_TYPES[quintType].name})` : ''} ×${n}.`, 'craft') }
-        })(),
       }
       persist(next)
       set(next)

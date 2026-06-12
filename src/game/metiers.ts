@@ -212,8 +212,12 @@ export const METIER_NODES: Record<MetierId, MetierNode[]> = {
       desc: 'L\'acte final du craft : invoquer l\'effet unique de ton CHOIX (Éclats cosmiques).' },
     { id: 'specDistillateur', name: 'Distillateur', icon: '🧪', maxRank: 1, minLevel: 15, exclusive: 'alchimiste-spec', requires: 'distillation',
       desc: 'SPÉCIALISATION : +25% d\'éclats au recyclage et essences d\'uniques ×2. Exclusif avec Transmutateur.' },
-    { id: 'specTransmutateur', name: 'Transmutateur', icon: '⚗️', maxRank: 1, minLevel: 15, exclusive: 'alchimiste-spec', requires: 'quintessence',
-      desc: 'SPÉCIALISATION : débloque la TRANSMUTATION DE RESSOURCES (♦ ↔ 🌌 / 💠 / ⚗️, à perte — l\'alchimie taxe). Exclusif avec Distillateur.' },
+    // v0.25 (DESIGN §4) : ex-Transmutateur — ses conversions de ressources contredisaient la
+    // suppression du Comptoir (« chaque donjon est LA source de sa ressource »). Même nœud (id
+    // conservé : l'acquis des saves survit), recentré sur l'identité QUINTESSENCE, miroir du
+    // Distillateur (recyclage).
+    { id: 'specTransmutateur', name: 'Catalyseur', icon: '⚗️', maxRank: 1, minLevel: 15, exclusive: 'alchimiste-spec', requires: 'quintessence',
+      desc: 'SPÉCIALISATION : les améliorations à la Quintessence coûtent −25%, et le recyclage rembourse 100% des Quintessences investies (au lieu de 75%). Exclusif avec Distillateur.' },
   ],
 }
 
@@ -312,8 +316,10 @@ export interface CraftMods {
   synth3: boolean
   /** ◈ Distillateur : essences d'uniques ×2 au recyclage. */
   distillateur: boolean
-  /** ◈ Transmutateur : conversions de ressources débloquées. */
-  transmutateur: boolean
+  /** ◈ Catalyseur (v0.25) : multiplicateur du coût des Quintessences (0,75 si spec, sinon 1). */
+  quintCostMult: number
+  /** ◈ Catalyseur : remboursement à 100% des Quintessences au recyclage. */
+  quintRefundFull: boolean
 }
 
 export function craftMods(metiers: MetiersState): CraftMods {
@@ -350,35 +356,14 @@ export function craftMods(metiers: MetiersState): CraftMods {
     synth2: r('alchimiste', 'synthese2') > 0,
     synth3: r('alchimiste', 'synthese3') > 0,
     distillateur: r('alchimiste', 'specDistillateur') > 0,
-    transmutateur: r('alchimiste', 'specTransmutateur') > 0,
+    quintCostMult: r('alchimiste', 'specTransmutateur') > 0 ? 0.75 : 1,
+    quintRefundFull: r('alchimiste', 'specTransmutateur') > 0,
   }
 }
 
-/* ------------------------------------------------------------------ */
-/* ◈ Transmutateur : conversions de ressources (à perte — l'alchimie taxe) */
-/* ------------------------------------------------------------------ */
-
-export type ConvRes = 'essence' | 'poussiere' | 'noyau' | 'quint'
-
-export interface ConversionDef {
-  id: string
-  name: string
-  from: { res: ConvRes; amt: number }
-  to: { res: ConvRes; amt: number }
-}
-
-/** Taux volontairement défavorables (aller-retour ≈ ÷2) : un robinet d'appoint, jamais l'optimum. */
-export const CONVERSIONS: ConversionDef[] = [
-  { id: 'eclatsPoussiere', name: '♦ → 🌌 Poussière d\'étoile', from: { res: 'essence', amt: 400 }, to: { res: 'poussiere', amt: 1 } },
-  { id: 'poussiereEclats', name: '🌌 → ♦ Éclats', from: { res: 'poussiere', amt: 1 }, to: { res: 'essence', amt: 200 } },
-  { id: 'eclatsNoyau', name: '♦ → 💠 Noyau primordial', from: { res: 'essence', amt: 300 }, to: { res: 'noyau', amt: 1 } },
-  { id: 'noyauEclats', name: '💠 → ♦ Éclats', from: { res: 'noyau', amt: 1 }, to: { res: 'essence', amt: 150 } },
-  { id: 'eclatsQuint', name: '♦ → ⚗️ Quintessence (au choix)', from: { res: 'essence', amt: 2000 }, to: { res: 'quint', amt: 1 } },
-]
-
-export function getConversion(id: string): ConversionDef | undefined {
-  return CONVERSIONS.find((c) => c.id === id)
-}
+// (v0.25 : les CONVERSIONS de ressources du ◈ Transmutateur ont été SUPPRIMÉES — même principe
+//  que le Comptoir d'échange : la fongibilité cassait « chaque donjon est LA source de sa
+//  ressource ». La spécialisation est devenue ◈ Catalyseur, voir plus haut.)
 
 /* ------------------------------------------------------------------ */
 /* Migration des anciennes sauvegardes (Savoir-faire + forgeUpgrades)  */
