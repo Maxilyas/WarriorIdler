@@ -3,16 +3,20 @@
 > État : **DESIGN FINAL — implémentation en cours** (juin 2026). Issu du retour joueur.
 >
 > **Lots LIVRÉS & commités** : **Lot 1 (Abîme A)** · **Lot 2 (qualité + inventaire D1–D5)** ·
-> **Lot 4 (stats/arbre C1·C3·C5·C6·C7)** · **Lot 6 (confort F1–F4)** · **corrections retour**
-> (qualité ⭐X/5 en coin haut-gauche, carte fonderie au clic, validation de rotation biome).
-> Tous : `tsc -b` + `vite build` + `validate-talents` + `dps-check` verts, smoke-test preview OK.
+> **Lot 4 (stats/arbre C1·C3·C5·C6·C7)** · **Lot 6 (confort F1–F4)** · **Lot 3 SOCLE** (anti-immortalité :
+> Mal de l'abîme regen−50% en raid + Estoc primordial 4% PV max imparable) · **corrections retour**
+> (qualité ⭐X/5 coin haut-gauche, carte fonderie au clic, validation rotation biome) · **F4 badge**
+> façon Overwatch (avatar + écusson à paliers, page combat + aperçu héros).
+> Tous : `tsc -b` + `vite build` + `validate-talents` + `dps-check` + `survival-sim` verts, preview OK.
 >
-> **Lots RESTANTS** (les plus lourds — à faire après un playtest des 4 lots livrés, car la balance
-> combat dépend des nouveaux chiffres de puissance/qualité) :
-> **Lot 3 (combat B : 5 leviers + twists + panneau Préparation)** · **Lot 5 (prestige E)**.
+> **RESTANT** :
+> - **Lot 3 (suite)** : 3 autres leviers socle (heal-cut, frappe partagée, estocade) + 10 twists par
+>   raid + panneau Préparation. *À faire après playtest du socle en raid réel (tuning ESTOC_PCT / regen).*
+> - **Lot 5 (prestige E)** : le plus gros système neuf (Éveil = reset destructif, Échos, Constellation,
+>   Relique) — mérite une passe dédiée.
 >
-> Chiffrages encore ouverts : E2 (gain d'Échos), F2c (knobs biomes posés à 10 min / 60 min / 3 ✨),
-> knobs de qualité (lignes bonus +0/0/1/1/2) et `SECOND_STAT_SHARE=0.2` — à éprouver en partie.
+> Knobs à éprouver : ESTOC_PCT=4% · RAID_REGEN_MULT=0.5 · qualité (+0/0/1/1/2) · SECOND_STAT_SHARE=0.2 ·
+> biomes (10 min / 60 min / 3 ✨). Chiffrage ouvert : E2 (gain d'Échos).
 
 Sommaire :
 - **A —** Abîme Primordial : accès + parité endgame
