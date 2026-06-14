@@ -3,13 +3,16 @@
 > État : **DESIGN FINAL — implémentation en cours** (juin 2026). Issu du retour joueur.
 >
 > **Lots LIVRÉS & commités** : **Lot 1 (Abîme A)** · **Lot 2 (qualité + inventaire D1–D5)** ·
-> **Lot 6 (confort F1–F4 : wake-lock, offline lifecycle, badge niveau, rotation biomes + lock Fragments)**.
-> Tous : `tsc -b` + `vite build` verts, smoke-test preview OK.
+> **Lot 4 (stats/arbre C1·C3·C5·C6·C7)** · **Lot 6 (confort F1–F4)** · **corrections retour**
+> (qualité ⭐X/5 en coin haut-gauche, carte fonderie au clic, validation de rotation biome).
+> Tous : `tsc -b` + `vite build` + `validate-talents` + `dps-check` verts, smoke-test preview OK.
 >
-> **Lots RESTANTS** (balance/feel-sensibles, à éprouver en partie réelle entre itérations) :
-> **Lot 3 (combat B)** · **Lot 4 (stats/arbre C1·C3·C6·C7)** · **Lot 5 (prestige E)**.
+> **Lots RESTANTS** (les plus lourds — à faire après un playtest des 4 lots livrés, car la balance
+> combat dépend des nouveaux chiffres de puissance/qualité) :
+> **Lot 3 (combat B : 5 leviers + twists + panneau Préparation)** · **Lot 5 (prestige E)**.
 >
-> Chiffrages encore ouverts : E2 (gain d'Échos), F2c (knobs biomes posés à 10 min / 60 min / 3 ✨).
+> Chiffrages encore ouverts : E2 (gain d'Échos), F2c (knobs biomes posés à 10 min / 60 min / 3 ✨),
+> knobs de qualité (lignes bonus +0/0/1/1/2) et `SECOND_STAT_SHARE=0.2` — à éprouver en partie.
 
 Sommaire :
 - **A —** Abîme Primordial : accès + parité endgame
