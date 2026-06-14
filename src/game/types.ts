@@ -324,6 +324,8 @@ export interface Character {
   primaryBias: PrimaryStat
   /** 🏆 Titre affiché (v0.28) : id d'un haut fait débloqué (résolu en libellé via achievements.ts). */
   title?: string
+  /** 🎨 Portrait procédural (v0.28) : palette + emblème (ids de avatar.ts ; défaut dérivé de la classe). */
+  avatar?: { palette?: string; emblem?: string }
   /** Présets de build (3 emplacements) — application via respec payant. */
   buildPresets?: (BuildPreset | null)[]
   /** PV courants (les PV max sont dérivés du stuff). */

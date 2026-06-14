@@ -1,5 +1,6 @@
 import type { Character } from '../game/types'
 import { xpForLevel } from '../game/store'
+import { resolveAvatar } from '../game/avatar'
 
 /**
  * F4 (v0.27) — BADGE DE NIVEAU « à la Overwatch » : un AVATAR (portrait) cerné d'un ANNEAU D'XP,
@@ -23,9 +24,6 @@ function levelTier(level: number) {
   return t
 }
 
-/** Glyphe d'avatar selon l'affinité (à défaut d'art : l'icône d'archétype tient lieu de portrait). */
-const CLASS_GLYPH: Record<string, string> = { force: '⚔️', agilite: '🏹', intelligence: '✨' }
-
 function hexPoints(cx: number, cy: number, rad: number): string {
   const p: string[] = []
   for (let i = 0; i < 6; i++) { const a = Math.PI / 6 + (i * Math.PI) / 3; p.push(`${cx + rad * Math.cos(a)},${cy + rad * Math.sin(a)}`) }
@@ -42,7 +40,9 @@ export function LevelBadge({ char, size = 64 }: { char: Character; size?: number
   const tier = levelTier(lvl)
   const need = xpForLevel(lvl)
   const progress = need > 0 ? Math.max(0, Math.min(1, char.xp / need)) : 1
-  const glyph = CLASS_GLYPH[char.primaryBias] ?? '⚔️'
+  // 🎨 (v0.28) portrait procédural : palette de fond + emblème central choisis (défaut par classe).
+  const { pal, emb } = resolveAvatar(char.primaryBias, char.avatar)
+  const glyph = emb.glyph
   const uid = String(char.id).replace(/[^a-z0-9]/gi, '') || 'x'
 
   const r = size / 2
@@ -60,8 +60,8 @@ export function LevelBadge({ char, size = 64 }: { char: Character; size?: number
       <svg width={size} height={size} className="absolute left-0 top-0">
         <defs>
           <radialGradient id={`av${uid}`} cx="50%" cy="36%">
-            <stop offset="0%" stopColor="#243044" />
-            <stop offset="100%" stopColor="#0a0e16" />
+            <stop offset="0%" stopColor={pal.c1} />
+            <stop offset="100%" stopColor={pal.c2} />
           </radialGradient>
         </defs>
         <circle cx={r} cy={r} r={ringR} fill={`url(#av${uid})`} stroke={tier.c2} strokeWidth={1.5} />

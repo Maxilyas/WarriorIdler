@@ -579,6 +579,8 @@ interface GameState extends SaveData {
   checkAchievements: () => void
   /** 🏆 (v0.28) Choisit le TITRE affiché d'un héros (id de haut fait débloqué, ou null). */
   selectTitle: (charId: string, achId: string | null) => void
+  /** 🎨 (v0.28) Personnalise le portrait d'un héros (palette / emblème). */
+  setAvatar: (charId: string, sel: { palette?: string; emblem?: string }) => void
   /** Coffre du Destin : garde l'objet à cet index, recycle les autres. */
   chooseFromChoice: (index: number) => void
   recruitCharacter: () => void
@@ -6125,6 +6127,14 @@ export const useGame = create<GameState>((set, get) => {
       // Titre valide = haut fait débloqué portant un titre (ou null pour retirer).
       if (achId !== null && (!s.achievements[achId] || !getAchievement(achId)?.title)) return
       const characters = s.characters.map((c) => (c.id === charId ? { ...c, title: achId ?? undefined } : c))
+      const next = { ...s, characters }
+      persist(next)
+      set(next)
+    },
+
+    setAvatar: (charId, sel) => {
+      const s = get()
+      const characters = s.characters.map((c) => (c.id === charId ? { ...c, avatar: { ...c.avatar, ...sel } } : c))
       const next = { ...s, characters }
       persist(next)
       set(next)

@@ -11,6 +11,7 @@ import { getPower, POWER_EFFECT_META, scaleLabel, powerDamageType } from '../gam
 import { RAID_LIST, getRaidDef, raidUnlocked, raidReqs, type RaidId } from '../game/raids'
 import { resistMult } from '../game/resist'
 import { LevelBadge } from './LevelBadge'
+import { AvatarEditor } from './AvatarEditor'
 
 const DMG_EFFECTS: ReadonlySet<string> = new Set(['nuke', 'cleave', 'dot', 'executeNuke', 'megaCleave', 'lifeNuke', 'rupture'])
 // Effets dont la magnitude est une VALEUR affichable (dégâts/PV). Les autres (charge/marque/frénésie/
@@ -157,6 +158,9 @@ export function CharacterPanel({ view = 'apercu' }: { view?: CharacterView }) {
               ))}
             </div>
           </div>
+
+          {/* 🎨 Apparence (portrait procédural) */}
+          <AvatarEditor />
 
           {/* Résumé combat */}
           <div className="rounded-xl border border-slate-800 bg-[#11151f] p-4">
