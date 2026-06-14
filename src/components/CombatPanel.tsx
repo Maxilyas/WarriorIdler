@@ -46,6 +46,8 @@ export function CombatPanel() {
   const fragments = useGame((s) => s.fragments)
   const nextRotateAt = useGame((s) => s.nextRotateAt)
   const biomeLockUntil = useGame((s) => s.biomeLockUntil)
+  const pendingBiome = useGame((s) => s.pendingBiome)
+  const confirmBiomeRotation = useGame((s) => s.confirmBiomeRotation)
   const activeChar = useGame((s) => s.activeChar)
   const castPower = useGame((s) => s.castPower)
   const togglePowerAuto = useGame((s) => s.togglePowerAuto)
@@ -210,6 +212,17 @@ export function CombatPanel() {
         </div>
       )}
 
+      {/* F2 — rotation prête : à VALIDER (pas de changement de biome silencieux). */}
+      {!dungeon && !raid && pendingBiome && (
+        <button
+          onClick={() => confirmBiomeRotation()}
+          className="flex w-full items-center justify-between gap-2 rounded-xl border border-amber-500/50 bg-amber-900/20 px-3 py-2 text-xs text-amber-100 hover:bg-amber-900/30"
+        >
+          <span className="min-w-0 truncate">🧭 Nouveau biome prêt : <b style={{ color: getBiomeDef(pendingBiome).color }}>{getBiomeDef(pendingBiome).icon} {getBiomeDef(pendingBiome).name}</b></span>
+          <span className="shrink-0 rounded bg-amber-500 px-2 py-1 font-semibold text-slate-950">Valider ▸</span>
+        </button>
+      )}
+
       {/* Ligne « zone » : biome (→ feuille) + stepper de palier + cadenas, le tout inline */}
       {!dungeon && !raid && (
         <div className="flex w-full items-center gap-1 rounded-xl border border-slate-800 bg-[#0d111a] px-2 py-1.5 text-xs">
@@ -260,7 +273,9 @@ export function CombatPanel() {
               <div className={'mb-2 rounded-lg px-2 py-1.5 text-[10.5px] leading-snug ' + (locked ? 'bg-emerald-900/20 text-emerald-200' : 'bg-slate-800/40 text-slate-300')}>
                 {locked
                   ? <>🔒 Verrouillé sur <b style={{ color: biomeDef.color }}>{biomeDef.icon} {biomeDef.name}</b> — encore ~{mins(biomeLockUntil - now)} min.</>
-                  : <>🧭 Rotation automatique — prochain biome dans ~{mins(nextRotateAt - now)} min. Verrouille-en un ({BIOME_LOCK_FRAGMENTS} ✨) pour y rester ~{Math.round(BIOME_LOCK_MS / 60000)} min (farm ciblé).</>}
+                  : pendingBiome
+                    ? <>🧭 Rotation prête : <b style={{ color: getBiomeDef(pendingBiome).color }}>{getBiomeDef(pendingBiome).icon} {getBiomeDef(pendingBiome).name}</b> — à valider (bouton sur l'écran de combat), ou verrouille un biome pour rester.</>
+                    : <>🧭 Rotation automatique — prochain biome dans ~{mins(nextRotateAt - now)} min. Verrouille-en un ({BIOME_LOCK_FRAGMENTS} ✨) pour y rester ~{Math.round(BIOME_LOCK_MS / 60000)} min (farm ciblé).</>}
               </div>
             )
           })()}

@@ -18,6 +18,20 @@ interface Props {
   onClick?: () => void
 }
 
+/** v0.27 — badge de QUALITÉ « ⭐X/5 » (indicateur chiffré, lisible sans clic). */
+export function QualityStars({ stars, className = '' }: { stars?: number; className?: string }) {
+  if (stars == null) return null
+  return (
+    <span
+      className={'inline-flex items-center rounded bg-black/55 px-1 text-[9px] font-bold leading-none ' + className}
+      style={{ color: qualityColor(stars) }}
+      title={`Qualité : ${qualityName(stars)} (${stars}/5)`}
+    >
+      ⭐{stars}/5
+    </span>
+  )
+}
+
 /** Δ DPS compact : +1,2k / −340 (vide si négligeable). */
 function fmtDelta(n: number): string {
   const a = Math.abs(n)
@@ -66,11 +80,13 @@ export function ItemRow({ item, dpsDelta, ehpDelta, selected, onClick }: Props) 
     <button
       onClick={onClick}
       className={
-        'flex w-full items-center gap-2.5 rounded-lg py-1.5 pr-2 text-left transition-colors ' +
+        'relative flex w-full items-center gap-2.5 rounded-lg py-1.5 pr-2 text-left transition-colors ' +
         (selected ? 'bg-white/10 ring-1 ring-white/20' : 'hover:bg-white/5')
       }
       style={{ borderLeft: `3px solid ${rarity.color}`, paddingLeft: 8 }}
     >
+      {/* v0.27 — qualité ⭐X/5 dans le coin HAUT-GAUCHE, lisible sans clic. */}
+      <QualityStars stars={item.stars} className="absolute left-0 top-0 z-10" />
       <span className="text-base leading-none">{type.icon}</span>
       <span className="min-w-0 flex-1">
         <span
@@ -81,9 +97,6 @@ export function ItemRow({ item, dpsDelta, ehpDelta, selected, onClick }: Props) 
         </span>
         <span className="block truncate text-[10px] text-slate-500">
           {type.name} · <span style={{ color: rarity.color }}>{rarity.name}</span>
-          {item.stars != null && (
-            <> · <span style={{ color: qualityColor(item.stars) }}>{qualityName(item.stars)}</span></>
-          )}
           {item.damageType && item.damageType !== 'physique' && (
             <span style={{ color: DAMAGE_TYPES[item.damageType].color }}> · {DAMAGE_TYPES[item.damageType].icon}</span>
           )}

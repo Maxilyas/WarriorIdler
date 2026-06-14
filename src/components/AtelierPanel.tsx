@@ -6,8 +6,10 @@ import { PRIMARY_META, SECONDARY_META } from '../game/stats'
 import { currentWeek } from '../game/maitrise'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from '../game/damage'
 import { RARITIES, RARITY_LIST } from '../game/rarities'
-import { maxCraftTier, createCost, qualityName, qualityColor } from '../game/items'
+import { maxCraftTier, createCost } from '../game/items'
 import type { Item } from '../game/types'
+import { ComparePanel } from './ComparePanel'
+import { QualityStars } from './ItemRow'
 import {
   METIERS, METIER_LIST, METIER_NODES, METIER_BRANCHES, METIER_MAX_LEVEL, AUTOMATE_FORGERON_LEVELS,
   craftMods, levelFromXp, xpTotalForLevel, pointsAvailable, pointsTotal, canLearnNode, nodeRank,
@@ -668,24 +670,29 @@ function AutomateWorkshop() {
   )
 }
 
-/** v0.27 — résumé COMPACT des stats d'un objet (fonderie/trempe : décider SANS clic). */
-function ItemLines({ item }: { item: Item }) {
-  const emptySock = (item.sockets ?? 0) - (item.gems?.length ?? 0)
+/** v0.27 — la fonderie/trempe ouvre la CARTE COMPLÈTE de l'objet au clic (cohérent avec le Stuff). */
+function ItemCardSheet({ item, onClose }: { item: Item; onClose: () => void }) {
+  const characters = useGame((s) => s.characters)
+  const activeChar = useGame((s) => s.activeChar)
+  const equip = useGame((s) => s.equip)
+  const sell = useGame((s) => s.sell)
+  const recycle = useGame((s) => s.recycle)
+  const char = characters[activeChar] ?? characters[0]
+  if (!char) return null
   return (
-    <div className="mt-0.5 flex flex-wrap gap-x-1.5 gap-y-0.5 text-[8.5px] leading-tight text-slate-400">
-      <span style={{ color: PRIMARY_META[item.primary].color }}>{PRIMARY_META[item.primary].short}+{item.primaryValue}</span>
-      {item.endurance > 0 && <span className="text-amber-200/80">END+{item.endurance}</span>}
-      {item.stars != null && <span style={{ color: qualityColor(item.stars) }}>{qualityName(item.stars)}</span>}
-      {item.affixes.map((a, i) => {
-        if (a.kind === 'stat' && a.stat) { const m = SECONDARY_META[a.stat]; return <span key={i} style={{ color: m?.color }}>{m?.short ?? a.stat}+{a.value}</span> }
-        if (a.kind === 'dmgType' && a.type) { const m = DAMAGE_TYPES[a.type]; return <span key={i} style={{ color: m.color }}>{m.icon}+{a.value}%</span> }
-        if (a.kind === 'resist' && a.type) { const m = DAMAGE_TYPES[a.type]; return <span key={i} style={{ color: m.color }}>🛡{m.icon}+{a.value}</span> }
-        return null
-      })}
-      {item.unique && <span className="text-fuchsia-400">✦</span>}
-      {(item.gems?.length ?? 0) > 0 && <span className="text-sky-300">💎×{item.gems!.length}</span>}
-      {emptySock > 0 && <span className="text-sky-500/70">◇×{emptySock}</span>}
-    </div>
+    <Sheet title={`${ITEM_TYPES[item.type].icon} ${item.name}`} onClose={onClose}>
+      <div className="max-h-[80vh] overflow-y-auto">
+        <ComparePanel
+          item={item}
+          char={char}
+          occupied={char.equipment}
+          onEquip={(slot) => { equip(item.id, slot); onClose() }}
+          onSell={() => { sell(item.id); onClose() }}
+          onRecycle={() => { recycle(item.id); onClose() }}
+          onClose={onClose}
+        />
+      </div>
+    </Sheet>
   )
 }
 
@@ -707,6 +714,8 @@ function ForgeProcedes() {
   const collectTempering = useGame((s) => s.collectTempering)
   const [fonderieOpen, setFonderieOpen] = useState(false)
   const [trempeOpen, setTrempeOpen] = useState(false)
+  // v0.27 — objet dont la CARTE COMPLÈTE est ouverte (clic sur une ligne fonderie/trempe).
+  const [viewItem, setViewItem] = useState<Item | null>(null)
 
   if (!mods.contrats && !mods.fonderie && !mods.trempeLente) return null
 
@@ -759,18 +768,19 @@ function ForgeProcedes() {
             <div className="mt-1 space-y-0.5">
               {smeltable.length === 0 && <div className="text-[9.5px] italic text-slate-500">Rien à fondre (Rare+ uniquement).</div>}
               {smeltable.map((it) => (
-                <div key={it.id} className="rounded bg-black/20 px-1.5 py-1 text-[10px]">
-                  <div className="flex items-center gap-1.5">
-                    <span className="min-w-0 flex-1 truncate" style={{ color: RARITIES[it.rarity].color }}>{it.name} <span className="text-slate-500">iLvl {it.ilvl}</span></span>
-                    <button
-                      onClick={() => smeltItem(it.id)}
-                      className="shrink-0 rounded bg-orange-900/40 px-1.5 py-1 font-medium text-orange-200 hover:bg-orange-800/50"
-                    >
-                      🫕 +{Math.max(1, Math.round(smeltLingots(RARITIES[it.rarity].tier) * mods.lingotierMult))} 🧱
-                    </button>
-                  </div>
-                  {/* v0.27 — stats complètes pour décider de fondre ou non. */}
-                  <ItemLines item={it} />
+                <div key={it.id} className="flex items-center gap-1.5 rounded bg-black/20 px-1.5 py-1 text-[10px]">
+                  {/* v0.27 — clic = carte complète de l'objet (pour décider de fondre). */}
+                  <button onClick={() => setViewItem(it)} className="flex min-w-0 flex-1 items-center gap-1 truncate text-left" style={{ color: RARITIES[it.rarity].color }}>
+                    <QualityStars stars={it.stars} />
+                    <span className="truncate hover:underline">{it.name}</span>
+                    <span className="shrink-0 text-slate-500">iLvl {it.ilvl}</span>
+                  </button>
+                  <button
+                    onClick={() => smeltItem(it.id)}
+                    className="shrink-0 rounded bg-orange-900/40 px-1.5 py-1 font-medium text-orange-200 hover:bg-orange-800/50"
+                  >
+                    🫕 +{Math.max(1, Math.round(smeltLingots(RARITIES[it.rarity].tier) * mods.lingotierMult))} 🧱
+                  </button>
                 </div>
               ))}
             </div>
@@ -800,14 +810,15 @@ function ForgeProcedes() {
               <div className="mt-1 space-y-0.5">
                 {trempables.length === 0 && <div className="text-[9.5px] italic text-slate-500">Aucun objet du sac à tremper.</div>}
                 {trempables.map((it) => (
-                  <div key={it.id} className="rounded bg-black/20 px-1.5 py-1 text-[10px]">
-                    <div className="flex items-center gap-1.5">
-                      <span className="min-w-0 flex-1 truncate" style={{ color: RARITIES[it.rarity].color }}>{it.name} <span className="text-slate-500">iLvl {it.ilvl} · {5 - (it.trempeCount ?? 0)} restant{5 - (it.trempeCount ?? 0) > 1 ? 's' : ''}</span></span>
-                      <button onClick={() => startTempering(it.id)} className="shrink-0 rounded bg-orange-900/40 px-1.5 py-1 font-medium text-orange-200 hover:bg-orange-800/50">
-                        🔥 Tremper
-                      </button>
-                    </div>
-                    <ItemLines item={it} />
+                  <div key={it.id} className="flex items-center gap-1.5 rounded bg-black/20 px-1.5 py-1 text-[10px]">
+                    <button onClick={() => setViewItem(it)} className="flex min-w-0 flex-1 items-center gap-1 truncate text-left" style={{ color: RARITIES[it.rarity].color }}>
+                      <QualityStars stars={it.stars} />
+                      <span className="truncate hover:underline">{it.name}</span>
+                      <span className="shrink-0 text-slate-500">iLvl {it.ilvl} · {5 - (it.trempeCount ?? 0)} rest.</span>
+                    </button>
+                    <button onClick={() => startTempering(it.id)} className="shrink-0 rounded bg-orange-900/40 px-1.5 py-1 font-medium text-orange-200 hover:bg-orange-800/50">
+                      🔥 Tremper
+                    </button>
                   </div>
                 ))}
               </div>
@@ -815,6 +826,9 @@ function ForgeProcedes() {
           )}
         </div>
       )}
+
+      {/* v0.27 — carte complète de l'objet (clic sur une ligne fonderie/trempe). */}
+      {viewItem && <ItemCardSheet item={viewItem} onClose={() => setViewItem(null)} />}
     </div>
   )
 }

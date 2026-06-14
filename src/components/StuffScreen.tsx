@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useGame, maxContentIlvl } from '../game/store'
-import { ItemRow } from './ItemRow'
+import { ItemRow, QualityStars } from './ItemRow'
 import { ComparePanel } from './ComparePanel'
 import { EQUIP_SLOTS, ITEM_TYPES, equipSlotsForType, slotAccepts } from '../game/slots'
 import { RARITIES, RARITY_LIST } from '../game/rarities'
-import { itemScore, itemHasRareStat, itemStatBlock, qualityName, qualityColor } from '../game/items'
+import { itemScore, itemHasRareStat, itemStatBlock } from '../game/items'
 import { PRIMARY_META, SECONDARY_META, SECONDARY_STATS } from '../game/stats'
 import { getCondGem } from '../game/condGems'
 import { itemSockets } from '../game/gems'
@@ -227,6 +227,8 @@ export function StuffScreen() {
                 }
                 style={item && rarity ? { borderColor: gemColor ?? rarity.color + '55', ...(gemColor ? { boxShadow: `0 0 9px 0 ${gemColor}aa` } : {}) } : undefined}
               >
+                {/* v0.27 — qualité ⭐X/5 dans le coin HAUT-GAUCHE, lisible sans clic. */}
+                {item && <QualityStars stars={item.stars} className="pointer-events-none absolute -left-1.5 -top-1.5 z-10" />}
                 {/* Gemme(s) INCRUSTÉE(S) + châsses VIDES (◇) dans le coin haut-droit. */}
                 {(gems.length > 0 || emptySockets > 0) && (
                   <span className="pointer-events-none absolute -right-1.5 -top-1.5 flex gap-0.5">
@@ -283,7 +285,6 @@ export function StuffScreen() {
                   <div className="mt-0.5 flex items-center gap-1 text-[9px] leading-none">
                     <span className="font-semibold tabular-nums" style={{ color: ilvlLagColor(item.ilvl, contentIlvl) }} title="iLvl — orange/rouge = en retard sur ton contenu actuel">i{item.ilvl}</span>
                     <span style={{ color: RARITIES[item.rarity].color }}>{RARITIES[item.rarity].name}</span>
-                    {item.stars != null && <span style={{ color: qualityColor(item.stars) }}>· {qualityName(item.stars)}</span>}
                   </div>
                   </>
                 ) : (
