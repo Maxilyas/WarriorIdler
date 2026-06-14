@@ -1,9 +1,15 @@
 # DESIGN v0.27 — Endgame, anti-exploit, refonte stats/DoT, qualité, prestige
 
-> État : **DESIGN FINAL — tous les arbitrages tranchés, prêt à découper en lots et coder** (juin 2026).
-> Issu du retour joueur. Voir le « Récapitulatif des arbitrages » en fin de doc pour la liste figée.
-> Seuls 2 *chiffrages* restent à poser au moment d'écrire le lot concerné (E2, F2c) — pas des
-> blocages de design.
+> État : **DESIGN FINAL — implémentation en cours** (juin 2026). Issu du retour joueur.
+>
+> **Lots LIVRÉS & commités** : **Lot 1 (Abîme A)** · **Lot 2 (qualité + inventaire D1–D5)** ·
+> **Lot 6 (confort F1–F4 : wake-lock, offline lifecycle, badge niveau, rotation biomes + lock Fragments)**.
+> Tous : `tsc -b` + `vite build` verts, smoke-test preview OK.
+>
+> **Lots RESTANTS** (balance/feel-sensibles, à éprouver en partie réelle entre itérations) :
+> **Lot 3 (combat B)** · **Lot 4 (stats/arbre C1·C3·C6·C7)** · **Lot 5 (prestige E)**.
+>
+> Chiffrages encore ouverts : E2 (gain d'Échos), F2c (knobs biomes posés à 10 min / 60 min / 3 ✨).
 
 Sommaire :
 - **A —** Abîme Primordial : accès + parité endgame
