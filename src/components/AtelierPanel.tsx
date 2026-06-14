@@ -844,6 +844,7 @@ function GemWorkshop() {
   const grindGem = useGame((s) => s.grindGem)
   const cutGem = useGame((s) => s.cutGem)
   const fuseGems = useGame((s) => s.fuseGems)
+  const fuseAllGems = useGame((s) => s.fuseAllGems)
   const corruptGem = useGame((s) => s.corruptGem)
   const tradeGems = useGame((s) => s.tradeGems)
   const metiers = useGame((s) => s.metiers)
@@ -863,6 +864,8 @@ function GemWorkshop() {
   const cutList = COND_GEM_LIST.filter((g) => cutFamily === 'all' || g.family === cutFamily)
   const cutCost = Math.round(GEM_CUT_COST * mods.tailleCostMult)
   const fuseCost = Math.round(GEM_FUSE_COST * mods.fuseCostMult)
+  // A6 — au moins un lot fusionnable (3 identiques sous le rang max) → bouton « Tout fusionner ».
+  const canFuseAny = mods.fusion && stock.some((x) => x.n >= GEM_FUSE_COUNT && x.parsed.rank < gemMaxRank(x.parsed.def))
   const corruptCost = Math.round(GEM_CORRUPT_COST * (mods.corruptSafe ? 2 : 1))
   const [cOdds] = corruptOdds(mods.pacteLapidaire)
   const [qE, , qP] = cutQualityOdds(mods.mainSure)
@@ -872,9 +875,22 @@ function GemWorkshop() {
 
   return (
     <div className="mb-3 rounded-xl border border-sky-800/40 bg-sky-950/10 p-2.5">
-      <div className="mb-1.5 flex items-center justify-between">
+      <div className="mb-1.5 flex flex-wrap items-center justify-between gap-1.5">
         <span className="text-[11px] font-semibold uppercase tracking-wide text-sky-300">💎 Taillerie</span>
-        <span className="text-[10px] text-slate-400">🔹 {gemDust.toLocaleString('fr-FR')} poussière · {total} gemme{total > 1 ? 's' : ''}</span>
+        <div className="flex items-center gap-2">
+          {/* A6 — fusionner TOUS les lots éligibles d'un coup (cascade incluse). */}
+          {canFuseAny && (
+            <button
+              onClick={fuseAllGems}
+              disabled={gemDust < fuseCost}
+              title="Fusionne d'un coup tous les lots de 3 gemmes identiques fusionnables (les résultats peuvent re-fusionner)."
+              className="rounded bg-orange-900/40 px-2 py-1 text-[10px] font-medium text-orange-200 hover:bg-orange-800/50 disabled:opacity-40"
+            >
+              🔥 Tout fusionner
+            </button>
+          )}
+          <span className="text-[10px] text-slate-400">🔹 {gemDust.toLocaleString('fr-FR')} poussière · {total} gemme{total > 1 ? 's' : ''}</span>
+        </div>
       </div>
       <p className="mb-1.5 text-[9.5px] leading-snug text-slate-500">
         Les gemmes de CONDITION programment le combat — 4 familles : 🥁 Rythme, 🌊 Flux, 🌍 Environnement,

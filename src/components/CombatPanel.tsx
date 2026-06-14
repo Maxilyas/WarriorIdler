@@ -3,10 +3,10 @@ import { useGame, powerCooldowns } from '../game/store'
 import type { LogKind } from '../game/store'
 import { Sheet } from './ui'
 import { LevelBadge } from './LevelBadge'
-import { charMaxHp, charDps, TALENT_START_LEVEL } from '../game/character'
+import { charMaxHp, charDps, charResist, TALENT_START_LEVEL } from '../game/character'
 import { isBossStage } from '../game/enemies'
 import { getPower, powerIcon } from '../game/powers'
-import { DAMAGE_TYPES } from '../game/damage'
+import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from '../game/damage'
 import { RAID_MECHANIC_META } from '../game/raids'
 import { BIOME_LIST, biomeUnlocked, biomeUnlockHint, getBiomeDef, BIOME_LOCK_FRAGMENTS, BIOME_LOCK_MS } from '../game/biomes'
 import { maitriseBonus, maitriseSum, surgeBiome, surgeRemainingMs } from '../game/biomeBonus'
@@ -449,6 +449,41 @@ export function CombatPanel() {
           <Metric label="DPS équipe" value={Math.round(partyDps).toLocaleString('fr-FR')} accent="text-emerald-300" />
           <Metric label={multi ? 'Dégâts pack/s' : 'Dégâts ennemi/s'} value={Math.round(enemyDmgTotal).toLocaleString('fr-FR')} accent="text-red-300" />
         </div>
+
+        {/* A5 — récap PUISSANCE + RÉSISTANCES du héros piloté (lisible sans ouvrir le hub Héros).
+            Le type infligé PAR l'ennemi courant est mis en avant (anneau). */}
+        {me && (() => {
+          const meResist = charResist(me)
+          return (
+            <div className="mt-2 border-t border-slate-800 pt-2">
+              <div className="mb-1 flex items-center justify-between text-[10px]">
+                <span className="min-w-0 truncate font-semibold uppercase tracking-wide text-slate-400">🛡 {me.name}</span>
+                <span className="shrink-0 tabular-nums text-slate-300">
+                  <span className="text-emerald-300">⚔ {Math.round(charDps(me)).toLocaleString('fr-FR')}</span>
+                  {' · '}
+                  <span className="text-sky-300">❤ {Math.round(charMaxHp(me)).toLocaleString('fr-FR')}</span>
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {DAMAGE_TYPE_LIST.map((t) => {
+                  const m = DAMAGE_TYPES[t]
+                  const v = Math.round(meResist[t] ?? 0)
+                  const incoming = enemy.damageType === t
+                  return (
+                    <span
+                      key={t}
+                      title={`Résistance ${m.name} : ${v} points${incoming ? ' — type infligé par l\'ennemi actuel' : ''}`}
+                      className={'inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] tabular-nums ' + (incoming ? 'bg-black/40 ring-1 ring-rose-400/70' : 'bg-black/25')}
+                      style={{ color: m.color }}
+                    >
+                      {m.icon} {v}
+                    </span>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })()}
       </div>
 
       {/* ÉQUIPE + CAPACITÉS fusionnées : une carte par héros (badge de niveau, PV, bouclier,

@@ -58,9 +58,11 @@ interface Props {
   /** Si défini, l'objet est actuellement équipé sur ce slot (affiche « Retirer »). */
   equippedSlot?: EquipSlotId
   onUnequip?: () => void
+  /** Bascule le verrou 🔒 de l'objet (A2). */
+  onToggleLock?: () => void
 }
 
-export function ComparePanel({ item, char, previewDelta, equipped, occupied, onEquip, onSell, onRecycle, onClose, equippedSlot, onUnequip }: Props) {
+export function ComparePanel({ item, char, previewDelta, equipped, occupied, onEquip, onSell, onRecycle, onClose, equippedSlot, onUnequip, onToggleLock }: Props) {
   const rarity = RARITIES[item.rarity]
   const type = ITEM_TYPES[item.type]
   const slots = equipSlotsForType(item.type)
@@ -140,7 +142,7 @@ export function ComparePanel({ item, char, previewDelta, equipped, occupied, onE
           const d = a - b
           return (
             <div key={k} className="grid grid-cols-[1fr_auto_auto] items-center gap-x-3 px-2.5 py-0.5">
-              <span style={{ color: meta.color }} className="truncate">{meta.rare ? '💎 ' : ''}{meta.name}</span>
+              <span style={{ color: meta.color }} className="truncate" title={meta.desc}>{meta.rare ? '💎 ' : ''}{meta.name}</span>
               <span className="text-right tabular-nums text-slate-200">
                 {a ? a.toLocaleString('fr-FR') : '—'}
                 {cmp && d !== 0 && (
@@ -247,11 +249,33 @@ export function ComparePanel({ item, char, previewDelta, equipped, occupied, onE
                 </button>
               )
             })}
+            {/* A2 — verrou : protège l'objet de la vente/recyclage (manuel, masse, auto, multi). */}
+            {onToggleLock && (
+              <button
+                onClick={onToggleLock}
+                className={
+                  'w-full rounded-lg py-1.5 text-[11px] font-medium ' +
+                  (item.locked
+                    ? 'bg-amber-600/30 text-amber-200 ring-1 ring-amber-500/50 hover:bg-amber-600/40'
+                    : 'bg-slate-800 text-slate-400 hover:text-slate-200')
+                }
+              >
+                {item.locked ? '🔒 Verrouillé — protégé (déverrouiller)' : '🔓 Verrouiller (protéger)'}
+              </button>
+            )}
             <div className="flex gap-1.5">
-              <button onClick={onSell} className="flex-1 rounded-lg bg-yellow-800/60 py-2 text-xs hover:bg-yellow-700/70">
+              <button
+                onClick={onSell}
+                disabled={item.locked}
+                className={'flex-1 rounded-lg bg-yellow-800/60 py-2 text-xs ' + (item.locked ? 'cursor-not-allowed opacity-40' : 'hover:bg-yellow-700/70')}
+              >
                 Vendre
               </button>
-              <button onClick={onRecycle} className="flex-1 rounded-lg bg-cyan-800/60 py-2 text-xs hover:bg-cyan-700/70">
+              <button
+                onClick={onRecycle}
+                disabled={item.locked}
+                className={'flex-1 rounded-lg bg-cyan-800/60 py-2 text-xs ' + (item.locked ? 'cursor-not-allowed opacity-40' : 'hover:bg-cyan-700/70')}
+              >
                 Recycler
               </button>
             </div>

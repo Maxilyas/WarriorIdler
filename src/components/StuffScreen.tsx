@@ -11,6 +11,7 @@ import { getCondGem } from '../game/condGems'
 import { itemSockets } from '../game/gems'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from '../game/damage'
 import { equipDelta, type EquipDelta } from '../game/character'
+import { SETS, setBonuses } from '../game/sets'
 import { rarityTextStyle, rarityNameClass } from './rarityStyle'
 import { ConfirmButton } from './ui'
 import type { DamageType, EquipSlotId, Equipment, Item, ItemType, OffensiveStat, SecondaryStat } from '../game/types'
@@ -60,6 +61,9 @@ export function StuffScreen() {
   const recycle = useGame((s) => s.recycle)
   const sellAllBelow = useGame((s) => s.sellAllBelow)
   const recycleAllBelow = useGame((s) => s.recycleAllBelow)
+  const toggleLock = useGame((s) => s.toggleLock)
+  const sellMany = useGame((s) => s.sellMany)
+  const recycleMany = useGame((s) => s.recycleMany)
   const recycleThreshold = useGame((s) => s.recycleThreshold)
   const setRecycleThreshold = useGame((s) => s.setRecycleThreshold)
   const autoRecycle = useGame((s) => s.autoRecycle)
@@ -85,6 +89,12 @@ export function StuffScreen() {
   const [equipOpen, setEquipOpen] = useState(true)
   // Tri & ventes groupées : repliés par défaut (utilisés par à-coups).
   const [bulkOpen, setBulkOpen] = useState(false)
+  // A1 — filtre par set : null = pas de filtre, 'any' = toute pièce de set, sinon id de set précis.
+  const [setFilter, setSetFilter] = useState<string | 'any' | null>(null)
+  // A3 — multi-sélection : ids cochés, mode « Sélection » (tactile), dernier id cliqué (Maj = plage).
+  const [bulkSel, setBulkSel] = useState<Set<string>>(new Set())
+  const [bulkMode, setBulkMode] = useState(false)
+  const [lastClickedId, setLastClickedId] = useState<string | null>(null)
 
   const filterType: ItemType | null = selectedSlot
     ? EQUIP_SLOTS.find((s) => s.id === selectedSlot)!.accepts
@@ -95,13 +105,16 @@ export function StuffScreen() {
     let arr = inventory
     if (filterType) arr = arr.filter((i) => i.type === filterType)
     if (primaryFilter) arr = arr.filter((i) => i.primary === primaryFilter)
+    // A1 — filtre par set : toute pièce de set, ou un set précis.
+    if (setFilter === 'any') arr = arr.filter((i) => i.setId != null)
+    else if (setFilter) arr = arr.filter((i) => i.setId === setFilter)
     // Filtre par stats : l'objet doit porter TOUTES les stats sélectionnées (recherche de build précis).
     if (statFilter.length) arr = arr.filter((i) => { const b = itemStatBlock(i); return statFilter.every((s) => (b[s] ?? 0) > 0) })
     // Filtres typés : lignes d'affixe du (kind, type) — une arme du bon élément compte comme dégâts.
     if (typeFilter.length) arr = arr.filter((i) => typeFilter.every((f) =>
       i.affixes.some((a) => a.kind === f.kind && a.type === f.type) || (f.kind === 'dmgType' && i.damageType === f.type)))
     return arr
-  }, [inventory, filterType, primaryFilter, statFilter, typeFilter])
+  }, [inventory, filterType, primaryFilter, statFilter, typeFilter, setFilter])
 
   // 2) Δ DPS / Δ Survie par objet filtré (swap simulé sur l'emplacement cible) — mémoïsé sur des
   // références stables (le tick recrée les persos mais PAS leur équipement/talents).
@@ -134,6 +147,54 @@ export function StuffScreen() {
 
   const equippedCount = Object.values(equipment).filter(Boolean).length
 
+  // A1 — sets présents dans l'inventaire (puces de filtre).
+  const setsInInv = useMemo(
+    () => Array.from(new Set(inventory.map((i) => i.setId).filter((x): x is string => !!x))),
+    [inventory],
+  )
+  // A7 — pièces de set PORTÉES (récap + marqueurs paper-doll).
+  const activeSetCounts = setBonuses(equipment).counts
+
+  // A3 — multi-sélection.
+  const visibleIds = visible.map((i) => i.id)
+  const bulkItems = inventory.filter((i) => bulkSel.has(i.id))
+  const bulkLockedCount = bulkItems.filter((i) => i.locked).length
+  const clearBulk = () => setBulkSel(new Set())
+  const handleRowClick = (e: React.MouseEvent, item: Item) => {
+    // Maj+clic = sélection d'une PLAGE depuis le dernier objet cliqué.
+    if (e.shiftKey && lastClickedId) {
+      const a = visibleIds.indexOf(lastClickedId)
+      const b = visibleIds.indexOf(item.id)
+      if (a !== -1 && b !== -1) {
+        const [lo, hi] = a < b ? [a, b] : [b, a]
+        setBulkSel((prev) => {
+          const n = new Set(prev)
+          for (let i = lo; i <= hi; i++) n.add(visibleIds[i])
+          return n
+        })
+        setLastClickedId(item.id)
+        return
+      }
+    }
+    // Ctrl/Cmd+clic ou mode Sélection (tactile) = (dé)cocher.
+    if (bulkMode || e.ctrlKey || e.metaKey) {
+      setBulkSel((prev) => {
+        const n = new Set(prev)
+        if (n.has(item.id)) n.delete(item.id)
+        else n.add(item.id)
+        return n
+      })
+      setLastClickedId(item.id)
+      return
+    }
+    // Clic simple = sélection de comparaison.
+    setSelectedItemId(item.id)
+    setLastClickedId(item.id)
+  }
+  const doBulkSell = () => { sellMany([...bulkSel]); clearBulk() }
+  const doBulkRecycle = () => { recycleMany([...bulkSel]); clearBulk() }
+  const doBulkLock = () => { for (const it of bulkItems) if (!it.locked) toggleLock(it.id) }
+
   const handleEquip = (slot: EquipSlotId) => {
     if (selectedItem) equip(selectedItem.id, slot)
     setSelectedItemId(null)
@@ -161,6 +222,7 @@ export function StuffScreen() {
         if (selectedEquippedSlot) unequip(selectedEquippedSlot)
         setSelectedItemId(null)
       }}
+      onToggleLock={selectedEquippedSlot ? undefined : () => toggleLock(selectedItem.id)}
     />
   ) : null
 
@@ -196,6 +258,26 @@ export function StuffScreen() {
           <span>Équipement de {active?.name ?? '—'} ({equippedCount}/16)</span>
           <span className="text-slate-600 lg:hidden">{equipOpen ? '▾' : '▸'}</span>
         </button>
+        {/* A7 — récap des SETS actifs (pièces portées / pièces du set). */}
+        {Object.keys(activeSetCounts).length > 0 && (
+          <div className={'mb-1.5 flex-wrap gap-1 px-1 text-[9px] ' + (equipOpen ? 'flex' : 'hidden lg:flex')}>
+            {Object.entries(activeSetCounts).map(([sid, n]) => {
+              const def = SETS[sid]
+              const total = def ? Object.keys(def.pieces).length : n
+              const color = def?.color ?? '#8a2be2'
+              return (
+                <span
+                  key={sid}
+                  title={def ? `${def.name} — ${n}/${total} pièces portées` : sid}
+                  className="rounded px-1.5 py-0.5 font-semibold"
+                  style={{ color, background: color + '22', border: `1px solid ${color}55` }}
+                >
+                  {def?.icon ?? '⬢'} {def?.name ?? sid} {n}/{total}
+                </span>
+              )
+            })}
+          </div>
+        )}
         <div className={'grid-cols-2 gap-1 lg:grid lg:grid-cols-1 ' + (equipOpen ? 'grid' : 'hidden')}>
           {EQUIP_SLOTS.map((slot) => {
             const item = equipment[slot.id]
@@ -223,7 +305,7 @@ export function StuffScreen() {
                 }}
                 className={
                   'group relative rounded-lg border px-2 py-1.5 text-left transition-colors ' +
-                  (active ? 'border-white/40 bg-white/10' : 'border-slate-800 hover:bg-white/5')
+                  (active ? 'border-orange-400 bg-orange-500/15 ring-2 ring-orange-400/70' : 'border-slate-800 hover:bg-white/5')
                 }
                 style={item && rarity ? { borderColor: gemColor ?? rarity.color + '55', ...(gemColor ? { boxShadow: `0 0 9px 0 ${gemColor}aa` } : {}) } : undefined}
               >
@@ -271,6 +353,10 @@ export function StuffScreen() {
                     </span>
                     {itemHasRareStat(item) && <span className="text-[9px]" title="Stat rare">💎</span>}
                     {item.unique && <span className="text-[9px] text-fuchsia-400">✦</span>}
+                    {item.setId && (
+                      <span className="text-[9px]" style={{ color: SETS[item.setId]?.color ?? '#8a2be2' }} title={`Pièce de set : ${SETS[item.setId]?.name ?? item.setId}`}>⬢</span>
+                    )}
+                    {item.locked && <span className="text-[9px] text-amber-300" title="Verrouillé">🔒</span>}
                     <span
                       onClick={(e) => {
                         e.stopPropagation()
@@ -336,6 +422,7 @@ export function StuffScreen() {
             <button
               key={p}
               onClick={() => setPrimaryFilter((f) => (f === p ? null : p))}
+              title={PRIMARY_META[p].desc}
               className={'rounded px-2.5 py-1.5 font-medium ' + (primaryFilter === p ? 'text-slate-950' : 'bg-slate-800')}
               style={primaryFilter === p ? { background: PRIMARY_META[p].color } : { color: PRIMARY_META[p].color }}
             >
@@ -343,6 +430,35 @@ export function StuffScreen() {
             </button>
           ))}
         </div>
+
+        {/* A1 — filtre par set (n'apparaît que si l'inventaire contient des pièces de set). */}
+        {setsInInv.length > 0 && (
+          <div className="mb-1.5 flex flex-wrap items-center gap-1 px-1 text-[10px]">
+            <span className="text-slate-500">Set :</span>
+            <button
+              onClick={() => setSetFilter((f) => (f === 'any' ? null : 'any'))}
+              className={'rounded px-2.5 py-1.5 font-medium ' + (setFilter === 'any' ? 'bg-violet-500 text-slate-950' : 'bg-slate-800 text-violet-300')}
+            >
+              ⬢ Toutes pièces
+            </button>
+            {setsInInv.map((sid) => {
+              const def = SETS[sid]
+              const on = setFilter === sid
+              const color = def?.color ?? '#8a2be2'
+              return (
+                <button
+                  key={sid}
+                  onClick={() => setSetFilter((f) => (f === sid ? null : sid))}
+                  title={def?.name}
+                  className={'rounded px-2.5 py-1.5 font-medium ' + (on ? 'text-slate-950' : 'bg-slate-800')}
+                  style={on ? { background: color } : { color }}
+                >
+                  {def?.icon ?? '⬢'} {def?.name ?? sid}
+                </button>
+              )
+            })}
+          </div>
+        )}
 
         {/* Filtre par stat secondaire (recherche de build précis) */}
         <div className="mb-1.5 px-1 text-[10px]">
@@ -362,7 +478,7 @@ export function StuffScreen() {
                     <button
                       key={s}
                       onClick={() => setStatFilter((f) => (on ? f.filter((x) => x !== s) : [...f, s]))}
-                      title={m.name}
+                      title={`${m.name} — ${m.desc}`}
                       className={'rounded px-2 py-1.5 font-medium ' + (on ? 'text-slate-950' : 'bg-slate-800')}
                       style={on ? { background: m.color } : { color: m.color }}
                     >
@@ -445,6 +561,29 @@ export function StuffScreen() {
           )}
         </div>
 
+        {/* A3 — multi-sélection : bascule du mode + barre d'action quand une sélection existe. */}
+        <div className="mb-1.5 flex flex-wrap items-center gap-1 px-1 text-[10px]">
+          <button
+            onClick={() => { if (bulkMode) clearBulk(); setBulkMode((m) => !m) }}
+            className={'rounded px-2.5 py-1.5 font-medium ' + (bulkMode ? 'bg-sky-600 text-slate-950' : 'bg-slate-800 text-slate-300 hover:text-slate-100')}
+          >
+            {bulkMode ? '✓ Sélection active' : '✓ Sélection'}
+          </button>
+          {bulkSel.size > 0 ? (
+            <>
+              <span className="text-sky-300">{bulkSel.size} sélectionné{bulkSel.size > 1 ? 's' : ''}{bulkLockedCount > 0 ? ` · ${bulkLockedCount} 🔒 protégé(s)` : ''}</span>
+              <ConfirmButton onConfirm={doBulkSell} className="rounded bg-yellow-900/40 px-2.5 py-1.5 text-yellow-300 hover:bg-yellow-900/60">💰 Vendre</ConfirmButton>
+              <ConfirmButton onConfirm={doBulkRecycle} className="rounded bg-cyan-900/40 px-2.5 py-1.5 text-cyan-300 hover:bg-cyan-900/60">♻️ Recycler</ConfirmButton>
+              <button onClick={doBulkLock} className="rounded bg-slate-800 px-2.5 py-1.5 text-amber-300 hover:bg-slate-700">🔒 Verrouiller</button>
+              <button onClick={clearBulk} className="rounded bg-slate-700 px-2 py-1.5 text-slate-300 hover:bg-slate-600">✕</button>
+            </>
+          ) : bulkMode ? (
+            <span className="text-slate-500">Touche les objets à sélectionner…</span>
+          ) : (
+            <span className="hidden text-slate-600 lg:inline">Ctrl+clic / Maj+clic pour sélectionner plusieurs objets</span>
+          )}
+        </div>
+
         <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto pr-1">
           {visible.length === 0 ? (
             <div className="mt-8 text-center text-sm text-slate-500">
@@ -458,7 +597,10 @@ export function StuffScreen() {
                 dpsDelta={deltas.get(item.id)?.dps}
                 ehpDelta={deltas.get(item.id)?.ehp}
                 selected={item.id === selectedItemId}
-                onClick={() => setSelectedItemId(item.id)}
+                bulkSelected={bulkSel.has(item.id)}
+                bulkMode={bulkMode}
+                onClick={(e) => handleRowClick(e, item)}
+                onToggleLock={() => toggleLock(item.id)}
               />
             ))
           )}

@@ -230,6 +230,8 @@ export interface Item {
   trempeCount?: number
   /** Pièce de SET (id du registre sets.ts) : bonus à paliers quand plusieurs pièces sont portées. */
   setId?: string
+  /** 🔒 VERROU joueur (v0.28) : protège la pièce de TOUTE vente/recyclage (manuel, masse, auto, multi-sélection). */
+  locked?: boolean
 }
 
 export type Equipment = Partial<Record<EquipSlotId, Item>>

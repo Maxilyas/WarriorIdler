@@ -14,8 +14,15 @@ interface Props {
   dpsDelta?: number
   /** Δ Survie (PV effectifs) si on équipe l'objet — le pendant défensif du Δ DPS. */
   ehpDelta?: number
+  /** Sélection de COMPARAISON (clic simple) — surbrillance orange forte (A8). */
   selected?: boolean
-  onClick?: () => void
+  /** Sélection MULTIPLE pour les actions de lot (A3) — surbrillance bleue + case. */
+  bulkSelected?: boolean
+  /** Mode « Sélection » (mobile) : affiche une case à cocher en tête de ligne. */
+  bulkMode?: boolean
+  onClick?: (e: React.MouseEvent) => void
+  /** Bascule le verrou 🔒 de l'objet (A2). */
+  onToggleLock?: () => void
 }
 
 /** v0.27 — badge de QUALITÉ « ⭐X/5 » (indicateur chiffré, lisible sans clic). */
@@ -70,23 +77,38 @@ export function GemBadges({ item }: { item: Item }) {
 }
 
 /** Une ligne compacte d'inventaire : icône · nom · type/rareté · Δ DPS/Survie · ilvl · badges. */
-export function ItemRow({ item, dpsDelta, ehpDelta, selected, onClick }: Props) {
+export function ItemRow({ item, dpsDelta, ehpDelta, selected, bulkSelected, bulkMode, onClick, onToggleLock }: Props) {
   const rarity = RARITIES[item.rarity]
   const type = ITEM_TYPES[item.type]
   const showDelta = dpsDelta != null && Math.abs(dpsDelta) >= 1
   const showEhp = ehpDelta != null && Math.abs(ehpDelta) >= 1
 
+  // A8 — surbrillance NETTE de l'objet sélectionné ; A3 — état de multi-sélection distinct (bleu).
+  const stateCls = bulkSelected
+    ? 'bg-sky-500/20 ring-2 ring-sky-400/80'
+    : selected
+      ? 'bg-orange-500/20 ring-2 ring-orange-400/90 shadow-[0_0_10px_-2px] shadow-orange-500/40'
+      : 'hover:bg-white/5'
+
   return (
     <button
       onClick={onClick}
-      className={
-        'relative flex w-full items-center gap-2.5 rounded-lg py-1.5 pr-2 text-left transition-colors ' +
-        (selected ? 'bg-white/10 ring-1 ring-white/20' : 'hover:bg-white/5')
-      }
+      className={'group relative flex w-full items-center gap-2.5 rounded-lg py-1.5 pr-2 text-left transition-colors ' + stateCls}
       style={{ borderLeft: `3px solid ${rarity.color}`, paddingLeft: 8 }}
     >
       {/* v0.27 — qualité ⭐X/5 dans le coin HAUT-GAUCHE, lisible sans clic. */}
       <QualityStars stars={item.stars} className="absolute left-0 top-0 z-10" />
+      {/* A3 — case de multi-sélection (mode Sélection mobile / repère visuel). */}
+      {bulkMode && (
+        <span
+          className={
+            'flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[10px] leading-none ' +
+            (bulkSelected ? 'border-sky-400 bg-sky-500 text-slate-950' : 'border-slate-600 text-transparent')
+          }
+        >
+          ✓
+        </span>
+      )}
       <span className="text-base leading-none">{type.icon}</span>
       <span className="min-w-0 flex-1">
         <span
@@ -103,6 +125,21 @@ export function ItemRow({ item, dpsDelta, ehpDelta, selected, onClick }: Props) 
         </span>
       </span>
       <span className="flex shrink-0 items-center gap-1.5">
+        {/* A2 — verrou : 🔒 doré si verrouillé (toujours visible) ; sinon 🔓 discret au survol. */}
+        {onToggleLock && (
+          <span
+            role="button"
+            tabIndex={-1}
+            onClick={(e) => { e.stopPropagation(); onToggleLock() }}
+            title={item.locked ? 'Verrouillé — protégé de la vente/recyclage. Cliquer pour déverrouiller.' : 'Verrouiller (protéger de la vente/recyclage)'}
+            className={
+              'cursor-pointer text-[11px] leading-none ' +
+              (item.locked ? 'text-amber-300' : 'text-slate-600 opacity-0 group-hover:opacity-100 hover:text-slate-300')
+            }
+          >
+            {item.locked ? '🔒' : '🔓'}
+          </span>
+        )}
         {itemHasRareStat(item) && (
           <span className="text-[11px]" title="Possède une stat RARE">💎</span>
         )}

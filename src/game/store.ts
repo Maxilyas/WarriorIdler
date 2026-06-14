@@ -457,6 +457,12 @@ interface GameState extends SaveData {
   recycle: (itemId: string) => void
   sellAllBelow: (tier: number) => void
   recycleAllBelow: (tier: number) => void
+  /** 🔒 (v0.28) Bascule le verrou anti-suppression d'un objet. */
+  toggleLock: (itemId: string) => void
+  /** (v0.28) Vend en lot une sélection d'objets (ignore les verrouillés). */
+  sellMany: (itemIds: string[]) => void
+  /** (v0.28) Recycle en lot une sélection d'objets (ignore les verrouillés). */
+  recycleMany: (itemIds: string[]) => void
   reforge: (itemId: string, locked: number[]) => void
   surillvl: (itemId: string) => void
   ascend: (itemId: string) => void
@@ -476,6 +482,8 @@ interface GameState extends SaveData {
   recutGem: (itemId: string, index: number) => void
   /** FUSION (v0.26) : 3 gemmes identiques du stock → 1 gemme au rang supérieur. */
   fuseGems: (key: string) => void
+  /** 🔥 (v0.28) Fusionne d'un coup TOUS les lots de gemmes éligibles (cascade incluse). */
+  fuseAllGems: () => void
   /** CORRUPTION (v0.26) : retaille risquée d'une gemme du stock (rang +1 / rien / broyée). */
   corruptGem: (key: string) => void
   /** PERÇAGE (v0.26) : ajoute UNE châsse à un objet (très cher, une fois par objet). */
@@ -1312,7 +1320,8 @@ function freshSave(): SaveData {
  * (Épique…) restent recyclables en masse : c'est le moteur d'essences du jeu.
  */
 function bulkProtected(item: Item): boolean {
-  return !!item.unique && RARITIES[item.rarity].tier >= 13
+  // 🔒 (v0.28) le verrou joueur protège de TOUTE suppression de masse/auto.
+  return !!item.locked || (!!item.unique && RARITIES[item.rarity].tier >= 13)
 }
 
 /** Ajoute les uniques portés par des objets au grimoire (sans doublon). */
@@ -4363,7 +4372,7 @@ export const useGame = create<GameState>((set, get) => {
     sell: (itemId) => {
       const s = get()
       const item = s.inventory.find((i) => i.id === itemId)
-      if (!item) return
+      if (!item || item.locked) return
       const gain = sellValue(item)
       const next = {
         ...s,
@@ -4379,7 +4388,7 @@ export const useGame = create<GameState>((set, get) => {
     recycle: (itemId) => {
       const s = get()
       const item = s.inventory.find((i) => i.id === itemId)
-      if (!item) return
+      if (!item || item.locked) return
       const mods = craftMods(s.metiers)
       const gain = Math.round(recycleValue(item) * computeGlobalMods(s.upgrades).eclatGain * mods.recycleMult)
       const pous = recyclePoussiere(item)
@@ -4457,6 +4466,69 @@ export const useGame = create<GameState>((set, get) => {
       // v0.25 — XP implicite : la fonte de masse nourrit aussi le Forgeron (≈30%).
       const g2 = count ? gainMetierXp({ metiers: g.metiers, log: g.log }, 'forgeron', Math.max(1, Math.round(xp * 0.3))) : g
       const next = { ...s, essence, poussiere, quint, gems, essences, metiers: g2.metiers, inventory: keep, log: count ? pushLog(g2.log, `${count} objet(s) recyclé(s) (+${gained} éclats).`, 'craft') : g2.log }
+      persist(next)
+      set(next)
+    },
+
+    toggleLock: (itemId) => {
+      const s = get()
+      const item = s.inventory.find((i) => i.id === itemId)
+      if (!item) return
+      const inventory = s.inventory.map((i) => (i.id === itemId ? { ...i, locked: !i.locked } : i))
+      const next = { ...s, inventory, log: pushLog(s.log, `${item.locked ? '🔓 Déverrouillé' : '🔒 Verrouillé'} : ${item.name}.`, 'info') }
+      persist(next)
+      set(next)
+    },
+
+    sellMany: (itemIds) => {
+      const s = get()
+      const ids = new Set(itemIds)
+      let gold = s.gold
+      let gems = s.gems
+      let count = 0
+      const keep: Item[] = []
+      for (const item of s.inventory) {
+        if (ids.has(item.id) && !item.locked) {
+          gold += sellValue(item)
+          gems = gemStockAdd(gems, item)
+          count++
+        } else keep.push(item)
+      }
+      if (!count) return
+      const gained = gold - s.gold
+      const next = { ...s, gold, gems, inventory: keep, log: pushLog(s.log, `${count} objet(s) vendu(s) (+${gained} or).`, 'gold') }
+      persist(next)
+      set(next)
+    },
+
+    recycleMany: (itemIds) => {
+      const s = get()
+      const ids = new Set(itemIds)
+      const mods = craftMods(s.metiers)
+      let essence = s.essence
+      let poussiere = s.poussiere
+      let quint = s.quint
+      let gems = s.gems
+      let count = 0
+      let xp = 0
+      const essences = { ...s.essences }
+      const keep: Item[] = []
+      for (const item of s.inventory) {
+        if (ids.has(item.id) && !item.locked) {
+          essence += Math.round(recycleValue(item) * mods.recycleMult)
+          poussiere += recyclePoussiere(item)
+          quint = addQuint(quint, quintRefund(item, mods.quintRefundFull))
+          gems = gemStockAdd(gems, item)
+          if (item.unique) essences[item.unique.id] = (essences[item.unique.id] ?? 0) + essenceGain(RARITIES[item.rarity].tier, item.unique.rank) * (mods.distillateur ? 2 : 1)
+          xp += metierXpGain(RARITIES[item.rarity].tier, 'modify')
+          count++
+        } else keep.push(item)
+      }
+      if (!count) return
+      const gained = essence - s.essence
+      const g = gainMetierXp(s, 'alchimiste', xp)
+      const g2 = gainMetierXp({ metiers: g.metiers, log: g.log }, 'forgeron', Math.max(1, Math.round(xp * 0.3)))
+      const next = { ...s, essence, poussiere, quint, gems, essences, metiers: g2.metiers, inventory: keep, log: pushLog(g2.log, `${count} objet(s) recyclé(s) (+${gained} éclats).`, 'craft') }
       persist(next)
       set(next)
     },
@@ -4724,6 +4796,48 @@ export const useGame = create<GameState>((set, get) => {
       const next = {
         ...s, gems, gemDust: s.gemDust - cost, metiers: g.metiers,
         log: pushLog(g.log, `🔥 Fusion : 3× ${parsed.def.name} → rang ${parsed.rank + 1} (-${cost} 🔹, +${gain} XP 💎).`, 'craft'),
+      }
+      persist(next)
+      set(next)
+    },
+
+    fuseAllGems: () => {
+      const s = get()
+      const mods = craftMods(s.metiers)
+      if (!mods.fusion) return
+      const cost1 = Math.round(GEM_FUSE_COST * mods.fuseCostMult)
+      const gems: Record<string, number> = { ...s.gems }
+      let gemDust = s.gemDust
+      let fusions = 0
+      let totalXp = 0
+      // Boucle : on fusionne le premier lot éligible, puis on rebalaie (les résultats peuvent
+      // redevenir éligibles → cascade). Garde-fou d'itérations + arrêt si la poussière manque.
+      for (let guard = 0; guard < 2000; guard++) {
+        if (gemDust < cost1) break
+        let found: { key: string; parsed: NonNullable<ReturnType<typeof parseCondKey>> } | null = null
+        for (const k in gems) {
+          if ((gems[k] ?? 0) < GEM_FUSE_COUNT) continue
+          const p = parseCondKey(k)
+          if (!p || p.rank >= gemMaxRank(p.def)) continue
+          found = { key: k, parsed: p }
+          break
+        }
+        if (!found) break
+        const { parsed } = found
+        const outKey = condGemKey(parsed.def.id, parsed.rank + 1, parsed.quality)
+        gems[found.key] -= GEM_FUSE_COUNT
+        if (gems[found.key] <= 0) delete gems[found.key]
+        gems[outKey] = (gems[outKey] ?? 0) + 1
+        gemDust -= cost1
+        totalXp += metierXpGain(4 + parsed.rank, 'ascend', mods.joaillierXpMult)
+        fusions++
+      }
+      if (!fusions) return
+      const g = gainMetierXp(s, 'joaillier', totalXp)
+      const spent = s.gemDust - gemDust
+      const next = {
+        ...s, gems, gemDust, metiers: g.metiers,
+        log: pushLog(g.log, `🔥 Fusion globale : ${fusions} fusion(s) effectuée(s) (-${spent} 🔹, +${totalXp} XP 💎).`, 'craft'),
       }
       persist(next)
       set(next)
