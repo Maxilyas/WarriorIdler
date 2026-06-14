@@ -48,8 +48,6 @@ export function CombatPanel() {
   const fragments = useGame((s) => s.fragments)
   const nextRotateAt = useGame((s) => s.nextRotateAt)
   const biomeLockUntil = useGame((s) => s.biomeLockUntil)
-  const pendingBiome = useGame((s) => s.pendingBiome)
-  const confirmBiomeRotation = useGame((s) => s.confirmBiomeRotation)
   const activeChar = useGame((s) => s.activeChar)
   const setActiveChar = useGame((s) => s.setActiveChar)
   const castPower = useGame((s) => s.castPower)
@@ -182,17 +180,6 @@ export function CombatPanel() {
         </div>
       )}
 
-      {/* F2 — rotation prête : à VALIDER (pas de changement de biome silencieux). */}
-      {!dungeon && !raid && pendingBiome && (
-        <button
-          onClick={() => confirmBiomeRotation()}
-          className="flex w-full items-center justify-between gap-2 rounded-xl border border-amber-500/50 bg-amber-900/20 px-3 py-2 text-xs text-amber-100 hover:bg-amber-900/30"
-        >
-          <span className="min-w-0 truncate">🧭 Nouveau biome prêt : <b style={{ color: getBiomeDef(pendingBiome).color }}>{getBiomeDef(pendingBiome).icon} {getBiomeDef(pendingBiome).name}</b></span>
-          <span className="shrink-0 rounded bg-amber-500 px-2 py-1 font-semibold text-slate-950">Valider ▸</span>
-        </button>
-      )}
-
       {/* Ligne « zone » : biome (→ feuille) + stepper de palier + cadenas, le tout inline */}
       {!dungeon && !raid && (
         <div className="flex w-full items-center gap-1 rounded-xl border border-slate-800 bg-[#0d111a] px-2 py-1.5 text-xs">
@@ -234,7 +221,7 @@ export function CombatPanel() {
       {/* Feuille zone : choix du biome, palier, verrou de farm */}
       {zoneOpen && (
         <Sheet title="🧭 Zone de chasse" onClose={() => setZoneOpen(false)}>
-          {/* F2 — la rotation est SUBIE ; pour rester sur un biome, on le VERROUILLE (Fragments). */}
+          {/* v0.28 — la zone change AU HASARD toutes les ~1 h ; pour rester, on FORCE un biome (Fragments). */}
           {(() => {
             const now = Date.now()
             const locked = now < biomeLockUntil
@@ -242,10 +229,8 @@ export function CombatPanel() {
             return (
               <div className={'mb-2 rounded-lg px-2 py-1.5 text-[10.5px] leading-snug ' + (locked ? 'bg-emerald-900/20 text-emerald-200' : 'bg-slate-800/40 text-slate-300')}>
                 {locked
-                  ? <>🔒 Verrouillé sur <b style={{ color: biomeDef.color }}>{biomeDef.icon} {biomeDef.name}</b> — encore ~{mins(biomeLockUntil - now)} min.</>
-                  : pendingBiome
-                    ? <>🧭 Rotation prête : <b style={{ color: getBiomeDef(pendingBiome).color }}>{getBiomeDef(pendingBiome).icon} {getBiomeDef(pendingBiome).name}</b> — à valider (bouton sur l'écran de combat), ou verrouille un biome pour rester.</>
-                    : <>🧭 Rotation automatique — prochain biome dans ~{mins(nextRotateAt - now)} min. Verrouille-en un ({BIOME_LOCK_FRAGMENTS} ✨) pour y rester ~{Math.round(BIOME_LOCK_MS / 60000)} min (farm ciblé).</>}
+                  ? <>🔒 Forcé sur <b style={{ color: biomeDef.color }}>{biomeDef.icon} {biomeDef.name}</b> — encore ~{mins(biomeLockUntil - now)} min, puis rotation aléatoire.</>
+                  : <>🧭 Rotation aléatoire — la zone change au hasard dans ~{mins(nextRotateAt - now)} min. Force un biome ({BIOME_LOCK_FRAGMENTS} ✨) pour y rester ~{Math.round(BIOME_LOCK_MS / 60000)} min (farm ciblé).</>}
               </div>
             )
           })()}
@@ -255,12 +240,14 @@ export function CombatPanel() {
               const active = b.id === activeBiome
               const rec = biomeBest[b.id] ?? 0
               const affordable = fragments >= BIOME_LOCK_FRAGMENTS
+              // Un biome déjà forcé (actif + verrou en cours) n'est pas re-forçable (éviter de re-payer).
+              const forcedActive = active && Date.now() < biomeLockUntil
               return (
                 <button
                   key={b.id}
-                  disabled={!unlocked || active || !affordable}
+                  disabled={!unlocked || !affordable || forcedActive}
                   onClick={() => lockBiome(b.id)}
-                  title={!unlocked ? 'Biome verrouillé' : active ? 'Biome actif' : affordable ? `Verrouiller ce biome (${BIOME_LOCK_FRAGMENTS} ✨)` : `Pas assez de Fragments (${BIOME_LOCK_FRAGMENTS} ✨)`}
+                  title={!unlocked ? 'Biome verrouillé' : forcedActive ? 'Déjà forcé' : affordable ? `Forcer ce biome 1 h (${BIOME_LOCK_FRAGMENTS} ✨)` : `Pas assez de Fragments (${BIOME_LOCK_FRAGMENTS} ✨)`}
                   className={
                     'relative flex flex-col items-center gap-0.5 rounded-lg border px-1 py-2 transition-colors ' +
                     (active ? 'border-current bg-white/10' : unlocked ? 'border-slate-700 hover:border-slate-500' : 'border-slate-800 opacity-50')
@@ -272,7 +259,7 @@ export function CombatPanel() {
                   <span className={'w-full truncate text-center text-[10px] font-semibold ' + (active ? '' : 'text-slate-300')}>
                     {DAMAGE_TYPES[b.id].name}
                   </span>
-                  <span className="text-[9px] text-slate-500">{unlocked ? (active ? '◉ actif' : `🔒 ${BIOME_LOCK_FRAGMENTS}✨`) : ''}</span>
+                  <span className="text-[9px] text-slate-500">{unlocked ? (forcedActive ? '🔒 forcé' : active ? '◉ actif' : `🔒 ${BIOME_LOCK_FRAGMENTS}✨`) : ''}</span>
                   {unlocked && rec > 0 && <span className="text-[8px] text-slate-600">rec. {rec}</span>}
                 </button>
               )

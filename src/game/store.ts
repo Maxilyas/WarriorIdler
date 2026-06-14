@@ -58,7 +58,7 @@ import {
 } from './alchimie'
 import { makeEnemy, isBossStage, stageIlvl, stageLuckTier } from './enemies'
 import {
-  BIOME_IDS, biomeUnlocked, getBiomeDef, nextUnlockedBiome,
+  BIOME_IDS, biomeUnlocked, getBiomeDef, randomUnlockedBiome,
   BIOME_ROTATE_MS, BIOME_LOCK_MS, BIOME_LOCK_FRAGMENTS, type BiomeId,
 } from './biomes'
 import {
@@ -300,12 +300,10 @@ interface SaveData {
   bestStage: number
   /** Biome actif (combat classique). */
   activeBiome: BiomeId
-  /** v0.27 (F2) — horodatage de la prochaine rotation automatique de biome. */
+  /** v0.28 — horodatage de la prochaine rotation ALÉATOIRE de la zone de chasse (~1 h). */
   nextRotateAt: number
-  /** v0.27 (F2) — biome VERROUILLÉ (payé en Fragments) jusqu'à cet horodatage (0 = rotation libre). */
+  /** v0.28 — biome FORCÉ (payé en Fragments) jusqu'à cet horodatage (0 = rotation libre). */
   biomeLockUntil: number
-  /** v0.27 (F2) — biome PROPOSÉ par la rotation, en attente de VALIDATION du joueur (null = aucun). */
-  pendingBiome: BiomeId | null
   /** Palier courant mémorisé par biome (le biome actif reflète `stage`). */
   biomeStages: Record<BiomeId, number>
   /** Meilleur palier atteint par biome. */
@@ -442,12 +440,10 @@ interface GameState extends SaveData {
   tick: (dt: number) => void
   setStage: (n: number) => void
   setBiome: (biome: BiomeId) => void
-  /** v0.27 (F2) — verrouille un biome contre des Fragments d'éternité (reste dessus ~1 h). */
+  /** v0.28 — force un biome contre des Fragments d'éternité (reste dessus ~1 h, puis rotation). */
   lockBiome: (biome: BiomeId) => void
-  /** v0.27 (F2) — propose une rotation si l'échéance est atteinte (appelée par un timer). */
+  /** v0.28 — fait tourner la zone vers un biome ALÉATOIRE si l'échéance horaire est atteinte (timer). */
   rotateBiomeIfDue: () => void
-  /** v0.27 (F2) — valide la rotation proposée (le joueur accepte de changer de biome). */
-  confirmBiomeRotation: () => void
   toggleFarmLock: () => void
   setRecycleThreshold: (tier: number) => void
   toggleAutoRecycle: () => void
@@ -1259,7 +1255,6 @@ function freshSave(): SaveData {
     activeBiome: 'physique',
     nextRotateAt: Date.now() + BIOME_ROTATE_MS,
     biomeLockUntil: 0,
-    pendingBiome: null,
     biomeStages: emptyBiomeRecord(1, 1),
     biomeBest: emptyBiomeRecord(1, 0),
     farmLock: false,
@@ -1292,7 +1287,7 @@ function freshSave(): SaveData {
     armedXpBonus: null,
     lastTransmute: 0,
     philosophale: false,
-    metiersV: 4,
+    metiersV: 5,
     essences: {},
     sceaux: 0,
     dungeonProgress: emptyDungeonProgress(),
@@ -1485,6 +1480,28 @@ function sanitize(save: SaveData): SaveData {
     save.metiers = { ...save.metiers, forgeron: { ...save.metiers.forgeron, nodes } }
     save.metiersV = 4
   }
+  // v0.28 E2 — MIGRATION metiersV 5 : arbre Joaillier RÉDUIT (Taillerie + Maîtrise & Sources).
+  // Fusionne les verbes-clés (taille = broyage+taille+qualité), garde specs/recoupe/fusion/corruption/
+  // perçage/troc, RETIRE le filler → points rendus. Idempotente (clé : Math.max sur les rangs migrés).
+  if ((save.metiersV ?? 1) < 5 && save.metiers?.joaillier) {
+    const old: Record<string, number> = save.metiers.joaillier.nodes ?? {}
+    const g = (id: string) => old[id] ?? 0
+    const nodes: Record<string, number> = {}
+    if (g('sertissage')) nodes.sertissage = 1
+    const taille = Math.min(2, Math.max(g('taille'), g('broyage') ? 1 : 0) + (g('mainSure') || g('inspirationJ') ? 1 : 0))
+    if (taille) nodes.taille = taille
+    if (g('recoupe')) nodes.recoupe = 1
+    if (g('fusion')) nodes.fusion = 1
+    if (g('corruption')) nodes.corruption = 1
+    if (g('percage')) nodes.percage = 1
+    for (const sp of ['specRythme', 'specFlux', 'specEnv', 'specBastion']) {
+      const v = Math.min(5, g(sp))
+      if (v) nodes[sp] = v
+    }
+    if (g('marche') || g('marcheAuxPierres')) nodes.marche = 1
+    save.metiers = { ...save.metiers, joaillier: { ...save.metiers.joaillier, nodes } }
+    save.metiersV = 5
+  }
   // v0.26 : 📖 Catalogue — les saves d'avant sont créditées de leurs gemmes déjà possédées
   // (stock + serties), pour ne pas repartir de zéro.
   if (!Array.isArray(save.gemsSeen)) save.gemsSeen = []
@@ -1603,8 +1620,6 @@ function sanitize(save: SaveData): SaveData {
   if (typeof save.prestigeRank !== 'number') save.prestigeRank = 0
   if (!save.constellation || typeof save.constellation !== 'object') save.constellation = {}
   if (typeof save.relic === 'undefined') save.relic = null
-  if (save.pendingBiome != null && !BIOME_IDS.includes(save.pendingBiome)) save.pendingBiome = null
-  if (typeof save.pendingBiome === 'undefined') save.pendingBiome = null
   // Biomes (v0.18) : une ancienne save mono-zone devient le biome Physique.
   if (!save.activeBiome || !BIOME_IDS.includes(save.activeBiome)) save.activeBiome = 'physique'
   {
@@ -1828,7 +1843,6 @@ function persist(s: GameState) {
     activeBiome: s.activeBiome,
     nextRotateAt: s.nextRotateAt,
     biomeLockUntil: s.biomeLockUntil,
-    pendingBiome: s.pendingBiome,
     // Le biome actif reflète `stage` → on le synchronise à la sauvegarde.
     biomeStages: { ...s.biomeStages, [s.activeBiome]: s.stage },
     biomeBest: s.biomeBest,
@@ -1862,7 +1876,7 @@ function persist(s: GameState) {
     armedXpBonus: s.armedXpBonus,
     lastTransmute: s.lastTransmute,
     philosophale: s.philosophale,
-    metiersV: s.metiersV ?? 4,
+    metiersV: s.metiersV ?? 5,
     essences: s.essences,
     sceaux: s.sceaux,
     dungeonProgress: s.dungeonProgress,
@@ -4275,7 +4289,7 @@ export const useGame = create<GameState>((set, get) => {
       set(next)
     },
 
-    // v0.27 (F2) — VERROUILLE un biome contre des Fragments (farm ciblé = contenu endgame).
+    // v0.28 — FORCE un biome contre des Fragments : il reste actif ~1 h, puis la rotation reprend.
     lockBiome: (biome) => {
       const s = get()
       if (s.dungeon || s.raid) return
@@ -4290,48 +4304,33 @@ export const useGame = create<GameState>((set, get) => {
         fragments: s.fragments - BIOME_LOCK_FRAGMENTS,
         activeBiome: biome, biomeStages, stage,
         biomeLockUntil: until,
-        pendingBiome: null, // un lock annule une rotation proposée
-        nextRotateAt: until + BIOME_ROTATE_MS, // après le lock, une période de rotation fraîche
+        nextRotateAt: until, // à la fin du forçage, la rotation aléatoire reprend aussitôt
         enemy: makeEnemy(stage, biome),
-        log: pushLog(s.log, `🔒 Biome verrouillé : ${getBiomeDef(biome).icon} ${getBiomeDef(biome).name} (~${Math.round(BIOME_LOCK_MS / 60000)} min · -${BIOME_LOCK_FRAGMENTS} ✨).`, 'info'),
+        log: pushLog(s.log, `🔒 Biome forcé : ${getBiomeDef(biome).icon} ${getBiomeDef(biome).name} (~${Math.round(BIOME_LOCK_MS / 60000)} min · -${BIOME_LOCK_FRAGMENTS} ✨).`, 'info'),
       }
       persist(next)
       set(next)
     },
 
-    // v0.27 (F2) — ROTATION SUBIE mais SOUMISE À VALIDATION : à l'échéance, on PROPOSE un biome ;
-    // le joueur le valide (confirmBiomeRotation) — pas de switch silencieux en plein combat.
+    // v0.28 — ROTATION ALÉATOIRE HORAIRE, automatique : à l'échéance, la zone bascule TOUTE SEULE
+    // vers un biome débloqué tiré au hasard (sauf en donjon/raid ou pendant un forçage).
     rotateBiomeIfDue: () => {
       const s = get()
-      if (s.dungeon || s.raid || s.pendingBiome) return
+      if (s.dungeon || s.raid) return
       const now = Date.now()
       if (now < s.biomeLockUntil || now < s.nextRotateAt) return
-      const nb = nextUnlockedBiome(s.activeBiome, s.biomeBest.physique ?? 0, s.bestStage)
+      const nb = randomUnlockedBiome(s.activeBiome, s.biomeBest.physique ?? 0, s.bestStage)
       if (nb === s.activeBiome) { // un seul biome débloqué : on repousse juste l'échéance
         const next = { ...s, nextRotateAt: now + BIOME_ROTATE_MS }
-        persist(next); set(next); return
-      }
-      const next = { ...s, pendingBiome: nb, log: pushLog(s.log, `🧭 Rotation prête : ${getBiomeDef(nb).icon} ${getBiomeDef(nb).name} — valide pour t'y déplacer.`, 'info') }
-      persist(next)
-      set(next)
-    },
-
-    // v0.27 (F2) — le joueur VALIDE la rotation proposée → bascule effective + nouvelle échéance.
-    confirmBiomeRotation: () => {
-      const s = get()
-      if (!s.pendingBiome || s.dungeon || s.raid) return
-      const nb = s.pendingBiome
-      if (!biomeUnlocked(nb, s.biomeBest.physique ?? 0, s.bestStage)) {
-        const next = { ...s, pendingBiome: null }
         persist(next); set(next); return
       }
       const biomeStages = { ...s.biomeStages, [s.activeBiome]: s.stage }
       const stage = Math.max(1, biomeStages[nb] ?? 1)
       const next = {
         ...s, activeBiome: nb, biomeStages, stage,
-        pendingBiome: null, nextRotateAt: Date.now() + BIOME_ROTATE_MS,
+        nextRotateAt: now + BIOME_ROTATE_MS,
         enemy: makeEnemy(stage, nb),
-        log: pushLog(s.log, `🧭 Tu te déplaces vers ${getBiomeDef(nb).icon} ${getBiomeDef(nb).name}.`, 'info'),
+        log: pushLog(s.log, `🧭 La zone de chasse a changé : ${getBiomeDef(nb).icon} ${getBiomeDef(nb).name}.`, 'info'),
       }
       persist(next)
       set(next)
