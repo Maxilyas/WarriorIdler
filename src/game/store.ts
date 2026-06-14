@@ -93,6 +93,11 @@ let regenMult = 1 // ajusté par l'amélioration "Régénération"
 const REGEN_RATE = 0.05
 /** v0.27 (F3) — horodatage de la mise en arrière-plan (0 = au premier plan). */
 let awaySince = 0
+
+/* v0.27 (Lot 3) — socle ANTI-IMMORTALITÉ en RAID (knobs à éprouver). */
+const RAID_REGEN_MULT = 0.5   // « Mal de l'abîme » : régén de base bridée de moitié en raid
+const ESTOC_INTERVAL = 9      // s entre deux « Estocs primordiaux »
+const ESTOC_PCT = 0.04        // % des PV MAX par estoc, IMPARABLE (ignore armure/résist/mitigation)
 /** v0.25.x — RELÈVE en farm : un héros tombé se relève après ce délai (s), à 35% de ses PV. */
 const FARM_REZ_DELAY = 20
 const RETREAT_STAGES = 2
@@ -2103,6 +2108,8 @@ interface CombatMods {
     affixCount?: number
     /** Raid : points de résistance offerts à l'équipe — Trophée de guerre. */
     resistBonus?: number
+    /** v0.27 (Lot 3) — « Mal de l'abîme » : multiplicateur de régén des héros en RAID (< 1 = bridée). */
+    regenMult?: number
     /** Farm : à ≤ 2 paliers du record — Pied du mur (appliqué via heroMult au tick). */
     nearRecord?: boolean
     /** 🧴 Antidote ciblé (Officine) : −pct des dégâts SUBIS de ce type. */
@@ -3170,7 +3177,9 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
     const d = info[i]
     if (c.hp > 0 && d) {
       const mh = charMaxHp(c)
-      let regen = mh * REGEN_RATE * (1 + d.derived.regenBonus) * regenMult
+      // v0.27 (Lot 3) « Mal de l'abîme » : la régén de base est BRIDÉE en raid (content.regenMult)
+      // → la vie redevient une ressource, fini le tank qui out-régène tout sans bouger.
+      let regen = mh * REGEN_RATE * (1 + d.derived.regenBonus) * regenMult * (mods?.content?.regenMult ?? 1)
       const ft = focus()
       if (d.cmods.surplusRegen > 0 && ft) {
         regen += mh * Math.min(d.cmods.surplusRegen, (resistSurplus(ft, d.resist) / RESIST_DSCALE) * d.cmods.surplusRegen)
@@ -3519,7 +3528,8 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
   const res = partyCombatStepMulti(s.characters, r.enemies, dt, {
     enrage, regen: drain, fightTime, dmgMult, heroMult: rHeroMult, cond: rCond, runes: rRunes, pact: rPact,
     // 🏅 Trophée de guerre (v0.26) : la gemme offre ses points de résist à l'équipe EN RAID.
-    content: { resistBonus: rCond.tropheeRes, antidote: rBuffs.antidote ?? undefined },
+    // v0.27 (Lot 3) « Mal de l'abîme » : régén bridée en raid (la vie redevient une ressource).
+    content: { resistBonus: rCond.tropheeRes, regenMult: RAID_REGEN_MULT, antidote: rBuffs.antidote ?? undefined },
   })
   let chars = res.chars
   let enemies = res.enemies
@@ -3554,6 +3564,13 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
     novaCd = 6
     chars = applyAoe(chars, boss.damage * NOVA_MULT, element, enemyReq(boss, element))
     log = pushLog(log, `☄️ ${boss.name} déchaîne une Nova ${DAMAGE_TYPES[element].name} !`, 'death')
+  }
+  // v0.27 (Lot 3) « Estoc primordial » : coup périodique en % des PV MAX qui IGNORE armure/résist/
+  // mitigation → punit l'empilement d'EHP & de réduction (le tank « increvable »). Ne mord que sur
+  // les combats QUI DURENT (1er estoc à ESTOC_INTERVAL s) — un kill rapide n'est pas concerné.
+  if (Math.floor(fightTime / ESTOC_INTERVAL) > Math.floor((fightTime - dt) / ESTOC_INTERVAL)) {
+    chars = chars.map((c) => (c.hp > 0 ? { ...c, hp: Math.max(0, c.hp - charMaxHp(c) * ESTOC_PCT) } : c))
+    log = pushLog(log, `🗡️ ${boss.name} porte un Estoc primordial (${Math.round(ESTOC_PCT * 100)}% PV max, imparable) !`, 'death')
   }
   // Déferlante : fait SURGIR des renforts réels (combat à plusieurs adversaires).
   // v0.25.x : les rejetons PERSISTENT jusqu'à leur mort (plus d'expiration) — le plafond
