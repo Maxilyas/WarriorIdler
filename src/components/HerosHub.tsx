@@ -5,14 +5,15 @@ import { CharacterPanel, type CharacterView } from './CharacterPanel'
 import { TalentTree } from './TalentTree'
 import { Sheet, SubTab } from './ui'
 import { LevelBadge } from './LevelBadge'
+import { PrestigePanel } from './PrestigePanel'
 import { charDps, charMaxHp, charResist } from '../game/character'
-import { getRaidDef, raidReqs } from '../game/raids'
+import { getRaidDef, raidReqs, raidUnlocked } from '../game/raids'
 import { resistMult } from '../game/resist'
 import { DAMAGE_TYPE_LIST } from '../game/damage'
 import { PRIMARY_META } from '../game/stats'
 import type { DamageType } from '../game/types'
 
-type HerosView = CharacterView | 'talents'
+type HerosView = CharacterView | 'talents' | 'prestige'
 
 function fmt(n: number): string {
   if (n >= 1e9) return (n / 1e9).toFixed(1) + 'Md'
@@ -33,8 +34,13 @@ export function HerosHub({ talentsUnlocked }: { talentsUnlocked: boolean }) {
   const activeChar = useGame((s) => s.activeChar)
   const setActiveChar = useGame((s) => s.setActiveChar)
   const raid = useGame((s) => s.raid)
+  const echos = useGame((s) => s.echos)
+  const prestigeRank = useGame((s) => s.prestigeRank)
+  const bestStage = useGame((s) => s.bestStage)
+  const raidProgress = useGame((s) => s.raidProgress)
   const isDesktop = useMediaQuery('(min-width: 1024px)')
   const talentPoints = characters.reduce((a, c) => a + c.talentPoints, 0)
+  const prestigeUnlocked = prestigeRank > 0 || echos > 0 || raidUnlocked(getRaidDef('abysse'), bestStage, raidProgress)
   const [sub, setSub] = useState<HerosView>('apercu')
   const [card, setCard] = useState<HerosView | null>(null)
 
@@ -72,10 +78,17 @@ export function HerosHub({ talentsUnlocked }: { talentsUnlocked: boolean }) {
               {talentPoints > 0 && <span className="rounded-full bg-amber-500 px-1.5 text-[10px] text-slate-950">{talentPoints}</span>}
             </SubTab>
           )}
+          {prestigeUnlocked && (
+            <SubTab on={active === 'prestige'} onClick={() => setSub('prestige')}>✨ Éveil
+              {echos > 0 && <span className="rounded-full bg-fuchsia-500 px-1.5 text-[10px] text-slate-950">{echos}</span>}
+            </SubTab>
+          )}
         </div>
         <div className="min-h-0 flex-1">
           {active === 'talents' ? (
             <TalentTree />
+          ) : active === 'prestige' ? (
+            <PrestigePanel />
           ) : (
             <div className="h-full overflow-y-auto pr-1">
               <CharacterPanel view={active} />
@@ -104,6 +117,14 @@ export function HerosHub({ talentsUnlocked }: { talentsUnlocked: boolean }) {
           id: 'talents' as HerosView, icon: '🌌', label: 'Talents', hint: 'L\'arbre des builds',
           badge: talentPoints > 0
             ? <span className="rounded-full bg-amber-500 px-1.5 py-0.5 text-[9px] font-bold text-slate-950">{talentPoints}</span>
+            : undefined,
+        }]
+      : []),
+    ...(prestigeUnlocked
+      ? [{
+          id: 'prestige' as HerosView, icon: '✨', label: 'Éveil', hint: 'Prestige · Constellation',
+          badge: echos > 0
+            ? <span className="rounded-full bg-fuchsia-500 px-1.5 py-0.5 text-[9px] font-bold text-slate-950">{echos}</span>
             : undefined,
         }]
       : []),
@@ -170,7 +191,7 @@ export function HerosHub({ talentsUnlocked }: { talentsUnlocked: boolean }) {
       )}
 
       {/* Plein écran (Sheet) */}
-      {card && card !== 'talents' && (
+      {card && card !== 'talents' && card !== 'prestige' && (
         <Sheet title={`${cards.find((c) => c.id === card)?.icon} ${cards.find((c) => c.id === card)?.label} — ${char.name}`} onClose={() => setCard(null)}>
           <CharacterPanel view={card} />
         </Sheet>
@@ -179,6 +200,13 @@ export function HerosHub({ talentsUnlocked }: { talentsUnlocked: boolean }) {
         <Sheet title={`🌌 Talents — ${char.name}`} onClose={() => setCard(null)}>
           <div className="h-[72vh]">
             <TalentTree />
+          </div>
+        </Sheet>
+      )}
+      {card === 'prestige' && (
+        <Sheet title="✨ Éveil Primordial" onClose={() => setCard(null)}>
+          <div className="h-[72vh]">
+            <PrestigePanel />
           </div>
         </Sheet>
       )}

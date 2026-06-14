@@ -124,6 +124,10 @@ export function setPactDerivedMods(m: { hpMult: number; apsMult: number; apsForc
   PACT = m
 }
 
+// ✨ PRESTIGE (v0.27) : résistance plate offerte par la Constellation (Acclimatation), mise à jour par le store.
+let PRESTIGE_RESIST = 0
+export function setGlobalPrestigeResist(v: number) { PRESTIGE_RESIST = Math.max(0, v) }
+
 export function charDerived(char: Character): DerivedStats {
   const d = computeDerived(charTotalStats(char))
   // Bonus de SET (Régalia du Néant…) : PV, recharge et vol de vie passent par le moteur dérivé
@@ -278,6 +282,8 @@ export function charResist(char: Character): Partial<Record<DamageType, number>>
   if (sb.resistAll > 0) {
     for (const t of DAMAGE_TYPE_LIST) r[t] = (r[t] ?? 0) + sb.resistAll * 100
   }
+  // ✨ Acclimatation (Constellation) : résistance plate sur TOUS les types.
+  if (PRESTIGE_RESIST > 0) for (const t of DAMAGE_TYPE_LIST) r[t] = (r[t] ?? 0) + PRESTIGE_RESIST
   return r
 }
 

@@ -7,7 +7,7 @@ import { resistMult, enemyReq, resistSurplus, RESIST_DSCALE } from './resist'
 import type { DerivedStats } from './stats'
 import {
   makeCharacter, charDerived, charMaxHp, charDamageProfile, charPassives,
-  charResist, charCombatMods, abilityPower, powerScale, computeUnlockedPowers, setGlobalCombatMods,
+  charResist, charCombatMods, abilityPower, powerScale, computeUnlockedPowers, setGlobalCombatMods, setGlobalPrestigeResist,
   setPactDerivedMods, talentPointsForLevel, type CombatMods as CharCombatMods,
 } from './character'
 import { getTalent, canAllocate } from './talents'
@@ -18,8 +18,9 @@ import {
   reforgeItem, surillvlItem, ascendItem,
   reforgeCost, surillvlCost, ascendCost, createCost, transmuteCost, maxCraftTier, craftRaidGate,
   SURILLVL_OVER_MARGIN,
-  enhanceTypedAffixes, quintRefund,
+  enhanceTypedAffixes, quintRefund, relicFromItem,
 } from './items'
+import { constellationMods, echosGain, getConstNode, nodeCost, RELIC_BASE_ILVL } from './prestige'
 import {
   craftMods, metierXpGain, canLearnNode, getMetierNode, respecCost, emptyMetiers, migrateLegacyForge,
   levelFromXp, METIERS, METIER_LIST, METIER_NODES, METIER_BRANCHES, AUTOMATE_FORGERON_LEVELS,
@@ -380,6 +381,14 @@ interface SaveData {
   fragments: number
   /** Éclat cosmique 💫 — ressource ultra-rare des raids. */
   cosmic: number
+  /** ✨ Échos primordiaux 💠 (v0.27, Lot 5) — monnaie de PRESTIGE (Éveil), investie en Constellation. */
+  echos: number
+  /** Nombre d'Éveils accomplis. */
+  prestigeRank: number
+  /** Rangs alloués dans la Constellation (méta-arbre de prestige). */
+  constellation: Record<string, number>
+  /** Relique conservée au dernier Éveil (1 pièce, iLvl plancher) — versée dans le sac au reset. */
+  relic: Item | null
   raidProgress: RaidProgress
   /** 🏆 Trophées par raid (v0.24) : la monnaie de PASSAGE DE TIER (gagnés par clear). */
   raidTrophies: Partial<Record<RaidId, number>>
@@ -559,6 +568,10 @@ interface GameState extends SaveData {
   chooseFromChoice: (index: number) => void
   recruitCharacter: () => void
   reset: () => void
+  /** v0.27 (Lot 5) — ÉVEIL PRIMORDIAL : reset DUR contre des Échos ; garde 1 Relique (slot choisi). */
+  awaken: (relicSlot: EquipSlotId | null) => void
+  /** v0.27 (Lot 5) — investit des Échos dans un nœud de Constellation. */
+  allocateConstellation: (nodeId: string) => void
 }
 
 let logId = 1
@@ -1267,6 +1280,10 @@ function freshSave(): SaveData {
     orbes: 0,
     fragments: 0,
     cosmic: 0,
+    echos: 0,
+    prestigeRank: 0,
+    constellation: {},
+    relic: null,
     raidProgress: emptyRaidProgress(),
     raidTrophies: {},
     raidTierUnlocked: {},
@@ -1531,6 +1548,11 @@ function sanitize(save: SaveData): SaveData {
   // v0.27 (F2) — rotation/lock des biomes (défauts pour les anciennes saves).
   if (typeof save.nextRotateAt !== 'number') save.nextRotateAt = Date.now() + BIOME_ROTATE_MS
   if (typeof save.biomeLockUntil !== 'number') save.biomeLockUntil = 0
+  // v0.27 (Lot 5) — prestige (défauts pour les anciennes saves).
+  if (typeof save.echos !== 'number') save.echos = 0
+  if (typeof save.prestigeRank !== 'number') save.prestigeRank = 0
+  if (!save.constellation || typeof save.constellation !== 'object') save.constellation = {}
+  if (typeof save.relic === 'undefined') save.relic = null
   if (save.pendingBiome != null && !BIOME_IDS.includes(save.pendingBiome)) save.pendingBiome = null
   if (typeof save.pendingBiome === 'undefined') save.pendingBiome = null
   // Biomes (v0.18) : une ancienne save mono-zone devient le biome Physique.
@@ -1800,6 +1822,10 @@ function persist(s: GameState) {
     orbes: s.orbes,
     fragments: s.fragments,
     cosmic: s.cosmic,
+    echos: s.echos,
+    prestigeRank: s.prestigeRank,
+    constellation: s.constellation,
+    relic: s.relic,
     raidProgress: s.raidProgress,
     raidTrophies: s.raidTrophies,
     raidTierUnlocked: s.raidTierUnlocked,
@@ -1879,9 +1905,12 @@ function fullHeal(c: Character): Character {
 }
 
 /** Met à jour les multiplicateurs globaux (combat, régén) — améliorations + 🏛️ Maîtrise (v0.25). */
-function refreshGlobals(upgrades: Record<string, number>, maitrise: Record<string, number> = {}) {
+function refreshGlobals(upgrades: Record<string, number>, maitrise: Record<string, number> = {}, constellation: Record<string, number> = {}) {
   const m = computeGlobalMods(upgrades, maitrise)
-  setGlobalCombatMods({ power: m.power, attackSpeed: m.attackSpeed, vitality: m.vitality })
+  // ✨ Constellation de prestige (v0.27, Lot 5) : multiplie les globaux de combat + résist plate.
+  const pm = constellationMods(constellation)
+  setGlobalCombatMods({ power: m.power * pm.damageMult, attackSpeed: m.attackSpeed * pm.speedMult, vitality: m.vitality * pm.vitalityMult })
+  setGlobalPrestigeResist(pm.resistFlat)
   regenMult = m.regen
 }
 
@@ -3800,7 +3829,7 @@ function applyChestRewards(s: GameState, c: ChestReward): Pick<GameState, 'inven
 
 export const useGame = create<GameState>((set, get) => {
   const save = loadSave()
-  refreshGlobals(save.upgrades, save.maitrise)
+  refreshGlobals(save.upgrades, save.maitrise, save.constellation)
 
   // Progression hors-ligne : applique les gains accumulés depuis la dernière sauvegarde.
   let pendingOffline: OfflineReport | null = null
@@ -3808,6 +3837,9 @@ export const useGame = create<GameState>((set, get) => {
   if (elapsed > 0) {
     const report = simulateOffline(save.characters, save.stage, save.upgrades, elapsed, save.activeBiome, save.maitrise)
     if (report) {
+      // ✨ Offrande au gouffre (Constellation) : booste les gains hors-ligne.
+      const offMult = constellationMods(save.constellation).offlineMult
+      if (offMult !== 1) { report.gold = Math.round(report.gold * offMult); report.noyau = Math.round(report.noyau * offMult); report.xp = Math.round(report.xp * offMult) }
       pendingOffline = report
       save.gold += report.gold
       save.noyau += report.noyau
@@ -4267,6 +4299,8 @@ export const useGame = create<GameState>((set, get) => {
       if (elapsed < 60_000 || s.pendingOffline) return // sous 1 min ou récap déjà en attente : rien
       const report = simulateOffline(s.characters, s.stage, s.upgrades, elapsed, s.activeBiome, s.maitrise)
       if (!report) return
+      const offMult = constellationMods(s.constellation).offlineMult
+      if (offMult !== 1) { report.gold = Math.round(report.gold * offMult); report.noyau = Math.round(report.noyau * offMult); report.xp = Math.round(report.xp * offMult) }
       const next = { ...s }
       next.gold += report.gold
       next.noyau += report.noyau
@@ -5856,7 +5890,7 @@ export const useGame = create<GameState>((set, get) => {
       const upgrades = { ...s.upgrades, [id]: level + 1 }
       let characters = s.characters
       if (id === 'talentBonus') characters = characters.map((c) => ({ ...c, talentPoints: c.talentPoints + 1 }))
-      refreshGlobals(upgrades, s.maitrise)
+      refreshGlobals(upgrades, s.maitrise, s.constellation)
       const next = { ...s, gold: s.gold - cost, poussiere: s.poussiere - pous, essence: s.essence - ecl, upgrades, characters, log: pushLog(s.log, `Amélioration : ${def.name} niv. ${level + 1} (-${cost.toLocaleString('fr-FR')} or${ecl ? `, -${ecl} ♦` : ''}${pous ? `, -${pous} 🌌` : ''}).`, 'gold') }
       persist(next)
       set(next)
@@ -5897,7 +5931,7 @@ export const useGame = create<GameState>((set, get) => {
       const rank = s.maitrise[nodeId] ?? 0
       if (rank >= def.maxRank || s.maitrisePoints < 1) return
       const maitrise = { ...s.maitrise, [nodeId]: rank + 1 }
-      refreshGlobals(s.upgrades, maitrise)
+      refreshGlobals(s.upgrades, maitrise, s.constellation)
       const next = {
         ...s, maitrise, maitrisePoints: s.maitrisePoints - 1,
         log: pushLog(s.log, `🏛️ Maîtrise : ${def.icon} ${def.name} rang ${rank + 1}/${def.maxRank}.`, 'level'),
@@ -6057,7 +6091,7 @@ export const useGame = create<GameState>((set, get) => {
       const fresh = freshSave()
       localStorage.removeItem(SAVE_KEY)
       cooldowns.clear()
-      refreshGlobals(fresh.upgrades, fresh.maitrise)
+      refreshGlobals(fresh.upgrades, fresh.maitrise, fresh.constellation)
       set({
         ...fresh,
         enemy: makeEnemy(fresh.stage, fresh.activeBiome),
@@ -6065,6 +6099,64 @@ export const useGame = create<GameState>((set, get) => {
         killCount: 0,
         pendingOffline: null,
       } as GameState)
+    },
+
+    // v0.27 (Lot 5) — ÉVEIL PRIMORDIAL : reset DUR contre des Échos. Conserve Échos + Constellation +
+    // 1 Relique (slot choisi, iLvl plancher) + record de progression (gating) + XP des métiers.
+    awaken: (relicSlot) => {
+      const s = get()
+      if (!raidUnlocked(getRaidDef('abysse'), s.bestStage, s.raidProgress)) return // éligible dès l'Abîme débloqué
+      const pm = constellationMods(s.constellation)
+      const raidsBeaten = Object.values(s.raidProgress).filter((t) => (t ?? 0) > 0).length
+      const gained = echosGain(bestRaidTier(s.raidProgress), s.bestStage, raidsBeaten, pm.echosMult)
+      // Relique : pièce choisie sur le perso actif, ramenée au plancher d'iLvl.
+      const active = s.characters[s.activeChar] ?? s.characters[0]
+      const kept = relicSlot ? active?.equipment[relicSlot] : undefined
+      const relic: Item | null = kept ? relicFromItem(kept, RELIC_BASE_ILVL + pm.relicFloor) : null
+
+      const fresh = freshSave()
+      let base = {
+        ...fresh,
+        echos: s.echos + gained,
+        prestigeRank: s.prestigeRank + 1,
+        constellation: s.constellation,
+        relic,
+        raidProgress: s.raidProgress, // record conservé (gating des contenus)
+        metiers: s.metiers,           // XP métiers conservée (choix A)
+        inventory: relic ? [relic] : [],
+      }
+      // ✨ Première étincelle : coup de pouce de démarrage (or + ~3 niveaux).
+      if (pm.etincelle) {
+        const lvlXp = xpForLevel(1) + xpForLevel(2) + xpForLevel(3)
+        base = { ...base, gold: 5000 * base.prestigeRank, characters: base.characters.map((c) => grantXp(c, lvlXp)) }
+      }
+      cooldowns.clear()
+      refreshGlobals(base.upgrades, base.maitrise, base.constellation)
+      const logged = {
+        ...base,
+        enemy: makeEnemy(base.stage, base.activeBiome),
+        log: [{ id: logId++, text: `✨ ÉVEIL PRIMORDIAL #${base.prestigeRank} : +${gained} Échos 💠.${relic ? ` Relique conservée : ${relic.name}.` : ''} Une nouvelle vie commence.`, kind: 'level' }],
+        killCount: 0,
+        pendingOffline: null,
+      } as GameState
+      persist(logged)
+      set(logged)
+    },
+
+    // v0.27 (Lot 5) — investit des Échos dans un nœud de Constellation.
+    allocateConstellation: (nodeId) => {
+      const s = get()
+      const node = getConstNode(nodeId)
+      if (!node) return
+      const cur = s.constellation[nodeId] ?? 0
+      if (cur >= node.maxRank) return
+      const cost = nodeCost(node, cur)
+      if (s.echos < cost) return
+      const constellation = { ...s.constellation, [nodeId]: cur + 1 }
+      refreshGlobals(s.upgrades, s.maitrise, constellation)
+      const next = { ...s, echos: s.echos - cost, constellation, log: pushLog(s.log, `💠 Constellation : ${node.icon} ${node.name} → rang ${cur + 1} (−${cost} Échos).`, 'level') }
+      persist(next)
+      set(next)
     },
   }
 })

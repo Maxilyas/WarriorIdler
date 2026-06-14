@@ -513,6 +513,23 @@ export function qualityColor(stars?: number): string { return QUALITY_COLORS[qId
 /** Lignes BONUS apportées par la qualité : +0/+0/+1/+1/+2 (Grossier→Chef-d'œuvre). KNOB d'équilibrage. */
 export function qualityBonusAffixes(stars: number): number { return [0, 0, 1, 1, 2][qIdx(stars)] }
 
+/**
+ * v0.27 (Lot 5) — RELIQUE de prestige : conserve l'objet (lignes / unique / gemmes / set / qualité)
+ * mais RAMÈNE son iLvl au plancher, stats rescalées au prorata. Re-grandira en jeu (surillvl/trempe).
+ */
+export function relicFromItem(item: Item, floorIlvl: number): Item {
+  const fl = Math.max(1, Math.min(item.ilvl, floorIlvl))
+  const k = fl / Math.max(1, item.ilvl)
+  return {
+    ...item,
+    ilvl: fl,
+    primaryValue: Math.max(1, Math.round(item.primaryValue * k)),
+    endurance: Math.max(1, Math.round(item.endurance * k)),
+    affixes: item.affixes.map((a) => ({ ...a, value: Math.max(1, Math.round(a.value * k)) })),
+    surCount: 0, trempeCount: 0, reforgeCount: 0,
+  }
+}
+
 /** Tire la qualité ⭐ d'une création (« Main de maître » déplace les poids vers le haut). */
 export function rollStars(finRank = 0): number {
   const w = [Math.max(5, 35 - 8 * finRank), 30, 22 + 2 * finRank, 10 + 3 * finRank, 3 + 3 * finRank]
