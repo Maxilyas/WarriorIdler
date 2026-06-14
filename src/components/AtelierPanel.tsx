@@ -44,6 +44,9 @@ const ORIENTATIONS: { id: ItemOrientation; label: string }[] = [
   { id: 'defensif', label: 'Défensif' },
 ]
 
+/** E1 — une sous-page d'un métier (segmented control + bandeau de guidage). */
+type SubPage = { id: string; label: string; icon: string; hint: string; node: ReactNode }
+
 /**
  * L'Atelier des MÉTIERS (v0.22) — hub des 4 métiers de craft.
  * Chaque métier : un niveau monté par la pratique, un arbre (1 point/niveau), son atelier.
@@ -53,8 +56,11 @@ export function AtelierPanel() {
   const bestStage = useGame((s) => s.bestStage)
   const metiers = useGame((s) => s.metiers)
   const [metier, setMetier] = useState<MetierId>('forgeron')
+  // E1 — sous-page active DANS le métier (vide = première page ; le fallback gère le changement de métier).
+  const [page, setPage] = useState('')
   const def = METIERS[metier]
   const unlocked = bestStage >= def.unlockStage
+  const pts = unlocked ? pointsAvailable(metiers[metier]) : 0
 
   return (
     <div className="h-full overflow-y-auto pr-1">
@@ -92,14 +98,57 @@ export function AtelierPanel() {
           <div className="mt-1 text-[11px] text-slate-500">Atteins le palier {def.unlockStage} pour ouvrir ce métier.</div>
         </div>
       ) : (
-        <>
-          <MetierHeader metier={metier} />
-          <MetierTree metier={metier} />
-          {metier === 'forgeron' && <ForgeronWorkshop />}
-          {metier === 'joaillier' && <GemWorkshop />}
-          {metier === 'runiste' && <RunisteWorkshop />}
-          {metier === 'alchimiste' && <AlchimisteWorkshop />}
-        </>
+        (() => {
+          // E1 — chaque métier est découpé en SOUS-PAGES (moins dense, mobile-first). L'Arbre
+          // a sa propre page ; les pages non pertinentes (ex. Automates < palier 65) sont MASQUÉES.
+          const treePage: SubPage = { id: 'arbre', label: 'Arbre', icon: '🌳', hint: 'Dépense tes points de métier dans les compétences.', node: <MetierTree metier={metier} alwaysOpen /> }
+          let pages: SubPage[]
+          if (metier === 'forgeron') {
+            pages = [
+              { id: 'creer', label: 'Créer', icon: '🔨', hint: 'Forge une pièce neuve, au niveau de ton meilleur contenu.', node: <ForgeronWorkshop /> },
+              { id: 'procedes', label: 'Procédés', icon: '⚙️', hint: 'Contrats de forge · Fonderie (→ Lingots) · Bac de trempe.', node: <ForgeProcedes /> },
+              ...(bestStage >= 65 ? [{ id: 'automates', label: 'Automates', icon: '🤖', hint: 'Envoie des automates farmer le contenu déjà vaincu.', node: <AutomateWorkshop /> }] : []),
+              treePage,
+            ]
+          } else if (metier === 'joaillier') {
+            pages = [{ id: 'atelier', label: 'Taillerie', icon: '💎', hint: 'Tes gemmes de condition : broyage, taille, fusion, échoppe.', node: <GemWorkshop /> }, treePage]
+          } else if (metier === 'runiste') {
+            pages = [{ id: 'atelier', label: 'Runes', icon: '🜁', hint: 'Forge et gère tes runes & pactes.', node: <RunisteWorkshop /> }, treePage]
+          } else {
+            pages = [{ id: 'atelier', label: 'Officine', icon: '⚗️', hint: 'Cuves, recettes et consommables alchimiques.', node: <AlchimisteWorkshop /> }, treePage]
+          }
+          const active = pages.find((p) => p.id === page) ?? pages[0]
+          return (
+            <>
+              <MetierHeader metier={metier} />
+              {/* Sous-pages (pills scrollables sous le pouce sur mobile) */}
+              <div className="mb-2 flex gap-1.5 overflow-x-auto pb-1">
+                {pages.map((p) => {
+                  const on = active.id === p.id
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => setPage(p.id)}
+                      className={'flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-2 text-[12px] font-medium transition-colors ' + (on ? 'border-current bg-white/10' : 'border-slate-700 text-slate-400 hover:border-slate-500')}
+                      style={on ? { color: def.color } : undefined}
+                    >
+                      <span>{p.icon} {p.label}</span>
+                      {p.id === 'arbre' && pts > 0 && <span className="rounded-full bg-amber-500 px-1 text-[9px] font-bold text-slate-950">{pts}</span>}
+                    </button>
+                  )
+                })}
+              </div>
+              {/* Bandeau de guidage : à quoi sert la page + recommandation contextuelle */}
+              <div className="mb-2 rounded-lg border border-slate-800 bg-[#0d111a] px-2.5 py-1.5 text-[10.5px] leading-snug text-slate-400">
+                <span style={{ color: def.color }}>{active.icon}</span> {active.hint}
+                {pts > 0 && active.id !== 'arbre' && (
+                  <span className="ml-1 text-amber-300">· ★ {pts} point{pts > 1 ? 's' : ''} d'arbre à dépenser (onglet 🌳 Arbre)</span>
+                )}
+              </div>
+              {active.node}
+            </>
+          )
+        })()
       )}
     </div>
   )
@@ -153,7 +202,7 @@ function MetierHeader({ metier }: { metier: MetierId }) {
 }
 
 /** Arbre du métier (v0.26) : nœuds groupés PAR BRANCHE, respec ciblé par branche. */
-function MetierTree({ metier }: { metier: MetierId }) {
+function MetierTree({ metier, alwaysOpen }: { metier: MetierId; alwaysOpen?: boolean }) {
   const metiers = useGame((s) => s.metiers)
   const bestStage = useGame((s) => s.bestStage)
   const gold = useGame((s) => s.gold)
@@ -161,7 +210,8 @@ function MetierTree({ metier }: { metier: MetierId }) {
   const respecBranch = useGame((s) => s.respecMetierBranch)
   const st = metiers[metier]
   const pts = pointsAvailable(st)
-  const [open, setOpen] = useState(pts > 0)
+  const [openState, setOpen] = useState(pts > 0)
+  const open = alwaysOpen ? true : openState
   const def = METIERS[metier]
 
   // Branches affichées : tronc commun d'abord, puis les branches déclarées qui ont des nœuds.
@@ -173,9 +223,9 @@ function MetierTree({ metier }: { metier: MetierId }) {
 
   return (
     <div className="mb-3 rounded-xl border border-slate-800 bg-[#0d111a] p-2.5">
-      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center justify-between py-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+      <button onClick={() => !alwaysOpen && setOpen((o) => !o)} className="flex w-full items-center justify-between py-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
         <span>🌳 Arbre de compétences {pts > 0 && <span className="ml-1 rounded-full bg-amber-500 px-1.5 text-[9px] text-slate-950">{pts}</span>}</span>
-        <span>{open ? '▾' : '▸'}</span>
+        {!alwaysOpen && <span>{open ? '▾' : '▸'}</span>}
       </button>
       {open && branches.map((b) => {
         const nodes = METIER_NODES[metier].filter((n) => (n.branch ?? 'tronc') === b.id)
@@ -297,12 +347,6 @@ function ForgeronWorkshop() {
 
   return (
     <>
-      {/* Automates : la branche Industrialisation du Forgeron */}
-      <AutomateWorkshop />
-
-      {/* 📋 Contrats · 🫕 Fonderie · 🔥 Bac de trempe (v0.26) */}
-      <ForgeProcedes />
-
       {/* ◈ Compagnonnage : où en est ton corps de métier */}
       {corpsName && mods.corpsMajeur && (
         <div className="mb-3 rounded-lg border border-amber-700/40 bg-amber-950/10 px-2.5 py-1.5 text-[10px] text-amber-200/90">
