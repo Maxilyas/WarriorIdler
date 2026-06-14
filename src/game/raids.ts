@@ -64,6 +64,14 @@ export interface RaidDef {
   anchorStage?: number
   /** Raid prérequis : doit avoir été clear (tier ≥ 1) au moins une fois. */
   requires?: RaidId
+  /**
+   * v0.27 — décalage de TIER MONDIAL. Toutes les courbes de RÉCOMPENSE et de CHECK calculent
+   * `tier + tierOffset` (l'Abîme « commence » à un Tier 7 mondial). La DIFFICULTÉ (PV/dégâts, via
+   * anchorStage) n'est PAS décalée — elle est déjà calée sur ce niveau.
+   */
+  tierOffset?: number
+  /** v0.27 — porte d'accès « avoir atteint le tier N sur TOUS ces raids » (Abîme = endgame). */
+  requiresAllTier?: { raids: RaidId[]; tier: number }
   /** Difficulté de base : multiplie PV et dégâts (≥1, monte d'un raid à l'autre). */
   baseDifficulty: number
   /** Mécaniques signature imposées (identité du raid — les boss de tier en AJOUTENT). */
@@ -109,7 +117,11 @@ export const RAIDS: Record<RaidId, RaidDef> = {
     // v0.23 : l'Abîme était EXTRÊMEMENT overtuné (ancré au palier 100 → des milliards de PV au T1).
     // Il reste verrouillé derrière le palier 100, mais sa DIFFICULTÉ est ancrée au palier 70 :
     // son Tier 1 ≈ un Tier 6 du Nexus, puis il scale au même pas (+4 paliers/tier).
-    unlockStage: 100, anchorStage: 70, requires: 'nexus', baseDifficulty: 1.9, signature: ['berserk', 'nova'], element: 'rotating', orbeCost: 3,
+    // v0.27 : accès = T7 sur les 4 raids de base (palier 100 RETIRÉ). tierOffset +6 ⇒ son T1 calcule
+    // récompenses & checks comme un Tier 7 MONDIAL ; difficulté inchangée (anchorStage 70).
+    unlockStage: 50, anchorStage: 70, tierOffset: 6,
+    requiresAllTier: { raids: ['forge', 'reliquaire', 'citadelle', 'nexus'], tier: 7 },
+    baseDifficulty: 1.9, signature: ['berserk', 'nova'], element: 'rotating', orbeCost: 3,
   },
 }
 
@@ -119,10 +131,20 @@ export function getRaidDef(id: RaidId): RaidDef {
   return RAIDS[id]
 }
 
-/** Un raid est-il accessible (palier requis + raid prérequis clear) ? */
+/**
+ * v0.27 — TIER MONDIAL : tier affiché + décalage du raid. Pilote TOUTES les courbes de récompense
+ * et de check (iLvl, rareté, exigences, trophées, fragments, éclats, enrage). Pour les raids de
+ * base (offset 0) c'est l'identité ; pour l'Abîme (+6), son Tier 1 = Tier 7 mondial.
+ */
+export function globalTier(def: RaidDef, tier: number): number {
+  return tier + (def.tierOffset ?? 0)
+}
+
+/** Un raid est-il accessible (palier requis + raid prérequis clear + tier requis sur d'autres raids) ? */
 export function raidUnlocked(def: RaidDef, bestStage: number, progress: Record<RaidId, number>): boolean {
   if (bestStage < def.unlockStage) return false
   if (def.requires && (progress[def.requires] ?? 0) < 1) return false
+  if (def.requiresAllTier && def.requiresAllTier.raids.some((r) => (progress[r] ?? 0) < def.requiresAllTier!.tier)) return false
   return true
 }
 
@@ -203,7 +225,7 @@ export function raidPartyHpMult(partySize: number): number {
 
 /** Délai d'enrage dur (s) — rétrécit doucement avec le tier → exige toujours plus de DPS. */
 export function raidBerserkTime(def: RaidDef, tier: number): number {
-  return Math.max(16, 32 - tier * 1.2 - def.baseDifficulty * 2)
+  return Math.max(16, 32 - globalTier(def, tier) * 1.2 - def.baseDifficulty * 2)
 }
 
 /**
@@ -214,7 +236,7 @@ export function raidBerserkTime(def: RaidDef, tier: number): number {
  */
 export function raidIlvl(def: RaidDef, tier: number): number {
   const base = stageIlvl(def.anchorStage ?? def.unlockStage) * 1.12 + def.baseDifficulty * 8
-  return Math.round(base * Math.pow(1.22, tier - 1))
+  return Math.round(base * Math.pow(1.22, globalTier(def, tier) - 1))
 }
 
 /**
@@ -229,8 +251,8 @@ export function raidIlvl(def: RaidDef, tier: number): number {
 const RAID_WINDOW_FLOOR = [4, 5, 5, 6, 6, 7, 7, 8, 8, 9]   // T1..T10 : Rare → Mythique (pic = +2)
 const RAID_WINDOW_CAP = [11, 11, 12, 12, 13, 13, 14, 14, 15, 16] // T1..T10 : Céleste → Transcendant
 
-export function raidRarityWindow(_def: RaidDef, tier: number): { floor: number; peak: number; cap: number } {
-  const i = Math.max(0, Math.min(RAID_WINDOW_FLOOR.length - 1, tier - 1))
+export function raidRarityWindow(def: RaidDef, tier: number): { floor: number; peak: number; cap: number } {
+  const i = Math.max(0, Math.min(RAID_WINDOW_FLOOR.length - 1, globalTier(def, tier) - 1))
   const floor = RAID_WINDOW_FLOOR[i]
   return { floor, peak: floor + 2, cap: RAID_WINDOW_CAP[i] }
 }
@@ -251,11 +273,12 @@ export function raidMaxTier(def: RaidDef, tier: number): number {
  *   T1 : +1 à 5% · +2 à 2.5%   ·   T5 : +1 à 25% · +2 à 12.5% · +3 à 5%   ·   T10 : 50/25/10%.
  */
 export function rollRaidLootCount(def: RaidDef, tier: number): number {
+  const gt = globalTier(def, tier)
   let n = def.id === 'abysse' ? 2 : 1
-  const p1 = Math.min(0.5, 0.05 * tier)
+  const p1 = Math.min(0.5, 0.05 * gt)
   if (Math.random() < p1) n++
   if (Math.random() < p1 * 0.5) n++
-  if (tier >= 3 && Math.random() < p1 * 0.2) n++
+  if (gt >= 3 && Math.random() < p1 * 0.2) n++
   return n
 }
 
@@ -264,30 +287,31 @@ export function rollRaidLootCount(def: RaidDef, tier: number): number {
 // ~5 clears du tier courant (ou plus de clears de tiers inférieurs). Chaque tier est un mur :
 // on farme le T(n) — stuff + Trophées — pour ouvrir le T(n+1).
 
-/** Trophées gagnés par victoire (= le tier vaincu). */
-export function raidTrophyGain(tier: number): number {
-  return tier
+/** Trophées gagnés par victoire (= le tier MONDIAL vaincu — v0.27). */
+export function raidTrophyGain(def: RaidDef, tier: number): number {
+  return globalTier(def, tier)
 }
 
-/** Coût en Trophées du déblocage du tier `next` (≈ 5 clears du tier précédent). */
-export function raidTierUnlockCost(next: number): number {
-  return 5 * Math.max(1, next - 1)
+/** Coût en Trophées du déblocage du tier `next` (≈ 5 clears du tier précédent, en tier mondial). */
+export function raidTierUnlockCost(def: RaidDef, next: number): number {
+  return 5 * Math.max(1, globalTier(def, next) - 1)
 }
 
 /** Fragments d'éternité gagnés. */
 export function raidFragments(def: RaidDef, tier: number): number {
-  return 1 + tier + (def.id === 'abysse' ? tier : 0)
+  const gt = globalTier(def, tier)
+  return 1 + gt + (def.id === 'abysse' ? gt : 0)
 }
 
 /** Chance d'Éclat cosmique 💫 (ressource ultra-rare, exclusive aux raids). */
 export function raidCosmicChance(def: RaidDef, tier: number): number {
-  const base = 0.04 + tier * 0.05
+  const base = 0.04 + globalTier(def, tier) * 0.05
   return Math.min(0.95, base * (def.id === 'abysse' ? 2.2 : 1))
 }
 
 /** Quantité d'Éclats cosmiques quand le tirage réussit (plus aux hauts tiers / Abîme). */
 export function raidCosmicQty(def: RaidDef, tier: number): number {
-  return 1 + Math.floor(tier / 4) + (def.id === 'abysse' ? 1 : 0)
+  return 1 + Math.floor(globalTier(def, tier) / 4) + (def.id === 'abysse' ? 1 : 0)
 }
 
 /** Type d'objet aléatoire dans la catégorie ciblée du raid. */
@@ -640,7 +664,7 @@ export const NOVA_MULT = 3.6
  *  v0.25.x : relevée (~+30%) — le joueur battait les boss à ×2,3 subis sans une ligne de résist.
  *  L'exigence doit être LE projet de stuff du tier, pas une taxe ignorable. */
 export function raidReq(def: RaidDef, tier: number): number {
-  return Math.round(70 + def.baseDifficulty * 30 + (tier - 1) * 34)
+  return Math.round(70 + def.baseDifficulty * 30 + (globalTier(def, tier) - 1) * 34)
 }
 
 /**

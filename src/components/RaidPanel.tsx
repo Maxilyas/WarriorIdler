@@ -87,6 +87,7 @@ export function RaidPanel() {
               key={def.id}
               def={def}
               unlocked={raidUnlocked(def, bestStage, progress)}
+              progress={progress}
               cleared={progress[def.id] ?? 0}
               maxTier={tierUnlocked[def.id] ?? 1}
               trophies={trophies[def.id] ?? 0}
@@ -147,9 +148,11 @@ function BossReqs({ def, tier, characters }: { def: RaidDef; tier: number; chara
   )
 }
 
-function RaidCard({ def, unlocked, cleared, maxTier, trophies, bestStage, orbes, busy, partyDps, partyHp, characters, onEnter, onUnlockTier }: {
+function RaidCard({ def, unlocked, progress, cleared, maxTier, trophies, bestStage, orbes, busy, partyDps, partyHp, characters, onEnter, onUnlockTier }: {
   def: RaidDef
   unlocked: boolean
+  /** Records de tier par raid (pour la porte d'accès « T7 sur les 4 raids »). */
+  progress: Record<string, number>
   cleared: number
   /** Tier maximal TENTABLE (débloqué via Trophées). */
   maxTier: number
@@ -169,23 +172,43 @@ function RaidCard({ def, unlocked, cleared, maxTier, trophies, bestStage, orbes,
   const [repeat, setRepeat] = useState(1)
   const t = Math.max(1, Math.min(frontier, tier))
   // Déblocage du tier suivant : la frontière doit être VAINCUE, puis payée en Trophées.
-  const unlockCost = raidTierUnlockCost(maxTier + 1)
+  const unlockCost = raidTierUnlockCost(def, maxTier + 1)
   const frontierCleared = cleared >= maxTier
   const canUnlock = frontierCleared && trophies >= unlockCost
 
   if (!unlocked) {
     const reqRaid = def.requires ? getRaidDef(def.requires) : null
+    const gate = def.requiresAllTier
     return (
       <div className="rounded-lg border border-slate-800 bg-[#0c0f17] p-2.5 opacity-70">
         <div className="flex items-center justify-between">
           <div className="font-medium text-slate-400">{def.icon} {def.name}</div>
           <span className="text-[10px] text-slate-600">🔒 Verrouillé</span>
         </div>
-        <div className="mt-1 text-[10.5px] text-slate-500">
-          Requiert le <span className="text-rose-300">palier {def.unlockStage}</span>
-          {bestStage < def.unlockStage ? ` (record ${bestStage})` : ' ✓'}
-          {reqRaid && <> · avoir vaincu <span style={{ color: reqRaid.color }}>{reqRaid.name}</span></>}
-        </div>
+        {gate ? (
+          // v0.27 — porte ENDGAME : atteindre le tier requis sur TOUS les raids de base.
+          <div className="mt-1 text-[10.5px] text-slate-500">
+            <div>Contenu endgame — requiert le <span className="text-rose-300">Tier {gate.tier}</span> sur chaque raid :</div>
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              {gate.raids.map((rid) => {
+                const rd = getRaidDef(rid)
+                const rec = progress[rid] ?? 0
+                const ok = rec >= gate.tier
+                return (
+                  <span key={rid} className="rounded px-1.5 py-0.5" style={{ color: ok ? '#86efac' : rd.color, background: ok ? '#16361f' : '#1a1d27' }}>
+                    {ok ? '✓' : `T${rec}`} {rd.icon}
+                  </span>
+                )
+              })}
+            </div>
+          </div>
+        ) : (
+          <div className="mt-1 text-[10.5px] text-slate-500">
+            Requiert le <span className="text-rose-300">palier {def.unlockStage}</span>
+            {bestStage < def.unlockStage ? ` (record ${bestStage})` : ' ✓'}
+            {reqRaid && <> · avoir vaincu <span style={{ color: reqRaid.color }}>{reqRaid.name}</span></>}
+          </div>
+        )}
       </div>
     )
   }

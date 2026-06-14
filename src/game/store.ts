@@ -3620,7 +3620,7 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
       // 🏆 Trophées du raid : la monnaie de passage de tier (≈ 5 clears du tier courant).
       // 🏆 Rune du Trophéiste (v0.26) : chance de doubler la moisson.
       const rRules = equippedRules(s.characters)
-      let trophies = raidTrophyGain(tier)
+      let trophies = raidTrophyGain(def, tier)
       if (rRules.has('tropheiste') && Math.random() < 0.15 * ruleAmp(rCraft.ruleAmpTier)) {
         trophies *= 2
         log = pushLog(log, '🏆 Trophéiste : la moisson de Trophées est DOUBLÉE !', 'loot')
@@ -5357,7 +5357,7 @@ export const useGame = create<GameState>((set, get) => {
       // Il faut avoir VAINCU la frontière actuelle (le mur se franchit, il ne s'achète pas seul)…
       if ((s.raidProgress[raidId] ?? 0) < cur) return
       // …et payer les Trophées du raid (≈ 5 clears du tier courant).
-      const cost = raidTierUnlockCost(cur + 1)
+      const cost = raidTierUnlockCost(def, cur + 1)
       if ((s.raidTrophies[raidId] ?? 0) < cost) return
       const next = {
         ...s,
