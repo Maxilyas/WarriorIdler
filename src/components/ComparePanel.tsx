@@ -338,6 +338,16 @@ function CraftSection({ item }: { item: Item }) {
     setLocked(locked.map((i) => kept.indexOf(i)))
   }
 
+  // E1b — recommandation contextuelle : LA prochaine amélioration la plus rentable, abordable et débloquée
+  // (priorité châsses vides → surillvl à bon prix → saut de rareté). Conseil, pas d'auto-dépense.
+  const emptySockets = Math.max(0, itemSockets(item, mods.weaponSocketBonus) - (item.gems?.length ?? 0))
+  const ascAffordable = !!nr && ascRaidOk && essence >= aCost.eclats && noyau >= aCost.noyau && fragments >= aCost.fragments && poussiere >= aCost.poussiere && cosmic >= aCost.cosmic
+  const reco: string | null =
+    emptySockets > 0 && mods.gems ? `sertis une gemme — ${emptySockets} châsse(s) vide(s) (section 💎 ci-dessous).`
+    : mods.surillvl && !surCapped && surOver === 0 && essence >= sCost ? `Surillvl → iLvl ${surTarget} (♦ ${sCost}) — de l'iLvl à bon prix.`
+    : mods.ascend && ascAffordable && nr ? `Ascension → ${RARITIES[nr].name} — un saut de rareté (gros gain).`
+    : null
+
   return (
     <div className="mt-2 rounded-lg border border-amber-800/40 bg-amber-950/10 p-2">
       <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center justify-between py-1 text-[11px] font-semibold text-amber-300">
@@ -347,6 +357,11 @@ function CraftSection({ item }: { item: Item }) {
 
       {open && (
         <div className="mt-2 space-y-2">
+          {reco && (
+            <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[10px] leading-snug text-amber-200">
+              ✨ Conseil : {reco}
+            </div>
+          )}
           {item.affixes.length > 0 && (
             <div>
               <div className="mb-1 text-[10px] text-slate-500">Verrouille les affixes à conserver, puis reforge le reste :</div>
