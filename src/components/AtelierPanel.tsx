@@ -15,7 +15,7 @@ import {
   craftMods, levelFromXp, xpTotalForLevel, pointsAvailable, pointsTotal, canLearnNode, nodeRank,
   respecCost, respecBranchCost, pointsSpentInBranch,
   CORPS, corpsBonusFor, signatureLingotCost, smeltLingots, MASTERWORK_LINGOTS,
-  type MetierId,
+  type MetierId, type MetierNode,
 } from '../game/metiers'
 import { ENCHANTS, TIME_RUNES, RULE_RUNES, PACT_RUNES, eraseFragments, runeForgeCost, RUNE_GAMBLE_COST } from '../game/enchants'
 import {
@@ -201,7 +201,30 @@ function MetierHeader({ metier }: { metier: MetierId }) {
   )
 }
 
-/** Arbre du métier (v0.26) : nœuds groupés PAR BRANCHE, respec ciblé par branche. */
+/** E2 — ordonne les nœuds d'une branche par dépendance (racines → enfants) avec une profondeur,
+ *  pour un rendu en ARBRE (indentation + connecteurs au lieu d'une grille plate). */
+function orderBranch(nodes: MetierNode[]): { node: MetierNode; depth: number }[] {
+  const inBranch = new Set(nodes.map((n) => n.id))
+  const children = new Map<string, MetierNode[]>()
+  const roots: MetierNode[] = []
+  for (const n of nodes) {
+    if (n.requires && inBranch.has(n.requires)) {
+      const arr = children.get(n.requires) ?? []
+      arr.push(n)
+      children.set(n.requires, arr)
+    } else roots.push(n)
+  }
+  const out: { node: MetierNode; depth: number }[] = []
+  const visit = (n: MetierNode, d: number) => {
+    out.push({ node: n, depth: d })
+    for (const c of children.get(n.id) ?? []) visit(c, d + 1)
+  }
+  for (const r of roots) visit(r, 0)
+  return out
+}
+
+/** Arbre du métier (v0.26) : nœuds groupés PAR BRANCHE, respec ciblé par branche.
+ *  v0.28 E2 (pilote Forgeron) : rendu en ARBRE À NŒUDS (dépendances visibles + keystones). */
 function MetierTree({ metier, alwaysOpen }: { metier: MetierId; alwaysOpen?: boolean }) {
   const metiers = useGame((s) => s.metiers)
   const bestStage = useGame((s) => s.bestStage)
@@ -213,6 +236,8 @@ function MetierTree({ metier, alwaysOpen }: { metier: MetierId; alwaysOpen?: boo
   const [openState, setOpen] = useState(pts > 0)
   const open = alwaysOpen ? true : openState
   const def = METIERS[metier]
+  // E2 pilote : seul le Forgeron passe au rendu ARBRE À NŒUDS ; les 3 autres gardent la grille.
+  const graph = metier === 'forgeron'
 
   // Branches affichées : tronc commun d'abord, puis les branches déclarées qui ont des nœuds.
   const branches: { id: string; name: string; icon: string }[] = [
@@ -248,12 +273,13 @@ function MetierTree({ metier, alwaysOpen }: { metier: MetierId; alwaysOpen?: boo
                 </button>
               )}
             </div>
-            <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
-              {nodes.map((n) => {
+            {(() => {
+              const tile = (n: MetierNode) => {
                 const rank = nodeRank(metiers, metier, n.id)
                 const owned = rank >= n.maxRank
                 const check = canLearnNode(metiers, metier, n.id, bestStage)
                 const isSpec = !!n.exclusive
+                const isKey = !!n.keystone
                 return (
                   <button
                     key={n.id}
@@ -261,15 +287,16 @@ function MetierTree({ metier, alwaysOpen }: { metier: MetierId; alwaysOpen?: boo
                     onClick={() => learn(metier, n.id)}
                     title={check.ok ? n.desc : `${n.desc}\n— ${check.reason}`}
                     className={
-                      'flex items-center gap-2 rounded-lg border px-2 py-1.5 text-left disabled:opacity-60 ' +
-                      (owned ? 'border-emerald-700/50 bg-emerald-950/20' : rank > 0 ? 'border-amber-700/50 bg-amber-950/10' : 'border-slate-700 bg-black/20 enabled:hover:border-amber-600/60')
+                      'flex flex-1 items-center gap-2 rounded-lg border px-2 py-1.5 text-left disabled:opacity-60 ' +
+                      (owned ? 'border-emerald-700/50 bg-emerald-950/20' : rank > 0 ? 'border-amber-700/50 bg-amber-950/10' : 'border-slate-700 bg-black/20 enabled:hover:border-amber-600/60') +
+                      (isKey ? ' ring-1 ring-amber-400/50 shadow-[0_0_8px_-2px] shadow-amber-500/40' : '')
                     }
                     style={isSpec && rank > 0 ? { borderColor: def.color } : undefined}
                   >
-                    <span className="text-base">{n.icon}</span>
+                    <span className="text-base">{isKey ? '◆' : n.icon}</span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[11px] font-medium text-slate-200">
-                        {isSpec && <span style={{ color: def.color }}>◈ </span>}{n.name}{n.maxRank > 1 ? <span className="text-slate-500"> {rank}/{n.maxRank}</span> : null}
+                        {isSpec && <span style={{ color: def.color }}>◈ </span>}{isKey ? `${n.icon} ` : ''}{n.name}{n.maxRank > 1 ? <span className="text-slate-500"> {rank}/{n.maxRank}</span> : null}
                       </span>
                       <span className="block text-[8.5px] leading-snug text-slate-500">{n.desc}</span>
                       {!owned && !check.ok && check.reason !== 'Aucun point disponible — pratique ton métier.' && (
@@ -281,8 +308,21 @@ function MetierTree({ metier, alwaysOpen }: { metier: MetierId; alwaysOpen?: boo
                     </span>
                   </button>
                 )
-              })}
-            </div>
+              }
+              return graph ? (
+                // ARBRE À NŒUDS : ordonné par dépendance, indentation + connecteur ↳ vers le parent.
+                <div className="space-y-1">
+                  {orderBranch(nodes).map(({ node: n, depth }) => (
+                    <div key={n.id} className="flex items-center" style={{ paddingLeft: depth * 16 }}>
+                      {depth > 0 && <span className="mr-1 shrink-0 select-none text-sm leading-none" style={{ color: def.color + 'aa' }}>↳</span>}
+                      {tile(n)}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">{nodes.map((n) => tile(n))}</div>
+              )
+            })()}
           </div>
         )
       })}

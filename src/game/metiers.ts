@@ -188,6 +188,8 @@ export interface MetierNode {
   branch?: string
   /** Rang minimal requis sur le nœud parent `requires` (lignes étagées I→V : 1 par défaut). */
   requiresRank?: number
+  /** Keystone (v0.28 E2) : nœud terminal à fort impact — rendu mis en avant (halo) dans l'arbre. */
+  keystone?: boolean
 }
 
 /** Une branche d'arbre (v0.26) : l'UI groupe les nœuds par branche, le respec est par branche. */
@@ -281,7 +283,7 @@ export const METIER_NODES: Record<MetierId, MetierNode[]> = {
       desc: 'Le surillvl donne +1 iLvl supplémentaire par usage.' },
     { id: 'transmute', name: 'Transmutateur', icon: '🔄', maxRank: 1, minLevel: 3, minStage: 20, branch: 'procedes',
       desc: 'Débloque la TRANSMUTATION : changer la stat primaire d\'un objet.' },
-    { id: 'ascension', name: 'Grand-maître forgeron', icon: '✨', maxRank: 1, minLevel: 10, minStage: 50, requires: 'surillvl', branch: 'procedes',
+    { id: 'ascension', name: 'Grand-maître forgeron', icon: '✨', maxRank: 1, minLevel: 10, minStage: 50, requires: 'surillvl', branch: 'procedes', keystone: true,
       desc: 'Débloque l\'ASCENSION : monter un objet d\'un cran de rareté.' },
     { id: 'verrous', name: 'Verrous huilés', icon: '🔐', maxRank: 3, minLevel: 7, branch: 'procedes',
       desc: '−12% du surcoût des VERROUS de reforge par rang (garder ses bonnes lignes coûte moins).' },
@@ -306,7 +308,7 @@ export const METIER_NODES: Record<MetierId, MetierNode[]> = {
       desc: 'Débloque la construction d\'AUTOMATES (machines qui refont les donjons/raids battus).' },
     { id: 'montage', name: 'Chaîne de montage', icon: '⚙️', maxRank: 3, requires: 'automates', branch: 'industrie',
       desc: '−8% de durée des runs d\'automates par rang.' },
-    { id: 'automate4', name: 'Manufacture', icon: '🏭', maxRank: 1, minLevel: 40, minStage: 80, requires: 'automates', branch: 'industrie',
+    { id: 'automate4', name: 'Manufacture', icon: '🏭', maxRank: 1, minLevel: 40, minStage: 80, requires: 'automates', branch: 'industrie', keystone: true,
       desc: 'Débloque la construction d\'un QUATRIÈME automate.' },
   ],
   // v0.26 — arbre REFONDU : ~62 rangs dépensables (tronc + 4 branches), specs étagées I→V.
