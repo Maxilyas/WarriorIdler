@@ -7,7 +7,7 @@ import {
   sellValue, recycleValue, itemStatBlock, itemHasRareStat, itemStatTotals,
   reforgeCost, surillvlCost, ascendCost, nextRarity, transmuteCost, craftRaidGate,
   SURILLVL_OVER_MARGIN,
-  quintCost, QUINT_GAIN,
+  quintCost, QUINT_GAIN, qualityName, qualityColor,
 } from '../game/items'
 import { craftMods } from '../game/metiers'
 import { itemSockets, unsocketCost } from '../game/gems'
@@ -91,7 +91,7 @@ export function ComparePanel({ item, char, previewDelta, equipped, occupied, onE
           </div>
           <div className="text-[10px] text-slate-400">
             <span style={{ color: rarity.color }}>{rarity.name}</span> · {type.name} · iLvl {item.ilvl}
-            {item.stars ? <span className="text-amber-300" title={`Polissage du Forgeron : qualité ⭐${item.stars}/5`}> · ⭐{item.stars}</span> : null}
+            {item.stars != null ? <span style={{ color: qualityColor(item.stars) }} title={`Qualité : ${qualityName(item.stars)} (⭐${item.stars}/5) — agit sur le budget ET le nombre de lignes`}> · ⭐{qualityName(item.stars)}</span> : null}
             {' · '}
             <span className={item.orientation === 'offensif' ? 'text-rose-300' : item.orientation === 'defensif' ? 'text-emerald-300' : 'text-slate-300'}>
               {item.orientation === 'offensif' ? '⚔ Offensif' : item.orientation === 'defensif' ? '🛡 Défensif' : '⚖ Équilibré'}
@@ -530,6 +530,9 @@ function GemSection({ item }: { item: Item }) {
   const drillSocket = useGame((s) => s.drillSocket)
   const mods = craftMods(useGame((s) => s.metiers))
   const [open, setOpen] = useState(false)
+  // v0.27 — APERÇU AVANT SERTISSAGE (mobile : plus de tooltip hover). 1er tap = sélection +
+  // description ; 2e tap sur « Sertir » = pose la gemme.
+  const [pickGem, setPickGem] = useState<string | null>(null)
 
   const sockets = itemSockets(item, mods.weaponSocketBonus)
   const filled = item.gems ?? []
@@ -594,18 +597,41 @@ function GemSection({ item }: { item: Item }) {
                 Aucune gemme en stock — drops par famille de biome, champions ✦, raids, ou la ✂️ Taille (Atelier · Joaillier).
               </div>
             ) : (
-              <div className="flex flex-wrap gap-1">
-                {condStock.map(({ key, parsed, n }) => (
-                  <button
-                    key={key}
-                    onClick={() => socketCondGem(item.id, parsed.def.id, parsed.rank, parsed.quality)}
-                    title={gemDesc(parsed.def, parsed.rank, parsed.quality)}
-                    className="rounded border px-2 py-1 text-[10px] font-medium hover:bg-white/5"
-                    style={{ color: parsed.def.color, borderColor: parsed.def.color + '66' }}
-                  >
-                    {parsed.def.icon} {parsed.def.name}{parsed.rank > 1 ? ` R${parsed.rank}` : ''}{qMark(parsed.quality)} ×{n}
-                  </button>
-                ))}
+              <div className="space-y-1">
+                <div className="flex flex-wrap gap-1">
+                  {condStock.map(({ key, parsed, n }) => {
+                    const sel = pickGem === key
+                    return (
+                      <button
+                        key={key}
+                        onClick={() => setPickGem(sel ? null : key)}
+                        className={'rounded border px-2 py-1 text-[10px] font-medium ' + (sel ? 'bg-white/10 ring-1 ring-white/30' : 'hover:bg-white/5')}
+                        style={{ color: parsed.def.color, borderColor: parsed.def.color + (sel ? 'cc' : '66') }}
+                      >
+                        {parsed.def.icon} {parsed.def.name}{parsed.rank > 1 ? ` R${parsed.rank}` : ''}{qMark(parsed.quality)} ×{n}
+                      </button>
+                    )
+                  })}
+                </div>
+                {/* v0.27 — aperçu de la gemme sélectionnée + confirmation (lisible au tap, sans hover). */}
+                {(() => {
+                  const sel = condStock.find((g) => g.key === pickGem)
+                  if (!sel) return <div className="text-[9px] italic text-slate-500">Touche une gemme pour voir son effet, puis sertis-la.</div>
+                  return (
+                    <div className="rounded border border-sky-700/40 bg-sky-950/30 p-1.5">
+                      <div className="text-[10px] font-medium" style={{ color: sel.parsed.def.color }}>
+                        {sel.parsed.def.icon} {sel.parsed.def.name}{sel.parsed.rank > 1 ? ` R${sel.parsed.rank}` : ''}{qMark(sel.parsed.quality)}
+                      </div>
+                      <div className="mt-0.5 text-[9px] leading-snug text-slate-300">{gemDesc(sel.parsed.def, sel.parsed.rank, sel.parsed.quality)}</div>
+                      <button
+                        onClick={() => { socketCondGem(item.id, sel.parsed.def.id, sel.parsed.rank, sel.parsed.quality); setPickGem(null) }}
+                        className="mt-1 w-full rounded bg-sky-700/60 py-1 text-[10px] font-semibold text-sky-100 hover:bg-sky-600/60"
+                      >
+                        💎 Sertir cette gemme
+                      </button>
+                    </div>
+                  )
+                })()}
               </div>
             )
           )}

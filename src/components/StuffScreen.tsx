@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { useGame } from '../game/store'
+import { useGame, maxContentIlvl } from '../game/store'
 import { ItemRow } from './ItemRow'
 import { ComparePanel } from './ComparePanel'
 import { EQUIP_SLOTS, ITEM_TYPES, equipSlotsForType, slotAccepts } from '../game/slots'
 import { RARITIES, RARITY_LIST } from '../game/rarities'
-import { itemScore, itemHasRareStat, itemStatBlock } from '../game/items'
+import { itemScore, itemHasRareStat, itemStatBlock, qualityName, qualityColor } from '../game/items'
 import { PRIMARY_META, SECONDARY_META, SECONDARY_STATS } from '../game/stats'
 import { getCondGem } from '../game/condGems'
 import { itemSockets } from '../game/gems'
@@ -15,8 +15,21 @@ import { rarityTextStyle, rarityNameClass } from './rarityStyle'
 import { ConfirmButton } from './ui'
 import type { DamageType, EquipSlotId, Equipment, Item, ItemType, OffensiveStat, SecondaryStat } from '../game/types'
 
-type SortMode = 'recent' | 'score' | 'rarity'
+type SortMode = 'recent' | 'score' | 'rarity' | 'ilvl' | 'dpsUp' | 'ehpUp'
+const SORT_LABELS: Record<SortMode, string> = {
+  score: 'Score', ilvl: 'iLvl', rarity: 'Rareté', dpsUp: '+DPS', ehpUp: '+Survie', recent: 'Récent',
+}
+const SORT_ORDER: SortMode[] = ['score', 'ilvl', 'rarity', 'dpsUp', 'ehpUp', 'recent']
 const PRIMARY_FILTERS: OffensiveStat[] = ['force', 'agilite', 'intelligence']
+
+/** Couleur de l'iLvl d'une pièce équipée selon son RETARD vs le plafond de contenu atteint. */
+function ilvlLagColor(ilvl: number, ref: number): string {
+  if (ref <= 0) return '#94a3b8'
+  const r = ilvl / ref
+  if (r >= 0.85) return '#94a3b8' // à jour
+  if (r >= 0.7) return '#fbbf24'  // léger retard
+  return '#f87171'                // gros retard
+}
 
 /** Objet équipé auquel comparer, selon le contexte (slot choisi ou auto). */
 function comparableEquipped(equipment: Equipment, type: ItemType, selectedSlot: EquipSlotId | null): Item | undefined {
@@ -51,9 +64,13 @@ export function StuffScreen() {
   const setRecycleThreshold = useGame((s) => s.setRecycleThreshold)
   const autoRecycle = useGame((s) => s.autoRecycle)
   const toggleAutoRecycle = useGame((s) => s.toggleAutoRecycle)
+  const bestStage = useGame((s) => s.bestStage)
+  const raidProgress = useGame((s) => s.raidProgress)
 
   const active = characters[activeChar] ?? characters[0]
   const equipment: Equipment = active?.equipment ?? {}
+  // Plafond d'iLvl du contenu atteint : sert à colorer le RETARD des pièces équipées (D2/D3).
+  const contentIlvl = maxContentIlvl(bestStage, raidProgress)
 
   const [selectedSlot, setSelectedSlot] = useState<EquipSlotId | null>(null)
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
@@ -73,7 +90,8 @@ export function StuffScreen() {
     ? EQUIP_SLOTS.find((s) => s.id === selectedSlot)!.accepts
     : null
 
-  const visible = useMemo(() => {
+  // 1) FILTRES uniquement (l'ordre vient après — les tris par Δ ont besoin des deltas d'abord).
+  const filtered = useMemo(() => {
     let arr = inventory
     if (filterType) arr = arr.filter((i) => i.type === filterType)
     if (primaryFilter) arr = arr.filter((i) => i.primary === primaryFilter)
@@ -82,21 +100,30 @@ export function StuffScreen() {
     // Filtres typés : lignes d'affixe du (kind, type) — une arme du bon élément compte comme dégâts.
     if (typeFilter.length) arr = arr.filter((i) => typeFilter.every((f) =>
       i.affixes.some((a) => a.kind === f.kind && a.type === f.type) || (f.kind === 'dmgType' && i.damageType === f.type)))
-    arr = [...arr]
-    if (sort === 'score') arr.sort((a, b) => itemScore(b) - itemScore(a))
-    else if (sort === 'rarity') arr.sort((a, b) => RARITIES[b.rarity].tier - RARITIES[a.rarity].tier)
     return arr
-  }, [inventory, filterType, primaryFilter, statFilter, typeFilter, sort])
+  }, [inventory, filterType, primaryFilter, statFilter, typeFilter])
 
-  // Δ DPS / Δ PV par objet visible (swap simulé sur l'emplacement cible) — mémoïsé sur des
+  // 2) Δ DPS / Δ Survie par objet filtré (swap simulé sur l'emplacement cible) — mémoïsé sur des
   // références stables (le tick recrée les persos mais PAS leur équipement/talents).
   const deltas = useMemo(() => {
     const m = new Map<string, EquipDelta>()
     if (!active) return m
-    for (const it of visible) m.set(it.id, equipDelta(active, it, targetSlotFor(equipment, it.type, selectedSlot)))
+    for (const it of filtered) m.set(it.id, equipDelta(active, it, targetSlotFor(equipment, it.type, selectedSlot)))
     return m
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, equipment, active?.talents, active?.powers, active?.level, selectedSlot])
+  }, [filtered, equipment, active?.talents, active?.powers, active?.level, selectedSlot])
+
+  // 3) TRI (réutilise les deltas pour « +DPS » / « +Survie »).
+  const visible = useMemo(() => {
+    const arr = [...filtered]
+    const dlt = (id: string, k: 'dps' | 'ehp') => deltas.get(id)?.[k] ?? -Infinity
+    if (sort === 'score') arr.sort((a, b) => itemScore(b) - itemScore(a))
+    else if (sort === 'rarity') arr.sort((a, b) => RARITIES[b.rarity].tier - RARITIES[a.rarity].tier || b.ilvl - a.ilvl)
+    else if (sort === 'ilvl') arr.sort((a, b) => b.ilvl - a.ilvl || RARITIES[b.rarity].tier - RARITIES[a.rarity].tier)
+    else if (sort === 'dpsUp') arr.sort((a, b) => dlt(b.id, 'dps') - dlt(a.id, 'dps'))
+    else if (sort === 'ehpUp') arr.sort((a, b) => dlt(b.id, 'ehp') - dlt(a.id, 'ehp'))
+    return arr
+  }, [filtered, sort, deltas])
 
   // L'objet sélectionné peut être dans l'inventaire OU équipé.
   const equippedEntry = (Object.entries(equipment) as [EquipSlotId, Item][]).find(
@@ -231,6 +258,7 @@ export function StuffScreen() {
                 )}
                 <div className="text-[9px] uppercase tracking-wide text-slate-500">{slot.name}</div>
                 {item ? (
+                  <>
                   <div className="flex items-center gap-1">
                     <span className="text-xs">{ITEM_TYPES[item.type].icon}</span>
                     <span
@@ -251,6 +279,13 @@ export function StuffScreen() {
                       ✕
                     </span>
                   </div>
+                  {/* v0.27 — rareté · iLvl · qualité LISIBLES SANS CLIC ; iLvl coloré selon le retard. */}
+                  <div className="mt-0.5 flex items-center gap-1 text-[9px] leading-none">
+                    <span className="font-semibold tabular-nums" style={{ color: ilvlLagColor(item.ilvl, contentIlvl) }} title="iLvl — orange/rouge = en retard sur ton contenu actuel">i{item.ilvl}</span>
+                    <span style={{ color: RARITIES[item.rarity].color }}>{RARITIES[item.rarity].name}</span>
+                    {item.stars != null && <span style={{ color: qualityColor(item.stars) }}>· {qualityName(item.stars)}</span>}
+                  </div>
+                  </>
                 ) : (
                   <div className="text-[11px] italic text-slate-600">— vide —</div>
                 )}
@@ -275,14 +310,14 @@ export function StuffScreen() {
               <>Objets <span className="text-slate-500">({visible.length})</span></>
             )}
           </div>
-          <div className="flex gap-1 text-[10px]">
-            {(['score', 'rarity', 'recent'] as SortMode[]).map((m) => (
+          <div className="flex flex-wrap justify-end gap-1 text-[10px]">
+            {SORT_ORDER.map((m) => (
               <button
                 key={m}
                 onClick={() => setSort(m)}
                 className={'rounded px-2.5 py-1.5 ' + (sort === m ? 'bg-slate-600 text-slate-100' : 'bg-slate-800 text-slate-400')}
               >
-                {m === 'score' ? 'Score' : m === 'rarity' ? 'Rareté' : 'Récent'}
+                {SORT_LABELS[m]}
               </button>
             ))}
           </div>

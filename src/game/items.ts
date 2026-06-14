@@ -148,6 +148,12 @@ export interface GenerateOptions {
   minTier?: number
   /** 🕳️ Tisse-châsse (rune v0.26) : chance SUPPLÉMENTAIRE d'ajouter une châsse au drop. */
   socketLuck?: number
+  /** v0.27 — qualité FORCÉE (1..5). Sinon roulée. */
+  stars?: number
+  /** v0.27 — décalage de distribution de qualité (forge « Main de maître »). */
+  starsFin?: number
+  /** v0.27 — qualité PLANCHER (raids/coffres : du bon stuff). */
+  minStars?: number
 }
 
 const OFFENSIVE_POOL: OffensiveStat[] = ['force', 'agilite', 'intelligence']
@@ -189,13 +195,22 @@ export function generateItem(opts: GenerateOptions): Item {
     opts.orientation ?? (isWeapon ? 'offensif' : isShield ? 'defensif' : pick(['offensif', 'equilibre', 'equilibre', 'defensif'] as ItemOrientation[]))
   const offFrac = ORIENTATION_FRAC[orientation]
 
-  const budget = opts.ilvl * typeMeta.weight * rarity.statMult
+  // v0.27 — QUALITÉ unifiée : TOUT objet roule une qualité 1..5 (ex-⭐ Polissage, généralisé aux
+  // drops). Elle agit sur le BUDGET (starsMult) ET le NOMBRE de lignes (qualityBonusAffixes).
+  let stars = opts.stars ?? rollStars(opts.starsFin ?? 0)
+  if (opts.minStars) stars = Math.max(stars, opts.minStars)
+  stars = Math.max(1, Math.min(5, stars))
+  const qMult = starsMult(stars)
+
+  const budget = opts.ilvl * typeMeta.weight * rarity.statMult * qMult
   const primaryValue = Math.max(1, Math.round(budget * offFrac * (0.85 + Math.random() * 0.3)))
   // Toute pièce donne de l'Endurance (la survie scale) ; davantage si défensive. Multiplicateur relevé
   // (1.4 → 1.9) : les PV suivaient mal la montée des dégâts ennemis → le stuff donne plus d'Endurance.
   const endurance = Math.max(1, Math.round(budget * (1 - offFrac) * 1.9 * (0.85 + Math.random() * 0.3)))
 
-  const affixes = rollAffixes(rarity.affixCount, opts.ilvl, rarity.statMult, rarity.tier, opts)
+  // La qualité AJOUTE des lignes au-dessus du plancher FIXE de la rareté (+0/+0/+1/+1/+2).
+  const affixCount = Math.min(7, rarity.affixCount + qualityBonusAffixes(stars))
+  const affixes = rollAffixes(affixCount, opts.ilvl, rarity.statMult * qMult, rarity.tier, opts)
   const unique = rollUnique(rarity.tier)
 
   // Type de dégâts : uniquement sur l'arme principale (Physique plus fréquent).
@@ -221,6 +236,7 @@ export function generateItem(opts: GenerateOptions): Item {
     endurance,
     orientation,
     affixes,
+    stars,
     // v0.25 : châsses RARES (roulées) · v0.26 : 🕳️ Tisse-châsse peut en ajouter une au drop.
     sockets: Math.min(3, rollSockets(rarity.tier) + (opts.socketLuck && Math.random() < opts.socketLuck ? 1 : 0)),
     ...(damageType ? { damageType } : {}),
@@ -483,7 +499,19 @@ export function createCost(rarityTier: number, ilvl: number): CraftCost {
   }
 }
 
-/* ---- ⭐ POLISSAGE (v0.26, Forgeron) : qualité de forge 1–5, budget de stats ± ---- */
+/* ---- ⭐ QUALITÉ unifiée (v0.27, ex-Polissage Forgeron) : 1–5 sur TOUT le stuff, drop & craft ----
+ * 1 Grossier · 2 Standard · 3 Fin · 4 Supérieur · 5 Chef-d'œuvre.
+ * Agit sur le BUDGET (starsMult) ET le NOMBRE de lignes (qualityBonusAffixes). Le nombre de lignes
+ * reste FIXE par rareté (plancher) ; la qualité est le SEUL levier qui en ajoute. */
+
+export const QUALITY_NAMES = ['Grossier', 'Standard', 'Fin', 'Supérieur', 'Chef-d\'œuvre']
+export const QUALITY_COLORS = ['#94a3b8', '#cbd5e1', '#86efac', '#5eead4', '#fcd34d']
+/** Index 0..4 borné (qualité absente = Standard, pour le stuff d'avant v0.27). */
+function qIdx(stars?: number): number { return Math.max(0, Math.min(4, (stars ?? 2) - 1)) }
+export function qualityName(stars?: number): string { return QUALITY_NAMES[qIdx(stars)] }
+export function qualityColor(stars?: number): string { return QUALITY_COLORS[qIdx(stars)] }
+/** Lignes BONUS apportées par la qualité : +0/+0/+1/+1/+2 (Grossier→Chef-d'œuvre). KNOB d'équilibrage. */
+export function qualityBonusAffixes(stars: number): number { return [0, 0, 1, 1, 2][qIdx(stars)] }
 
 /** Tire la qualité ⭐ d'une création (« Main de maître » déplace les poids vers le haut). */
 export function rollStars(finRank = 0): number {

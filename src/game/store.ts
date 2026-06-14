@@ -19,7 +19,6 @@ import {
   reforgeCost, surillvlCost, ascendCost, createCost, transmuteCost, maxCraftTier, craftRaidGate,
   SURILLVL_OVER_MARGIN,
   enhanceTypedAffixes, quintRefund,
-  rollStars, applyStars,
 } from './items'
 import {
   craftMods, metierXpGain, canLearnNode, getMetierNode, respecCost, emptyMetiers, migrateLegacyForge,
@@ -3589,7 +3588,7 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
           const sd = SETS.neant
           const types = Object.keys(sd.pieces) as ItemType[]
           const t = types[Math.floor(Math.random() * types.length)]
-          const it = generateItem({ ilvl, rarity, type: t, primaryBias: bias, ...(t === 'armePrincipale' ? { element: 'ombre' as DamageType } : {}) })
+          const it = generateItem({ ilvl, rarity, type: t, primaryBias: bias, minStars: 4, ...(t === 'armePrincipale' ? { element: 'ombre' as DamageType } : {}) })
           it.setId = sd.id
           it.name = sd.pieces[t]!
           items.push(it)
@@ -3597,7 +3596,7 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
         }
         const lootType = pickRaidLootType(def)
         items.push(generateItem({
-          ilvl, rarity, type: lootType, primaryBias: bias,
+          ilvl, rarity, type: lootType, primaryBias: bias, minStars: def.id === 'abysse' ? 4 : 3,
           ...(def.id === 'nexus' ? { biasResist: DAMAGE_TYPE_LIST[Math.floor(Math.random() * DAMAGE_TYPE_LIST.length)] } : {}),
         }))
       }
@@ -4996,13 +4995,15 @@ export const useGame = create<GameState>((set, get) => {
       const rarityId = RARITY_LIST.find((r) => r.tier === prodTier)?.id ?? opts.rarity
       const item = generateItem({
         ilvl, type: opts.type, rarity: rarityId, primary: opts.primary,
+        // ⭐ Polissage : meilleure distribution de qualité ; Chef-d'œuvre : qualité plancher Fin.
+        starsFin: mods.polissage ? mods.polishFin : 0,
+        ...(masterwork ? { minStars: 3 } : {}),
         ...(opts.orientation ? { orientation: opts.orientation } : {}),
         ...(opts.element ? { element: opts.element } : {}),
         ...(signature ? { forceStat: signature } : {}),
       })
-      // 🏆 Chef-d'œuvre : châsse garantie. ⭐ Polissage : qualité de forge roulée.
+      // 🏆 Chef-d'œuvre : châsse garantie (la qualité est désormais roulée dans generateItem).
       if (masterwork && itemSockets(item, 0) < 1) item.sockets = 1
-      if (mods.polissage) applyStars(item, rollStars(mods.polishFin))
       const inventory = [item, ...s.inventory].slice(0, invMax)
       // 🍀 Sérendipité : un craft SANS proc rembourse une part des coûts.
       const refundPct = !lucky && mods.serendipite > 0 ? mods.serendipite : 0

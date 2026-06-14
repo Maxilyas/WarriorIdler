@@ -3,7 +3,7 @@ import { RARITIES } from '../game/rarities'
 import { ITEM_TYPES } from '../game/slots'
 import { DAMAGE_TYPES } from '../game/damage'
 import { getUnique } from '../game/uniques'
-import { itemHasRareStat } from '../game/items'
+import { itemHasRareStat, qualityName, qualityColor } from '../game/items'
 import { itemSockets } from '../game/gems'
 import { getCondGem } from '../game/condGems'
 import { rarityTextStyle, rarityNameClass } from './rarityStyle'
@@ -81,6 +81,9 @@ export function ItemRow({ item, dpsDelta, ehpDelta, selected, onClick }: Props) 
         </span>
         <span className="block truncate text-[10px] text-slate-500">
           {type.name} · <span style={{ color: rarity.color }}>{rarity.name}</span>
+          {item.stars != null && (
+            <> · <span style={{ color: qualityColor(item.stars) }}>{qualityName(item.stars)}</span></>
+          )}
           {item.damageType && item.damageType !== 'physique' && (
             <span style={{ color: DAMAGE_TYPES[item.damageType].color }}> · {DAMAGE_TYPES[item.damageType].icon}</span>
           )}
