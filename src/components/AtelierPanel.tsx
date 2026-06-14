@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
-import { useGame, bestRaidTier, forgeContractsForDay, CONTRACT_LINGOTS } from '../game/store'
+import { useGame, bestRaidTier, forgeContractsForDay, CONTRACT_LINGOTS, referenceIlvl } from '../game/store'
 import { ITEM_TYPES } from '../game/slots'
 import { PRIMARY_META, SECONDARY_META } from '../game/stats'
 import { currentWeek } from '../game/maitrise'
@@ -33,7 +33,6 @@ import {
 } from '../game/automates'
 import { DUNGEON_LIST } from '../game/dungeons'
 import { RAID_LIST } from '../game/raids'
-import { stageIlvl } from '../game/enemies'
 import { Sheet } from './ui'
 import type { ItemType, OffensiveStat, ItemOrientation, DamageType, RarityId, SecondaryStat } from '../game/types'
 
@@ -248,6 +247,7 @@ function MetierTree({ metier }: { metier: MetierId }) {
 function ForgeronWorkshop() {
   const bestStage = useGame((s) => s.bestStage)
   const raidProgress = useGame((s) => s.raidProgress)
+  const dungeonProgress = useGame((s) => s.dungeonProgress)
   const essence = useGame((s) => s.essence)
   const noyau = useGame((s) => s.noyau)
   const fragments = useGame((s) => s.fragments)
@@ -278,7 +278,9 @@ function ForgeronWorkshop() {
   const tier = RARITY_LIST.find((r) => r.id === rarity)!.tier
   // ◈ Compagnonnage (v0.26) : bonus du corps couvrant le type sélectionné.
   const corps = corpsBonusFor(mods, type)
-  const ilvl = stageIlvl(bestStage) + corps.ilvlBonus
+  // B1 — la forge crée au niveau de ton meilleur contenu (farm/donjons/raids) + bonus de métier,
+  // pour ne plus stagner au farm quand tu raid. Doit matcher createItem côté store.
+  const ilvl = referenceIlvl(bestStage, raidProgress, dungeonProgress) + corps.ilvlBonus
   const activeSignature = signature && corps.signatures?.includes(signature) ? signature : null
   const signCost = activeSignature ? signatureLingotCost(tier) : 0
   const mwReady = corps.masterwork && lastMasterwork < currentWeek()
@@ -457,7 +459,7 @@ function ForgeronWorkshop() {
 
       {/* Récapitulatif + coût */}
       <div className="mt-3 rounded-lg bg-black/30 p-3 text-xs text-slate-400">
-        <div>iLvl de l'objet : <span className="text-slate-200">{ilvl}</span> (lié à ton record de palier{corps.ilvlBonus > 0 ? ` · ◈ +${corps.ilvlBonus}` : ''})</div>
+        <div>iLvl de l'objet : <span className="text-slate-200">{ilvl}</span> (au niveau de ton meilleur contenu — farm / donjons / raids{corps.ilvlBonus > 0 ? ` · ◈ +${corps.ilvlBonus}` : ''})</div>
         {mouldHit && <div className="mt-0.5 text-[10.5px] text-emerald-300/80">🧩 Moule actif : ce craft est identique au précédent — coûts −30%.</div>}
         <div className="mt-1 flex flex-wrap items-center gap-3">
           <span>Coût :</span>

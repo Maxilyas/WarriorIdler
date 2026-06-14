@@ -2071,6 +2071,30 @@ export function maxContentIlvl(bestStage: number, raidProgress: Record<string, n
   return best
 }
 
+/**
+ * RÉFÉRENCE D'ILVL DU COMPTE (v0.28, B1) — le plus haut iLvl RÉELLEMENT obtenable selon le contenu
+ * débloqué : farm (palier), DONJONS et RAIDS. C'est l'échelle UNIFIÉE : la forge, le marché et les
+ * coffres produisent à ce niveau (ils suivent tes meilleurs drops au lieu de stagner au farm), et
+ * l'inventaire colore le « retard » par rapport à elle. ≠ `maxContentIlvl` (qui garde le ×1.25 +
+ * marge UNIQUEMENT comme plafond de surillvl, pour qu'on puisse pousser un poil au-dessus en craft).
+ */
+export function referenceIlvl(
+  bestStage: number,
+  raidProgress: Record<string, number>,
+  dungeonProgress: Record<string, number>,
+): number {
+  let best = stageIlvl(Math.max(1, bestStage))
+  for (const id in dungeonProgress) {
+    const lvl = dungeonProgress[id] ?? 0
+    if (lvl > 0) best = Math.max(best, dungeonIlvl(lvl, bestStage))
+  }
+  for (const def of RAID_LIST) {
+    const t = raidProgress[def.id] ?? 0
+    if (t >= 1) best = Math.max(best, raidIlvl(def, t))
+  }
+  return best
+}
+
 /** Prix d'achat d'un objet en échoppe (croît FORTEMENT avec la rareté → vrai puits d'or). */
 export function shopBuyPrice(item: Item): number {
   const tier = RARITIES[item.rarity].tier
@@ -2081,8 +2105,9 @@ export function shopRefreshCost(bestStage: number): number {
   return Math.round(500 + bestStage * 60)
 }
 
-function generateShop(bestStage: number, luckBonus: number): Item[] {
-  const ilvl = Math.max(1, stageIlvl(bestStage))
+function generateShop(bestStage: number, raidProgress: Record<string, number>, dungeonProgress: Record<string, number>, luckBonus: number): Item[] {
+  // B1 — le marché suit la référence du compte (raids/donjons compris), plus seulement le farm.
+  const ilvl = Math.max(1, referenceIlvl(bestStage, raidProgress, dungeonProgress))
   const luck = stageLuckTier(bestStage) + 1 + luckBonus
   const out: Item[] = []
   for (let i = 0; i < SHOP_SIZE; i++) out.push(generateItem({ ilvl, luckTier: luck }))
@@ -5299,7 +5324,8 @@ export const useGame = create<GameState>((set, get) => {
       if (tier > craftCap) return
       // ◈ Compagnonnage (v0.26) : bonus du corps de métier couvrant CE type de pièce.
       const corps = corpsBonusFor(mods, opts.type)
-      const ilvl = stageIlvl(s.bestStage) + corps.ilvlBonus
+      // B1 — la forge crée au niveau de ton meilleur contenu (raids/donjons compris) + bonus de métier.
+      const ilvl = referenceIlvl(s.bestStage, s.raidProgress, s.dungeonProgress) + corps.ilvlBonus
       // 🏆 Chef-d'œuvre (étage V) : 1/semaine, +1 cran GARANTI (capé), châsse garantie, coût ×1,5 + Lingots.
       const week = currentWeek()
       const masterwork = !!opts.masterwork
@@ -6015,7 +6041,7 @@ export const useGame = create<GameState>((set, get) => {
       const cost = shopRefreshCost(s.bestStage)
       if (s.gold < cost) return
       const eco = computeGlobalMods(s.upgrades)
-      const next = { ...s, gold: s.gold - cost, shopStock: generateShop(s.bestStage, Math.floor(eco.rarityLuck)), lastShopRefresh: Date.now(), log: pushLog(s.log, `Échoppe rafraîchie (-${cost} or).`, 'gold') }
+      const next = { ...s, gold: s.gold - cost, shopStock: generateShop(s.bestStage, s.raidProgress, s.dungeonProgress, Math.floor(eco.rarityLuck)), lastShopRefresh: Date.now(), log: pushLog(s.log, `Échoppe rafraîchie (-${cost} or).`, 'gold') }
       persist(next)
       set(next)
     },
@@ -6070,7 +6096,8 @@ export const useGame = create<GameState>((set, get) => {
       const cosmicCost = (box.costCosmic ?? 0) * qty
       if (s.gold < goldCost || s.fragments < fragCost || s.cosmic < cosmicCost) return
 
-      const ilvl = Math.max(1, stageIlvl(s.bestStage))
+      // B1 — les coffres (souvent gated par raid) suivent la référence du compte, pas seulement le farm.
+      const ilvl = Math.max(1, referenceIlvl(s.bestStage, s.raidProgress, s.dungeonProgress))
       // Karma du marchand 🍀 : la malchance accumulée gonfle la chance de jackpot, reset au proc.
       const pityBonus = Math.min(BOX_PITY_CAP, s.boxPity * BOX_PITY_STEP)
       let jackpotHit = false

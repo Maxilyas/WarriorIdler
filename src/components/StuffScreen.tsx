@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { useGame, maxContentIlvl } from '../game/store'
+import { useGame, referenceIlvl } from '../game/store'
 import { ItemRow, QualityStars } from './ItemRow'
 import { ComparePanel } from './ComparePanel'
 import { EQUIP_SLOTS, ITEM_TYPES, equipSlotsForType, slotAccepts } from '../game/slots'
@@ -70,11 +70,12 @@ export function StuffScreen() {
   const toggleAutoRecycle = useGame((s) => s.toggleAutoRecycle)
   const bestStage = useGame((s) => s.bestStage)
   const raidProgress = useGame((s) => s.raidProgress)
+  const dungeonProgress = useGame((s) => s.dungeonProgress)
 
   const active = characters[activeChar] ?? characters[0]
   const equipment: Equipment = active?.equipment ?? {}
-  // Plafond d'iLvl du contenu atteint : sert à colorer le RETARD des pièces équipées (D2/D3).
-  const contentIlvl = maxContentIlvl(bestStage, raidProgress)
+  // B1 — référence d'iLvl du compte (farm/donjons/raids) : colore le RETARD des pièces équipées.
+  const contentIlvl = referenceIlvl(bestStage, raidProgress, dungeonProgress)
 
   const [selectedSlot, setSelectedSlot] = useState<EquipSlotId | null>(null)
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
