@@ -381,12 +381,13 @@ chain('soin', 'so_c', 'so_entry', 1, [
 
 /* ---------------- MÉTAMORPHE (Conversions) ---------------- */
 single({ id: 'cv_entry', name: 'Symbiose', constellation: 'conversion', kind: 'notable', tier: 0, maxRank: 1, requires: ['co_gw_conv'], description: '+30 à chaque stat offensive, +40 Polyvalence.', statMods: { force: 30, agilite: 30, intelligence: 30, maitrise: 40 } })
-chain('conversion', 'cv_a', 'cv_entry', 1, [
-  { name: 'Équilibre', maxRank: 4, statMods: { maitrise: 24 } },
-  { name: 'Guerre dansante', kind: 'keystone', desc: '60% de ta Force compte aussi comme Agilité.', keystone: { statAsOther: { from: 'force', to: 'agilite', frac: 0.6 } } },
-  { name: 'Esprit affûté', kind: 'keystone', desc: '60% de ton Agilité compte aussi comme Intelligence.', keystone: { statAsOther: { from: 'agilite', to: 'intelligence', frac: 0.6 } } },
-  { name: 'Magie de guerre', kind: 'keystone', desc: '60% de ton Intelligence compte aussi comme Force.', keystone: { statAsOther: { from: 'intelligence', to: 'force', frac: 0.6 } } },
-])
+// v0.27 (C3) — conversions de stat PARALLÈLES (chacune depuis l'entrée, tier 1) : on prend CELLE
+// qu'on veut sans enchaîner les trois ni gaver une autre branche pour le palier (fini la conversion
+// physique→ombre forcée juste pour atteindre Magie de guerre).
+single({ id: 'cv_a0', name: 'Équilibre', constellation: 'conversion', kind: 'minor', tier: 1, maxRank: 4, requires: ['cv_entry'], description: '+24 Maîtrise par rang.', statMods: { maitrise: 24 } })
+single({ id: 'cv_a1', name: 'Guerre dansante', constellation: 'conversion', kind: 'keystone', tier: 1, maxRank: 1, requires: ['cv_entry'], description: '60% de ta Force compte aussi comme Agilité.', keystone: { statAsOther: { from: 'force', to: 'agilite', frac: 0.6 } } })
+single({ id: 'cv_a2', name: 'Esprit affûté', constellation: 'conversion', kind: 'keystone', tier: 1, maxRank: 1, requires: ['cv_entry'], description: '60% de ton Agilité compte aussi comme Intelligence.', keystone: { statAsOther: { from: 'agilite', to: 'intelligence', frac: 0.6 } } })
+single({ id: 'cv_a3', name: 'Magie de guerre', constellation: 'conversion', kind: 'keystone', tier: 1, maxRank: 1, requires: ['cv_entry'], description: '60% de ton Intelligence compte aussi comme Force.', keystone: { statAsOther: { from: 'intelligence', to: 'force', frac: 0.6 } } })
 // Voile d'ombre (Physique→Ombre) et Givre éternel (Physique→Froid) sont des conversions ALTERNATIVES
 // (exclusives) → branches SÉPARÉES depuis l'entrée, pas l'une après l'autre.
 chain('conversion', 'cv_b', 'cv_entry', 1, [
@@ -406,7 +407,8 @@ single({ id: 'cv_c0', name: 'Empreinte d\'ombre', constellation: 'conversion', k
 single({ id: 'cv_c1', name: 'Empreinte arcanique', constellation: 'conversion', kind: 'keystone', tier: 1, maxRank: 1, requires: ['cv_entry'], description: 'Tes dégâts Physiques comptent AUSSI comme Arcane (50%).', statMods: { maitrise: 16 }, keystone: { splashType: { from: 'physique', to: 'arcane', frac: 0.5 } } })
 single({ id: 'cv_c2', name: 'Empreinte sylvestre', constellation: 'conversion', kind: 'keystone', tier: 1, maxRank: 1, requires: ['cv_entry'], description: 'Tes dégâts Physiques comptent AUSSI comme Nature (50%).', statMods: { maitrise: 16 }, keystone: { splashType: { from: 'physique', to: 'nature', frac: 0.5 } } })
 single({ id: 'cv_c3', name: 'Polymorphie', constellation: 'conversion', kind: 'keystone', tier: 2, maxRank: 1, requires: ['cv_entry'], description: 'Capstone : +30 à chaque stat offensive, +18% de dégâts.', statMods: { force: 30, agilite: 30, intelligence: 30 }, keystone: { damageMult: 1.18 } })
-single({ id: 'cv_gw_faucheur', name: '→ Faucheur', constellation: 'conversion', kind: 'gateway', tier: 2, maxRank: 1, requires: ['cv_b1'], description: 'Passerelle vers le Faucheur (ombre/DoT). +30 Intelligence.', statMods: { intelligence: 30 } })
+// v0.27 (C3) — la passerelle Faucheur part de l'ENTRÉE (plus de Voile d'ombre physique→ombre forcé).
+single({ id: 'cv_gw_faucheur', name: '→ Faucheur', constellation: 'conversion', kind: 'gateway', tier: 2, maxRank: 1, requires: ['cv_entry'], description: 'Passerelle vers le Faucheur (ombre/DoT). +30 Intelligence.', statMods: { intelligence: 30 } })
 
 /* ================== ARCHÉTYPES ================== */
 

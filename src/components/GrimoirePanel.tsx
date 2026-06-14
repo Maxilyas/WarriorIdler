@@ -159,7 +159,8 @@ function PowersCodex() {
                 </span>
                 <span className="flex shrink-0 items-center gap-1 text-[9px]">
                   {p.effect && <span className="rounded bg-slate-700 px-1 py-0.5 text-slate-300">{EFFECT_LABEL[p.effect] ?? p.effect}</span>}
-                  {p.scaleStat && <span className="rounded px-1 py-0.5 font-bold" style={{ background: SCALE_LABEL[p.scaleStat].color + '33', color: SCALE_LABEL[p.scaleStat].color }}>{SCALE_LABEL[p.scaleStat].label}</span>}
+                  {/* v0.27 (C1) : les capacités scalent sur la stat DOMINANTE ; le scaleStat n'est plus qu'une affinité (couleur). */}
+                  {p.scaleStat && <span className="rounded px-1 py-0.5 font-bold" style={{ background: SCALE_LABEL[p.scaleStat].color + '33', color: SCALE_LABEL[p.scaleStat].color }} title="Scale sur ta stat primaire DOMINANTE (v0.27) — le type de dégâts reste l'identité de la capacité.">⚡ dominante</span>}
                   {p.cooldown && <span className="text-slate-500">{p.cooldown}s</span>}
                 </span>
               </div>

@@ -168,16 +168,21 @@ export function charEhp(char: Character): number {
  * - liste de stats → la MEILLEURE d'entre elles (build Force OU Agilité, etc.).
  * - rien → la STAT DOMINANTE (`d.power`) → utilitaire ouvert à tous les builds.
  */
-export function abilityPower(d: DerivedStats, scale?: OffensiveStat | OffensiveStat[]): number {
-  if (Array.isArray(scale)) {
-    let best = 0
-    for (const s of scale) best = Math.max(best, abilityPower(d, s))
-    return best || d.power
-  }
-  if (scale === 'force') return d.forcePower
-  if (scale === 'agilite') return d.agiPower
-  if (scale === 'intelligence') return d.intPower
+function singlePower(d: DerivedStats, s?: OffensiveStat): number {
+  if (s === 'force') return d.forcePower
+  if (s === 'agilite') return d.agiPower
+  if (s === 'intelligence') return d.intPower
   return d.power
+}
+export function abilityPower(d: DerivedStats, scale?: OffensiveStat | OffensiveStat[]): number {
+  // v0.27 (C1) — DÉCOUPLAGE : le primaire est le MOTEUR, l'arbre est l'IDENTITÉ. Toute capacité
+  // scale sur ta stat DOMINANTE (`d.power`) ; le `scaleStat` déclaré n'est plus qu'une AFFINITÉ
+  // thématique, jamais INFÉRIEURE à la dominante. Fin du mismatch « sort d'arbre Int qui scale
+  // For/Agi » : un build For prend un sort « Int » et il scale sur sa Force.
+  let declared = 0
+  if (Array.isArray(scale)) for (const s of scale) declared = Math.max(declared, singlePower(d, s))
+  else declared = singlePower(d, scale)
+  return Math.max(declared, d.power)
 }
 
 /** Stat(s) de scaling effectives d'une capacité (multi prioritaire sur simple). */

@@ -23,7 +23,7 @@ import type { DamageType, StatKey, PowerDef } from '../game/types'
 /*   d'écran noir au déplacement, quelle que soit la limite de texture du GPU.
 /* ------------------------------------------------------------------ */
 
-const RING = 66 // px par anneau de profondeur (v0.24 : aéré — 300+ nœuds avec les archétypes)
+const RING = 82 // px par anneau de profondeur (v0.27 : aéré +25% — anti-chevauchement en zone dense)
 
 const CIDX = new Map(CONSTELLATION_LIST.map((c, i) => [c, i]))
 function sortKey(n: TalentNode): number {

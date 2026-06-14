@@ -126,6 +126,8 @@ export interface DerivedStats {
 
 export const RATING_PER_PERCENT = 50 // ratings nécessaires pour 1% (style WoW)
 const PER_PCT = RATING_PER_PERCENT * 100 // ratings pour +1.0 (100%)
+/** v0.27 (C5) — part de la 2e stat offensive reversée dans la puissance (knob d'équilibrage). */
+export const SECOND_STAT_SHARE = 0.2
 
 /** Puissance issue d'une stat primaire offensive. */
 function statPower(value: number): number {
@@ -166,6 +168,10 @@ export function computeDerived(total: StatBlock): DerivedStats {
   ]
   offensive.sort((a, b) => b[1] - a[1])
   const [mainStat, mainValue] = offensive[0]
+  // v0.27 (C5) — les hybrides 2-stats ne sont plus du poids mort : la 2e stat offensive compte
+  // pour SECOND_STAT_SHARE dans la puissance d'auto-attaque (le winner-take-all est adouci).
+  const secondValue = offensive[1]?.[1] ?? 0
+  const effMainValue = mainValue + SECOND_STAT_SHARE * secondValue
 
   // Maîtrise SPÉCIFIQUE À L'ARCHÉTYPE — distincte de la Surpuissance (qui, elle, est un mult brut
   // universel). La Maîtrise ne donne quasiment pas de dégâts bruts sauf pour l'Intelligence :
@@ -190,7 +196,7 @@ export function computeDerived(total: StatBlock): DerivedStats {
 
   return {
     mainStat,
-    power: statPower(mainValue),
+    power: statPower(effMainValue),
     forcePower,
     agiPower,
     intPower,
