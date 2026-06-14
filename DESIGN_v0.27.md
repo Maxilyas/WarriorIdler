@@ -9,14 +9,17 @@
 > façon Overwatch (avatar + écusson à paliers, page combat + aperçu héros).
 > Tous : `tsc -b` + `vite build` + `validate-talents` + `dps-check` + `survival-sim` verts, preview OK.
 >
-> **RESTANT** :
-> - **Lot 3 (suite)** : 3 autres leviers socle (heal-cut, frappe partagée, estocade) + 10 twists par
->   raid + panneau Préparation. *À faire après playtest du socle en raid réel (tuning ESTOC_PCT / regen).*
-> - **Lot 5 (prestige E)** : le plus gros système neuf (Éveil = reset destructif, Échos, Constellation,
->   Relique) — mérite une passe dédiée.
+> **TOUS LES LOTS LIVRÉS** :
+> - **Lot 3 complet** : socle 5 leviers (Mal de l'abîme, Estoc, heal-cut sur Nova, frappe partagée,
+>   estocade) + twists (Forge Surchauffe · Citadelle Effondrement · Reliquaire Avarice) + panneau
+>   **Préparation** (tier « prêt » par raid). *Twists restants (Trempe, Barrage, Résonance, Inversion,
+>   Synchronisation, Dernier souffle, Ressoudure) = réserve, à ajouter au goût.*
+> - **Lot 5 prestige** : Éveil (reset dur), Échos, Constellation 8 nœuds, Relique (iLvl plancher),
+>   bonus combat/résist/offline, `PrestigePanel` (HerosHub · onglet « Éveil »).
 >
-> Knobs à éprouver : ESTOC_PCT=4% · RAID_REGEN_MULT=0.5 · qualité (+0/0/1/1/2) · SECOND_STAT_SHARE=0.2 ·
-> biomes (10 min / 60 min / 3 ✨). Chiffrage ouvert : E2 (gain d'Échos).
+> **Knobs à éprouver en partie** : ESTOC_PCT=4% · RAID_REGEN_MULT=0.5 · HEALCUT (×0.25, 4 s) ·
+> FRAPPE_MULT=3.2 · qualité (+0/0/1/1/2) · SECOND_STAT_SHARE=0.2 · biomes (10 min / 60 min / 3 ✨) ·
+> Constellation (coûts/effets) · echosGain.
 
 Sommaire :
 - **A —** Abîme Primordial : accès + parité endgame
