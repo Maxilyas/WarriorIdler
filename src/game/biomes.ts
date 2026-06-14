@@ -34,6 +34,14 @@ export const BIOME_COMMON_UNLOCK = 20
 /** Meilleur palier (tous biomes) requis pour débloquer les 2 biomes rares. */
 export const BIOME_RARE_UNLOCK = 50
 
+/* ---- v0.27 (F2) — ROTATION SUBIE des biomes + lock payant (Fragments d'éternité) ----
+ * Par défaut, le biome actif tourne automatiquement. Pour rester sur un biome précis (farm
+ * d'une quintessence/d'un stuff ciblé = contenu endgame), on VERROUILLE contre des Fragments.
+ * KNOBS d'équilibrage (F2c). */
+export const BIOME_ROTATE_MS = 10 * 60 * 1000   // un biome toutes les ~10 min
+export const BIOME_LOCK_MS = 60 * 60 * 1000     // un lock dure ~1 h
+export const BIOME_LOCK_FRAGMENTS = 3           // coût du lock en ✨ Fragments d'éternité
+
 function def(id: BiomeId, name: string, tier: BiomeTier, lore: string): BiomeDef {
   return { id, name, tier, lore, icon: DAMAGE_TYPES[id].icon, color: DAMAGE_TYPES[id].color }
 }
@@ -64,6 +72,19 @@ export function biomeUnlocked(id: BiomeId, physiqueBest: number, globalBest: num
   if (tier === 'start') return true
   if (tier === 'common') return physiqueBest >= BIOME_COMMON_UNLOCK
   return globalBest >= BIOME_RARE_UNLOCK
+}
+
+/** Liste ordonnée des biomes DÉBLOQUÉS (pour la rotation). */
+export function unlockedBiomes(physiqueBest: number, globalBest: number): BiomeId[] {
+  return BIOME_IDS.filter((id) => biomeUnlocked(id, physiqueBest, globalBest))
+}
+
+/** Biome débloqué SUIVANT (rotation cyclique) ; renvoie le courant s'il est seul. */
+export function nextUnlockedBiome(current: BiomeId, physiqueBest: number, globalBest: number): BiomeId {
+  const list = unlockedBiomes(physiqueBest, globalBest)
+  if (list.length <= 1) return list[0] ?? current
+  const i = list.indexOf(current)
+  return list[(i + 1 + list.length) % list.length]
 }
 
 /** Texte d'aide expliquant comment débloquer un biome encore verrouillé. */

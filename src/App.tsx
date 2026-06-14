@@ -54,6 +54,7 @@ export default function App() {
   const tick = useGame((s) => s.tick)
   const markAway = useGame((s) => s.markAway)
   const resumeAway = useGame((s) => s.resumeAway)
+  const rotateBiomeIfDue = useGame((s) => s.rotateBiomeIfDue)
   const inventory = useGame((s) => s.inventory)
   const gold = useGame((s) => s.gold)
   const essence = useGame((s) => s.essence)
@@ -88,6 +89,13 @@ export default function App() {
     const id = setInterval(() => tick(TICK_MS / 1000), TICK_MS)
     return () => clearInterval(id)
   }, [tick, paused])
+
+  // F2 — rotation subie des biomes : vérifiée toutes les 5 s (hors du tick de combat).
+  useEffect(() => {
+    if (paused) return
+    const id = setInterval(() => rotateBiomeIfDue(), 5000)
+    return () => clearInterval(id)
+  }, [rotateBiomeIfDue, paused])
 
   // F3 — cycle de vie mobile : arrière-plan → suspend le tick + horodate ; retour → gains hors-ligne.
   useEffect(() => {
