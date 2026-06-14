@@ -88,6 +88,8 @@ const INV_BASE = 100000
 let invMax = INV_BASE
 let regenMult = 1 // ajusté par l'amélioration "Régénération"
 const REGEN_RATE = 0.05
+/** v0.27 (F3) — horodatage de la mise en arrière-plan (0 = au premier plan). */
+let awaySince = 0
 /** v0.25.x — RELÈVE en farm : un héros tombé se relève après ce délai (s), à 35% de ses PV. */
 const FARM_REZ_DELAY = 20
 const RETREAT_STAGES = 2
@@ -411,6 +413,10 @@ interface GameState extends SaveData {
   toggleAutoRecycle: () => void
   insertEffect: (itemId: string, effectId: string) => void
   claimOffline: () => void
+  /** v0.27 (F3) — cycle de vie mobile : l'appli passe en arrière-plan (horodate la mise en veille). */
+  markAway: () => void
+  /** v0.27 (F3) — retour au premier plan : crédite les gains hors-ligne accumulés en arrière-plan. */
+  resumeAway: () => void
   equip: (itemId: string, targetSlot?: EquipSlotId) => void
   unequip: (slot: EquipSlotId) => void
   sell: (itemId: string) => void
@@ -4095,6 +4101,34 @@ export const useGame = create<GameState>((set, get) => {
 
     claimOffline: () => {
       set({ ...get(), pendingOffline: null })
+    },
+
+    // v0.27 (F3) — l'appli passe en arrière-plan : on horodate + persiste (couvre aussi la fermeture
+    // dure, où le cold-start recalculera depuis lastSeen).
+    markAway: () => {
+      awaySince = Date.now()
+      persist(get())
+    },
+    // v0.27 (F3) — retour au premier plan : crédite les gains hors-ligne du temps en arrière-plan
+    // (même logique que le cold-start : applique les gains À L'ÉTAT + récap pendingOffline).
+    resumeAway: () => {
+      const s = get()
+      if (!awaySince) return
+      const elapsed = Date.now() - awaySince
+      awaySince = 0
+      if (elapsed < 60_000 || s.pendingOffline) return // sous 1 min ou récap déjà en attente : rien
+      const report = simulateOffline(s.characters, s.stage, s.upgrades, elapsed, s.activeBiome, s.maitrise)
+      if (!report) return
+      const next = { ...s }
+      next.gold += report.gold
+      next.noyau += report.noyau
+      next.sceaux += report.sceaux
+      if (report.quint) next.quint = addQuint(next.quint, { [report.quint.type]: report.quint.amount })
+      next.characters = next.characters.map((c) => (c.hp > 0 ? grantXp(c, report.xp) : c))
+      for (const it of report.items) next.inventory = [it, ...next.inventory].slice(0, invMax)
+      next.pendingOffline = report
+      persist(next)
+      set(next)
     },
 
     equip: (itemId, targetSlot) => {

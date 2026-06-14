@@ -52,6 +52,8 @@ function fmtShort(n: number): string {
 
 export default function App() {
   const tick = useGame((s) => s.tick)
+  const markAway = useGame((s) => s.markAway)
+  const resumeAway = useGame((s) => s.resumeAway)
   const inventory = useGame((s) => s.inventory)
   const gold = useGame((s) => s.gold)
   const essence = useGame((s) => s.essence)
@@ -74,11 +76,55 @@ export default function App() {
   const [tab, setTab] = useState<Tab>('combat')
   const [deskTab, setDeskTab] = useState<DeskTab>('stuff')
   const [sheet, setSheet] = useState<null | 'monnaies' | 'codex' | 'reglages'>(null)
+  const [paused, setPaused] = useState(false)
+  // F1 — garder l'écran allumé (préférence persistée ; off par défaut pour la batterie).
+  const [keepAwake, setKeepAwake] = useState(() => {
+    try { return localStorage.getItem('wi-keepAwake') === '1' } catch { return false }
+  })
 
+  // Boucle de tick — suspendue quand l'appli passe en arrière-plan (F3).
   useEffect(() => {
+    if (paused) return
     const id = setInterval(() => tick(TICK_MS / 1000), TICK_MS)
     return () => clearInterval(id)
-  }, [tick])
+  }, [tick, paused])
+
+  // F3 — cycle de vie mobile : arrière-plan → suspend le tick + horodate ; retour → gains hors-ligne.
+  useEffect(() => {
+    const onHide = () => { markAway(); setPaused(true) }
+    const onVis = () => {
+      if (document.visibilityState === 'hidden') onHide()
+      else { resumeAway(); setPaused(false) }
+    }
+    document.addEventListener('visibilitychange', onVis)
+    window.addEventListener('pagehide', onHide)
+    return () => {
+      document.removeEventListener('visibilitychange', onVis)
+      window.removeEventListener('pagehide', onHide)
+    }
+  }, [markAway, resumeAway])
+
+  // F1 — Screen Wake Lock : maintient l'écran allumé tant que c'est activé (ré-acquis au retour).
+  useEffect(() => {
+    try { localStorage.setItem('wi-keepAwake', keepAwake ? '1' : '0') } catch { /* */ }
+    if (!keepAwake) return
+    let sentinel: { release: () => Promise<void> } | null = null
+    let cancelled = false
+    const acquire = async () => {
+      try {
+        const nav = navigator as Navigator & { wakeLock?: { request: (t: string) => Promise<typeof sentinel> } }
+        if (nav.wakeLock && document.visibilityState === 'visible') sentinel = await nav.wakeLock.request('screen')
+      } catch { /* non supporté / refusé : silencieux */ }
+    }
+    acquire()
+    const onVis = () => { if (document.visibilityState === 'visible' && !cancelled) acquire() }
+    document.addEventListener('visibilitychange', onVis)
+    return () => {
+      cancelled = true
+      document.removeEventListener('visibilitychange', onVis)
+      try { sentinel?.release() } catch { /* */ }
+    }
+  }, [keepAwake])
 
   // Révélation progressive : une fonctionnalité n'apparaît qu'une fois pertinente.
   const maxLevel = characters.reduce((m, c) => Math.max(m, c.level), 1)
@@ -278,6 +324,11 @@ export default function App() {
             <div className="text-[11px] text-slate-500">
               Record de palier : <span className="text-slate-300">{bestStage}</span> · Niveau max : <span className="text-slate-300">{maxLevel}</span>
             </div>
+            {/* F1 — empêcher la mise en veille de l'écran (consomme plus de batterie). */}
+            <label className="flex cursor-pointer items-center justify-between rounded-lg bg-slate-800/40 px-3 py-2 text-xs text-slate-300">
+              <span>📱 Garder l'écran allumé</span>
+              <input type="checkbox" checked={keepAwake} onChange={(e) => setKeepAwake(e.target.checked)} className="h-4 w-4 accent-orange-500" />
+            </label>
             <ResetButton />
           </div>
         </Sheet>

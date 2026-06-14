@@ -4,6 +4,7 @@ import { useMediaQuery } from '../useMediaQuery'
 import { CharacterPanel, type CharacterView } from './CharacterPanel'
 import { TalentTree } from './TalentTree'
 import { Sheet, SubTab } from './ui'
+import { LevelBadge } from './LevelBadge'
 import { charDps, charMaxHp, charResist } from '../game/character'
 import { getRaidDef, raidReqs } from '../game/raids'
 import { resistMult } from '../game/resist'
@@ -128,11 +129,14 @@ export function HerosHub({ talentsUnlocked }: { talentsUnlocked: boolean }) {
             ))}
           </div>
         )}
-        <div className="flex items-center justify-between">
-          <div className="min-w-0">
-            <div className="truncate text-base font-bold text-slate-100">{char.name}</div>
-            <div className="text-[11px] text-slate-400">
-              Niveau {char.level} · <span style={{ color: PRIMARY_META[char.primaryBias].color }}>{PRIMARY_META[char.primaryBias].name}</span>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <LevelBadge char={char} />
+            <div className="min-w-0">
+              <div className="truncate text-base font-bold text-slate-100">{char.name}</div>
+              <div className="text-[11px]" style={{ color: PRIMARY_META[char.primaryBias].color }}>
+                {PRIMARY_META[char.primaryBias].name}
+              </div>
             </div>
           </div>
           <div className="text-right text-[11px]">
