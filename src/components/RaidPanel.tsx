@@ -62,11 +62,28 @@ export function RaidPanel() {
         ses coups frappent jusqu'à ×5. Seule source de stuff <b className="text-slate-300">Céleste → Transcendant</b>.
       </p>
 
+      {/* v0.27 (Lot 3 · Préparation) — DPS/PV d'équipe + TIER « PRÊT » par raid débloqué (aperçu global). */}
       <div className="mb-2 rounded-lg border border-slate-800 bg-[#0d111a] px-2.5 py-1.5 text-[10.5px]">
-        <span className="text-slate-500">Ton équipe — </span>
-        <span className="text-emerald-300">DPS {fmt(partyDps)}</span>
-        <span className="text-slate-600"> · </span>
-        <span className="text-sky-300">PV {fmt(partyHp)}</span>
+        <div>
+          <span className="text-slate-500">🧭 Préparation — </span>
+          <span className="text-emerald-300">DPS équipe {fmt(partyDps)}</span>
+          <span className="text-slate-600"> · </span>
+          <span className="text-sky-300">PV équipe {fmt(partyHp)}</span>
+        </div>
+        <div className="mt-1 flex flex-wrap gap-x-2.5 gap-y-0.5">
+          {RAID_LIST.filter((d) => raidUnlocked(d, bestStage, progress)).map((d) => {
+            const max = tierUnlocked[d.id] ?? 1
+            let ready = 0
+            for (let t = 1; t <= max; t++) { if (partyDps >= recommendedDps(d, t, characters.length) && partyHp >= recommendedEhp(d, t)) ready = t; else break }
+            const cls = ready >= max ? 'text-emerald-300' : ready > 0 ? 'text-amber-300' : 'text-red-400'
+            return (
+              <span key={d.id} style={{ color: d.color }} title={`${d.name} : prêt jusqu'au Tier ${ready} (frontière débloquée T${max})`}>
+                {d.icon} <b className={cls}>T{ready}</b><span className="text-slate-600">/{max}</span>
+              </span>
+            )
+          })}
+        </div>
+        <div className="mt-0.5 text-[9px] leading-snug text-slate-600">« prêt » = DPS ET PV au-dessus du conseillé. La résistance se vérifie par boss (fiche ci-dessous).</div>
       </div>
 
       {(raid || dungeon) && (
