@@ -460,7 +460,13 @@ export function canLearnNode(
   if (bestStage < METIERS[metier].unlockStage) return { ok: false, reason: `Métier verrouillé (palier ${METIERS[metier].unlockStage}).` }
   const rank = state.nodes[nodeId] ?? 0
   if (rank >= def.maxRank) return { ok: false, reason: 'Rang maximal.' }
-  if (pointsAvailable(state) < 1) return { ok: false, reason: 'Aucun point disponible — pratique ton métier.' }
+  // v0.28 — changer de spé exclusive est GRATUIT (no-regret) : les rangs de la rivale sont remboursés.
+  let exclusiveRefund = 0
+  if (def.exclusive && rank === 0) {
+    const rival = METIER_NODES[metier].find((n) => n.exclusive === def.exclusive && n.id !== nodeId && (state.nodes[n.id] ?? 0) > 0)
+    if (rival) exclusiveRefund = state.nodes[rival.id] ?? 0
+  }
+  if (pointsAvailable(state) + exclusiveRefund < 1) return { ok: false, reason: 'Aucun point disponible — pratique ton métier.' }
   if (def.minLevel && levelFromXp(state.xp) < def.minLevel) return { ok: false, reason: `Niveau de métier ${def.minLevel} requis.` }
   if (def.minStage && bestStage < def.minStage) return { ok: false, reason: `Palier ${def.minStage} requis.` }
   const needRank = def.requiresRank ?? 1
@@ -468,10 +474,7 @@ export function canLearnNode(
     const parent = getMetierNode(metier, def.requires)
     return { ok: false, reason: `Requiert « ${parent?.name ?? def.requires} »${needRank > 1 ? ` rang ${needRank}` : ''}.` }
   }
-  if (def.exclusive) {
-    const rival = METIER_NODES[metier].find((n) => n.exclusive === def.exclusive && n.id !== nodeId && (state.nodes[n.id] ?? 0) > 0)
-    if (rival) return { ok: false, reason: `Spécialisation déjà choisie : ${rival.name} (respec pour changer).` }
-  }
+  // (v0.28 : plus de blocage exclusif — choisir une autre spé la remplace gratuitement, voir learnMetierNode.)
   return { ok: true }
 }
 

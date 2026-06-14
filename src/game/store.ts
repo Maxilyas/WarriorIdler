@@ -5557,8 +5557,17 @@ export const useGame = create<GameState>((set, get) => {
       if (!def) return
       if (!canLearnNode(s.metiers, metier, nodeId, s.bestStage).ok) return
       const st = s.metiers[metier]
-      const rank = (st.nodes[nodeId] ?? 0) + 1
-      const metiers = { ...s.metiers, [metier]: { ...st, nodes: { ...st.nodes, [nodeId]: rank } } }
+      const nodes = { ...st.nodes }
+      // v0.28 — SWITCH d'exclusive GRATUIT (no-regret) : choisir une autre spé rembourse la
+      // précédente (ses rangs redeviennent des points), au lieu d'exiger un respec payant.
+      if (def.exclusive && (nodes[nodeId] ?? 0) === 0) {
+        for (const n of METIER_NODES[metier]) {
+          if (n.exclusive === def.exclusive && n.id !== nodeId) delete nodes[n.id]
+        }
+      }
+      nodes[nodeId] = (nodes[nodeId] ?? 0) + 1
+      const rank = nodes[nodeId]
+      const metiers = { ...s.metiers, [metier]: { ...st, nodes } }
       const m = METIERS[metier]
       const next = {
         ...s, metiers,
