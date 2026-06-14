@@ -847,11 +847,13 @@ function GemWorkshop() {
   const cutGem = useGame((s) => s.cutGem)
   const fuseGems = useGame((s) => s.fuseGems)
   const fuseAllGems = useGame((s) => s.fuseAllGems)
+  const buyGem = useGame((s) => s.buyGem)
   const corruptGem = useGame((s) => s.corruptGem)
   const tradeGems = useGame((s) => s.tradeGems)
   const metiers = useGame((s) => s.metiers)
   const mods = craftMods(metiers)
   const [cutOpen, setCutOpen] = useState(false)
+  const [shopOpen, setShopOpen] = useState(false)
   const [cutFamily, setCutFamily] = useState<GemFamily | 'all'>('all')
   const [tradeSel, setTradeSel] = useState<string[]>([])
   const [tradeOpen, setTradeOpen] = useState(false)
@@ -865,6 +867,8 @@ function GemWorkshop() {
   const total = stock.reduce((a, x) => a + x.n, 0)
   const cutList = COND_GEM_LIST.filter((g) => cutFamily === 'all' || g.family === cutFamily)
   const cutCost = Math.round(GEM_CUT_COST * mods.tailleCostMult)
+  // 🛒 (v0.28 B2) Échoppe de base : achat d'une gemme rang 1 sans Joaillier, plus cher que la Taille.
+  const buyCost = GEM_CUT_COST * 2
   const fuseCost = Math.round(GEM_FUSE_COST * mods.fuseCostMult)
   // A6 — au moins un lot fusionnable (3 identiques sous le rang max) → bouton « Tout fusionner ».
   const canFuseAny = mods.fusion && stock.some((x) => x.n >= GEM_FUSE_COUNT && x.parsed.rank < gemMaxRank(x.parsed.def))
@@ -1034,6 +1038,31 @@ function GemWorkshop() {
       ) : (
         <p className="mt-2 text-[9px] italic text-slate-600">✂️ Taille (gemme au choix) et 🔬 Recoupe (rangs) : nœuds de l'arbre ci-dessus.</p>
       )}
+
+      {/* 🛒 Échoppe de gemmes (v0.28 B2) — achat de base, accessible SANS le Joaillier. */}
+      <div className="mt-2 border-t border-slate-800 pt-2">
+        <button onClick={() => setShopOpen((o) => !o)} className="flex w-full items-center justify-between py-1 text-[11px] font-semibold text-emerald-200">
+          <span>🛒 Échoppe de gemmes · {buyCost} 🔹 <span className="font-normal text-slate-500">(rang 1, Polie — sans métier)</span></span>
+          <span>{shopOpen ? '▾' : '▸'}</span>
+        </button>
+        {shopOpen && (
+          <div className="mt-1 space-y-0.5">
+            {COND_GEM_LIST.map((def) => (
+              <button
+                key={def.id}
+                disabled={gemDust < buyCost}
+                onClick={() => buyGem(def.id as CondGemId)}
+                title={gemDesc(def, 1)}
+                className="flex w-full items-center gap-1.5 rounded border border-slate-700 px-1.5 py-1 text-left text-[10px] enabled:hover:border-emerald-500 disabled:opacity-40"
+              >
+                <span className="shrink-0 font-medium" style={{ color: def.color }}>{GEM_FAMILIES[def.family].icon} {def.icon} {def.name}</span>
+                <span className="min-w-0 flex-1 truncate text-slate-500">{gemDesc(def, 1)}</span>
+                <span className="shrink-0 text-[9px] text-emerald-300">🛒 {buyCost} 🔹</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

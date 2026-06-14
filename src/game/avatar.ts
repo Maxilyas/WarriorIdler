@@ -12,12 +12,16 @@ export interface AvatarPalette {
   /** Dégradé du médaillon (haut → bas). */
   c1: string
   c2: string
+  /** Coût de déblocage en Poussière d'étoile 🌌 (v0.28 B2) — absent = gratuit dès le départ. */
+  cost?: number
 }
 
 export interface AvatarEmblem {
   id: string
   name: string
   glyph: string
+  /** Coût de déblocage en Poussière d'étoile 🌌 (v0.28 B2) — absent = gratuit dès le départ. */
+  cost?: number
 }
 
 export const AVATAR_PALETTES: AvatarPalette[] = [
@@ -31,6 +35,12 @@ export const AVATAR_PALETTES: AvatarPalette[] = [
   { id: 'cendre', name: 'Cendre', c1: '#44403c', c2: '#0c0a09' },
   { id: 'rose', name: 'Rose', c1: '#9d174d', c2: '#1a0610' },
   { id: 'jade', name: 'Jade', c1: '#0f766e', c2: '#04140f' },
+  // Premium (🌌 Poussière d'étoile) — finitions prestige.
+  { id: 'nebuleuse', name: 'Nébuleuse', c1: '#6d28d9', c2: '#0a1840', cost: 50 },
+  { id: 'aurore', name: 'Aurore', c1: '#0891b2', c2: '#3b1060', cost: 50 },
+  { id: 'magma', name: 'Magma', c1: '#b91c1c', c2: '#451a03', cost: 80 },
+  { id: 'spectre', name: 'Spectre', c1: '#0d9488', c2: '#172554', cost: 80 },
+  { id: 'royal', name: 'Royal', c1: '#1d4ed8', c2: '#3b0764', cost: 120 },
 ]
 
 export const AVATAR_EMBLEMS: AvatarEmblem[] = [
@@ -46,6 +56,13 @@ export const AVATAR_EMBLEMS: AvatarEmblem[] = [
   { id: 'bouclier', name: 'Bouclier', glyph: '🛡️' },
   { id: 'etoile', name: 'Étoile', glyph: '⭐' },
   { id: 'oeil', name: 'Œil', glyph: '👁️' },
+  // Premium (🌌 Poussière d'étoile).
+  { id: 'phenix', name: 'Phénix', glyph: '🦅', cost: 50 },
+  { id: 'serpent', name: 'Serpent', glyph: '🐍', cost: 50 },
+  { id: 'lune', name: 'Lune', glyph: '🌙', cost: 80 },
+  { id: 'soleil', name: 'Soleil', glyph: '☀️', cost: 80 },
+  { id: 'galaxie', name: 'Galaxie', glyph: '🌌', cost: 120 },
+  { id: 'diamant', name: 'Diamant', glyph: '💎', cost: 120 },
 ]
 
 const CLASS_DEFAULT_EMBLEM: Record<PrimaryStat, string> = { force: 'epee', agilite: 'arc', intelligence: 'sort', endurance: 'bouclier' }
@@ -64,4 +81,10 @@ export function resolveAvatar(bias: PrimaryStat, sel?: AvatarSel): { pal: Avatar
   const pal = AVATAR_PALETTES.find((p) => p.id === palId) ?? AVATAR_PALETTES[0]
   const emb = AVATAR_EMBLEMS.find((e) => e.id === embId) ?? AVATAR_EMBLEMS[0]
   return { pal, emb }
+}
+
+/** Coût de déblocage (🌌) d'un cosmétique (palette ou emblème), 0 si gratuit/inconnu. */
+export function cosmeticCost(id: string): number {
+  const all = [...AVATAR_PALETTES, ...AVATAR_EMBLEMS]
+  return all.find((x) => x.id === id)?.cost ?? 0
 }

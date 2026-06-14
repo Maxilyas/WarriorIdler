@@ -14,6 +14,7 @@ import { getTalent, canAllocate } from './talents'
 import { getPower } from './powers'
 import { getUpgrade, upgradeCost as accountUpgradeCost, upgradePoussiere, upgradeEclats, isMaxed, computeGlobalMods, REMOVED_UPGRADES } from './upgrades'
 import { achievementBonuses, evaluateNewAchievements, getAchievement, type AchvCtx } from './achievements'
+import { cosmeticCost } from './avatar'
 import {
   generateItem, rollBoxRarity, rollWindowRarity, rollFarmRarity, sellValue, recycleValue, recyclePoussiere, itemScore,
   reforgeItem, surillvlItem, ascendItem,
@@ -411,6 +412,8 @@ interface SaveData {
   maitrise: Record<string, number>
   /** 🏆 Hauts faits débloqués (v0.28) : id → true. Bonus permanents façon Maîtrise + titres. */
   achievements: Record<string, true>
+  /** 🎨 Cosmétiques premium débloqués (v0.28 B2) : id de palette/emblème → true (sink Poussière d'étoile). */
+  cosmetics: Record<string, true>
   /** Métiers de l'Atelier (v0.22) : XP cumulée + nœuds d'arbre appris, par métier. */
   metiers: MetiersState
   /** Automates de forge : farment en boucle les donjons/raids déjà battus (3 max). */
@@ -481,6 +484,8 @@ interface GameState extends SaveData {
   grindGem: (key: string) => void
   /** TAILLE (Joaillier) : façonne la gemme de son CHOIX (rang 1) contre de la poussière 🔹. */
   cutGem: (condId: CondGemId) => void
+  /** 🛒 (v0.28 B2) Échoppe de gemmes : achète une gemme de condition (rang 1) contre Poussière de gemme 🔹, sans Joaillier. */
+  buyGem: (condId: CondGemId) => void
   /** RECOUPE (Joaillier) : monte d'un rang le paramètre d'une gemme SERTIE (poussière 🔹). */
   recutGem: (itemId: string, index: number) => void
   /** FUSION (v0.26) : 3 gemmes identiques du stock → 1 gemme au rang supérieur. */
@@ -581,6 +586,8 @@ interface GameState extends SaveData {
   selectTitle: (charId: string, achId: string | null) => void
   /** 🎨 (v0.28) Personnalise le portrait d'un héros (palette / emblème). */
   setAvatar: (charId: string, sel: { palette?: string; emblem?: string }) => void
+  /** 🎨 (v0.28 B2) Débloque un cosmétique premium contre de la Poussière d'étoile 🌌. */
+  unlockCosmetic: (id: string) => void
   /** Coffre du Destin : garde l'objet à cet index, recycle les autres. */
   chooseFromChoice: (index: number) => void
   recruitCharacter: () => void
@@ -1312,6 +1319,7 @@ function freshSave(): SaveData {
     maitrisePoints: 0,
     maitrise: {},
     achievements: {},
+    cosmetics: {},
     metiers: emptyMetiers(),
     automates: [],
     shopStock: [],
@@ -1611,6 +1619,7 @@ function sanitize(save: SaveData): SaveData {
   if (typeof save.maitrisePoints !== 'number') save.maitrisePoints = 0
   if (!save.maitrise || typeof save.maitrise !== 'object') save.maitrise = {}
   if (!save.achievements || typeof save.achievements !== 'object') save.achievements = {}
+  if (!save.cosmetics || typeof save.cosmetics !== 'object') save.cosmetics = {}
   // 🏪 v0.25 (DESIGN §1) : améliorations de combat + Sacoches SUPPRIMÉES — remboursement 100%
   // (or + éclats, recalculé depuis les formules de coût d'origine). Durcissement assumé.
   {
@@ -1857,6 +1866,7 @@ function persist(s: GameState) {
     maitrisePoints: s.maitrisePoints,
     maitrise: s.maitrise,
     achievements: s.achievements,
+    cosmetics: s.cosmetics,
     metiers: s.metiers,
     automates: s.automates,
     shopStock: s.shopStock,
@@ -4815,6 +4825,22 @@ export const useGame = create<GameState>((set, get) => {
       set(next)
     },
 
+    buyGem: (condId) => {
+      // 🛒 (v0.28 B2) Échoppe de base — accessible SANS le Joaillier, mais plus chère que la Taille
+      // (pas de qualité/rang/multitaille) : donne un usage à la Poussière de gemme aux non-joailliers.
+      const s = get()
+      const def = getCondGem(condId)
+      if (!def) return
+      const cost = GEM_CUT_COST * 2
+      if (s.gemDust < cost) return
+      const key = condGemKey(condId, 1, 1)
+      const gems = { ...s.gems, [key]: (s.gems[key] ?? 0) + 1 }
+      const gemsSeen = s.gemsSeen.includes(def.id) ? s.gemsSeen : [...s.gemsSeen, def.id]
+      const next = { ...s, gems, gemDust: s.gemDust - cost, gemsSeen, log: pushLog(s.log, `🛒 Gemme achetée : ${def.icon} ${def.name} (-${cost} 🔹).`, 'craft') }
+      persist(next)
+      set(next)
+    },
+
     fuseGems: (key) => {
       const s = get()
       const mods = craftMods(s.metiers)
@@ -6140,6 +6166,17 @@ export const useGame = create<GameState>((set, get) => {
       set(next)
     },
 
+    unlockCosmetic: (id) => {
+      const s = get()
+      if (s.cosmetics[id]) return
+      const cost = cosmeticCost(id)
+      if (cost <= 0 || s.poussiere < cost) return
+      const cosmetics = { ...s.cosmetics, [id]: true as const }
+      const next = { ...s, cosmetics, poussiere: s.poussiere - cost, log: pushLog(s.log, `🎨 Cosmétique débloqué (-${cost} 🌌).`, 'info') }
+      persist(next)
+      set(next)
+    },
+
     mysteryBox: (id, opts = {}) => {
       const s = get()
       const box = MYSTERY_BOXES[id]
@@ -6322,6 +6359,7 @@ export const useGame = create<GameState>((set, get) => {
         prestigeRank: s.prestigeRank + 1,
         constellation: s.constellation,
         achievements: s.achievements, // 🏆 hauts faits conservés (permanents au compte)
+        cosmetics: s.cosmetics,       // 🎨 cosmétiques débloqués conservés
         relic,
         raidProgress: s.raidProgress, // record conservé (gating des contenus)
         metiers: s.metiers,           // XP métiers conservée (choix A)
