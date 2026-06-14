@@ -14,7 +14,7 @@ import {
   METIERS, METIER_LIST, METIER_NODES, METIER_BRANCHES, METIER_MAX_LEVEL, AUTOMATE_FORGERON_LEVELS,
   craftMods, levelFromXp, xpTotalForLevel, pointsAvailable, pointsTotal, canLearnNode, nodeRank,
   respecCost, respecBranchCost, pointsSpentInBranch,
-  CORPS, corpsBonusFor, signatureLingotCost, smeltLingots, MASTERWORK_LINGOTS,
+  forgeBonus, signatureLingotCost, smeltLingots, MASTERWORK_LINGOTS,
   type MetierId, type MetierNode,
 } from '../game/metiers'
 import { ENCHANTS, TIME_RUNES, RULE_RUNES, PACT_RUNES, eraseFragments, runeForgeCost, RUNE_GAMBLE_COST } from '../game/enchants'
@@ -344,7 +344,6 @@ function ForgeronWorkshop() {
   const poussiere = useGame((s) => s.poussiere)
   const cosmic = useGame((s) => s.cosmic)
   const lingots = useGame((s) => s.lingots)
-  const mould = useGame((s) => s.mould)
   const lastMasterwork = useGame((s) => s.lastMasterwork)
   const createItem = useGame((s) => s.createItem)
   const metiers = useGame((s) => s.metiers)
@@ -366,40 +365,22 @@ function ForgeronWorkshop() {
 
   const isWeapon = type === 'armePrincipale'
   const tier = RARITY_LIST.find((r) => r.id === rarity)!.tier
-  // ◈ Compagnonnage (v0.26) : bonus du corps couvrant le type sélectionné.
-  const corps = corpsBonusFor(mods, type)
-  // B1 — la forge crée au niveau de ton meilleur contenu (farm/donjons/raids) + bonus de métier,
-  // pour ne plus stagner au farm quand tu raid. Doit matcher createItem côté store.
-  const ilvl = referenceIlvl(bestStage, raidProgress, dungeonProgress) + corps.ilvlBonus
-  const activeSignature = signature && corps.signatures?.includes(signature) ? signature : null
+  // v0.28 E2 — bonus de création UNIVERSELS (Maître forgeron + Signature) ; plus de corps de métier.
+  const forge = forgeBonus(mods)
+  // B1 — la forge crée au niveau de ton meilleur contenu (farm/donjons/raids) + bonus de métier.
+  const ilvl = referenceIlvl(bestStage, raidProgress, dungeonProgress) + forge.ilvlBonus
+  const activeSignature = signature && forge.signatures?.includes(signature) ? signature : null
   const signCost = activeSignature ? signatureLingotCost(tier) : 0
-  const mwReady = corps.masterwork && lastMasterwork < currentWeek()
+  const mwReady = forge.masterwork && lastMasterwork < currentWeek()
   const mwOn = masterwork && mwReady
-  const mouldHit = mods.moules && mould
-    && mould.type === type && mould.rarity === rarity && mould.primary === primary
-    && mould.orientation === orientation && mould.element === (isWeapon ? element : undefined)
   const raw = createCost(tier, ilvl)
-  const cm = mods.costMult * corps.costMult * (mouldHit ? 0.7 : 1) * (mwOn ? 1.5 : 1)
+  const cm = mods.costMult * (mwOn ? 1.5 : 1)
   const cost = { eclats: Math.round(raw.eclats * cm), noyau: Math.round(raw.noyau * cm), fragments: Math.round((raw.fragments ?? 0) * cm), poussiere: Math.round((raw.poussiere ?? 0) * cm), cosmic: Math.round((raw.cosmic ?? 0) * cm) }
   const lingotNeed = signCost + (mwOn ? MASTERWORK_LINGOTS : 0)
   const canForge = essence >= cost.eclats && noyau >= cost.noyau && fragments >= cost.fragments && poussiere >= cost.poussiere && cosmic >= cost.cosmic && lingots >= lingotNeed
-  const corpsName = mods.corpsMajeur ? CORPS[mods.corpsMajeur.corps] : null
 
   return (
     <>
-      {/* ◈ Compagnonnage : où en est ton corps de métier */}
-      {corpsName && mods.corpsMajeur && (
-        <div className="mb-3 rounded-lg border border-amber-700/40 bg-amber-950/10 px-2.5 py-1.5 text-[10px] text-amber-200/90">
-          ◈ {corpsName.icon} <b>{corpsName.name}</b> {['I', 'II', 'III', 'IV', 'V'][mods.corpsMajeur.tier - 1]}
-          <span className="text-slate-400"> — {corpsName.types.map((t) => ITEM_TYPES[t].name).join(', ')} : −15% coûts
-          {mods.corpsMajeur.tier >= 2 && ' · +1 iLvl'}
-          {mods.corpsMajeur.tier >= 3 && ' · ✒️ Signature'}
-          {mods.corpsMajeur.tier >= 4 && ' · 🎲 +12% rareté'}
-          {mods.corpsMajeur.tier >= 5 && ' · 🏆 Chef-d\'œuvre hebdo'}</span>
-          {mods.corpsMineur && <span className="text-slate-400"> · mineur : {CORPS[mods.corpsMineur.corps].icon} {CORPS[mods.corpsMineur.corps].name} {['I', 'II'][mods.corpsMineur.tier - 1]}</span>}
-        </div>
-      )}
-
       {/* Type d'objet */}
       <Section title="Type d'objet">
         <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-7">
@@ -504,8 +485,8 @@ function ForgeronWorkshop() {
         )}
       </Section>
 
-      {/* ✒️ Signature (Compagnonnage III) : affixe garanti au choix sur les pièces du corps */}
-      {corps.signatures && (
+      {/* ✒️ Signature (v0.28 E2) : affixe garanti AU CHOIX (universel, débloqué par le nœud Signature) */}
+      {forge.signatures && (
         <Section title={`✒️ Signature (${signCost > 0 ? `${signCost} 🧱` : 'choisis une ligne garantie'})`}>
           <div className="flex flex-wrap gap-1.5">
             <button
@@ -514,7 +495,7 @@ function ForgeronWorkshop() {
             >
               Sans
             </button>
-            {corps.signatures.map((st) => (
+            {forge.signatures.map((st) => (
               <button
                 key={st}
                 onClick={() => setSignature(st)}
@@ -527,8 +508,8 @@ function ForgeronWorkshop() {
         </Section>
       )}
 
-      {/* 🏆 Chef-d'œuvre hebdomadaire (Compagnonnage V) */}
-      {corps.masterwork && (
+      {/* 🏆 Chef-d'œuvre hebdomadaire (Maître forgeron R3) */}
+      {forge.masterwork && (
         <button
           onClick={() => setMasterwork((m2) => !m2)}
           disabled={!mwReady}
@@ -543,8 +524,7 @@ function ForgeronWorkshop() {
 
       {/* Récapitulatif + coût */}
       <div className="mt-3 rounded-lg bg-black/30 p-3 text-xs text-slate-400">
-        <div>iLvl de l'objet : <span className="text-slate-200">{ilvl}</span> (au niveau de ton meilleur contenu — farm / donjons / raids{corps.ilvlBonus > 0 ? ` · ◈ +${corps.ilvlBonus}` : ''})</div>
-        {mouldHit && <div className="mt-0.5 text-[10.5px] text-emerald-300/80">🧩 Moule actif : ce craft est identique au précédent — coûts −30%.</div>}
+        <div>iLvl de l'objet : <span className="text-slate-200">{ilvl}</span> (au niveau de ton meilleur contenu — farm / donjons / raids{forge.ilvlBonus > 0 ? ` · 🛠️ +${forge.ilvlBonus}` : ''})</div>
         <div className="mt-1 flex flex-wrap items-center gap-3">
           <span>Coût :</span>
           <span className={essence >= cost.eclats ? 'text-cyan-300' : 'text-red-400'}>♦ {cost.eclats}</span>

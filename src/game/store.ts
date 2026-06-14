@@ -27,7 +27,7 @@ import {
   craftMods, metierXpGain, canLearnNode, getMetierNode, respecCost, emptyMetiers, migrateLegacyForge,
   levelFromXp, METIERS, METIER_LIST, METIER_NODES, METIER_BRANCHES, AUTOMATE_FORGERON_LEVELS,
   pointsSpentInBranch, respecBranchCost,
-  corpsBonusFor, signatureLingotCost, smeltLingots, MASTERWORK_LINGOTS,
+  forgeBonus, signatureLingotCost, smeltLingots, MASTERWORK_LINGOTS,
   type MetierId, type MetiersState,
 } from './metiers'
 import { itemSockets, unsocketCost, parseGemKey } from './gems'
@@ -1292,7 +1292,7 @@ function freshSave(): SaveData {
     armedXpBonus: null,
     lastTransmute: 0,
     philosophale: false,
-    metiersV: 3,
+    metiersV: 4,
     essences: {},
     sceaux: 0,
     dungeonProgress: emptyDungeonProgress(),
@@ -1461,6 +1461,29 @@ function sanitize(save: SaveData): SaveData {
       save.metiers = { ...save.metiers, [mid]: { ...st, nodes } }
     }
     save.metiersV = 3
+  }
+  // v0.28 E2 — MIGRATION metiersV 4 : arbre Forgeron RÉDUIT (Atelier + Manufacture). On fusionne les
+  // anciens nœuds (surillvl+affutage, polissage+polissageFin, econome+specEconome, chance plafonné à 5)
+  // et on RETIRE les disparus (Compagnonnage/Moules/Pédagogie/Sérendipité/Verrous/Contrats/Négociant/
+  // Lingotier/Inspiration) → leurs points sont AUTOMATIQUEMENT rendus (pointsSpent recalculé). Idempotente.
+  if ((save.metiersV ?? 1) < 4 && save.metiers?.forgeron) {
+    const old: Record<string, number> = save.metiers.forgeron.nodes ?? {}
+    const g = (id: string) => old[id] ?? 0
+    const nodes: Record<string, number> = {}
+    const surillvl = Math.min(2, g('surillvl') + g('affutage'))
+    if (surillvl) nodes.surillvl = surillvl
+    const polissage = Math.min(3, g('polissage') + g('polissageFin'))
+    if (polissage) nodes.polissage = polissage
+    const econome = Math.min(5, g('econome') + (g('specEconome') ? 2 : 0))
+    if (econome) nodes.econome = econome
+    const chance = Math.min(5, g('chance'))
+    if (chance) nodes.chance = chance
+    for (const [id, max] of [['transmute', 1], ['trempeLente', 1], ['ascension', 1], ['fonderie', 1], ['automates', 1], ['montage', 3], ['automate4', 1]] as const) {
+      const v = Math.min(max, g(id))
+      if (v) nodes[id] = v
+    }
+    save.metiers = { ...save.metiers, forgeron: { ...save.metiers.forgeron, nodes } }
+    save.metiersV = 4
   }
   // v0.26 : 📖 Catalogue — les saves d'avant sont créditées de leurs gemmes déjà possédées
   // (stock + serties), pour ne pas repartir de zéro.
@@ -1839,7 +1862,7 @@ function persist(s: GameState) {
     armedXpBonus: s.armedXpBonus,
     lastTransmute: s.lastTransmute,
     philosophale: s.philosophale,
-    metiersV: s.metiersV ?? 3,
+    metiersV: s.metiersV ?? 4,
     essences: s.essences,
     sceaux: s.sceaux,
     dungeonProgress: s.dungeonProgress,
@@ -5360,16 +5383,16 @@ export const useGame = create<GameState>((set, get) => {
       // v0.25 : double horloge — la rareté craftable est bornée par le palier ET le tier de raid.
       const craftCap = maxCraftTier(s.bestStage, bestRaidTier(s.raidProgress))
       if (tier > craftCap) return
-      // ◈ Compagnonnage (v0.26) : bonus du corps de métier couvrant CE type de pièce.
-      const corps = corpsBonusFor(mods, opts.type)
+      // v0.28 E2 — bonus de création UNIVERSELS (Maître forgeron + Signature), plus de corps de métier.
+      const forge = forgeBonus(mods)
       // B1 — la forge crée au niveau de ton meilleur contenu (raids/donjons compris) + bonus de métier.
-      const ilvl = referenceIlvl(s.bestStage, s.raidProgress, s.dungeonProgress) + corps.ilvlBonus
+      const ilvl = referenceIlvl(s.bestStage, s.raidProgress, s.dungeonProgress) + forge.ilvlBonus
       // 🏆 Chef-d'œuvre (étage V) : 1/semaine, +1 cran GARANTI (capé), châsse garantie, coût ×1,5 + Lingots.
       const week = currentWeek()
       const masterwork = !!opts.masterwork
-      if (masterwork && (!corps.masterwork || s.lastMasterwork >= week || s.lingots < MASTERWORK_LINGOTS)) return
-      // ✒️ Signature (étage III) : affixe garanti au choix dans la liste du corps — coûte des Lingots.
-      const signature = opts.signature && corps.signatures?.includes(opts.signature) ? opts.signature : undefined
+      if (masterwork && (!forge.masterwork || s.lastMasterwork >= week || s.lingots < MASTERWORK_LINGOTS)) return
+      // ✒️ Signature : affixe garanti AU CHOIX (universel, débloqué par le nœud Signature) — coûte des Lingots.
+      const signature = opts.signature && forge.signatures?.includes(opts.signature) ? opts.signature : undefined
       const signCost = signature ? signatureLingotCost(tier) : 0
       if (signature && s.lingots < signCost + (masterwork ? MASTERWORK_LINGOTS : 0)) return
       // 🧩 Moule : re-forger À L'IDENTIQUE coûte −30%.
@@ -5379,11 +5402,11 @@ export const useGame = create<GameState>((set, get) => {
         && s.mould.element === opts.element
       // Coût : rareté choisie × métier (Économe) × corps (−15%) × moule (−30%) × chef-d'œuvre (×1,5).
       const c = createCost(tier, ilvl)
-      const m = mods.costMult * corps.costMult * (mouldHit ? 0.7 : 1) * (masterwork ? 1.5 : 1)
+      const m = mods.costMult * (mouldHit ? 0.7 : 1) * (masterwork ? 1.5 : 1)
       const cost = { eclats: Math.round(c.eclats * m), noyau: Math.round(c.noyau * m), fragments: Math.round((c.fragments ?? 0) * m), poussiere: Math.round((c.poussiere ?? 0) * m), cosmic: Math.round((c.cosmic ?? 0) * m) }
       if (s.essence < cost.eclats || s.noyau < cost.noyau || s.fragments < cost.fragments || s.poussiere < cost.poussiere || s.cosmic < cost.cosmic) return
       // 🎲 Prodige : chance de rareté SUPÉRIEURE (corps IV : +12% local) — 💡 Inspiration : DEUX crans.
-      const lucky = masterwork || (Math.random() < Math.min(0.75, mods.luckChance + corps.luckBonus) && tier < craftCap)
+      const lucky = masterwork || (Math.random() < Math.min(0.75, mods.luckChance + forge.luckBonus) && tier < craftCap)
       const inspired = lucky && !masterwork && mods.inspiration > 0 && Math.random() < mods.inspiration && tier + 2 <= craftCap
       const prodTier = Math.min(craftCap, tier + (inspired ? 2 : lucky ? 1 : 0))
       const rarityId = RARITY_LIST.find((r) => r.tier === prodTier)?.id ?? opts.rarity
@@ -5406,7 +5429,7 @@ export const useGame = create<GameState>((set, get) => {
         fragments: Math.round(cost.fragments * refundPct), poussiere: Math.round(cost.poussiere * refundPct),
         cosmic: Math.round(cost.cosmic * refundPct),
       }
-      const gain = metierXpGain(prodTier, 'create', mods.forgeronXpMult * corps.xpMult * (masterwork ? 2 : 1))
+      const gain = metierXpGain(prodTier, 'create', mods.forgeronXpMult * forge.xpMult * (masterwork ? 2 : 1))
       const g = gainMetierXp(s, 'forgeron', gain)
       let log = pushLog(
         g.log,
