@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useGame, powerCooldowns } from '../game/store'
 import type { LogKind } from '../game/store'
 import { Sheet } from './ui'
+import { LevelBadge } from './LevelBadge'
 import { charMaxHp, charDps, TALENT_START_LEVEL } from '../game/character'
 import { isBossStage } from '../game/enemies'
 import { getPower, powerIcon } from '../game/powers'
@@ -485,9 +486,13 @@ export function CombatPanel() {
       {/* Capacités : icône de sort + bascule AUTO/MANUEL + lancement (tap quand MANUEL & prêt) */}
       {castSlots.length > 0 && (
         <div className="rounded-xl border border-slate-800 bg-[#0d111a] p-2">
-          <div className="mb-1.5 flex items-center justify-between">
-            <span className="text-[10px] uppercase tracking-wide text-slate-500">⚔️ Capacités de {me!.name}</span>
-            <span className="text-[8.5px] text-slate-600">AUTO = lancée seule · MANUEL = au tap</span>
+          {/* F4 — badge de niveau (avatar + écusson) en tête des capacités du héros. */}
+          <div className="mb-1.5 flex items-center gap-2">
+            <LevelBadge char={me!} size={44} />
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-[12px] font-semibold text-slate-100">{me!.name}</div>
+              <div className="text-[8.5px] text-slate-600">⚔️ Capacités · AUTO = lancée seule · MANUEL = au tap</div>
+            </div>
           </div>
           {/* Mobile : rangée horizontale scrollable (1 ligne) · Desktop : grille 3 colonnes */}
           <div className="flex gap-1.5 overflow-x-auto pb-1 sm:grid sm:grid-cols-3 sm:overflow-visible sm:pb-0">

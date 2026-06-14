@@ -10,6 +10,7 @@ import { setBonuses, getSet } from '../game/sets'
 import { getPower, POWER_EFFECT_META, scaleLabel, powerDamageType } from '../game/powers'
 import { RAID_LIST, getRaidDef, raidUnlocked, raidReqs, type RaidId } from '../game/raids'
 import { resistMult } from '../game/resist'
+import { LevelBadge } from './LevelBadge'
 
 const DMG_EFFECTS: ReadonlySet<string> = new Set(['nuke', 'cleave', 'dot', 'executeNuke', 'megaCleave', 'lifeNuke', 'rupture'])
 // Effets dont la magnitude est une VALEUR affichable (dégâts/PV). Les autres (charge/marque/frénésie/
@@ -90,8 +91,10 @@ export function CharacterPanel({ view = 'apercu' }: { view?: CharacterView }) {
         <>
           {/* Identité */}
           <div className="rounded-xl border border-slate-800 bg-gradient-to-br from-[#161c2a] to-[#0d111a] p-4">
-            <div className="flex items-center justify-between">
-              <div className="min-w-0">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex min-w-0 items-center gap-3">
+                <LevelBadge char={char} size={58} />
+                <div className="min-w-0">
                 {editName !== null ? (
                   <form
                     className="flex items-center gap-1.5"
@@ -115,6 +118,7 @@ export function CharacterPanel({ view = 'apercu' }: { view?: CharacterView }) {
                 )}
                 <div className="text-xs text-slate-400">
                   Niveau {char.level} · Build <span style={{ color: PRIMARY_META[derived.mainStat].color }}>{buildName}</span>
+                </div>
                 </div>
               </div>
               <div className="text-right text-xs">
