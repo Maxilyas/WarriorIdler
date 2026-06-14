@@ -107,7 +107,9 @@ export function AtelierPanel() {
             pages = [
               { id: 'creer', label: 'Créer', icon: '🔨', hint: 'Forge une pièce neuve, au niveau de ton meilleur contenu.', node: <ForgeronWorkshop /> },
               { id: 'procedes', label: 'Procédés', icon: '⚙️', hint: 'Contrats de forge · Fonderie (→ Lingots) · Bac de trempe.', node: <ForgeProcedes /> },
-              ...(bestStage >= 65 ? [{ id: 'automates', label: 'Automates', icon: '🤖', hint: 'Envoie des automates farmer le contenu déjà vaincu.', node: <AutomateWorkshop /> }] : []),
+              // Automates : page visible dès que le nœud Industrialisation est appris (survit au prestige,
+              // contrairement au palier qui reset) — ou au palier 65 (avant de l'avoir appris).
+              ...(nodeRank(metiers, 'forgeron', 'automates') > 0 || bestStage >= 65 ? [{ id: 'automates', label: 'Automates', icon: '🤖', hint: 'Envoie des automates farmer le contenu déjà vaincu.', node: <AutomateWorkshop /> }] : []),
               treePage,
             ]
           } else if (metier === 'joaillier') {
