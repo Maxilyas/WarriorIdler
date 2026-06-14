@@ -10,7 +10,7 @@ import { DAMAGE_TYPES } from '../game/damage'
 import { RAID_MECHANIC_META } from '../game/raids'
 import { BIOME_LIST, biomeUnlocked, biomeUnlockHint, getBiomeDef, BIOME_LOCK_FRAGMENTS, BIOME_LOCK_MS } from '../game/biomes'
 import { maitriseBonus, maitriseSum, surgeBiome, surgeRemainingMs } from '../game/biomeBonus'
-import type { DamageType, Enemy, EnemyAbility, PowerDef } from '../game/types'
+import type { Character, DamageType, Enemy, EnemyAbility, PowerDef } from '../game/types'
 
 /** Filtres du journal plein écran (catégories de LogKind). */
 const LOG_FILTERS: { id: string; label: string; kinds?: LogKind[] }[] = [
@@ -50,6 +50,7 @@ export function CombatPanel() {
   const pendingBiome = useGame((s) => s.pendingBiome)
   const confirmBiomeRotation = useGame((s) => s.confirmBiomeRotation)
   const activeChar = useGame((s) => s.activeChar)
+  const setActiveChar = useGame((s) => s.setActiveChar)
   const castPower = useGame((s) => s.castPower)
   const togglePowerAuto = useGame((s) => s.togglePowerAuto)
   const farmLock = useGame((s) => s.farmLock)
@@ -114,34 +115,6 @@ export function CombatPanel() {
         </div>
       )}
 
-      {/* Équipe */}
-      <div className="space-y-1.5 rounded-xl border border-slate-800 bg-gradient-to-br from-[#141a26] to-[#0d111a] p-3">
-        {characters.map((c) => {
-          const mh = charMaxHp(c)
-          const pct = Math.max(0, (c.hp / mh) * 100)
-          const dead = c.hp <= 0
-          return (
-            <div key={c.id}>
-              <div className="flex items-center justify-between text-[11px]">
-                <span className={'font-semibold ' + (dead ? 'text-red-500/70 line-through' : 'text-slate-100')}>
-                  🛡 {c.name} <span className="text-slate-500">N{c.level}</span>
-                  {(c.stun ?? 0) > 0 && <span className="ml-1 rounded bg-yellow-500/20 px-1 text-[9px] text-yellow-300" title="Étourdi : n'attaque pas">💫 étourdi</span>}
-                  {c.dots && c.dots.length > 0 && <span className="ml-1 rounded bg-rose-500/20 px-1 text-[9px] text-rose-300" title="Altération subie (DoT) — Purge et résistance la réduisent">🩸 altéré</span>}
-                  {c.weaken && <span className="ml-1 rounded bg-fuchsia-500/20 px-1 text-[9px] text-fuchsia-300" title="Affaibli (malédiction) — Purge en réduit la durée">✨ affaibli</span>}
-                </span>
-                <span className="text-slate-400">{Math.ceil(Math.max(0, c.hp)).toLocaleString('fr-FR')} / {Math.round(mh).toLocaleString('fr-FR')}</span>
-              </div>
-              <div className="mt-0.5 h-3 w-full overflow-hidden rounded-full bg-slate-800">
-                <div
-                  className={'h-full transition-all duration-200 ' + (dead ? 'bg-red-900' : 'bg-gradient-to-r from-emerald-600 to-emerald-400')}
-                  style={{ width: `${pct}%` }}
-                />
-              </div>
-            </div>
-          )
-        })}
-      </div>
-
       {/* Bandeau donjon */}
       {dungeon && (
         <div className="rounded-xl border border-amber-700/50 bg-amber-950/20 p-3">
@@ -201,15 +174,10 @@ export function CombatPanel() {
         </div>
       )}
 
-      {/* Bonus de biome actifs (surcharge / maîtrise des zones) */}
-      {!dungeon && !raid && (surgeOn || maitrise > 0) && (
+      {/* Surcharge tournante (la Maîtrise des Zones vit désormais dans la feuille Zone, pour gagner de la place) */}
+      {!dungeon && !raid && surgeOn && (
         <div className="flex flex-wrap gap-1.5 text-[10px]">
-          {surgeOn && (
-            <span className="rounded bg-amber-500/15 px-1.5 py-0.5 font-medium text-amber-300">⚡ Surcharge : +50% or & XP · quintessence ×2</span>
-          )}
-          {maitrise > 0 && (
-            <span className="rounded bg-violet-500/15 px-1.5 py-0.5 font-medium text-violet-300">🗺️ Maîtrise des Zones : +{(maitrise * 100).toFixed(1)}% dégâts</span>
-          )}
+          <span className="rounded bg-amber-500/15 px-1.5 py-0.5 font-medium text-amber-300">⚡ Surcharge : +50% or & XP · quintessence ×2</span>
         </div>
       )}
 
@@ -483,62 +451,125 @@ export function CombatPanel() {
         </div>
       </div>
 
-      {/* Capacités : icône de sort + bascule AUTO/MANUEL + lancement (tap quand MANUEL & prêt) */}
-      {castSlots.length > 0 && (
-        <div className="rounded-xl border border-slate-800 bg-[#0d111a] p-2">
-          {/* F4 — badge de niveau (avatar + écusson) en tête des capacités du héros. */}
-          <div className="mb-1.5 flex items-center gap-2">
-            <LevelBadge char={me!} size={44} />
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-[12px] font-semibold text-slate-100">{me!.name}</div>
-              <div className="text-[8.5px] text-slate-600">⚔️ Capacités · AUTO = lancée seule · MANUEL = au tap</div>
+      {/* ÉQUIPE + CAPACITÉS fusionnées : une carte par héros (badge de niveau, PV, bouclier,
+          altérations) → tap pour piloter ce héros ; ses sorts s'affichent juste en dessous.
+          Posée bas d'écran : PV + sorts sous le pouce, à côté du journal (ergonomie mobile). */}
+      <div className="rounded-xl border border-slate-800 bg-gradient-to-br from-[#141a26] to-[#0d111a] p-2.5">
+        <div className="space-y-1.5">
+          {characters.map((c, i) => {
+            const mh = charMaxHp(c)
+            const pct = Math.max(0, Math.min(100, (c.hp / mh) * 100))
+            const dead = c.hp <= 0
+            const active = i === activeChar
+            const single = characters.length === 1
+            const chips = statusChips(c)
+            // Bouclier d'absorption : segment cyan posé À LA SUITE des PV (visible sans encombrer).
+            const shieldPct = (c.absorb ?? 0) > 0 ? Math.max(0, Math.min(100 - pct, ((c.absorb ?? 0) / mh) * 100)) : 0
+            return (
+              <button
+                key={c.id}
+                onClick={() => setActiveChar(i)}
+                disabled={single}
+                title={single ? undefined : `Piloter ${c.name} (sorts manuels)`}
+                className={
+                  'flex w-full items-center gap-2.5 rounded-lg border px-2 py-1.5 text-left transition-colors ' +
+                  (active && !single
+                    ? 'border-orange-500/50 bg-orange-500/10'
+                    : 'border-transparent bg-black/20 ' + (single ? '' : 'hover:border-slate-600'))
+                }
+              >
+                <LevelBadge char={c} size={40} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline justify-between gap-2 text-[11px]">
+                    <span className={'truncate font-semibold ' + (dead ? 'text-red-500/70 line-through' : 'text-slate-100')}>
+                      {c.name}
+                      {active && !single && <span className="ml-1 text-[8.5px] font-normal text-orange-400">● actif</span>}
+                    </span>
+                    <span className="shrink-0 tabular-nums text-slate-400">
+                      {dead ? (
+                        <span className="text-red-400">{(c.rez ?? 0) > 0 ? `↻ ${Math.ceil(c.rez!)} s` : 'K.O.'}</span>
+                      ) : (
+                        <>{Math.ceil(Math.max(0, c.hp)).toLocaleString('fr-FR')} <span className="text-slate-600">/ {Math.round(mh).toLocaleString('fr-FR')}</span></>
+                      )}
+                    </span>
+                  </div>
+                  <div className="relative mt-1 h-2.5 w-full overflow-hidden rounded-full bg-slate-800">
+                    <div
+                      className={'absolute inset-y-0 left-0 transition-all duration-200 ' + (dead ? 'bg-red-900' : 'bg-gradient-to-r from-emerald-600 to-emerald-400')}
+                      style={{ width: `${pct}%` }}
+                    />
+                    {shieldPct > 0 && (
+                      <div className="absolute inset-y-0 bg-sky-400/70" style={{ left: `${pct}%`, width: `${shieldPct}%` }} />
+                    )}
+                  </div>
+                  {chips.length > 0 && (
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {chips.map((s) => (
+                        <span key={s.label} title={s.title} className={'rounded px-1 py-px text-[9px] leading-tight ' + s.cls}>
+                          {s.icon} {s.label}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Sorts du héros piloté (AUTO = lancé seul · MANUEL = au tap) */}
+        {castSlots.length > 0 && (
+          <div className="mt-2 border-t border-slate-800 pt-2">
+            <div className="mb-1.5 flex items-center justify-between gap-2">
+              <span className="min-w-0 truncate text-[10px] font-semibold uppercase tracking-wide text-slate-400">⚔️ Sorts — {me!.name}</span>
+              <span className="shrink-0 text-[8.5px] text-slate-600">AUTO = seul · MAN = au tap</span>
+            </div>
+            {/* Mobile : rangée horizontale scrollable (1 ligne) · Desktop : grille 3 colonnes */}
+            <div className="flex gap-1.5 overflow-x-auto pb-1 sm:grid sm:grid-cols-3 sm:overflow-visible sm:pb-0">
+              {castSlots.map(({ slot, p }) => {
+                const cd = pcd[p.id] ?? 0
+                const ready = cd <= 0
+                const auto = me!.powerAuto?.[slot] !== false
+                const total = p.cooldown ?? 3
+                const frac = ready ? 1 : Math.max(0, 1 - cd / total)
+                const canTap = !auto && ready
+                return (
+                  <div
+                    key={slot}
+                    className={
+                      'relative w-[68px] shrink-0 overflow-hidden rounded-lg border sm:w-auto ' +
+                      (auto ? 'border-cyan-700/50 bg-cyan-950/20' : canTap ? 'border-amber-500 bg-amber-900/20' : 'border-slate-700 bg-black/20')
+                    }
+                  >
+                    {/* Bascule AUTO/MANUEL (coin) */}
+                    <button
+                      onClick={() => togglePowerAuto(slot)}
+                      title="Activer / désactiver le lancement automatique"
+                      className={'absolute right-0.5 top-0.5 z-10 rounded px-1.5 py-1 text-[8px] font-bold ' + (auto ? 'bg-cyan-600/40 text-cyan-100' : 'bg-amber-600/40 text-amber-100')}
+                    >
+                      {auto ? 'AUTO' : 'MAN'}
+                    </button>
+                    {/* Zone de lancement (active uniquement en MANUEL & prête) */}
+                    <button
+                      disabled={!canTap}
+                      onClick={() => castPower(slot)}
+                      title={auto ? `${p.name} — lancement automatique` : ready ? `Lancer ${p.name}` : `${p.name} — ${cd.toFixed(1)} s`}
+                      className="flex w-full flex-col items-center gap-0.5 px-1 pb-1.5 pt-2"
+                    >
+                      <span className="text-xl leading-none">{powerIcon(p)}</span>
+                      <span className="w-full truncate text-center text-[8px] font-medium text-slate-300">{p.name}</span>
+                      <span className={'text-[8px] font-semibold leading-none ' + (canTap ? 'text-amber-200' : 'text-slate-500')}>
+                        {auto ? '⟳ auto' : ready ? '▶ lancer' : `${cd.toFixed(1)}s`}
+                      </span>
+                    </button>
+                    {!ready && <div className="absolute bottom-0 left-0 h-0.5 bg-cyan-500" style={{ width: `${frac * 100}%` }} />}
+                  </div>
+                )
+              })}
             </div>
           </div>
-          {/* Mobile : rangée horizontale scrollable (1 ligne) · Desktop : grille 3 colonnes */}
-          <div className="flex gap-1.5 overflow-x-auto pb-1 sm:grid sm:grid-cols-3 sm:overflow-visible sm:pb-0">
-            {castSlots.map(({ slot, p }) => {
-              const cd = pcd[p.id] ?? 0
-              const ready = cd <= 0
-              const auto = me!.powerAuto?.[slot] !== false
-              const total = p.cooldown ?? 3
-              const frac = ready ? 1 : Math.max(0, 1 - cd / total)
-              const canTap = !auto && ready
-              return (
-                <div
-                  key={slot}
-                  className={
-                    'relative w-[68px] shrink-0 overflow-hidden rounded-lg border sm:w-auto ' +
-                    (auto ? 'border-cyan-700/50 bg-cyan-950/20' : canTap ? 'border-amber-500 bg-amber-900/20' : 'border-slate-700 bg-black/20')
-                  }
-                >
-                  {/* Bascule AUTO/MANUEL (coin) */}
-                  <button
-                    onClick={() => togglePowerAuto(slot)}
-                    title="Activer / désactiver le lancement automatique"
-                    className={'absolute right-0.5 top-0.5 z-10 rounded px-1.5 py-1 text-[8px] font-bold ' + (auto ? 'bg-cyan-600/40 text-cyan-100' : 'bg-amber-600/40 text-amber-100')}
-                  >
-                    {auto ? 'AUTO' : 'MAN'}
-                  </button>
-                  {/* Zone de lancement (active uniquement en MANUEL & prête) */}
-                  <button
-                    disabled={!canTap}
-                    onClick={() => castPower(slot)}
-                    title={auto ? `${p.name} — lancement automatique` : ready ? `Lancer ${p.name}` : `${p.name} — ${cd.toFixed(1)} s`}
-                    className="flex w-full flex-col items-center gap-0.5 px-1 pb-1.5 pt-2"
-                  >
-                    <span className="text-xl leading-none">{powerIcon(p)}</span>
-                    <span className="w-full truncate text-center text-[8px] font-medium text-slate-300">{p.name}</span>
-                    <span className={'text-[8px] font-semibold leading-none ' + (canTap ? 'text-amber-200' : ready ? 'text-slate-500' : 'text-slate-500')}>
-                      {auto ? '⟳ auto' : ready ? '▶ lancer' : `${cd.toFixed(1)}s`}
-                    </span>
-                  </button>
-                  {!ready && <div className="absolute bottom-0 left-0 h-0.5 bg-cyan-500" style={{ width: `${frac * 100}%` }} />}
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Journal — zone réelle (min-height garanti) + plein écran filtrable au tap */}
       <div className="flex min-h-[120px] flex-1 flex-col rounded-xl border border-slate-800 bg-[#0d111a] p-3">
@@ -594,6 +625,23 @@ export function CombatPanel() {
       )}
     </div>
   )
+}
+
+/** Pastilles d'état d'un héros (altérations + buffs transitoires) — lecture rapide « comment va-t-il ? ». */
+function statusChips(c: Character): { icon: string; label: string; cls: string; title: string }[] {
+  const out: { icon: string; label: string; cls: string; title: string }[] = []
+  if ((c.stun ?? 0) > 0) out.push({ icon: '💫', label: 'étourdi', cls: 'bg-yellow-500/20 text-yellow-300', title: "Étourdi : n'attaque pas tant que ça dure" })
+  if (c.dots && c.dots.length > 0) {
+    const dps = c.dots.reduce((a, d) => a + d.dps, 0)
+    out.push({ icon: '🩸', label: 'altéré', cls: 'bg-rose-500/20 text-rose-300', title: `Altération subie (DoT) ~${Math.round(dps).toLocaleString('fr-FR')}/s — Purge et résistance la réduisent` })
+  }
+  if (c.weaken) out.push({ icon: '🌀', label: 'affaibli', cls: 'bg-fuchsia-500/20 text-fuchsia-300', title: `Affaibli (malédiction) : dégâts ×${c.weaken.mult.toFixed(2)} — Purge en réduit la durée` })
+  if ((c.healCut ?? 0) > 0) out.push({ icon: '🚫', label: 'soins coupés', cls: 'bg-red-500/20 text-red-300', title: 'Blessures mortelles : régénération fortement réduite' })
+  if ((c.absorb ?? 0) > 0) out.push({ icon: '🛡', label: 'bouclier', cls: 'bg-sky-500/20 text-sky-200', title: `Bouclier d'absorption : ${Math.round(c.absorb!).toLocaleString('fr-FR')} PV encaissés avant la vie` })
+  if ((c.invuln ?? 0) > 0) out.push({ icon: '💎', label: 'immunisé', cls: 'bg-cyan-500/20 text-cyan-200', title: 'Immunité aux dégâts directs' })
+  if (c.frenzy) out.push({ icon: '🔥', label: 'frénésie', cls: 'bg-orange-500/20 text-orange-300', title: `Frénésie : dégâts ×${c.frenzy.mult.toFixed(2)}` })
+  if (c.charge) out.push({ icon: '⚡', label: 'vengeance', cls: 'bg-amber-500/20 text-amber-300', title: 'Vengeance différée : la riposte frappe à expiration' })
+  return out
 }
 
 /** Aide d'une technique ennemie : type + le contre du kit héros à privilégier. */
