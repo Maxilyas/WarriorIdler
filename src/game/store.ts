@@ -98,6 +98,11 @@ let awaySince = 0
 const RAID_REGEN_MULT = 0.5   // « Mal de l'abîme » : régén de base bridée de moitié en raid
 const ESTOC_INTERVAL = 9      // s entre deux « Estocs primordiaux »
 const ESTOC_PCT = 0.04        // % des PV MAX par estoc, IMPARABLE (ignore armure/résist/mitigation)
+const HEALCUT_DUR = 4         // « Blessures mortelles » : durée (s) de la fenêtre de soins réduits (posée par la Nova)
+const HEALCUT_REGEN_MULT = 0.25 // régén pendant le heal-cut (×0.25 : les soins ne suivent plus)
+const FRAPPE_INTERVAL = 12    // « Frappe partagée » : intervalle (s)
+const FRAPPE_MULT = 3.2       // dégâts TOTAUX (÷ héros vivants) → soloer la frappe = la prendre PLEINE
+const ESTOCADE_INTERVAL = 8   // « Estocade » : intervalle (s) — frappe le plus BAS en PV
 /** v0.25.x — RELÈVE en farm : un héros tombé se relève après ce délai (s), à 35% de ses PV. */
 const FARM_REZ_DELAY = 20
 const RETREAT_STAGES = 2
@@ -3186,6 +3191,9 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
       }
       // 💉 Perfusion (v0.26) : sous 50% des PV, la régénération s'emballe.
       if (mods?.cond?.perfusionBonus && c.hp / mh < 0.5) regen *= 1 + mods.cond.perfusionBonus
+      // v0.27 (Lot 3) « Blessures mortelles » : pendant la fenêtre de heal-cut (posée par la Nova),
+      // la régén s'effondre → un tank ne peut plus éponger juste après une Nova.
+      if ((c.healCut ?? 0) > 0) { regen *= HEALCUT_REGEN_MULT; c.healCut = Math.max(0, (c.healCut ?? 0) - dt) }
       // 🍽️ Jeûne / 🧛 Sang vicié : la régénération est coupée.
       if (mods?.pact?.noHeal || mods?.pact?.noRegen) regen = 0
       c.hp = Math.min(mh, c.hp + regen * dt)
@@ -3482,10 +3490,11 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
   set({ ...s, characters: chars, dungeon: { ...d, enemies, fightTime, runTime }, log })
 }
 
-/** Dégâts de zone (Nova/adds) sur l'équipe, typés : multiplicateur d'exigence par perso. */
-function applyAoe(chars: Character[], baseDmg: number, type: DamageType, req = 0): Character[] {
-  return chars.map((c) => {
-    if (c.hp <= 0) return c
+/** Dégâts de zone (Nova/adds) sur l'équipe, typés : multiplicateur d'exigence par perso.
+ *  `onlyIdx` (v0.27) : limite le coup à un seul héros (Estocade — frappe le plus bas en PV). */
+function applyAoe(chars: Character[], baseDmg: number, type: DamageType, req = 0, onlyIdx?: number): Character[] {
+  return chars.map((c, i) => {
+    if (c.hp <= 0 || (onlyIdx != null && i !== onlyIdx)) return c
     const d = charDerived(c)
     const p = charPassives(c)
     const cm = charCombatMods(c)
@@ -3516,6 +3525,9 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
   // Acharnement : le boss frappe plus fort à mesure qu'il agonise (premier boss VIVANT — duo de l'Abîme).
   const bossIn = r.enemies.find((e) => e.boss && e.hp > 0) ?? r.enemies[0]
   if (mech.includes('execute')) dmgMult *= 1 + (1 - bossIn.hp / Math.max(1, bossIn.maxHp)) * 0.7
+  // v0.27 (Lot 3) Forge « Surchauffe » : la forge chauffe à mesure qu'on la martèle → plus tu l'as
+  // entamée, plus elle frappe fort (tension DPS↔survie, anti-glass-cannon).
+  if (def.id === 'forge') dmgMult *= 1 + Math.min(0.8, (1 - bossIn.hp / Math.max(1, bossIn.maxHp)) * 0.8)
 
   const rCraft = craftMods(s.metiers)
   const rCond = condGemMods(s.characters, rCraft.gemSpec, teamGemOpts(s, rCraft))
@@ -3537,6 +3549,16 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
   const boss = aliveBosses[0] ?? enemies[0]
   let log = s.log
   for (const n of res.revived ?? []) log = pushLog(log, `🕊️ Sursis : ${n} survit in extremis !`, 'info')
+
+  // v0.27 (Lot 3) Reliquaire « Avarice » : chaque renfort qui tombe REND 3% des PV au boss (l'avare
+  // récupère son dû) → tuer les adds dans le mauvais ordre te punit, l'ordre de kill compte.
+  if (def.id === 'reliquaire') {
+    const killed = Math.max(0, r.enemies.filter((e) => e.add && e.hp > 0).length - enemies.filter((e) => e.add && e.hp > 0).length)
+    if (killed > 0 && boss.hp > 0) {
+      boss.hp = Math.min(boss.maxHp, boss.hp + boss.maxHp * 0.03 * killed)
+      log = pushLog(log, `🪙 ${boss.name} : Avarice — ${killed} renfort(s) tombé(s), il récupère des PV.`, 'info')
+    }
+  }
 
   // Duo de l'Abîme : quand l'un des jumeaux tombe, le survivant entre en FURIE (+50% dégâts).
   if (aliveBosses.length === 1 && !aliveBosses[0].enraged && enemies.some((e) => e.boss && e.hp <= 0)) {
@@ -3561,9 +3583,12 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
   // Nova cataclysmique : grosse AoE typée (check d'EHP/mitigation). NOVA_MULT plat : la difficulté
   // du raid est DÉJÀ dans boss.damage (avant, ×4×baseDifficulty la comptait deux fois).
   if (mech.includes('nova') && novaCd <= 0) {
-    novaCd = 6
+    // Citadelle « Effondrement » : sous 20% des PV du boss, les Novas s'enchaînent (course EHP↔DPS).
+    novaCd = (def.id === 'citadelle' && boss.hp / Math.max(1, boss.maxHp) < 0.2) ? 2 : 6
     chars = applyAoe(chars, boss.damage * NOVA_MULT, element, enemyReq(boss, element))
-    log = pushLog(log, `☄️ ${boss.name} déchaîne une Nova ${DAMAGE_TYPES[element].name} !`, 'death')
+    // « Blessures mortelles » : la Nova ouvre une fenêtre où les SOINS NE SUIVENT PLUS (heal-cut).
+    chars = chars.map((c) => (c.hp > 0 ? { ...c, healCut: HEALCUT_DUR } : c))
+    log = pushLog(log, `☄️ ${boss.name} déchaîne une Nova ${DAMAGE_TYPES[element].name} (soins réduits !) !`, 'death')
   }
   // v0.27 (Lot 3) « Estoc primordial » : coup périodique en % des PV MAX qui IGNORE armure/résist/
   // mitigation → punit l'empilement d'EHP & de réduction (le tank « increvable »). Ne mord que sur
@@ -3571,6 +3596,24 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
   if (Math.floor(fightTime / ESTOC_INTERVAL) > Math.floor((fightTime - dt) / ESTOC_INTERVAL)) {
     chars = chars.map((c) => (c.hp > 0 ? { ...c, hp: Math.max(0, c.hp - charMaxHp(c) * ESTOC_PCT) } : c))
     log = pushLog(log, `🗡️ ${boss.name} porte un Estoc primordial (${Math.round(ESTOC_PCT * 100)}% PV max, imparable) !`, 'death')
+  }
+  // « Frappe partagée » : un gros coup RÉPARTI sur les héros vivants → soloer la frappe = la prendre
+  // PLEINE (impose d'avoir ≥2 survivants pour la diluer).
+  if (Math.floor(fightTime / FRAPPE_INTERVAL) > Math.floor((fightTime - dt) / FRAPPE_INTERVAL)) {
+    const living = chars.filter((c) => c.hp > 0).length
+    if (living > 0) {
+      chars = applyAoe(chars, (boss.damage * FRAPPE_MULT) / living, element, enemyReq(boss, element))
+      log = pushLog(log, `⚔️ ${boss.name} : Frappe partagée (÷${living} survivant${living > 1 ? 's' : ''}) !`, 'death')
+    }
+  }
+  // « Estocade » : frappe le héros le plus BAS en PV (le DPS « protégé » doit aussi survivre).
+  if (Math.floor(fightTime / ESTOCADE_INTERVAL) > Math.floor((fightTime - dt) / ESTOCADE_INTERVAL)) {
+    let li = -1, lo = Infinity
+    chars.forEach((c, i) => { if (c.hp > 0 && c.hp < lo) { lo = c.hp; li = i } })
+    if (li >= 0) {
+      chars = applyAoe(chars, boss.damage * 2.2, element, enemyReq(boss, element), li)
+      log = pushLog(log, `🎯 ${boss.name} : Estocade sur le plus vulnérable !`, 'death')
+    }
   }
   // Déferlante : fait SURGIR des renforts réels (combat à plusieurs adversaires).
   // v0.25.x : les rejetons PERSISTENT jusqu'à leur mort (plus d'expiration) — le plafond

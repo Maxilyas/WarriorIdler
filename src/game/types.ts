@@ -338,6 +338,8 @@ export interface Character {
   absorb?: number
   /** Immunité aux dégâts directs restante (s) — sort « Phase éthérée ». Transitoire. */
   invuln?: number
+  /** v0.27 (Lot 3) « Blessures mortelles » : soins (régén) RÉDUITS tant que > 0 (s). Transitoire. */
+  healCut?: number
   /** « Vengeance différée » : enregistre les dégâts infligés puis frappe ×mult à expiration. Transitoire. */
   charge?: { dealt: number; remaining: number; mult: number }
   /** Frénésie (« Furie sanguinaire ») : multiplicateur de dégâts temporaire. Transitoire. */
