@@ -13,6 +13,7 @@ import {
 import { getTalent, canAllocate } from './talents'
 import { getPower } from './powers'
 import { getUpgrade, upgradeCost as accountUpgradeCost, upgradePoussiere, upgradeEclats, isMaxed, computeGlobalMods, REMOVED_UPGRADES } from './upgrades'
+import { achievementBonuses, evaluateNewAchievements, getAchievement, type AchvCtx } from './achievements'
 import {
   generateItem, rollBoxRarity, rollWindowRarity, rollFarmRarity, sellValue, recycleValue, recyclePoussiere, itemScore,
   reforgeItem, surillvlItem, ascendItem,
@@ -408,6 +409,8 @@ interface SaveData {
   maitrisePoints: number
   /** Arbre de Maîtrise : id de nœud → rang (bonus minimes via computeGlobalMods). */
   maitrise: Record<string, number>
+  /** 🏆 Hauts faits débloqués (v0.28) : id → true. Bonus permanents façon Maîtrise + titres. */
+  achievements: Record<string, true>
   /** Métiers de l'Atelier (v0.22) : XP cumulée + nœuds d'arbre appris, par métier. */
   metiers: MetiersState
   /** Automates de forge : farment en boucle les donjons/raids déjà battus (3 max). */
@@ -572,6 +575,10 @@ interface GameState extends SaveData {
   mysteryBox: (id: number, opts?: { qty?: number; element?: DamageType }) => void
   /** 🏛️ Dépense un Point de Maîtrise dans un nœud de l'arbre du Conseil. */
   learnMaitrise: (nodeId: string) => void
+  /** 🏆 (v0.28) Évalue et débloque les hauts faits désormais atteints (appelé périodiquement). */
+  checkAchievements: () => void
+  /** 🏆 (v0.28) Choisit le TITRE affiché d'un héros (id de haut fait débloqué, ou null). */
+  selectTitle: (charId: string, achId: string | null) => void
   /** Coffre du Destin : garde l'objet à cet index, recycle les autres. */
   chooseFromChoice: (index: number) => void
   recruitCharacter: () => void
@@ -1302,6 +1309,7 @@ function freshSave(): SaveData {
     conseil: emptyConseil(),
     maitrisePoints: 0,
     maitrise: {},
+    achievements: {},
     metiers: emptyMetiers(),
     automates: [],
     shopStock: [],
@@ -1600,6 +1608,7 @@ function sanitize(save: SaveData): SaveData {
   if (!save.conseil || typeof save.conseil !== 'object') save.conseil = emptyConseil()
   if (typeof save.maitrisePoints !== 'number') save.maitrisePoints = 0
   if (!save.maitrise || typeof save.maitrise !== 'object') save.maitrise = {}
+  if (!save.achievements || typeof save.achievements !== 'object') save.achievements = {}
   // 🏪 v0.25 (DESIGN §1) : améliorations de combat + Sacoches SUPPRIMÉES — remboursement 100%
   // (or + éclats, recalculé depuis les formules de coût d'origine). Durcissement assumé.
   {
@@ -1845,6 +1854,7 @@ function persist(s: GameState) {
     conseil: s.conseil,
     maitrisePoints: s.maitrisePoints,
     maitrise: s.maitrise,
+    achievements: s.achievements,
     metiers: s.metiers,
     automates: s.automates,
     shopStock: s.shopStock,
@@ -1914,8 +1924,8 @@ function fullHeal(c: Character): Character {
 }
 
 /** Met à jour les multiplicateurs globaux (combat, régén) — améliorations + 🏛️ Maîtrise (v0.25). */
-function refreshGlobals(upgrades: Record<string, number>, maitrise: Record<string, number> = {}, constellation: Record<string, number> = {}) {
-  const m = computeGlobalMods(upgrades, maitrise)
+function refreshGlobals(upgrades: Record<string, number>, maitrise: Record<string, number> = {}, constellation: Record<string, number> = {}, achievements: Record<string, true> = {}) {
+  const m = computeGlobalMods(upgrades, maitrise, achievementBonuses(achievements))
   // ✨ Constellation de prestige (v0.27, Lot 5) : multiplie les globaux de combat + résist plate.
   const pm = constellationMods(constellation)
   setGlobalCombatMods({ power: m.power * pm.damageMult, attackSpeed: m.attackSpeed * pm.speedMult, vitality: m.vitality * pm.vitalityMult })
@@ -3362,7 +3372,7 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
     crescendoAdd(enemies.length)
     tresorerieShield(chars, dCond.tresorerieCap)
     gemKillEvents(chars, dCond, enemies.length, 1, dRunes, dPact) // 🔔 Glas · 🦷 Fièvre · 🎺 Marche · 🪽 · 🍽️
-    const eco = computeGlobalMods(s.upgrades, s.maitrise)
+    const eco = computeGlobalMods(s.upgrades, s.maitrise, achievementBonuses(s.achievements))
     const lv = d.level
     const packXp = enemies.reduce((a, e) => a + (e.xp ?? 0), 0)
     const noGold = d.modifiers.some((m) => m.noGold)
@@ -3863,13 +3873,13 @@ function applyChestRewards(s: GameState, c: ChestReward): Pick<GameState, 'inven
 
 export const useGame = create<GameState>((set, get) => {
   const save = loadSave()
-  refreshGlobals(save.upgrades, save.maitrise, save.constellation)
+  refreshGlobals(save.upgrades, save.maitrise, save.constellation, save.achievements)
 
   // Progression hors-ligne : applique les gains accumulés depuis la dernière sauvegarde.
   let pendingOffline: OfflineReport | null = null
   const elapsed = Date.now() - (save.lastSeen ?? Date.now())
   if (elapsed > 0) {
-    const report = simulateOffline(save.characters, save.stage, save.upgrades, elapsed, save.activeBiome, save.maitrise)
+    const report = simulateOffline(save.characters, save.stage, save.upgrades, elapsed, save.activeBiome, save.maitrise, achievementBonuses(save.achievements))
     if (report) {
       // ✨ Offrande au gouffre (Constellation) : booste les gains hors-ligne.
       const offMult = constellationMods(save.constellation).offlineMult
@@ -3990,7 +4000,7 @@ export const useGame = create<GameState>((set, get) => {
         crescendoAdd(1)
         tresorerieShield(chars, cond.tresorerieCap)
         gemKillEvents(chars, cond, 1, 1, runes, pact) // 🔔 Glas · 🦷 Fièvre · 🎺 Marche · 🪽 · 🍽️
-        const eco = computeGlobalMods(s.upgrades, s.maitrise)
+        const eco = computeGlobalMods(s.upgrades, s.maitrise, achievementBonuses(s.achievements))
         // SURCHARGE élémentaire : le biome tournant rapporte +50% or/XP et ×2 quintessence.
         const surged = surgeBiome() === s.activeBiome
         const surgeMult = surged ? SURGE_GOLD_XP_MULT : 1
@@ -4331,7 +4341,7 @@ export const useGame = create<GameState>((set, get) => {
       const elapsed = Date.now() - awaySince
       awaySince = 0
       if (elapsed < 60_000 || s.pendingOffline) return // sous 1 min ou récap déjà en attente : rien
-      const report = simulateOffline(s.characters, s.stage, s.upgrades, elapsed, s.activeBiome, s.maitrise)
+      const report = simulateOffline(s.characters, s.stage, s.upgrades, elapsed, s.activeBiome, s.maitrise, achievementBonuses(s.achievements))
       if (!report) return
       const offMult = constellationMods(s.constellation).offlineMult
       if (offMult !== 1) { report.gold = Math.round(report.gold * offMult); report.noyau = Math.round(report.noyau * offMult); report.xp = Math.round(report.xp * offMult) }
@@ -6030,7 +6040,7 @@ export const useGame = create<GameState>((set, get) => {
       const upgrades = { ...s.upgrades, [id]: level + 1 }
       let characters = s.characters
       if (id === 'talentBonus') characters = characters.map((c) => ({ ...c, talentPoints: c.talentPoints + 1 }))
-      refreshGlobals(upgrades, s.maitrise, s.constellation)
+      refreshGlobals(upgrades, s.maitrise, s.constellation, s.achievements)
       const next = { ...s, gold: s.gold - cost, poussiere: s.poussiere - pous, essence: s.essence - ecl, upgrades, characters, log: pushLog(s.log, `Amélioration : ${def.name} niv. ${level + 1} (-${cost.toLocaleString('fr-FR')} or${ecl ? `, -${ecl} ♦` : ''}${pous ? `, -${pous} 🌌` : ''}).`, 'gold') }
       persist(next)
       set(next)
@@ -6071,11 +6081,51 @@ export const useGame = create<GameState>((set, get) => {
       const rank = s.maitrise[nodeId] ?? 0
       if (rank >= def.maxRank || s.maitrisePoints < 1) return
       const maitrise = { ...s.maitrise, [nodeId]: rank + 1 }
-      refreshGlobals(s.upgrades, maitrise, s.constellation)
+      refreshGlobals(s.upgrades, maitrise, s.constellation, s.achievements)
       const next = {
         ...s, maitrise, maitrisePoints: s.maitrisePoints - 1,
         log: pushLog(s.log, `🏛️ Maîtrise : ${def.icon} ${def.name} rang ${rank + 1}/${def.maxRank}.`, 'level'),
       }
+      persist(next)
+      set(next)
+    },
+
+    checkAchievements: () => {
+      const s = get()
+      const metierLevels = METIER_LIST.map((m) => levelFromXp(s.metiers[m.id].xp))
+      const ctx: AchvCtx = {
+        bestStage: s.bestStage,
+        maxLevel: highestLevel(s.characters),
+        prestigeRank: s.prestigeRank,
+        bestRaidTier: bestRaidTier(s.raidProgress),
+        dungeonLevels: Object.values(s.dungeonProgress).reduce((a, b) => a + (b ?? 0), 0),
+        uniquesDiscovered: s.codex.length,
+        metierMaxLevel: metierLevels.reduce((a, b) => Math.max(a, b), 0),
+        metierMinLevel: metierLevels.reduce((a, b) => Math.min(a, b), Infinity),
+        characters: s.characters,
+      }
+      const fresh = evaluateNewAchievements(ctx, s.achievements)
+      if (!fresh.length) return
+      const achievements = { ...s.achievements }
+      let log = s.log
+      for (const id of fresh) {
+        achievements[id] = true
+        const def = getAchievement(id)
+        if (def) log = pushLog(log, `🏆 Haut fait débloqué : ${def.icon} ${def.name} !`, 'level')
+      }
+      // Les hauts faits créditent des rangs façon Maîtrise → recalcule les globaux de combat.
+      refreshGlobals(s.upgrades, s.maitrise, s.constellation, achievements)
+      const next = { ...s, achievements, log }
+      persist(next)
+      set(next)
+    },
+
+    selectTitle: (charId, achId) => {
+      const s = get()
+      // Titre valide = haut fait débloqué portant un titre (ou null pour retirer).
+      if (achId !== null && (!s.achievements[achId] || !getAchievement(achId)?.title)) return
+      const characters = s.characters.map((c) => (c.id === charId ? { ...c, title: achId ?? undefined } : c))
+      const next = { ...s, characters }
       persist(next)
       set(next)
     },
@@ -6232,7 +6282,7 @@ export const useGame = create<GameState>((set, get) => {
       const fresh = freshSave()
       localStorage.removeItem(SAVE_KEY)
       cooldowns.clear()
-      refreshGlobals(fresh.upgrades, fresh.maitrise, fresh.constellation)
+      refreshGlobals(fresh.upgrades, fresh.maitrise, fresh.constellation, fresh.achievements)
       set({
         ...fresh,
         enemy: makeEnemy(fresh.stage, fresh.activeBiome),
@@ -6261,6 +6311,7 @@ export const useGame = create<GameState>((set, get) => {
         echos: s.echos + gained,
         prestigeRank: s.prestigeRank + 1,
         constellation: s.constellation,
+        achievements: s.achievements, // 🏆 hauts faits conservés (permanents au compte)
         relic,
         raidProgress: s.raidProgress, // record conservé (gating des contenus)
         metiers: s.metiers,           // XP métiers conservée (choix A)
@@ -6272,7 +6323,7 @@ export const useGame = create<GameState>((set, get) => {
         base = { ...base, gold: 5000 * base.prestigeRank, characters: base.characters.map((c) => grantXp(c, lvlXp)) }
       }
       cooldowns.clear()
-      refreshGlobals(base.upgrades, base.maitrise, base.constellation)
+      refreshGlobals(base.upgrades, base.maitrise, base.constellation, base.achievements)
       const logged = {
         ...base,
         enemy: makeEnemy(base.stage, base.activeBiome),
@@ -6294,7 +6345,7 @@ export const useGame = create<GameState>((set, get) => {
       const cost = nodeCost(node, cur)
       if (s.echos < cost) return
       const constellation = { ...s.constellation, [nodeId]: cur + 1 }
-      refreshGlobals(s.upgrades, s.maitrise, constellation)
+      refreshGlobals(s.upgrades, s.maitrise, constellation, s.achievements)
       const next = { ...s, echos: s.echos - cost, constellation, log: pushLog(s.log, `💠 Constellation : ${node.icon} ${node.name} → rang ${cur + 1} (−${cost} Échos).`, 'level') }
       persist(next)
       set(next)

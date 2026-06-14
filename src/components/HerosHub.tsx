@@ -6,6 +6,8 @@ import { TalentTree } from './TalentTree'
 import { Sheet, SubTab } from './ui'
 import { LevelBadge } from './LevelBadge'
 import { PrestigePanel } from './PrestigePanel'
+import { AchievementsPanel } from './AchievementsPanel'
+import { getAchievement } from '../game/achievements'
 import { charDps, charMaxHp, charResist } from '../game/character'
 import { getRaidDef, raidReqs, raidUnlocked } from '../game/raids'
 import { resistMult } from '../game/resist'
@@ -13,7 +15,7 @@ import { DAMAGE_TYPE_LIST } from '../game/damage'
 import { PRIMARY_META } from '../game/stats'
 import type { DamageType } from '../game/types'
 
-type HerosView = CharacterView | 'talents' | 'prestige'
+type HerosView = CharacterView | 'talents' | 'prestige' | 'hautsFaits'
 
 function fmt(n: number): string {
   if (n >= 1e9) return (n / 1e9).toFixed(1) + 'Md'
@@ -83,12 +85,15 @@ export function HerosHub({ talentsUnlocked }: { talentsUnlocked: boolean }) {
               {echos > 0 && <span className="rounded-full bg-fuchsia-500 px-1.5 text-[10px] text-slate-950">{echos}</span>}
             </SubTab>
           )}
+          <SubTab on={active === 'hautsFaits'} onClick={() => setSub('hautsFaits')}>🏆 Hauts faits</SubTab>
         </div>
         <div className="min-h-0 flex-1">
           {active === 'talents' ? (
             <TalentTree />
           ) : active === 'prestige' ? (
             <PrestigePanel />
+          ) : active === 'hautsFaits' ? (
+            <AchievementsPanel />
           ) : (
             <div className="h-full overflow-y-auto pr-1">
               <CharacterPanel view={active} />
@@ -128,6 +133,7 @@ export function HerosHub({ talentsUnlocked }: { talentsUnlocked: boolean }) {
             : undefined,
         }]
       : []),
+    { id: 'hautsFaits' as HerosView, icon: '🏆', label: 'Hauts faits', hint: 'Titres · bonus permanents' },
   ]
 
   return (
@@ -155,6 +161,9 @@ export function HerosHub({ talentsUnlocked }: { talentsUnlocked: boolean }) {
             <LevelBadge char={char} />
             <div className="min-w-0">
               <div className="truncate text-base font-bold text-slate-100">{char.name}</div>
+              {char.title && getAchievement(char.title)?.title && (
+                <div className="truncate text-[10px] italic text-amber-300">🎖 {getAchievement(char.title)!.title}</div>
+              )}
               <div className="text-[11px]" style={{ color: PRIMARY_META[char.primaryBias].color }}>
                 {PRIMARY_META[char.primaryBias].name}
               </div>
@@ -191,9 +200,16 @@ export function HerosHub({ talentsUnlocked }: { talentsUnlocked: boolean }) {
       )}
 
       {/* Plein écran (Sheet) */}
-      {card && card !== 'talents' && card !== 'prestige' && (
+      {card && card !== 'talents' && card !== 'prestige' && card !== 'hautsFaits' && (
         <Sheet title={`${cards.find((c) => c.id === card)?.icon} ${cards.find((c) => c.id === card)?.label} — ${char.name}`} onClose={() => setCard(null)}>
           <CharacterPanel view={card} />
+        </Sheet>
+      )}
+      {card === 'hautsFaits' && (
+        <Sheet title="🏆 Hauts faits" onClose={() => setCard(null)}>
+          <div className="h-[72vh]">
+            <AchievementsPanel />
+          </div>
         </Sheet>
       )}
       {card === 'talents' && (

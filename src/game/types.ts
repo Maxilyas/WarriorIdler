@@ -322,6 +322,8 @@ export interface Character {
   /** Talents alloués : id de nœud → rang. */
   talents: Record<string, number>
   primaryBias: PrimaryStat
+  /** 🏆 Titre affiché (v0.28) : id d'un haut fait débloqué (résolu en libellé via achievements.ts). */
+  title?: string
   /** Présets de build (3 emplacements) — application via respec payant. */
   buildPresets?: (BuildPreset | null)[]
   /** PV courants (les PV max sont dérivés du stuff). */

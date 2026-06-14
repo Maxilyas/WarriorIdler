@@ -34,6 +34,8 @@ export function simulateOffline(
   elapsedMs: number,
   activeBiome: DamageType,
   maitrise: Record<string, number> = {},
+  /** v0.28 — bonus de hauts faits (rangs façon Maîtrise) à inclure dans l'éco. */
+  achv: Record<string, number> = {},
 ): OfflineReport | null {
   if (elapsedMs < MIN_OFFLINE_MS) return null
   const capped = Math.min(elapsedMs, OFFLINE_CAP_MS)
@@ -49,7 +51,7 @@ export function simulateOffline(
   const kills = Math.min(20000, Math.floor(seconds / timePerKill))
   if (kills <= 0) return null
 
-  const eco = computeGlobalMods(upgrades, maitrise)
+  const eco = computeGlobalMods(upgrades, maitrise, achv)
   // Même filet d'or que le combat classique en ligne (la richesse vient des donjons/raids).
   const gold = Math.round(kills * enemy.xp * 0.8 * eco.goldGain) // aligné sur CLASSIC_GOLD_MULT (store)
   // Même boost d'XP que le combat classique en ligne (CLASSIC_XP_MULT = 8 dans le store).

@@ -55,6 +55,7 @@ export default function App() {
   const markAway = useGame((s) => s.markAway)
   const resumeAway = useGame((s) => s.resumeAway)
   const rotateBiomeIfDue = useGame((s) => s.rotateBiomeIfDue)
+  const checkAchievements = useGame((s) => s.checkAchievements)
   const inventory = useGame((s) => s.inventory)
   const gold = useGame((s) => s.gold)
   const essence = useGame((s) => s.essence)
@@ -96,6 +97,14 @@ export default function App() {
     const id = setInterval(() => rotateBiomeIfDue(), 5000)
     return () => clearInterval(id)
   }, [rotateBiomeIfDue, paused])
+
+  // 🏆 Hauts faits : évaluation périodique (hors du tick de combat) + un passage immédiat au montage.
+  useEffect(() => {
+    if (paused) return
+    checkAchievements()
+    const id = setInterval(() => checkAchievements(), 4000)
+    return () => clearInterval(id)
+  }, [checkAchievements, paused])
 
   // F3 — cycle de vie mobile : arrière-plan → suspend le tick + horodate ; retour → gains hors-ligne.
   useEffect(() => {

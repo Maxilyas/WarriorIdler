@@ -104,9 +104,14 @@ export interface GlobalMods {
  * Calcule tous les multiplicateurs/bonus globaux issus des améliorations — et, v0.25, de l'arbre
  * du 🏛️ Conseil des Maîtrises (`maitrise` : rangs par nœud, bonus minimes appliqués partout).
  */
-export function computeGlobalMods(upgrades: Record<string, number>, maitrise: Record<string, number> = {}): GlobalMods {
+export function computeGlobalMods(
+  upgrades: Record<string, number>,
+  maitrise: Record<string, number> = {},
+  /** v0.28 — rangs « façon Maîtrise » crédités par les hauts faits (mêmes clés, mêmes coefficients). */
+  achv: Record<string, number> = {},
+): GlobalMods {
   const lv = (id: string) => upgrades[id] ?? 0
-  const mr = (id: string) => maitrise[id] ?? 0
+  const mr = (id: string) => (maitrise[id] ?? 0) + (achv[id] ?? 0)
   return {
     // v0.25 : Puissance/Vivacité/Vitalité/Régénération supprimées — seule la Forge stellaire
     // (puits sommital) et la Maîtrise (minime) portent encore du combat.

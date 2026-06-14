@@ -4,6 +4,7 @@ import type { LogKind } from '../game/store'
 import { Sheet } from './ui'
 import { LevelBadge } from './LevelBadge'
 import { charMaxHp, charDps, charResist, TALENT_START_LEVEL } from '../game/character'
+import { getAchievement } from '../game/achievements'
 import { isBossStage } from '../game/enemies'
 import { getPower, powerIcon } from '../game/powers'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from '../game/damage'
@@ -518,6 +519,9 @@ export function CombatPanel() {
                   <div className="flex items-baseline justify-between gap-2 text-[11px]">
                     <span className={'truncate font-semibold ' + (dead ? 'text-red-500/70 line-through' : 'text-slate-100')}>
                       {c.name}
+                      {c.title && getAchievement(c.title)?.title && (
+                        <span className="ml-1 text-[8.5px] font-normal italic text-amber-300/80">🎖 {getAchievement(c.title)!.title}</span>
+                      )}
                       {active && !single && <span className="ml-1 text-[8.5px] font-normal text-orange-400">● actif</span>}
                     </span>
                     <span className="shrink-0 tabular-nums text-slate-400">
