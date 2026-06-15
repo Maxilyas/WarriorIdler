@@ -2,6 +2,7 @@ import type { Enemy, DamageType, EnemyAbility } from './types'
 import { DAMAGE_TYPE_LIST } from './damage'
 import type { BiomeId } from './biomes'
 import { farmReq } from './resist'
+import { enemyHp, enemyDmg, enemyArmor, farmDifficultyIlvl, ilvlFarm, type EnemyClass } from './progression'
 
 /**
  * Technique SIGNATURE par biome (l'« autre chose » qui s'ajoute aux frappes physiques de base).
@@ -109,13 +110,15 @@ export function makeEnemy(stage: number, biome: BiomeId = 'physique', championMu
   // Trait déterministe sur certains paliers (cycle), hors boss/élite/champion.
   const trait = !isBoss && !isElite && !isChampion && stage % 3 === 0 ? TRAITS[Math.floor(stage / 3) % TRAITS.length] : undefined
 
-  const hpMult = (isElite ? 2.2 : isChampion ? 1.8 : 1) * (trait?.hpMult ?? 1)
-  const dmgMult = (isElite ? 1.4 : isChampion ? 1.25 : 1) * (trait?.dmgMult ?? 1)
+  // v0.30 — courbe UNIFIÉE : PV/dégâts = base commune b^ilvl (progression.ts), classe d'ennemi =
+  // multiplicateur (ratio de TTK). La difficulté suit le STAGE (non capée → mur de farm naturel) ;
+  // les traits (Massif, Féroce…) restent des multiplicateurs en plus.
+  const cls: EnemyClass = isBoss ? 'boss' : isElite ? 'elite' : isChampion ? 'champion' : 'trash'
+  const diffIlvl = farmDifficultyIlvl(stage)
+  const traitHp = trait?.hpMult ?? 1
+  const traitDmg = trait?.dmgMult ?? 1
   const armorMult = trait?.armorMult ?? 1
-
-  // Croissance exponentielle douce du HP (réduite : moins de "sacs à PV"). Boss un peu moins gonflés.
-  const hpBase = 40 * Math.pow(1.17, stage - 1)
-  const maxHp = Math.round(hpBase * (isBoss ? 5 : 1) * hpMult)
+  const maxHp = Math.round(enemyHp(diffIlvl, cls) * traitHp)
   const pool = BIOME_ENEMIES[biome]
   const baseName = pool[(stage - 1) % pool.length]
   const bosses = BIOME_BOSSES[biome]
@@ -146,11 +149,11 @@ export function makeEnemy(stage: number, biome: BiomeId = 'physique', championMu
     name,
     maxHp,
     hp: maxHp,
-    armor: Math.round(stage * 1.5 * armorMult),
-    // Dégâts : croissance VOLONTAIREMENT plus lente que les PV (1.115 vs 1.17, comme les raids) →
-    // les PV joueur (≈ linéaires) suivent, fini le one-shot exponentiel en fin de course. La menace
-    // vient désormais de la pression soutenue + des techniques télégraphiées (à parer), pas du mur sec.
-    damage: Math.round(7 * Math.pow(1.115, stage - 1) * (isBoss ? 1.8 : 1) * dmgMult),
+    armor: Math.round(enemyArmor(diffIlvl, armorMult)),
+    // Dégâts : MÊME base b que les PV (et que le joueur) → la pression suit la montée, fini le
+    // one-shot exponentiel ET le « trop mou ». La menace vient des techniques télégraphiées + du
+    // check de résistance (req), pas d'un mur sec. La classe encode le ratio (boss ×1,8 trash).
+    damage: Math.round(enemyDmg(diffIlvl, cls) * traitDmg),
     // XP rare (monter de niveau se mérite — levelling volontairement lent au début).
     xp: Math.round((isBoss ? 38 : isElite || isChampion ? 17 : 4) * Math.pow(1.115, stage - 1)),
     resist,
@@ -170,9 +173,10 @@ export function isBossStage(stage: number): boolean {
   return stage % 10 === 0
 }
 
-/** ilvl de loot attendu pour un palier. */
+/** ilvl de loot attendu pour un palier (v0.30 : PLAFONNÉ à 200 via ilvlFarm — au-delà, la difficulté
+ *  monte encore mais le loot stagne → on passe aux donjons/raids). */
 export function stageIlvl(stage: number): number {
-  return Math.max(1, Math.round(stage * 1.5))
+  return ilvlFarm(stage)
 }
 
 /** Décalage de chance de rareté selon le palier atteint. */

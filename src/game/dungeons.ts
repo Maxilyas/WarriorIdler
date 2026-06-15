@@ -2,6 +2,7 @@ import type { DamageType, Enemy } from './types'
 import { DAMAGE_TYPES } from './damage'
 import type { GemFamily } from './condGems'
 import { dungeonReq } from './resist'
+import { enemyHp, enemyDmg, enemyArmor, ilvlDungeon, ilvlFarm, dungeonDifficultyIlvl } from './progression'
 
 /**
  * DONJONS « par RESSOURCE » (refonte v0.17).
@@ -308,10 +309,10 @@ export function dungeonFights(level: number): number {
  * Monter le PALIER redevient le moteur ; le donjon garde une longueur d'avance, pas une galaxie.
  */
 export function dungeonIlvl(level: number, bestStage: number): number {
-  const cap = Math.round(Math.max(1, bestStage) * 1.5 * 1.25) // stageIlvl(bestStage) × 1.25
-  // v0.25 : rang 1 ≈ iLvl 66 (la Cache débloquée au palier 40 doit valoir le coup), plafonné par le
-  // record (monter le PALIER reste le moteur ; le donjon garde une avance, pas une galaxie).
-  return Math.min(Math.round(46 + level * 20), Math.max(20, cap))
+  // v0.30 : loot du donjon = ilvlDungeon (cap 250), borné par le record de farm (×1,25 + marge) →
+  // le donjon garde une avance ciblée sur le farm, jamais une galaxie. Monter reste le moteur.
+  const cap = Math.round(ilvlFarm(bestStage) * 1.25 + 20)
+  return Math.min(ilvlDungeon(level), Math.max(20, cap))
 }
 
 /**
@@ -354,29 +355,14 @@ export function dungeonLuckTier(level: number): number {
   return 2 + Math.floor(level / 2)
 }
 
-// Constantes d'équilibrage des donjons (à ajuster facilement).
-const EFF_STAGE_PER_LEVEL = 7 // sert aux RÉCOMPENSES (xp) et à l'armure → économie inchangée.
-// COURBE DE COMBAT (calée et CONSERVÉE) : PV/dégâts par NIVEAU de donjon + rampe douce par combat.
-const DUNGEON_HP_BASE = 3200       // PV d'un ennemi NORMAL, donjon niv 1, 1er combat (neutre)
-const DUNGEON_HP_PER_LEVEL = 1.42  // ×PV par niveau de donjon (montée douce → progression réelle)
-const DUNGEON_DMG_BASE = 389       // dégâts de base
-const DUNGEON_DMG_PER_LEVEL = 1.26 // ×dégâts par niveau (plus lent que les PV → la survie suit)
-const DUNGEON_FIGHT_RAMP = 1.04    // ×PV & dégâts par combat DANS un run (rampe douce, pas un mur)
-const DUNGEON_BOSS_HP_MULT = 5     // le boss (dernier combat) reste un pic de PV
-// v0.25 — DÉCALAGE DE DÉPART, pour les donjons à fort palier de déblocage UNIQUEMENT. La courbe
-// ci-dessus n'est PAS touchée (progression validée) ; on lève seulement le NIVEAU 1 des donjons qui
-// s'ouvrent tard, pour qu'il vaille leur palier d'ouverture (Cache 40, Vortex 50, Géode 50…). Baseline
-// = palier implicite du niv 1 d'origine (3200 PV ≈ farm palier 29) → offset 0 en dessous : les donjons
-// à faible/moyen déblocage NE BOUGENT PAS d'un poil.
-const DUNGEON_UNLOCK_BASELINE = 29
-const DUNGEON_PALIERS_PER_LEVEL = 2.23 // 1.42 = 1.17^2.23 (paliers de farm ↔ niveaux de donjon)
-// v0.25.1 — adoucissement : le premier jet était « un poil trop chaud » (retour joueur). −0,6 niveau
-// effectif sur les SEULS donjons décalés (≈ −19% PV, −13% dégâts) ; n'affecte jamais les autres.
-const DUNGEON_OFFSET_SOFTEN = 0.6
-function dungeonStartOffset(def: DungeonDef): number {
-  const anchor = def.anchorStage ?? def.unlockStage
-  return Math.max(0, (anchor - DUNGEON_UNLOCK_BASELINE) / DUNGEON_PALIERS_PER_LEVEL - DUNGEON_OFFSET_SOFTEN)
-}
+// Constantes d'équilibrage des donjons.
+const EFF_STAGE_PER_LEVEL = 7      // sert aux RÉCOMPENSES (xp) → économie inchangée.
+// v0.30 — la COURBE DE COMBAT n'est plus propre aux donjons : PV/dégâts = base unifiée b^ilvl
+// (progression.ts, dungeonDifficultyIlvl). Le décalage de départ (anchorStage) est ABSORBÉ par
+// l'ilvl du donjon — plus besoin d'offsets. L'identité (TRAIT_CFG) reste un multiplicateur.
+const DUNGEON_FIGHT_RAMP_ILVL = 2 // +ilvl de difficulté par combat DANS un run (rampe douce)
+const DUNGEON_BOSS_HP_MULT = 5    // boss (dernier combat) : pic de PV (~15 s, pacing donjon court)
+const DUNGEON_ELITE_HP_MULT = 2.7 // élites coriaces (Cache)
 
 /** Régénération des ennemis (fraction des PV max/s) imposée par l'identité du donjon. */
 export function dungeonRegen(trait: DungeonTrait): number {
@@ -399,25 +385,22 @@ export function makeDungeonEnemy(
 ): Enemy {
   const cfg = TRAIT_CFG[def.trait]
   const isBoss = fightIndex === totalFights - 1
-  let hpMult = cfg.hp
-  let armorMult = cfg.armor
+  const isElite = cfg.elite && !isBoss
+  let hpMods = 1
+  let armorMods = 1
   let xpMult = 1
   for (const m of modifiers) {
-    if (m.hpMult) hpMult *= m.hpMult
-    if (m.armorMult) armorMult *= m.armorMult
+    if (m.hpMult) hpMods *= m.hpMult
+    if (m.armorMult) armorMods *= m.armorMult
     if (m.xpMult) xpMult *= m.xpMult
   }
 
-  const lvl = level - 1
-  const effStage = level * EFF_STAGE_PER_LEVEL + fightIndex // récompenses (xp) + armure (économie inchangée)
-  // Niveau EFFECTIF sur la courbe = niveau réel + décalage de départ (>0 SEULEMENT pour les donjons à
-  // fort palier de déblocage → leur niv 1 vaut leur palier d'ouverture ; les autres : offset 0, inchangés).
-  const startOff = dungeonStartOffset(def)
-  const effLevel = lvl + startOff
-  // PV : COURBE CONSERVÉE (1.42/niveau) + rampe douce par COMBAT (1.04).
-  const hpBase = DUNGEON_HP_BASE * Math.pow(DUNGEON_HP_PER_LEVEL, effLevel) * Math.pow(DUNGEON_FIGHT_RAMP, fightIndex)
-  const maxHp = Math.round(hpBase * (isBoss ? DUNGEON_BOSS_HP_MULT : 1) * hpMult)
-  const isElite = cfg.elite && !isBoss
+  // v0.30 — base UNIFIÉE b^ilvl à l'ilvl de difficulté du donjon (+ rampe douce par combat) ;
+  // l'identité (cfg.hp/dmg/armor) et la classe (boss/élite) restent des multiplicateurs.
+  const diffIlvl = dungeonDifficultyIlvl(level) + fightIndex * DUNGEON_FIGHT_RAMP_ILVL
+  const classHp = isBoss ? DUNGEON_BOSS_HP_MULT : isElite ? DUNGEON_ELITE_HP_MULT : 1
+  const maxHp = Math.round(enemyHp(diffIlvl, 'trash') * classHp * cfg.hp * hpMods)
+  const effStage = level * EFF_STAGE_PER_LEVEL + fightIndex // récompenses (xp) — économie inchangée
 
   const baseName = `${pick(ENEMY_NAMES)} ${DAMAGE_TYPES[def.element].name.toLowerCase()}`
   const name = isBoss ? `★ ${baseName}` : isElite ? `◆ ${baseName}` : baseName
@@ -426,9 +409,9 @@ export function makeDungeonEnemy(
     name,
     maxHp,
     hp: maxHp,
-    armor: Math.round((10 + (level + startOff) * 10) * armorMult),
-    // Dégâts : COURBE CONSERVÉE (1.26/niveau, plus lente que les PV → survie suit) + décalage de départ.
-    damage: Math.round(DUNGEON_DMG_BASE * Math.pow(DUNGEON_DMG_PER_LEVEL, effLevel) * Math.pow(DUNGEON_FIGHT_RAMP, fightIndex) * cfg.dmg * (isBoss ? 1.8 : 1)),
+    armor: Math.round(enemyArmor(diffIlvl, cfg.armor * armorMods)),
+    // Dégâts : MÊME base b que les PV ; identité (cfg.dmg) + boss ×1,8 en multiplicateurs.
+    damage: Math.round(enemyDmg(diffIlvl, 'trash') * cfg.dmg * (isBoss ? 1.8 : 1)),
     xp: Math.round(8 * Math.pow(1.12, effStage - 1) * (isBoss ? 5 : 1) * xpMult),
     resist: {},
     damageType: def.element,

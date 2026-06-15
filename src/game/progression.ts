@@ -79,6 +79,22 @@ export function enemyDmg(ilvl: number, cls: EnemyClass = 'trash'): number {
   return ENEMY_DMG0 * powerAt(ilvl) * ENEMY_DMG_CLASS[cls]
 }
 
+/** Armure d'un ennemi : scale comme la puissance (powerAt) → mitigation physique ~constante (la
+ *  Pénétration reste pertinente à tout ilvl). `mult` = blindage du contenu (donjon armure, forteresse). */
+export const ENEMY_ARMOR0 = 6
+export function enemyArmor(ilvl: number, mult = 1): number {
+  return ENEMY_ARMOR0 * powerAt(ilvl) * mult
+}
+
+/**
+ * Difficulté du FARM en ilvl, NON capée (le loot, lui, plafonne à 200 via ilvlFarm) : au-delà du
+ * palier ~80 la pression continue de monter alors que le loot stagne → mur de farm NATUREL qui
+ * pousse vers donjons/raids (ce n'est plus l'écart exponentiel PV/DPS qui fait le mur).
+ */
+export function farmDifficultyIlvl(stage: number): number {
+  return stage * 2.5
+}
+
 // ---- Cibles d'équilibrage (knobs centraux) ----
 
 /** Temps de kill cibles (s) à stuff CALÉ sur le contenu (DESIGN_v0.30 §7). */
@@ -94,9 +110,13 @@ export const SURVIVE_SECONDS = 8
 export function ilvlFarm(palier: number): number {
   return Math.min(200, Math.max(1, Math.round(palier * 2.5)))
 }
-/** Donjon : side-grade ciblé, ~15 % d'ilvl devant le farm, plafonné à 250. */
+/** Donjon : difficulté en ilvl (NON capée — comme le farm, la pression continue au-delà du loot). */
+export function dungeonDifficultyIlvl(level: number): number {
+  return Math.max(20, Math.round(40 + level * 14))
+}
+/** Donjon : ilvl de LOOT (side-grade ciblé, ~15 % devant le farm), plafonné à 250. */
 export function ilvlDungeon(level: number): number {
-  return Math.min(250, Math.max(20, Math.round(40 + level * 14)))
+  return Math.min(250, dungeonDifficultyIlvl(level))
 }
 /**
  * Raid : bande linéaire `230 → 600` pour les 4 raids de base (+~15/tier sur 10 tiers), prolongée par

@@ -1,6 +1,6 @@
 import type { DamageType, Enemy, EnemyAbility, ItemType } from './types'
 import { DAMAGE_TYPE_LIST } from './damage'
-import { stageIlvl } from './enemies'
+import { enemyHp, enemyDmg, enemyArmor, clampIlvl } from './progression'
 
 /**
  * RAIDS — refonte v0.23 « un boss, dix tiers ».
@@ -148,25 +148,26 @@ export function raidUnlocked(def: RaidDef, bestStage: number, progress: Record<R
   return true
 }
 
-// ---- Constantes d'équilibrage (DUR mais sans mur — à nudger ici) ----
-// v0.25.x : 2.5 → 3.2 (retour joueur). Les boss mouraient avant d'avoir lancé leurs capacités →
-// les combats doivent DURER assez pour que les télégraphes et le check de résistance s'expriment.
-const RAID_HP_PREMIUM = 3.2       // PV bruts vs un ennemi de farm de palier équivalent
-// v0.24 : 1.95 → 1.6. La résistance n'atténue plus en % (modèle relatif) : un joueur AU CAP
-// encaisse ×1 (avant : jusqu'à -75%) → on rend une partie de la marge dans les dégâts de base.
-// La vraie menace vient du multiplicateur d'exigence (×5 à zéro résist), pas du chiffre brut.
-const RAID_DMG_PREMIUM = 1.6
-const SOLO_BOSS_MULT = 1.7        // l'unique boss du raid est un vrai morceau (il remplace 3-5 combats)
-/**
- * Pas (en paliers de farm) entre deux tiers — CONSTANT (v0.23). Avant : pas de 8 paliers qui
- * GRANDISSAIT de +2 par tier → le tier 10 cumulait +144 paliers (×10¹⁰ PV), inatteignable.
- * Désormais chaque tier = +4 paliers (×~1,9 PV) : ~10 tiers se montent sur une partie.
- */
-const TIER_STAGE_STEP = 4
+// ---- Constantes d'équilibrage (v0.30 — courbe UNIFIÉE) ----
+// PV/dégâts des boss = base commune b^ilvl (progression.ts) à l'ilvl du raid ; la classe 'raidboss'
+// (×13,3 PV / ×2 dégâts vs trash) donne le pool d'un vrai boss (~40 s à stuff calé). Plus de
+// premiums propres aux raids : l'ilvl (bande 230→700) ET la classe portent tout.
 
-/** Paliers de farm cumulés ajoutés par les tiers (linéaire — courbe douce et prévisible). */
-function tierStageOffset(tier: number): number {
-  return (tier - 1) * TIER_STAGE_STEP
+/**
+ * v0.30 — BANDE D'ILVL LINÉAIRE par raid (fini le ×1,22/tier exponentiel qui faisait le snowball).
+ * Plancher ÉCHELONNÉ selon la difficulté du raid (Forge 230 … Nexus 500, Abîme 560) + pas CONSTANT
+ * de +15 ilvl/tier → un rung ne saute jamais > +20 (jamais de trivialisation du tier précédent).
+ * Les 4 raids de base se chevauchent (loot par type, faits en parallèle) en montant vers 700.
+ */
+const RAID_BASE_FLOOR = 230   // ilvl du Tier 1 du raid le plus facile (Forge)
+const RAID_DIFF_SPREAD = 300  // écart d'ilvl entre raids selon baseDifficulty (1.0→1.9 ⇒ 230→500)
+const RAID_TIER_STEP = 15     // +ilvl par tier
+const ABYSS_FLOOR = 560       // l'Abîme démarre au sommet (≈ Nexus T5) et finit à 700
+
+/** ilvl de difficulté ET de loot d'un raid/tier (la même valeur — contenu calé sur le stuff qu'il rend). */
+function raidTierFloor(def: RaidDef): number {
+  if (def.id === 'abysse') return ABYSS_FLOOR
+  return RAID_BASE_FLOOR + (def.baseDifficulty - 1) * RAID_DIFF_SPREAD
 }
 const FORTRESS_ARMOR_MULT = 3.2   // 'fortress' : armure colossale
 const FORTRESS_RESIST_BONUS = 0.2 // 'fortress' : +résistance au thème
@@ -209,9 +210,10 @@ export interface ActiveRaid {
   repeatLeft?: number
 }
 
-/** Palier de farm « effectif » du boss d'un tier (sert à toutes les courbes). */
+/** Palier « effectif » du boss d'un tier — ne sert plus qu'au pacing de l'XP (les PV/dégâts passent
+ *  par l'ilvl unifié). Conservé pour ne pas casser la courbe d'XP. */
 function effStage(def: RaidDef, tier: number): number {
-  return (def.anchorStage ?? def.unlockStage) + tierStageOffset(tier)
+  return (def.anchorStage ?? def.unlockStage) + (globalTier(def, tier) - 1) * 4
 }
 
 /**
@@ -223,33 +225,32 @@ export function raidPartyHpMult(partySize: number): number {
   return 1 + 0.55 * Math.max(0, partySize - 1)
 }
 
-/** Délai d'enrage dur (s) — rétrécit doucement avec le tier → exige toujours plus de DPS. */
+/** Délai d'enrage dur (s). v0.30 : recalé AU-DESSUS du TTK boss à stuff calé (~37 s) avec marge →
+ *  le stuff calé clear, le sous-stuffé (DPS plus lent) tape l'enrage et échoue (LE check de DPS). */
 export function raidBerserkTime(def: RaidDef, tier: number): number {
-  return Math.max(16, 32 - globalTier(def, tier) * 1.2 - def.baseDifficulty * 2)
+  return Math.max(45, 62 - globalTier(def, tier) * 1.2)
 }
 
 /**
- * iLvl du butin (les raids restent la meilleure source de stuff du jeu).
- * v0.24 : gap MULTIPLICATIF ×1,22 par tier — le budget de stats d'un objet est linéaire en
- * iLvl, donc chaque tier vaut « +1 cran de rareté » en stats brutes (statMult ≈ ×1,22/cran).
- * Un Légendaire T(n+1) peut donc battre un Cosmique T(n) : monter de tier paie toujours.
+ * iLvl du butin = ilvl de DIFFICULTÉ (contenu calé sur le stuff qu'il rend → TTK constant).
+ * v0.30 : BANDE LINÉAIRE `plancher(raid) + (tier-1)×15` (fini le ×1,22/tier exponentiel qui faisait
+ * le snowball). Avec le budget d'objet exponentiel (b^ilvl), +15 ilvl = ×1,55 de puissance par tier,
+ * et le boss monte de la MÊME base b → un tier de plus paie toujours, mais sans jamais s'emballer.
  */
 export function raidIlvl(def: RaidDef, tier: number): number {
-  const base = stageIlvl(def.anchorStage ?? def.unlockStage) * 1.12 + def.baseDifficulty * 8
-  return Math.round(base * Math.pow(1.22, globalTier(def, tier) - 1))
+  return clampIlvl(raidTierFloor(def) + (tier - 1) * RAID_TIER_STEP)
 }
 
 /**
- * Rareté du butin de raid (v0.24, DESIGN §4.3) : FENÊTRE À PIC par tier (rollWindowRarity).
- * v0.25.x — fenêtre DÉCALÉE À DROITE (+1/+2 crans, retour joueur) : au rythme où l'ascension/
- * le craft montent le perso, le pic Épique du T1-T2 ne « droppait » plus que du recyclage
- * (~90% des objets sous le stuff porté). Le pic colle désormais au stuff ATTENDU du tier
- * (T1 Légendaire · T2-T3 Artefact · T4-T5 Patrimoine…) → un clear reste majoritairement du
- * même cran que toi, l'épaule (+1 cran ≈ 17%) est le VRAI up régulier, la traîne l'événement.
- * Les raids restent la SEULE source de Céleste → Transcendant.
+ * Rareté du butin de raid : FENÊTRE À PIC par tier (rollWindowRarity).
+ * v0.30 — fenêtre quasi-PLATE : l'ilvl (bande 230→700) porte la progression, PAS la rareté. Le pic
+ * ne grimpe que TRÈS lentement (Légendaire→Patrimoine sur 10 tiers, ×~1,2 de DPS) → fini le « creep
+ * de rareté » qui ajoutait un snowball par-dessus l'ilvl. Le PLAFOND reste haut (jackpots rares
+ * Céleste→Transcendant) : les raids restent la seule source des hautes raretés, mais elles sont
+ * un événement, pas le vecteur de puissance.
  */
-const RAID_WINDOW_FLOOR = [4, 5, 5, 6, 6, 7, 7, 8, 8, 9]   // T1..T10 : Rare → Mythique (pic = +2)
-const RAID_WINDOW_CAP = [11, 11, 12, 12, 13, 13, 14, 14, 15, 16] // T1..T10 : Céleste → Transcendant
+const RAID_WINDOW_FLOOR = [4, 4, 4, 5, 5, 5, 5, 6, 6, 6]   // T1..T10 : Rare → Légendaire (pic = +2)
+const RAID_WINDOW_CAP = [11, 11, 12, 12, 13, 13, 14, 14, 15, 16] // T1..T10 : Céleste → Transcendant (jackpots)
 
 export function raidRarityWindow(def: RaidDef, tier: number): { floor: number; peak: number; cap: number } {
   const i = Math.max(0, Math.min(RAID_WINDOW_FLOOR.length - 1, globalTier(def, tier) - 1))
@@ -688,15 +689,16 @@ export function raidReqs(def: RaidDef, tier: number): Partial<Record<DamageType,
 }
 
 function bossHp(def: RaidDef, tier: number, partySize = 1): number {
-  const eff = effStage(def, tier)
+  // v0.30 — base UNIFIÉE b^ilvl à l'ilvl du raid ; classe 'raidboss' (×13,3) = pool d'un vrai boss
+  // (~40 s à stuff calé). v.hpMult = tweak du visage du tier ; partyMult = scaling multi-perso.
   const v = raidBossVariant(def, tier)
-  return Math.round(40 * Math.pow(1.18, eff - 1) * RAID_HP_PREMIUM * def.baseDifficulty * SOLO_BOSS_MULT * v.hpMult * raidPartyHpMult(partySize))
+  return Math.round(enemyHp(raidIlvl(def, tier), 'raidboss') * v.hpMult * raidPartyHpMult(partySize))
 }
 
 function bossDamage(def: RaidDef, tier: number): number {
-  const eff = effStage(def, tier)
+  // v0.30 — MÊME base b que les PV (la pression suit l'ilvl) ; classe 'raidboss' (×2 trash).
   const v = raidBossVariant(def, tier)
-  return Math.round(2.5 * Math.pow(1.12, eff - 1) * RAID_DMG_PREMIUM * def.baseDifficulty * v.dmgMult)
+  return Math.round(enemyDmg(raidIlvl(def, tier), 'raidboss') * v.dmgMult)
 }
 
 /** Construit le boss du tier. `element` = type d'attaque courant (pour les raids 'rotating'). */
@@ -717,7 +719,8 @@ export function makeRaidBoss(def: RaidDef, tier: number, element: DamageType, pa
     name: `★ ${def.icon} ${v.name}`,
     maxHp,
     hp: maxHp,
-    armor: Math.round((20 + eff * 2.2) * armorMult),
+    // v0.30 — armure unifiée (scale b^ilvl → Pénétration pertinente ; fortress ×3,2).
+    armor: Math.round(enemyArmor(raidIlvl(def, tier), armorMult)),
     damage: bossDamage(def, tier),
     xp: Math.round(8 * Math.pow(1.12, eff - 1) * 6),
     resist,
@@ -781,8 +784,10 @@ export function raidMaxAdds(tier: number): number {
  * sa mort, plus d'expiration) qui frappe l'équipe. Le nombre simultané est plafonné (raidMaxAdds).
  */
 export function makeRaidAdd(def: RaidDef, tier: number, element: DamageType, partySize = 1): Enemy {
-  const eff = effStage(def, tier)
-  const hp = Math.round(40 * Math.pow(1.18, eff - 1) * 0.45 * def.baseDifficulty * raidPartyHpMult(partySize))
+  const ilvl = raidIlvl(def, tier)
+  // v0.30 — renfort = ennemi de classe 'elite' à l'ilvl du raid (× scaling multi-perso) ; il frappe
+  // ~45 % d'un boss (pression de groupe, pas un second mur).
+  const hp = Math.round(enemyHp(ilvl, 'elite') * raidPartyHpMult(partySize))
   // Les renforts exigent moitié moins que le boss (pression de groupe, pas un second check).
   const reqs: Partial<Record<DamageType, number>> = {}
   const br = raidReqs(def, tier)
@@ -791,7 +796,7 @@ export function makeRaidAdd(def: RaidDef, tier: number, element: DamageType, par
     name: `${def.icon} Rejeton`,
     maxHp: hp,
     hp,
-    armor: Math.round(8 + eff),
+    armor: Math.round(enemyArmor(ilvl)),
     damage: Math.round(bossDamage(def, tier) * 0.45),
     xp: 0,
     resist: {},
