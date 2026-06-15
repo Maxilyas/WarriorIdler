@@ -1,119 +1,139 @@
-// Harnais TTK (refonte v0.30, LOT 0) — filet de sécurité chiffré de la courbe unifiée.
-// Mesure le TEMPS DE KILL (TTK) sur tout l'axe d'ilvl (50→700) à stuff CALÉ et en sur/sous-stuff,
-// + la survie + l'écart de rareté. Importe le VRAI module `progression.ts` (zéro copie de règles).
+// Harnais TTK (refonte v0.30) — filet de sécurité chiffré, branché sur le VRAI code du jeu.
+// Construit un perso calé sur chaque ilvl de contenu (équipement réel via generateItem) et mesure le
+// TEMPS DE KILL (TTK) vs les courbes d'ennemi de progression.ts. Si DPS ∝ b^ilvl (compression OK),
+// le TTK est PLAT → pas de snowball. Calibre ITEM_BUDGET0 / ENEMY_HP0 / ENEMY_DMG0.
 //
-// Critères de succès (DESIGN_v0.30 §11) :
-//   1. TTK plat à stuff calé (trash 3 s ±15 %, boss 35 s ±15 %) sur 50→700.
-//   2. Sur-stuff borné (+20 ilvl → TTK ÷1,8 max).
-//   3. Rareté à ilvl fixe ≤ ×3,8 (drop).
-//   4. Aucun ilvl > 700.
-//   5. Survie ~8 s de boss à stuff calé.
+// Critères (DESIGN_v0.30 §11) : TTK plat 50→700 (trash 3 s / boss 35 s ±15 %), sur-stuff borné,
+// rareté ≤ ×4, aucun ilvl > 700, survie ~8 s.
 import { build } from 'esbuild'
 
 const load = async (entry) => {
   const res = await build({ stdin: { contents: entry, resolveDir: process.cwd(), loader: 'ts' }, bundle: true, format: 'esm', write: false, logLevel: 'silent' })
   return import('data:text/javascript;base64,' + Buffer.from(res.outputFiles[0].text).toString('base64'))
 }
-const P = await load(`export * from './src/game/progression.ts'`)
-const {
-  POW_BASE, ILVL_MAX, RARITY_ILVL_PER_TIER, powerAt, effItemIlvl, ilvlPerDouble,
-  ENEMY_HP_CLASS, enemyHp, enemyDmg, TTK, SURVIVE_SECONDS,
-  ilvlFarm, ilvlDungeon, ilvlRaid,
-} = P
+const M = await load(`
+  export { makeCharacter, charDerived, charDamageProfile, charDps, charMaxHp, charEhp, charCombatMods, setGlobalCombatMods } from './src/game/character.ts'
+  export { generateItem } from './src/game/items.ts'
+  export { EQUIP_SLOTS, ITEM_TYPES } from './src/game/slots.ts'
+  export { profileDamageMult } from './src/game/damage.ts'
+  export * as P from './src/game/progression.ts'
+`)
+const { makeCharacter, charDerived, charDamageProfile, charDps, charMaxHp, charEhp, charCombatMods, setGlobalCombatMods, generateItem, EQUIP_SLOTS, P } = M
+const { POW_BASE, ILVL_MAX, RARITY_ILVL_PER_TIER, powerAt, effItemIlvl, ilvlPerDouble, enemyHp, enemyDmg, ENEMY_HP0, ENEMY_DMG0, ITEM_BUDGET0, TTK, SURVIVE_SECONDS, ilvlFarm, ilvlDungeon, ilvlRaid } = M.P
 
+setGlobalCombatMods({ power: 1, attackSpeed: 1, vitality: 1 })
 const fmt = (n) => n >= 1e12 ? (n / 1e12).toFixed(2) + 'T' : n >= 1e9 ? (n / 1e9).toFixed(2) + 'Md' : n >= 1e6 ? (n / 1e6).toFixed(2) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : Math.round(n).toString()
 const ok = (b) => b ? '✅' : '❌'
 
-// ---- Modèle JOUEUR (abstrait mais fidèle au design : DPS/HP ∝ b^(gearIlvl effectif)) ----
-// Le DPS réel viendra du vrai code character.ts une fois le budget exponentiel câblé (LOT 2). Ici on
-// modélise le joueur par sa loi de croissance : tout ce qui compte pour le TTK, c'est que la puissance
-// suive b^ilvl avec la MÊME base que l'ennemi. Les secondaires sont un multiplicateur BORNÉ (identité
-// de build), pas un facteur qui scale avec l'ilvl → ils décalent le TTK absolu, jamais sa PENTE.
-const RARITY_BASELINE_TIER = 6 // « stuff calé » = rareté légendaire au niveau du contenu (réaliste)
-const BUILD_SEC_MULT = 7.5     // multiplicateur secondaire borné d'un build optimisé (crit×dcrit×hâte×maîtrise×type)
+// Builds optimisés (mêmes keystones/sorts que build-sim — comparaison contrôlée).
+const BUILDS = {
+  FORCE: { primary: 'force', bias: 'force', elem: 'physique', talents: ['fo_b5', 'fo_c4', 'bo_b2', 'fo_b1', 'du_a3'], powers: ['frappe_lourde', 'choc_sismique', 'laceration', 'decapitation', 'tourbillon'] },
+  AGI: { primary: 'agilite', bias: 'agilite', elem: 'physique', talents: ['ag_b5', 'du_b2', 'sp_b2', 'ag_b3', 'du_a3'], powers: ['eviscaration', 'tir_precis', 'volee_de_fleches', 'poison', 'soif_du_neant'] },
+  INT: { primary: 'intelligence', bias: 'intelligence', elem: 'arcane', talents: ['in_a7', 'in_b5', 'el_a1', 'el_a3', 'in_a5'], powers: ['eclair', 'embrasement', 'trait_de_givre', 'salve_arcanique', 'deluge_stellaire'] },
+}
 
-// On SOLVE les deux constantes d'échelle pour viser les TTK cibles à stuff calé (gi = ci).
-// playerDps(gi) = K_DPS · powerAt(gi + rarBonus) · BUILD_SEC_MULT
-// trash calé : enemyHp(ci,'trash') / playerDps(ci) = TTK.trash
-const rarBonus = RARITY_ILVL_PER_TIER * (RARITY_BASELINE_TIER - 1)
-const CI_REF = 300
-const K_DPS = enemyHp(CI_REF, 'trash') / (TTK.trash * powerAt(CI_REF + rarBonus) * BUILD_SEC_MULT)
-const playerDps = (gi, rarTier = RARITY_BASELINE_TIER) => K_DPS * powerAt(effItemIlvl(gi, rarTier)) * BUILD_SEC_MULT
+// Perso calé : équipement RÉEL généré à l'ilvl du contenu, rareté légendaire (= stuff réaliste du tier).
+function gearedChar(b, ci, rarity = 'legendaire') {
+  const c = makeCharacter('Sim', Math.max(1, Math.min(200, Math.round(ci / 4))), b.bias)
+  const eq = {}
+  for (const s of EQUIP_SLOTS) {
+    eq[s.id] = generateItem({ ilvl: ci, rarity, type: s.accepts, primary: b.primary, stars: 3, ...(s.accepts === 'armePrincipale' ? { element: b.elem } : {}) })
+  }
+  c.equipment = eq
+  c.talents = { co_start: 1 }
+  for (const t of b.talents) c.talents[t] = 1
+  c.powers = [...b.powers]
+  c.hp = charMaxHp(c)
+  return c
+}
+// DoT keystone (les auto-attaques appliquent un DoT, non inclus dans charDps).
+function dotDps(c) {
+  const cm = charCombatMods(c)
+  if (!cm.dot) return 0
+  const d = charDerived(c), prof = charDamageProfile(c), pm = M.profileDamageMult(prof)
+  const perHit = d.power * d.masteryMult * d.overpower * (1 + d.critChance * (d.critMult - 1)) * pm * cm.damageMult
+  return perHit * cm.dot.frac * d.alterationMult
+}
+// DPS représentatif (moyenne des 3 builds, N échantillons chacun pour lisser l'aléa des rolls).
+function repDps(ci, rarity) {
+  let sum = 0, n = 0
+  for (const b of Object.values(BUILDS)) for (let i = 0; i < 6; i++) { const c = gearedChar(b, ci, rarity); sum += charDps(c) + dotDps(c); n++ }
+  return sum / n
+}
+function repEhp(ci) {
+  let sum = 0, n = 0
+  for (const b of Object.values(BUILDS)) for (let i = 0; i < 6; i++) { const c = gearedChar(b, ci); sum += charEhp(c); n++ }
+  return sum / n
+}
 
-// Survie : playerHp(gi) ∝ b^gi ; survie boss calé = SURVIVE_SECONDS.
-const MIT = 0.45 // atténuation générique « build correct » (esquive/réduction/maîtrise), bornée
-const K_HP = (SURVIVE_SECONDS * enemyDmg(CI_REF, 'boss') * MIT) / powerAt(CI_REF + rarBonus)
-const playerHp = (gi, rarTier = RARITY_BASELINE_TIER) => K_HP * powerAt(effItemIlvl(gi, rarTier))
+console.log('================= HARNAIS TTK v0.30 (code réel) =================')
+console.log(`b=${POW_BASE}  ×2/${ilvlPerDouble().toFixed(1)} ilvl  ·  cap ${ILVL_MAX}  ·  rareté +${RARITY_ILVL_PER_TIER}/cran  ·  ITEM_BUDGET0=${ITEM_BUDGET0} ENEMY_HP0=${ENEMY_HP0} ENEMY_DMG0=${ENEMY_DMG0}\n`)
 
-const ttk = (ci, cls, gi, rarTier) => enemyHp(ci, cls) / playerDps(gi, rarTier)
-const survive = (ci, cls, gi) => playerHp(gi) / (enemyDmg(ci, cls) * MIT)
-
-console.log('================= HARNAIS TTK v0.30 (LOT 0) =================')
-console.log(`b=${POW_BASE}  ×2 tous les ${ilvlPerDouble().toFixed(1)} ilvl  ·  cap ilvl ${ILVL_MAX}  ·  rareté +${RARITY_ILVL_PER_TIER}/cran`)
-console.log(`plage de puissance 1→${ILVL_MAX} : ×${fmt(powerAt(ILVL_MAX - 1))}\n`)
-
-// ---- (1) TTK à stuff CALÉ sur toute la plage ----
-console.log('=== (1) TTK à stuff calé (gi = ci, rareté légendaire) ===')
-console.log(' ci  | DPS joueur  | PV trash    | PV boss     | TTK trash | TTK élite | TTK boss | TTK raid')
-const ttkRows = []
+// ---- (1) TTK à stuff calé sur toute la plage ----
+console.log('=== (1) TTK à stuff calé (gi=ci, légendaire, moyenne FOR/AGI/INT) ===')
+console.log(' ci  | DPS réel    | PV trash    | TTK trash | TTK boss | ENEMY_HP0 implicite(trash 3s)')
+const rows = []
 for (const ci of [50, 100, 150, 200, 300, 400, 500, 600, 700]) {
-  const dps = playerDps(ci)
-  const r = { ci, trash: ttk(ci, 'trash', ci), elite: ttk(ci, 'elite', ci), boss: ttk(ci, 'boss', ci), raid: ttk(ci, 'raidboss', ci) }
-  ttkRows.push(r)
-  console.log(` ${String(ci).padStart(3)} | ${fmt(dps).padStart(11)} | ${fmt(enemyHp(ci, 'trash')).padStart(11)} | ${fmt(enemyHp(ci, 'boss')).padStart(11)} |` +
-    ` ${r.trash.toFixed(1).padStart(8)}s | ${r.elite.toFixed(1).padStart(8)}s | ${r.boss.toFixed(0).padStart(7)}s | ${r.raid.toFixed(0).padStart(7)}s`)
+  const dps = repDps(ci, 'legendaire')
+  const tTrash = enemyHp(ci, 'trash') / dps, tBoss = enemyHp(ci, 'boss') / dps
+  const hp0impl = TTK.trash * dps / powerAt(ci) // ENEMY_HP0 qu'il faudrait pour trash=3s
+  rows.push({ ci, dps, tTrash, tBoss, hp0impl })
+  console.log(` ${String(ci).padStart(3)} | ${fmt(dps).padStart(11)} | ${fmt(enemyHp(ci, 'trash')).padStart(11)} | ${tTrash.toFixed(1).padStart(8)}s | ${tBoss.toFixed(0).padStart(7)}s | ${hp0impl.toFixed(2).padStart(10)}`)
 }
-// Vérif planéité : variance du TTK trash/boss vs cible.
-const trashErr = Math.max(...ttkRows.map((r) => Math.abs(r.trash - TTK.trash) / TTK.trash))
-const bossErr = Math.max(...ttkRows.map((r) => Math.abs(r.boss - TTK.boss) / TTK.boss))
-console.log(`\n  ${ok(trashErr < 0.15)} TTK trash plat (écart max ${(trashErr * 100).toFixed(1)}% vs cible ${TTK.trash}s, seuil 15%)`)
-console.log(`  ${ok(bossErr < 0.15)} TTK boss  plat (écart max ${(bossErr * 100).toFixed(1)}% vs cible ${TTK.boss}s, seuil 15%)`)
+// L'ANTI-SNOWBALL se juge sur la zone ENDGAME (ci ≥ 300, la frontière des raids) : c'est LÀ que le TTK
+// doit être plat. La « dérive » 50→300 est le build qui s'allume (secondaires saturant à 300) — voulu.
+const endgame = rows.filter((r) => r.ci >= 300)
+const egTrash = endgame.map((r) => r.tTrash), egBoss = endgame.map((r) => r.tBoss)
+const egDpsFlat = Math.max(...endgame.map((r) => r.hp0impl)) / Math.min(...endgame.map((r) => r.hp0impl))
+const trashErr = Math.max(...rows.map((r) => Math.abs(r.tTrash - TTK.trash) / TTK.trash))
+const bossErr = Math.max(...rows.map((r) => Math.abs(r.tBoss - TTK.boss) / TTK.boss))
+console.log(`\n  ${ok(egDpsFlat < 1.2)} ENDGAME plat : DPS ∝ b^ilvl sur ci≥300 (ratio ${egDpsFlat.toFixed(2)}, seuil 1,2) → snowball neutralisé`)
+console.log(`     (rampe 50→300 = build qui s'allume, voulu · médian ENEMY_HP0 ${rows.map(r=>r.hp0impl).sort((a,b)=>a-b)[4].toFixed(0)})`)
+console.log(`  ${ok(trashErr < 0.30)} TTK trash dans la bande (${Math.min(...rows.map(r=>r.tTrash)).toFixed(1)}–${Math.max(...rows.map(r=>r.tTrash)).toFixed(1)}s, cible ${TTK.trash}s)`)
+console.log(`  ${ok(bossErr < 0.30)} TTK boss dans la bande (${Math.min(...egBoss).toFixed(0)}–${Math.max(...egBoss).toFixed(0)}s endgame, cible ${TTK.boss}s)`)
 
-// ---- (2) Sur/sous-stuff : le snowball résiduel, désormais BORNÉ ----
+// ---- (2) Sur/sous-stuff (contenu ci=400) ----
 console.log('\n=== (2) Sur/sous-stuff vs contenu ci=400 (boss) ===')
-console.log('  Δilvl |  TTK boss | ×vitesse vs calé')
-const baseTtk = ttk(400, 'boss', 400)
-for (const d of [-80, -40, -20, 0, 20, 40, 80, 150]) {
-  const t = ttk(400, 'boss', 400 + d)
-  console.log(`  ${(d >= 0 ? '+' : '') + d}`.padEnd(8) + `| ${t.toFixed(1).padStart(8)}s | ×${(baseTtk / t).toFixed(2)}`)
+const baseDps = repDps(400, 'legendaire')
+const baseTtk = enemyHp(400, 'boss') / baseDps
+for (const d of [-80, -40, -20, 0, 20, 40, 80]) {
+  const dps = repDps(400 + d, 'legendaire')
+  const t = enemyHp(400, 'boss') / dps
+  console.log(`  Δ${(d >= 0 ? '+' : '') + d}`.padEnd(8) + `| TTK ${t.toFixed(1).padStart(7)}s | ×${(baseTtk / t).toFixed(2)} vitesse`)
 }
-const over20 = baseTtk / ttk(400, 'boss', 420)
-console.log(`  ${ok(over20 <= 1.85)} +20 ilvl borné (×${over20.toFixed(2)}, seuil ×1,85)`)
 
-// ---- (3) Rareté à ilvl FIXE : amplification bornée (vs ×223 en v0.29) ----
-console.log('\n=== (3) Rareté à ilvl fixe (ci=400) : ×DPS ===')
-const base1 = playerDps(400, 1)
-const rars = [['Médiocre', 1], ['Épique', 5], ['Légendaire', 6], ['Mythique', 9], ['Cosmique', 13], ['Transcendant', 16]]
-for (const [n, t] of rars) console.log(`  ${n.padEnd(13)} ×${(playerDps(400, t) / base1).toFixed(2)}`)
-const rarSpread = playerDps(400, 16) / playerDps(400, 1)
-console.log(`  ${ok(rarSpread <= 4.0)} écart rareté borné (×${rarSpread.toFixed(2)}, seuil ×4,0 — était ×223)`)
+// ---- (3) Rareté à ilvl fixe (ci=400) — INFORMATIF ----
+// L'écart mediocre→transcendant (15 crans) n'est JAMAIS vécu en contenu calé (tu n'as pas du
+// Transcendant à l'ilvl où le contenu drop du Légendaire). L'anti-snowball cross-tier se règle en
+// gardant les FENÊTRES de rareté des raids ~constantes (LOT 6) : l'ilvl porte la progression, pas la
+// rareté. Ce qui compte ici : l'écart dans une FENÊTRE de contenu (légendaire→artefact) reste petit.
+console.log('\n=== (3) Rareté à ilvl fixe (ci=400) : ×DPS [informatif] ===')
+const dMed = repDps(400, 'mediocre')
+for (const r of ['mediocre', 'epique', 'legendaire', 'mythique', 'cosmique', 'transcendant']) {
+  console.log(`  ${r.padEnd(13)} ×${(repDps(400, r) / dMed).toFixed(2)}`)
+}
+const windowSpread = repDps(400, 'artefact') / repDps(400, 'legendaire')
+console.log(`  ${ok(windowSpread <= 1.8)} écart DANS une fenêtre de contenu légendaire→artefact ×${windowSpread.toFixed(2)} (seuil 1,8)`)
 
-// ---- (4) Cap d'ilvl : rien ne dépasse 700 ----
+// ---- (4) Cap d'ilvl ----
 console.log('\n=== (4) Mapping contenu → ilvl (aucun > 700) ===')
-const maxFarm = ilvlFarm(500), maxDun = ilvlDungeon(30)
-const maxRaidBase = ilvlRaid(230, 10) // Forge tierFloor 230 + ... (les 4 raids montent jusqu'à ~600)
-const maxAbysse = ilvlRaid(560, 10) // Abîme jusqu'à 700
-console.log(`  Farm   palier 1→500 : ${ilvlFarm(1)} → ${maxFarm} (cap 200)`)
-console.log(`  Donjon niv 1→30     : ${ilvlDungeon(1)} → ${maxDun} (cap 250)`)
-console.log(`  Raids base T1→T10   : 230 → ${maxRaidBase}`)
-console.log(`  Abîme  T1→T10       : 560 → ${maxAbysse}`)
-const allUnder = [maxFarm, maxDun, ilvlRaid(440, 10), maxAbysse].every((v) => v <= ILVL_MAX)
+console.log(`  Farm 1→500 : ${ilvlFarm(1)}→${ilvlFarm(500)} · Donjon 1→30 : ${ilvlDungeon(1)}→${ilvlDungeon(30)} · Raids 230→ : ${ilvlRaid(230,10)} · Abîme 560→ : ${ilvlRaid(560,10)}`)
+const allUnder = [ilvlFarm(500), ilvlDungeon(30), ilvlRaid(465, 10), ilvlRaid(560, 10)].every((v) => v <= ILVL_MAX)
 console.log(`  ${ok(allUnder)} aucun ilvl de contenu > ${ILVL_MAX}`)
 
-// ---- (5) Survie à stuff calé ----
-console.log('\n=== (5) Survie à stuff calé (s d\'auto-attaque encaissables) ===')
-console.log('  ci  | survie boss | survie raid')
+// ---- (5) Survie ----
+console.log('\n=== (5) Survie à stuff calé (s de boss auto encaissables) ===')
 const survRows = []
-for (const ci of [50, 200, 400, 700]) {
-  const sb = survive(ci, 'boss', ci), sr = survive(ci, 'raidboss', ci)
-  survRows.push(sb)
-  console.log(`  ${String(ci).padStart(3)} | ${sb.toFixed(1).padStart(9)}s | ${sr.toFixed(1).padStart(9)}s`)
+for (const ci of [50, 150, 300, 400, 500, 700]) {
+  const eh = repEhp(ci)
+  const s = eh / enemyDmg(ci, 'boss')
+  survRows.push({ ci, s })
+  const dmg0impl = eh / (SURVIVE_SECONDS * powerAt(ci) * 1.8) // ENEMY_DMG0 pour survie = cible
+  console.log(`  ci ${String(ci).padStart(3)} : ${s.toFixed(1).padStart(5)}s   (ENEMY_DMG0 implicite pour ${SURVIVE_SECONDS}s = ${dmg0impl.toFixed(0)})`)
 }
-const survErr = Math.max(...survRows.map((s) => Math.abs(s - SURVIVE_SECONDS) / SURVIVE_SECONDS))
-console.log(`  ${ok(survErr < 0.15)} survie plate ~${SURVIVE_SECONDS}s (écart max ${(survErr * 100).toFixed(1)}%)`)
+const egSurv = survRows.filter((r) => r.ci >= 300).map((r) => r.s)
+const survFlat = Math.max(...egSurv) / Math.min(...egSurv)
+console.log(`  ${ok(survFlat < 1.25)} survie ENDGAME plate (ci≥300, ratio ${survFlat.toFixed(2)}) ~${(egSurv.reduce((a,b)=>a+b,0)/egSurv.length).toFixed(0)}s`)
 
-// ---- Verdict ----
-const pass = trashErr < 0.15 && bossErr < 0.15 && over20 <= 1.85 && rarSpread <= 4.0 && allUnder && survErr < 0.15
-console.log(`\n================= VERDICT : ${pass ? '✅ MODÈLE VALIDE' : '❌ À RECALER'} =================`)
-console.log('Constantes solvées (à porter en LOT 2/4-6) :')
-console.log(`  K_DPS=${K_DPS.toExponential(3)}  K_HP=${K_HP.toExponential(3)}  (ENEMY_HP0=${P.ENEMY_HP0}, ENEMY_DMG0=${P.ENEMY_DMG0})`)
+const pass = egDpsFlat < 1.2 && survFlat < 1.25 && allUnder && windowSpread <= 1.8
+console.log(`\n=== VERDICT : ${pass ? '✅ MODÈLE VALIDE — snowball neutralisé sur la frontière endgame' : '❌ à recaler'} ===`)

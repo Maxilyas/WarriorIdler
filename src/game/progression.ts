@@ -64,10 +64,11 @@ export const ENEMY_DMG_CLASS: Record<EnemyClass, number> = {
   trash: 1, elite: 1.4, champion: 1.25, boss: 1.8, raidboss: 2.0,
 }
 
-/** Échelle de PV de base (ennemi trash, ilvl 0). Calibrée pour des nombres lisibles. */
-export const ENEMY_HP0 = 40
-/** Échelle de dégâts de base. Calibrée (LOT 4-6) pour viser `SURVIVE_SECONDS` à stuff calé. */
-export const ENEMY_DMG0 = 6
+/** Échelle de PV de base (ennemi trash, ilvl 0). Calibrée par `npm run ttk` (médian implicite) pour
+ *  que le trash meure en ~`TTK.trash` à stuff calé sur tout l'axe. */
+export const ENEMY_HP0 = 1000
+/** Échelle de dégâts de base. Calibrée par `npm run ttk` pour viser `SURVIVE_SECONDS` à stuff calé. */
+export const ENEMY_DMG0 = 82
 
 /** PV d'un ennemi à un ilvl de contenu donné. */
 export function enemyHp(ilvl: number, cls: EnemyClass = 'trash'): number {

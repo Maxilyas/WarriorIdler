@@ -5,6 +5,14 @@ import { ITEM_TYPES } from './slots'
 import { rollUnique, instanceMods } from './uniques'
 import { rollSockets } from './gems'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from './damage'
+import { itemBudget, effItemIlvl, clampIlvl, powerAt, RARITY_ILVL_PER_TIER } from './progression'
+
+/** v0.30 — échelle des lignes de stat secondaire (≠ budget exponentiel du primaire).
+ *  Les secondaires MONTENT jusqu'à `SECONDARY_SATURATE` (ilvl-équiv) puis PLAFONNENT → l'endgame
+ *  est du `b^ilvl` PUR (le primaire porte tout), pas de dérive du TTK/survie en fin de course. En
+ *  deçà, elles s'allument progressivement (« le build vient en ligne »). % bornés en aval (soft caps). */
+export const SECONDARY_SCALE = 2.0
+export const SECONDARY_SATURATE = 300
 
 const ITEM_TYPE_LIST: ItemType[] = Object.keys(ITEM_TYPES) as ItemType[]
 
@@ -81,10 +89,13 @@ export const DMG_LINE_BASE = 8
 export const DMG_LINE_RANGE = 12
 export const DMG_LINE_TIER_GROWTH = 0.07
 
-function rollLineValue(spec: LineSpec, ilvl: number, statMult: number, tier: number): number {
+function rollLineValue(spec: LineSpec, ilvl: number, qMult: number, tier: number): number {
   if (spec.kind === 'stat') {
     const soft = RARE_STATS.includes(spec.stat) ? 0.5 : 1 // stats rares modérées (rares mais fortes)
-    const base = ilvl * 0.8 * statMult * soft
+    // v0.30 : échelle linéaire en ilvl effectif (rareté +3/cran), SATURÉE à SECONDARY_SATURATE →
+    // l'endgame est du b^ilvl pur. La qualité (qMult) les rehausse un peu ; % bornés en aval.
+    const eff = Math.min(effItemIlvl(ilvl, tier), SECONDARY_SATURATE)
+    const base = SECONDARY_SCALE * eff * soft * qMult
     return Math.max(1, Math.round(base * (0.7 + Math.random() * 0.6)))
   }
   if (spec.kind === 'dmgType') return Math.round((DMG_LINE_BASE + Math.random() * DMG_LINE_RANGE) * (1 + tier * DMG_LINE_TIER_GROWTH))
@@ -98,15 +109,16 @@ function specToAffix(spec: LineSpec, value: number): Affix {
   return { kind: spec.kind, type: spec.type, value }
 }
 
-/** Tire `count` lignes distinctes depuis le pool pondéré, en garantissant des lignes ciblées. */
-function rollAffixes(count: number, ilvl: number, statMult: number, tier: number, opts: GenerateOptions): Affix[] {
+/** Tire `count` lignes distinctes depuis le pool pondéré, en garantissant des lignes ciblées.
+ *  `qMult` = multiplicateur de qualité (les lignes de stat secondaire en profitent un peu). */
+function rollAffixes(count: number, ilvl: number, qMult: number, tier: number, opts: GenerateOptions): Affix[] {
   const used = new Set<string>()
   const out: Affix[] = []
 
   const force = (spec: LineSpec) => {
     if (out.length >= count || used.has(lineKey(spec))) return
     used.add(lineKey(spec))
-    out.push(specToAffix(spec, rollLineValue(spec, ilvl, statMult, tier)))
+    out.push(specToAffix(spec, rollLineValue(spec, ilvl, qMult, tier)))
   }
   // Lignes ciblées (donjons par type / coffres ciblés) en priorité.
   if (opts.forceStat) force({ kind: 'stat', stat: opts.forceStat, weight: 0 })
@@ -121,7 +133,7 @@ function rollAffixes(count: number, ilvl: number, statMult: number, tier: number
     for (let i = 0; i < pool.length; i++) { r -= pool[i].weight; if (r <= 0) { idx = i; break } }
     const spec = pool.splice(idx, 1)[0]
     used.add(lineKey(spec))
-    out.push(specToAffix(spec, rollLineValue(spec, ilvl, statMult, tier)))
+    out.push(specToAffix(spec, rollLineValue(spec, ilvl, qMult, tier)))
   }
   return out
 }
@@ -164,12 +176,14 @@ const ORIENTATION_FRAC: Record<ItemOrientation, number> = { offensif: 0.82, equi
 export function generateItem(opts: GenerateOptions): Item {
   const type = opts.type ?? pick(ITEM_TYPE_LIST)
   const typeMeta = ITEM_TYPES[type]
+  // v0.30 : cap DUR d'ilvl (aucun objet ne dépasse 700).
+  const ilvl = clampIlvl(opts.ilvl)
   let rarityId = opts.rarity ?? rollRarity(opts.luckTier ?? 0)
   // Plancher d'iLvl par rareté (drops ALÉATOIRES uniquement) : une haute rareté ne peut pas
   // tomber sur un objet de bas iLvl → fini le « ilvl 30 abyssal qui remplace un ilvl 140 ».
   // Les coffres/raids/craft (rareté forcée) ne sont pas concernés (leur iLvl est déjà calé).
   if (!opts.rarity) {
-    const capTier = maxRarityTierForIlvl(opts.ilvl)
+    const capTier = maxRarityTierForIlvl(ilvl)
     if (RARITIES[rarityId].tier > capTier) {
       const capped = RARITY_LIST.find((r) => r.tier === capTier)
       if (capped) rarityId = capped.id
@@ -202,15 +216,17 @@ export function generateItem(opts: GenerateOptions): Item {
   stars = Math.max(1, Math.min(5, stars))
   const qMult = starsMult(stars)
 
-  const budget = opts.ilvl * typeMeta.weight * rarity.statMult * qMult
+  // v0.30 — BUDGET EXPONENTIEL en ilvl effectif (= ilvl + rareté ×3/cran). La stat primaire le porte
+  // → DPS ∝ b^ilvl → TTK constant. La rareté n'est plus un multiplicateur de budget (qui se faisait
+  // « cuber » par le DPS convexe) : c'est un bonus d'ilvl-équiv borné (cf. progression.ts).
+  const budget = itemBudget(ilvl, rarity.tier, typeMeta.weight, qMult)
   const primaryValue = Math.max(1, Math.round(budget * offFrac * (0.85 + Math.random() * 0.3)))
-  // Toute pièce donne de l'Endurance (la survie scale) ; davantage si défensive. Multiplicateur relevé
-  // (1.4 → 1.9) : les PV suivaient mal la montée des dégâts ennemis → le stuff donne plus d'Endurance.
+  // Toute pièce donne de l'Endurance (la survie scale, même base b → EHP suit les dégâts ennemis).
   const endurance = Math.max(1, Math.round(budget * (1 - offFrac) * 1.9 * (0.85 + Math.random() * 0.3)))
 
   // La qualité AJOUTE des lignes au-dessus du plancher FIXE de la rareté (+0/+0/+1/+1/+2).
   const affixCount = Math.min(7, rarity.affixCount + qualityBonusAffixes(stars))
-  const affixes = rollAffixes(affixCount, opts.ilvl, rarity.statMult * qMult, rarity.tier, opts)
+  const affixes = rollAffixes(affixCount, ilvl, qMult, rarity.tier, opts)
   const unique = rollUnique(rarity.tier)
 
   // Type de dégâts : uniquement sur l'arme principale (Physique plus fréquent).
@@ -230,7 +246,7 @@ export function generateItem(opts: GenerateOptions): Item {
     name,
     type,
     rarity: rarityId,
-    ilvl: opts.ilvl,
+    ilvl,
     primary,
     primaryValue,
     endurance,
@@ -519,13 +535,17 @@ export function qualityBonusAffixes(stars: number): number { return [0, 0, 1, 1,
  */
 export function relicFromItem(item: Item, floorIlvl: number): Item {
   const fl = Math.max(1, Math.min(item.ilvl, floorIlvl))
-  const k = fl / Math.max(1, item.ilvl)
+  const tier = RARITIES[item.rarity].tier
+  // v0.30 : primaire/endurance suivent le budget EXPONENTIEL (powerAt) ; les lignes de stat suivent
+  // l'échelle linéaire (effItemIlvl) ; les lignes typées (% / points) ne scalent pas.
+  const powK = powerAt(fl - item.ilvl)
+  const statK = effItemIlvl(fl, tier) / effItemIlvl(item.ilvl, tier)
   return {
     ...item,
     ilvl: fl,
-    primaryValue: Math.max(1, Math.round(item.primaryValue * k)),
-    endurance: Math.max(1, Math.round(item.endurance * k)),
-    affixes: item.affixes.map((a) => ({ ...a, value: Math.max(1, Math.round(a.value * k)) })),
+    primaryValue: Math.max(1, Math.round(item.primaryValue * powK)),
+    endurance: Math.max(1, Math.round(item.endurance * powK)),
+    affixes: item.affixes.map((a) => (a.kind === 'stat' ? { ...a, value: Math.max(1, Math.round(a.value * statK)) } : a)),
     surCount: 0, trempeCount: 0, reforgeCount: 0,
   }
 }
@@ -565,7 +585,7 @@ export function reforgeItem(item: Item, locked: number[]): Affix[] {
   const kept = item.affixes.filter((_, i) => lockedSet.has(i))
   const used = new Set(kept.map(affixKey))
   const tier = RARITIES[item.rarity].tier
-  const statMult = RARITIES[item.rarity].statMult
+  const qMult = starsMult(item.stars ?? 3)
   const pool = buildPool().filter((s) => !used.has(lineKey(s)))
   const fresh: Affix[] = []
   const rerollCount = item.affixes.length - kept.length
@@ -575,31 +595,40 @@ export function reforgeItem(item: Item, locked: number[]): Affix[] {
     let idx = 0
     for (let j = 0; j < pool.length; j++) { r -= pool[j].weight; if (r <= 0) { idx = j; break } }
     const spec = pool.splice(idx, 1)[0]
-    fresh.push(specToAffix(spec, rollLineValue(spec, item.ilvl, statMult, tier)))
+    fresh.push(specToAffix(spec, rollLineValue(spec, item.ilvl, qMult, tier)))
   }
   return [...kept, ...fresh]
 }
 
-/** Augmente l'ilvl de l'objet et rescale ses stats (les lignes % ne scalent pas). */
+/** Augmente l'ilvl de l'objet et rescale ses stats (cap dur 700 ; les lignes typées % ne scalent pas). */
 export function surillvlItem(item: Item, step = SURILLVL_STEP): Pick<Item, 'ilvl' | 'primaryValue' | 'endurance' | 'affixes' | 'surCount'> {
-  const newIlvl = item.ilvl + step
-  const ratio = newIlvl / item.ilvl
+  const newIlvl = clampIlvl(item.ilvl + step)
+  const realStep = newIlvl - item.ilvl
+  const tier = RARITIES[item.rarity].tier
+  // v0.30 : primaire/endurance EXPONENTIELS (powerAt(step)) ; lignes de stat linéaires (effItemIlvl).
+  const powK = powerAt(realStep)
+  const statK = effItemIlvl(newIlvl, tier) / effItemIlvl(item.ilvl, tier)
   return {
     ilvl: newIlvl,
-    primaryValue: Math.round(item.primaryValue * ratio),
-    endurance: Math.round(item.endurance * ratio),
-    affixes: item.affixes.map((a) => (a.kind === 'stat' ? { ...a, value: Math.round(a.value * ratio) } : a)),
+    primaryValue: Math.round(item.primaryValue * powK),
+    endurance: Math.round(item.endurance * powK),
+    affixes: item.affixes.map((a) => (a.kind === 'stat' ? { ...a, value: Math.round(a.value * statK) } : a)),
     surCount: (item.surCount ?? 0) + 1, // v0.25 : renchérit le prochain surillvl (×1,18)
   }
 }
 
-/** Monte l'objet d'un cran de rareté : rescale, +1 ligne, chance d'unique. */
+/** Monte l'objet d'un cran de rareté : rescale (+3 ilvl-équiv), +1 ligne, chance d'unique. */
 export function ascendItem(item: Item): Partial<Item> | null {
   const nr = nextRarity(item.rarity)
   if (!nr) return null
-  const ratio = RARITIES[nr].statMult / RARITIES[item.rarity].statMult
-  const tier = RARITIES[nr].tier
-  const affixes = item.affixes.map((a) => (a.kind === 'stat' ? { ...a, value: Math.round(a.value * ratio) } : a))
+  const ot = RARITIES[item.rarity].tier
+  const nt = RARITIES[nr].tier
+  // v0.30 : +1 cran = +RARITY_ILVL_PER_TIER ilvl-équiv. Primaire/endurance ×powerAt(+3) ; lignes de
+  // stat ×ratio linéaire d'effItemIlvl.
+  const powK = powerAt(RARITY_ILVL_PER_TIER * (nt - ot))
+  const statK = effItemIlvl(item.ilvl, nt) / effItemIlvl(item.ilvl, ot)
+  const qMult = starsMult(item.stars ?? 3)
+  const affixes = item.affixes.map((a) => (a.kind === 'stat' ? { ...a, value: Math.round(a.value * statK) } : a))
   const used = new Set(affixes.map(affixKey))
   const pool = buildPool().filter((s) => !used.has(lineKey(s)))
   if (pool.length) {
@@ -608,13 +637,13 @@ export function ascendItem(item: Item): Partial<Item> | null {
     let idx = 0
     for (let j = 0; j < pool.length; j++) { r -= pool[j].weight; if (r <= 0) { idx = j; break } }
     const spec = pool[idx]
-    affixes.push(specToAffix(spec, rollLineValue(spec, item.ilvl, RARITIES[nr].statMult, tier)))
+    affixes.push(specToAffix(spec, rollLineValue(spec, item.ilvl, qMult, nt)))
   }
-  const unique = item.unique ?? rollUnique(RARITIES[nr].tier)
+  const unique = item.unique ?? rollUnique(nt)
   return {
     rarity: nr,
-    primaryValue: Math.round(item.primaryValue * ratio),
-    endurance: Math.round(item.endurance * ratio),
+    primaryValue: Math.round(item.primaryValue * powK),
+    endurance: Math.round(item.endurance * powK),
     affixes,
     ...(unique ? { unique } : {}),
   }

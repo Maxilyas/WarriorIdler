@@ -178,9 +178,12 @@ export function computeDerived(total: StatBlock): DerivedStats {
   // - Force        → RÉDUCTION de dégâts (bruiser tanky) + un peu de dégâts
   // - Agilité      → DÉGÂTS CRITIQUES accrus (burst, rien sans Critique)
   // - Intelligence → DÉGÂTS BRUTS (le seul archétype « glass cannon » qui scale en dégâts purs)
-  const masteryFrac = (total.maitrise ?? 0) / PER_PCT
+  // v0.30 — COMPRESSION anti-snowball : Maîtrise & Dégâts crit SOFT-CAPÉS (canaux multiplicatifs qui
+  // scalaient sans borne → DPS ≈ budget^2,4). Le soft cap garde la pente 1 au seuil (zéro nerf sous
+  // l'ancien rendement) puis borne → secondaires = identité de build, plus inflation de puissance.
+  const masteryFrac = softCap((total.maitrise ?? 0) / PER_PCT, 0.8, 1.5)
   let masteryMult = 1
-  let critMult = 2 + (total.degatsCrit ?? 0) / PER_PCT
+  let critMult = 2 + softCap((total.degatsCrit ?? 0) / PER_PCT, 1.0, 2.0)
   let masteryDr = 0
   // v0.29 (Lot A) — RÉÉQUILIBRAGE inter-stats (validé par scripts/sim-classes.mjs : écart DPS
   // endgame ×3.40 → ×1.67). Avant : la Maîtrise Agi donnait +crit ×2/frac NON CAPÉ → l'Agi
@@ -211,7 +214,9 @@ export function computeDerived(total: StatBlock): DerivedStats {
     // en approchant une limite haute. Plus aucun rating gaspillé après le seuil.
     critChance: softCap(0.05 + (total.critique ?? 0) / PER_PCT, 0.75, 0.92),
     critMult,
-    attacksPerSecond: 1 + (total.hate ?? 0) / PER_PCT,
+    // v0.30 — Hâte SOFT-CAPÉE (asymptote ~+1,5 → aps max ~2,5) : c'était le multiplicateur le plus
+    // dangereux (aps non borné × power × maîtrise = courbe cubique). Plein rendement jusqu'à +90%.
+    attacksPerSecond: 1 + softCap((total.hate ?? 0) / PER_PCT, 0.9, 1.5),
     masteryMult,
     masteryDr,
     leech: softCap((total.volDeVie ?? 0) / 2500, 0.5, 0.72),
