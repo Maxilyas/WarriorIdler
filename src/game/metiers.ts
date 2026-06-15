@@ -210,9 +210,8 @@ export const METIER_BRANCHES: Record<MetierId, MetierBranch[]> = {
     { id: 'maitrise', name: 'Maîtrise & Sources', icon: '◈' },
   ],
   runiste: [
-    { id: 'chrono', name: 'Chronomancie', icon: '⏳' },
-    { id: 'lois', name: 'Législation', icon: '⚖️' },
-    { id: 'pactes', name: 'Pactes', icon: '🩸' },
+    { id: 'atelier', name: 'Atelier runique', icon: '🪄' },
+    { id: 'voies', name: 'Voies', icon: '◈' },
   ],
   alchimiste: [
     { id: 'officine', name: 'Officine', icon: '🧪' },
@@ -310,38 +309,32 @@ export const METIER_NODES: Record<MetierId, MetierNode[]> = {
   ],
   // v0.26 — arbre REFONDU : tronc (gravure, atelier runique) + Chronomancie + Législation
   // + Pactes. Specs étagées I→V exclusives. ~45 rangs + fillers.
+  // v0.28 E2 — arbre RÉDUIT : 2 sections, 11 nœuds. Atelier runique = les verbes (graver/effacer/
+  // forger/surcharger). Voies = les 3 maîtrises exclusives (re-choix libre) + Pactes.
   runiste: [
-    /* — tronc commun — */
-    { id: 'gravure', name: 'Gravure', icon: '🪄', maxRank: 1,
+    /* — 🪄 ATELIER RUNIQUE : les verbes (3 premiers = indispensables) — */
+    { id: 'gravure', name: 'Gravure', icon: '🪄', maxRank: 1, branch: 'atelier',
       desc: 'Débloque la GRAVURE : une rune par pièce d\'équipement (runes de TEMPS).' },
-    { id: 'palimpseste', name: 'Palimpseste', icon: '📜', maxRank: 3, requires: 'gravure',
-      desc: '−15% du coût de gravure par rang.' },
-    { id: 'calligraphie', name: 'Calligraphie', icon: '✒️', maxRank: 3, minLevel: 5,
-      desc: '+20% d\'XP de Runiste par rang.' },
-    { id: 'effacement', name: 'Effacement', icon: '🧽', maxRank: 1, minLevel: 4, requires: 'gravure',
-      desc: 'Débloque l\'EFFACEMENT : sacrifier une rune possédée → Fragments runiques 🜁 (1 temps · 2 règle).' },
-    { id: 'forgeRunique', name: 'Forge runique', icon: '🔨', maxRank: 1, minLevel: 10, requires: 'effacement',
-      desc: 'Débloque la FORGE RUNIQUE : fragments 🜁 + 🌌 + or → la rune de ton CHOIX (coût ×1,5 par exemplaire).' },
-    { id: 'surchargeRunique', name: 'Surcharge runique', icon: '🎲', maxRank: 1, minLevel: 18, requires: 'effacement',
-      desc: 'Débloque la SURCHARGE : 3 fragments 🜁 → une rune ALÉATOIRE (jamais un pacte). Le gamble du Runiste.' },
-    { id: 'greffier', name: 'Greffier', icon: '🖋️', maxRank: 3, minLevel: 7,
-      desc: '+10% de chance de DROP de rune (raids, donjons) par rang.' },
-    /* — ⏳ Chronomancie — */
-    { id: 'specChrono', name: 'Chronomancien', icon: '⏳', maxRank: 5, minLevel: 15, exclusive: 'runiste-spec', requires: 'gravure', branch: 'chrono',
-      desc: '◈ I→V : les runes de TEMPS gagnent +15% / +30% / +50% / +65% / +80% d\'efficacité.' },
-    { id: 'horloger', name: 'Horloger', icon: '🕰️', maxRank: 3, minLevel: 9, requires: 'gravure', branch: 'chrono',
-      desc: '+5% d\'efficacité des runes de TEMPS par rang (se cumule avec le Chronomancien).' },
-    /* — ⚖️ Législation — */
-    { id: 'regles', name: 'Lois du monde', icon: '⚖️', maxRank: 1, minLevel: 8, minStage: 50, requires: 'gravure', branch: 'lois',
+    { id: 'effacement', name: 'Effacement', icon: '🧽', maxRank: 1, minLevel: 4, requires: 'gravure', branch: 'atelier',
+      desc: 'Débloque l\'EFFACEMENT : sacrifier une rune possédée → Fragments runiques 🜁.' },
+    { id: 'forgeRunique', name: 'Forge runique', icon: '🔨', maxRank: 1, minLevel: 10, requires: 'effacement', branch: 'atelier',
+      desc: 'Débloque la FORGE RUNIQUE : fragments 🜁 + 🌌 + or → la rune de ton CHOIX.' },
+    { id: 'surchargeRunique', name: 'Surcharge runique', icon: '🎲', maxRank: 1, minLevel: 18, requires: 'effacement', branch: 'atelier',
+      desc: 'Débloque la SURCHARGE : 3 fragments 🜁 → une rune ALÉATOIRE. Le gamble du Runiste.' },
+    { id: 'runologue', name: 'Runologue', icon: '📜', maxRank: 3, minLevel: 5, requires: 'gravure', branch: 'atelier',
+      desc: 'Par rang : −15% du coût de gravure, +XP de Runiste, +10% de chance de DROP de rune.' },
+    { id: 'regles', name: 'Lois du monde', icon: '⚖️', maxRank: 1, minLevel: 8, minStage: 50, requires: 'gravure', branch: 'atelier',
       desc: 'Débloque les runes de RÈGLE : elles tordent le fonctionnement du jeu (loot, clés, économie).' },
-    { id: 'specLegislateur', name: 'Législateur', icon: '🏛️', maxRank: 5, minLevel: 15, exclusive: 'runiste-spec', requires: 'regles', branch: 'lois',
-      desc: '◈ I→V : règles AMPLIFIÉES aux étages III (Karma /25, Économe 25%, Transmutation ×3, knobs +25%) et V (Économe 35%, ×4, knobs +50%).' },
-    /* — 🩸 Pactes — */
-    { id: 'pactes', name: 'Sang d\'encre', icon: '🩸', maxRank: 1, minLevel: 12, minStage: 60, requires: 'gravure', branch: 'pactes',
+    /* — ◈ VOIES : 1 maîtrise exclusive (re-choix libre) + Pactes — */
+    { id: 'specChrono', name: 'Chronomancien', icon: '⏳', maxRank: 5, minLevel: 15, exclusive: 'runiste-spec', requires: 'gravure', branch: 'voies',
+      desc: '◈ I→V : les runes de TEMPS gagnent +15% / +30% / +50% / +65% / +80% d\'efficacité. (Re-choix libre.)' },
+    { id: 'specLegislateur', name: 'Législateur', icon: '🏛️', maxRank: 5, minLevel: 15, exclusive: 'runiste-spec', requires: 'regles', branch: 'voies',
+      desc: '◈ I→V : règles AMPLIFIÉES aux étages III et V (Karma, Économe, Transmutation, knobs). (Re-choix libre.)' },
+    { id: 'pactes', name: 'Sang d\'encre', icon: '🩸', maxRank: 1, minLevel: 12, minStage: 60, requires: 'gravure', branch: 'voies',
       desc: 'Débloque la gravure des PACTES : un keystone bonus/malus, UN SEUL actif par équipe. Forgés, jamais droppés.' },
-    { id: 'specPactiste', name: 'Pactiste', icon: '🖤', maxRank: 5, minLevel: 15, exclusive: 'runiste-spec', requires: 'pactes', branch: 'pactes',
-      desc: '◈ I→V : les MALUS des pactes sont réduits de 5% / 10% / 15% / 20% / 30%.' },
-    { id: 'doublePacte', name: 'Double pacte', icon: '⛓️', maxRank: 1, minLevel: 50, requires: 'specPactiste', requiresRank: 5, branch: 'pactes',
+    { id: 'specPactiste', name: 'Pactiste', icon: '🖤', maxRank: 5, minLevel: 15, exclusive: 'runiste-spec', requires: 'pactes', branch: 'voies',
+      desc: '◈ I→V : les MALUS des pactes sont réduits de 5% / 10% / 15% / 20% / 30%. (Re-choix libre.)' },
+    { id: 'doublePacte', name: 'Double pacte', icon: '⛓️', maxRank: 1, minLevel: 50, requires: 'specPactiste', requiresRank: 5, branch: 'voies', keystone: true,
       desc: 'DEUX pactes actifs simultanément — mais leurs malus repassent ×1,5. Le nœud le plus dangereux du jeu.' },
   ],
   // v0.26 — arbre REFONDU : l'Alchimiste devient le métier des CONSOMMABLES et du temps réel.
@@ -683,10 +676,10 @@ export function craftMods(metiers: MetiersState): CraftMods {
     catalogue: r('joaillier', 'marche') > 0,
     enchant: r('runiste', 'gravure') > 0,
     ruleRunes: r('runiste', 'regles') > 0,
-    enchantCostMult: Math.max(0.4, 1 - r('runiste', 'palimpseste') * 0.15),
-    runisteXpMult: 1 + r('runiste', 'calligraphie') * 0.2,
+    enchantCostMult: Math.max(0.4, 1 - r('runiste', 'runologue') * 0.15),
+    runisteXpMult: 1 + r('runiste', 'runologue') * 0.1,
     // ◈ Chronomancien I→V : 1,15 / 1,3 / 1,5 / 1,65 / 1,8 — + Horloger (+5%/rang).
-    runisteTempo: [1, 1.15, 1.3, 1.5, 1.65, 1.8][Math.min(5, r('runiste', 'specChrono'))] + r('runiste', 'horloger') * 0.05,
+    runisteTempo: [1, 1.15, 1.3, 1.5, 1.65, 1.8][Math.min(5, r('runiste', 'specChrono'))],
     ruleAmpTier: r('runiste', 'specLegislateur'),
     loiAmplifiee: r('runiste', 'specLegislateur') >= 3,
     pactes: r('runiste', 'pactes') > 0,
@@ -695,7 +688,7 @@ export function craftMods(metiers: MetiersState): CraftMods {
     effacement: r('runiste', 'effacement') > 0,
     forgeRunique: r('runiste', 'forgeRunique') > 0,
     surchargeRunique: r('runiste', 'surchargeRunique') > 0,
-    greffierMult: 1 + r('runiste', 'greffier') * 0.1,
+    greffierMult: 1 + r('runiste', 'runologue') * 0.1,
     quint: r('alchimiste', 'quintessence') > 0,
     // ◈ Distillateur I→V : +10/15/25/30/35% (l'étage III = l'ancien rang 1).
     recycleMult: (1 + r('alchimiste', 'distillation') * 0.1)

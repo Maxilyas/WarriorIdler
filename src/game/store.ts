@@ -1287,7 +1287,7 @@ function freshSave(): SaveData {
     armedXpBonus: null,
     lastTransmute: 0,
     philosophale: false,
-    metiersV: 5,
+    metiersV: 6,
     essences: {},
     sceaux: 0,
     dungeonProgress: emptyDungeonProgress(),
@@ -1501,6 +1501,19 @@ function sanitize(save: SaveData): SaveData {
     if (g('marche') || g('marcheAuxPierres')) nodes.marche = 1
     save.metiers = { ...save.metiers, joaillier: { ...save.metiers.joaillier, nodes } }
     save.metiersV = 5
+  }
+  // v0.28 E2 — MIGRATION metiersV 6 : arbre Runiste RÉDUIT (Atelier runique + Voies). Garde les
+  // verbes + les 3 spés ; RETIRE le filler (palimpseste/calligraphie/greffier/horloger) → points rendus.
+  if ((save.metiersV ?? 1) < 6 && save.metiers?.runiste) {
+    const old: Record<string, number> = save.metiers.runiste.nodes ?? {}
+    const g = (id: string) => old[id] ?? 0
+    const nodes: Record<string, number> = {}
+    for (const [id, max] of [['gravure', 1], ['effacement', 1], ['forgeRunique', 1], ['surchargeRunique', 1], ['regles', 1], ['pactes', 1], ['specChrono', 5], ['specLegislateur', 5], ['specPactiste', 5], ['doublePacte', 1]] as const) {
+      const v = Math.min(max, g(id))
+      if (v) nodes[id] = v
+    }
+    save.metiers = { ...save.metiers, runiste: { ...save.metiers.runiste, nodes } }
+    save.metiersV = 6
   }
   // v0.26 : 📖 Catalogue — les saves d'avant sont créditées de leurs gemmes déjà possédées
   // (stock + serties), pour ne pas repartir de zéro.
@@ -1876,7 +1889,7 @@ function persist(s: GameState) {
     armedXpBonus: s.armedXpBonus,
     lastTransmute: s.lastTransmute,
     philosophale: s.philosophale,
-    metiersV: s.metiersV ?? 5,
+    metiersV: s.metiersV ?? 6,
     essences: s.essences,
     sceaux: s.sceaux,
     dungeonProgress: s.dungeonProgress,
