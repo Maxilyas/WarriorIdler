@@ -1200,16 +1200,25 @@ function AlchimisteWorkshop() {
     <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[9.5px] text-emerald-300">{label} · {remainingMin(until)} min</span>
   )
 
+  // v0.28 E2 — panneau réutilisable (sous-section moderne, encadrée).
+  const Panel = ({ title, children }: { title: ReactNode; children: ReactNode }) => (
+    <div className="rounded-lg border border-emerald-800/30 bg-black/20 p-2">
+      <div className="mb-1.5 text-[10px] font-semibold text-emerald-300/80">{title}</div>
+      {children}
+    </div>
+  )
+
   return (
-    <div className="mb-3 rounded-xl border border-emerald-800/40 bg-emerald-950/10 p-2.5">
-      <div className="mb-1.5 flex items-center justify-between">
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-emerald-300">⚗️ Laboratoire {philosophale && <span title="Pierre philosophale">🜍</span>}</span>
-        <span className="text-[10px] text-slate-500">⚗️ {totalQuint} quint. · {alchemyRecipes.length}/{BREWS.length} recettes</span>
+    <div className="space-y-2.5">
+      {/* en-tête */}
+      <div className="flex flex-wrap items-center justify-between gap-1.5">
+        <span className="text-[11px] text-emerald-300">⚗️ {totalQuint} quintessences {philosophale && <span title="Pierre philosophale">🜍</span>}</span>
+        <span className="text-[10px] text-slate-500">{alchemyRecipes.length}/{BREWS.length} recettes</span>
       </div>
 
       {/* Buffs actifs & potions armées */}
       {(elixirActive && elixirActive.until > now) || (oilActive && oilActive.until > now) || (antidoteActive && antidoteActive.until > now) || (mutagenActive && mutagenActive.until > now) || armedRaidShield || armedChestBonus || armedXpBonus ? (
-        <div className="mb-2 flex flex-wrap gap-1">
+        <div className="flex flex-wrap gap-1">
           {elixirActive && elixirActive.until > now && activeLine(`🧪 ${getBrew(elixirActive.id)?.name ?? 'Élixir'}`, elixirActive.until)}
           {oilActive && oilActive.until > now && activeLine(`🛢️ Huile ${DAMAGE_TYPES[oilActive.type].name}`, oilActive.until)}
           {antidoteActive && antidoteActive.until > now && activeLine(`🧴 Antidote ${DAMAGE_TYPES[antidoteActive.type].name}`, antidoteActive.until)}
@@ -1221,91 +1230,108 @@ function AlchimisteWorkshop() {
       ) : null}
 
       {/* 🌿 Réactifs */}
-      <div className="mb-2 flex flex-wrap gap-x-3 gap-y-1 rounded bg-black/20 px-2 py-1.5 text-[10px]">
-        {DAMAGE_TYPE_LIST.map((t) => (
-          <span key={t} title={REAGENTS[t].name} style={{ color: DAMAGE_TYPES[t].color }}>{REAGENTS[t].icon} ×{reagents[t] ?? 0}</span>
-        ))}
-        <span className="text-slate-600">— réactifs de biome (drop en farm{mods.herboristeMult > 1 ? `, 🌿 ×${mods.herboristeMult.toFixed(2)}` : ''})</span>
-      </div>
+      <Panel title={<>🌿 Réactifs <span className="font-normal text-slate-500">— drop en farm{mods.herboristeMult > 1 ? `, ×${mods.herboristeMult.toFixed(2)}` : ''}</span></>}>
+        <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px]">
+          {DAMAGE_TYPE_LIST.map((t) => (
+            <span key={t} title={REAGENTS[t].name} style={{ color: DAMAGE_TYPES[t].color }}>{REAGENTS[t].icon} ×{reagents[t] ?? 0}</span>
+          ))}
+        </div>
+      </Panel>
 
       {!mods.officine ? (
-        <p className="mb-2 text-[9.5px] italic text-slate-500">🔒 Apprends « 🫖 Officine » dans l'arbre : cuves de brassage, expérimentation, élixirs & potions.</p>
+        <p className="text-[9.5px] italic text-slate-500">🔒 Apprends « 🫖 Officine » dans l'arbre : cuves de brassage, expérimentation, élixirs & potions.</p>
       ) : (
         <>
-          {/* 🫙 Cuves */}
-          <div className="mb-1 text-[10px] font-semibold text-emerald-300/80">🫙 Cuves ({cuvesEnCours.length}/{mods.cuves}) <span className="font-normal text-slate-500">— récolte dans la fenêtre PARFAITE (entre ×1,3 et ×1,6 du temps) pour le ▴</span></div>
-          <div className="mb-2 space-y-0.5">
-            {cuvesEnCours.map((cu, i) => {
-              const def = getBrew(cu.recipeId)
-              if (!def) return null
-              const elapsed = (now - cu.startedAt) / 60_000
-              const need = def.brewMin * mods.brewTimeMult
-              const state = elapsed < need ? `mûrit… ${Math.round(elapsed)}/${Math.round(need)} min` : elapsed <= need * 1.6 ? (elapsed >= need * 1.3 ? '▴ FENÊTRE PARFAITE !' : 'à point (Pur)') : 'éventé (Pur)'
-              return (
-                <div key={i} className="flex items-center gap-1.5 rounded bg-black/20 px-1.5 py-1 text-[10px]">
-                  <span className="shrink-0 font-medium text-slate-200">{def.icon} {def.name}</span>
-                  <span className={'min-w-0 flex-1 truncate ' + (state.includes('PARFAITE') ? 'font-semibold text-emerald-300' : 'text-slate-500')}>{state}</span>
-                  <button onClick={() => brewCollect(i)} className="shrink-0 rounded bg-emerald-900/40 px-1.5 py-1 font-medium text-emerald-200 hover:bg-emerald-800/50">Récolter</button>
-                </div>
-              )
-            })}
-            {cuvesEnCours.length < mods.cuves && alchemyRecipes.length > 0 && (
-              <div className="flex flex-wrap gap-1">
-                {alchemyRecipes.map((rid) => {
-                  const def = getBrew(rid)
+          {/* 🫙 Cuves — cartes */}
+          <Panel title={<>🫙 Cuves ({cuvesEnCours.length}/{mods.cuves}) <span className="font-normal text-slate-500">— récolte en fenêtre PARFAITE (×1,3→×1,6) pour le ▴</span></>}>
+            {cuvesEnCours.length > 0 && (
+              <div className="mb-1.5 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                {cuvesEnCours.map((cu, i) => {
+                  const def = getBrew(cu.recipeId)
                   if (!def) return null
-                  const [a, b] = def.recipe
-                  const ok = (reagents[a] ?? 0) >= def.cost && (reagents[b] ?? 0) >= (a === b ? def.cost * 2 : def.cost)
+                  const elapsed = (now - cu.startedAt) / 60_000
+                  const need = def.brewMin * mods.brewTimeMult
+                  const perfect = elapsed >= need * 1.3 && elapsed <= need * 1.6
+                  const state = elapsed < need ? `mûrit… ${Math.round(elapsed)}/${Math.round(need)} min` : perfect ? '▴ FENÊTRE PARFAITE !' : elapsed <= need * 1.6 ? 'à point (Pur)' : 'éventé (Pur)'
                   return (
-                    <button
-                      key={rid}
-                      disabled={!ok}
-                      onClick={() => brewStart(rid)}
-                      title={`${def.desc}\nCoût : ${def.cost} ${REAGENTS[a].icon} + ${def.cost} ${REAGENTS[b].icon} · ~${Math.round(def.brewMin * mods.brewTimeMult)} min`}
-                      className="rounded border border-emerald-800/50 px-1.5 py-1 text-[9.5px] text-emerald-200 hover:bg-emerald-900/30 disabled:opacity-40"
-                    >
-                      {def.icon} {def.name}
-                    </button>
+                    <div key={i} className={'rounded-lg border p-1.5 ' + (perfect ? 'border-emerald-400 bg-emerald-950/30' : 'border-slate-700/60 bg-black/20')}>
+                      <div className="truncate text-[10.5px] font-medium text-slate-200">{def.icon} {def.name}</div>
+                      <div className={'text-[9px] ' + (perfect ? 'font-semibold text-emerald-300' : 'text-slate-500')}>{state}</div>
+                      <button onClick={() => brewCollect(i)} className="mt-1 w-full rounded bg-emerald-900/40 py-1 text-[9.5px] font-medium text-emerald-200 hover:bg-emerald-800/50">Récolter</button>
+                    </div>
                   )
                 })}
               </div>
             )}
-          </div>
+            {cuvesEnCours.length < mods.cuves && alchemyRecipes.length > 0 ? (
+              <>
+                <div className="mb-1 text-[9px] text-slate-500">Lancer un brassin (cuve libre) :</div>
+                <div className="flex flex-wrap gap-1">
+                  {alchemyRecipes.map((rid) => {
+                    const def = getBrew(rid)
+                    if (!def) return null
+                    const [a, b] = def.recipe
+                    const ok = (reagents[a] ?? 0) >= def.cost && (reagents[b] ?? 0) >= (a === b ? def.cost * 2 : def.cost)
+                    return (
+                      <button
+                        key={rid}
+                        disabled={!ok}
+                        onClick={() => brewStart(rid)}
+                        title={`${def.desc}\nCoût : ${def.cost} ${REAGENTS[a].icon} + ${def.cost} ${REAGENTS[b].icon} · ~${Math.round(def.brewMin * mods.brewTimeMult)} min`}
+                        className="rounded border border-emerald-800/50 px-1.5 py-1 text-[9.5px] text-emerald-200 hover:bg-emerald-900/30 disabled:opacity-40"
+                      >
+                        {def.icon} {def.name}
+                      </button>
+                    )
+                  })}
+                </div>
+              </>
+            ) : cuvesEnCours.length === 0 && alchemyRecipes.length === 0 ? (
+              <div className="text-[9.5px] italic text-slate-500">Aucune recette connue — utilise l'Expérimentation ci-dessous.</div>
+            ) : null}
+          </Panel>
 
           {/* 🧪 Expérimentation */}
-          <div className="mb-1 text-[10px] font-semibold text-emerald-300/80">🧪 Expérimentation <span className="font-normal text-slate-500">— combine 2 réactifs ({EXPERIMENT_COST} de chaque) pour DÉCOUVRIR une recette</span></div>
-          <div className="mb-2 flex flex-wrap items-center gap-1">
-            {DAMAGE_TYPE_LIST.map((t) => (
-              <button key={'a' + t} onClick={() => setExpA(t)} className={'rounded px-1.5 py-1 text-[10px] ' + (expA === t ? 'bg-emerald-600 text-slate-950' : 'bg-slate-800 text-slate-400')} title={REAGENTS[t].name}>{REAGENTS[t].icon}</button>
-            ))}
-            <span className="text-slate-500">+</span>
-            {DAMAGE_TYPE_LIST.map((t) => (
-              <button key={'b' + t} onClick={() => setExpB(t)} className={'rounded px-1.5 py-1 text-[10px] ' + (expB === t ? 'bg-emerald-600 text-slate-950' : 'bg-slate-800 text-slate-400')} title={REAGENTS[t].name}>{REAGENTS[t].icon}</button>
-            ))}
-            <button
-              onClick={() => experiment(expA, expB)}
-              disabled={(reagents[expA] ?? 0) < EXPERIMENT_COST || (reagents[expB] ?? 0) < (expA === expB ? EXPERIMENT_COST * 2 : EXPERIMENT_COST)}
-              className="rounded bg-emerald-700/60 px-2 py-1 text-[10px] font-medium text-emerald-100 hover:bg-emerald-600/60 disabled:opacity-40"
-            >
-              ⚗️ Tenter
-            </button>
-          </div>
+          <Panel title={<>🧪 Expérimentation <span className="font-normal text-slate-500">— 2 réactifs ({EXPERIMENT_COST} chacun) → DÉCOUVRIR une recette</span></>}>
+            <div className="flex flex-wrap items-center gap-1">
+              {DAMAGE_TYPE_LIST.map((t) => (
+                <button key={'a' + t} onClick={() => setExpA(t)} className={'rounded px-1.5 py-1 text-[10px] ' + (expA === t ? 'bg-emerald-600 text-slate-950' : 'bg-slate-800 text-slate-400')} title={REAGENTS[t].name}>{REAGENTS[t].icon}</button>
+              ))}
+              <span className="text-slate-500">+</span>
+              {DAMAGE_TYPE_LIST.map((t) => (
+                <button key={'b' + t} onClick={() => setExpB(t)} className={'rounded px-1.5 py-1 text-[10px] ' + (expB === t ? 'bg-emerald-600 text-slate-950' : 'bg-slate-800 text-slate-400')} title={REAGENTS[t].name}>{REAGENTS[t].icon}</button>
+              ))}
+              <button
+                onClick={() => experiment(expA, expB)}
+                disabled={(reagents[expA] ?? 0) < EXPERIMENT_COST || (reagents[expB] ?? 0) < (expA === expB ? EXPERIMENT_COST * 2 : EXPERIMENT_COST)}
+                className="rounded bg-emerald-700/60 px-2 py-1 text-[10px] font-medium text-emerald-100 hover:bg-emerald-600/60 disabled:opacity-40"
+              >
+                ⚗️ Tenter
+              </button>
+            </div>
+          </Panel>
 
-          {/* Stock de brassins */}
+          {/* 🍶 Brassins — cartes */}
           {brewStock.length > 0 && (
-            <>
-              <div className="mb-1 text-[10px] font-semibold text-emerald-300/80">🍶 Brassins en réserve</div>
-              <div className="mb-2 space-y-0.5">
+            <Panel title="🍶 Brassins en réserve">
+              <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                 {brewStock.map(({ key, parsed, n }) => {
                   const q = BREW_QUALITIES[parsed.quality]
                   const needsType = parsed.def.kind === 'huile' || parsed.def.kind === 'antidote'
                   return (
-                    <div key={key} className="flex items-center gap-1.5 rounded bg-black/20 px-1.5 py-1 text-[10px]">
-                      <span className="shrink-0 font-medium" style={{ color: q.color }}>{parsed.def.icon} {parsed.def.name} {q.mark} ×{n}</span>
-                      <span className="min-w-0 flex-1 truncate text-slate-500">{parsed.def.desc}</span>
-                      {needsType && DAMAGE_TYPE_LIST.map((t) => (
-                        <button key={t} onClick={() => setTyped(t)} className={'shrink-0 rounded px-1 py-0.5 text-[9px] ' + (typed === t ? 'bg-emerald-600 text-slate-950' : 'bg-slate-800 text-slate-500')}>{DAMAGE_TYPES[t].icon}</button>
-                      ))}
+                    <div key={key} className="rounded-lg border border-slate-700/60 bg-black/20 p-1.5">
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="truncate text-[10.5px] font-medium" style={{ color: q.color }}>{parsed.def.icon} {parsed.def.name} {q.mark}</span>
+                        <span className="shrink-0 text-[9px] text-slate-400">×{n}</span>
+                      </div>
+                      <div className="line-clamp-2 text-[8.5px] leading-snug text-slate-500" title={parsed.def.desc}>{parsed.def.desc}</div>
+                      {needsType && (
+                        <div className="mt-1 flex flex-wrap gap-0.5">
+                          {DAMAGE_TYPE_LIST.map((t) => (
+                            <button key={t} onClick={() => setTyped(t)} title={DAMAGE_TYPES[t].name} className={'rounded px-1 py-0.5 text-[9px] ' + (typed === t ? 'bg-emerald-600 text-slate-950' : 'bg-slate-800 text-slate-500')}>{DAMAGE_TYPES[t].icon}</button>
+                          ))}
+                        </div>
+                      )}
                       <button
                         onClick={() => {
                           if (parsed.def.kind === 'elixir') drinkElixir(key)
@@ -1314,42 +1340,43 @@ function AlchimisteWorkshop() {
                           else if (parsed.def.kind === 'antidote') useAntidote(key, typed)
                           else drinkMutagen(key)
                         }}
-                        className="shrink-0 rounded bg-emerald-900/40 px-1.5 py-1 font-medium text-emerald-200 hover:bg-emerald-800/50"
+                        className="mt-1 w-full rounded bg-emerald-900/40 py-1 text-[9.5px] font-medium text-emerald-200 hover:bg-emerald-800/50"
                       >
-                        {parsed.def.kind === 'potion' ? 'Armer' : parsed.def.kind === 'huile' ? 'Appliquer' : 'Boire'}
+                        {parsed.def.kind === 'potion' ? 'Armer' : parsed.def.kind === 'huile' ? `Appliquer ${DAMAGE_TYPES[typed].icon}` : parsed.def.kind === 'antidote' ? `Utiliser ${DAMAGE_TYPES[typed].icon}` : 'Boire'}
                       </button>
                     </div>
                   )
                 })}
               </div>
-            </>
+            </Panel>
           )}
 
           {/* 🌗 Transmutation du jour */}
           {mods.transmutJour && (
-            <div className="mb-2 flex flex-wrap items-center gap-1 rounded border border-emerald-900/40 bg-black/20 px-1.5 py-1 text-[10px]">
-              <span className="font-semibold text-emerald-300/80">🌗 Transmutation du jour</span>
-              {lastTransmute >= today ? (
-                <span className="text-slate-500">— déjà utilisée aujourd'hui</span>
-              ) : (
-                <>
-                  {DAMAGE_TYPE_LIST.map((t) => (
-                    <button key={'f' + t} onClick={() => setTransFrom(t)} className={'rounded px-1 py-0.5 ' + (transFrom === t ? 'bg-emerald-600 text-slate-950' : 'bg-slate-800 text-slate-500')}>{DAMAGE_TYPES[t].icon}</button>
-                  ))}
-                  <span className="text-slate-500">→</span>
-                  {DAMAGE_TYPE_LIST.map((t) => (
-                    <button key={'t' + t} onClick={() => setTransTo(t)} className={'rounded px-1 py-0.5 ' + (transTo === t ? 'bg-emerald-600 text-slate-950' : 'bg-slate-800 text-slate-500')}>{DAMAGE_TYPES[t].icon}</button>
-                  ))}
-                  <button
-                    onClick={() => dailyTransmute(transFrom, transTo)}
-                    disabled={(quint[transFrom] ?? 0) < DAILY_TRANSMUTE_COST || transFrom === transTo}
-                    className="rounded bg-emerald-700/60 px-1.5 py-0.5 font-medium text-emerald-100 disabled:opacity-40"
-                  >
-                    4 → 1
-                  </button>
-                </>
-              )}
-            </div>
+            <Panel title="🌗 Transmutation du jour">
+              <div className="flex flex-wrap items-center gap-1 text-[10px]">
+                {lastTransmute >= today ? (
+                  <span className="text-slate-500">Déjà utilisée aujourd'hui.</span>
+                ) : (
+                  <>
+                    {DAMAGE_TYPE_LIST.map((t) => (
+                      <button key={'f' + t} onClick={() => setTransFrom(t)} className={'rounded px-1 py-0.5 ' + (transFrom === t ? 'bg-emerald-600 text-slate-950' : 'bg-slate-800 text-slate-500')}>{DAMAGE_TYPES[t].icon}</button>
+                    ))}
+                    <span className="text-slate-500">→</span>
+                    {DAMAGE_TYPE_LIST.map((t) => (
+                      <button key={'t' + t} onClick={() => setTransTo(t)} className={'rounded px-1 py-0.5 ' + (transTo === t ? 'bg-emerald-600 text-slate-950' : 'bg-slate-800 text-slate-500')}>{DAMAGE_TYPES[t].icon}</button>
+                    ))}
+                    <button
+                      onClick={() => dailyTransmute(transFrom, transTo)}
+                      disabled={(quint[transFrom] ?? 0) < DAILY_TRANSMUTE_COST || transFrom === transTo}
+                      className="rounded bg-emerald-700/60 px-1.5 py-0.5 font-medium text-emerald-100 disabled:opacity-40"
+                    >
+                      4 → 1
+                    </button>
+                  </>
+                )}
+              </div>
+            </Panel>
           )}
 
           {/* 🜍 Pierre philosophale */}
@@ -1358,7 +1385,7 @@ function AlchimisteWorkshop() {
               onClick={() => craftPhilosophale()}
               disabled={DAMAGE_TYPE_LIST.some((t) => (reagents[t] ?? 0) < PHILOSOPHALE_COST.reagentsEach) || poussiere < PHILOSOPHALE_COST.poussiere || !brewStock.some((b) => b.parsed.quality === 3)}
               title={`${PHILOSOPHALE_COST.reagentsEach} de CHAQUE réactif + ${PHILOSOPHALE_COST.poussiere} 🌌 + 1 brassin MILLÉSIME ★`}
-              className="mb-2 w-full rounded-lg border border-amber-600/50 bg-amber-900/20 py-2 text-[11px] font-semibold text-amber-200 hover:bg-amber-800/30 disabled:opacity-40"
+              className="w-full rounded-lg border border-amber-600/50 bg-amber-900/20 py-2 text-[11px] font-semibold text-amber-200 hover:bg-amber-800/30 disabled:opacity-40"
             >
               🜍 Accomplir le Grand Œuvre — la Pierre philosophale
             </button>
@@ -1366,37 +1393,27 @@ function AlchimisteWorkshop() {
         </>
       )}
 
-      {/* Quintessences + synthèses (inchangé) */}
-      {totalQuint > 0 && (
-        <div className="mb-2 flex flex-wrap gap-x-3 gap-y-1 rounded bg-black/20 px-2 py-1.5 text-[10px]">
-          {DAMAGE_TYPE_LIST.filter((t) => (quint[t] ?? 0) > 0).map((t) => (
-            <span key={t} style={{ color: DAMAGE_TYPES[t].color }}>{DAMAGE_TYPES[t].icon} {DAMAGE_TYPES[t].name} ×{quint[t]}</span>
+      {/* 🧬 Quintessences + synthèses */}
+      <Panel title="🧬 Synthèse d'uniques — 3 crans (depuis la fiche objet)">
+        {totalQuint > 0 && (
+          <div className="mb-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[10px]">
+            {DAMAGE_TYPE_LIST.filter((t) => (quint[t] ?? 0) > 0).map((t) => (
+              <span key={t} style={{ color: DAMAGE_TYPES[t].color }}>{DAMAGE_TYPES[t].icon} ×{quint[t]}</span>
+            ))}
+          </div>
+        )}
+        <div className="grid grid-cols-1 gap-1 sm:grid-cols-3 text-[10px]">
+          {([['✨ I — Infusion', 'Fragment → effet ALÉATOIRE.', mods.synth1], ['🧬 II — Essence', 'Essence → effet semi-ciblé.', mods.synth2], ['💫 III — Invocation', 'Éclats cosmiques → effet AU CHOIX.', mods.synth3]] as const).map(([t, d, on]) => (
+            <div key={t} className={'rounded-lg border border-slate-700/60 bg-black/20 p-1.5 ' + (on ? '' : 'opacity-50')}>
+              <div className="text-[10px] font-medium text-slate-200">{t} {!on && '🔒'}</div>
+              <div className="text-[8.5px] leading-snug text-slate-500">{d}</div>
+            </div>
           ))}
         </div>
-      )}
-      <div className="mb-1 text-[10px] font-semibold text-emerald-300/80">🧬 Synthèse d'uniques — 3 crans de précision (fiche objet)</div>
-      <div className="space-y-0.5 text-[10px]">
-        <div className={'flex items-center gap-1.5 rounded bg-black/20 px-1.5 py-1 ' + (mods.synth1 ? '' : 'opacity-50')}>
-          <span className="shrink-0 font-medium text-slate-200">✨ I — Infusion</span>
-          <span className="min-w-0 flex-1 truncate text-slate-500">Fragment d'éternité → effet ALÉATOIRE (ou +1 rang).</span>
-          {!mods.synth1 && <span className="shrink-0 text-slate-500">🔒</span>}
-        </div>
-        <div className={'flex items-center gap-1.5 rounded bg-black/20 px-1.5 py-1 ' + (mods.synth2 ? '' : 'opacity-50')}>
-          <span className="shrink-0 font-medium text-slate-200">🧬 II — Essence</span>
-          <span className="min-w-0 flex-1 truncate text-slate-500">Essences d'uniques recyclés → l'effet de l'essence (semi-ciblé).</span>
-          {!mods.synth2 && <span className="shrink-0 text-slate-500">🔒</span>}
-        </div>
-        <div className={'flex items-center gap-1.5 rounded bg-black/20 px-1.5 py-1 ' + (mods.synth3 ? '' : 'opacity-50')}>
-          <span className="shrink-0 font-medium text-slate-200">💫 III — Invocation</span>
-          <span className="min-w-0 flex-1 truncate text-slate-500">Éclats cosmiques → l'effet de ton CHOIX. L'acte final du craft.</span>
-          {!mods.synth3 && <span className="shrink-0 text-slate-500">🔒</span>}
-        </div>
-      </div>
-      {mods.quintCostMult < 1 && (
-        <p className="mt-2 rounded bg-emerald-500/10 px-1.5 py-1 text-[9.5px] text-emerald-300">
-          ◈ Catalyseur/Rendement : Quintessences <b>−{Math.round((1 - mods.quintCostMult) * 100)}%</b>{mods.quintRefundFull ? <> · recyclage rembourse <b>100%</b></> : null}.
-        </p>
-      )}
+        {mods.quintCostMult < 1 && (
+          <p className="mt-1.5 text-[9.5px] text-emerald-300">◈ Quintessences <b>−{Math.round((1 - mods.quintCostMult) * 100)}%</b>{mods.quintRefundFull ? <> · recyclage <b>100%</b></> : null}.</p>
+        )}
+      </Panel>
     </div>
   )
 }
