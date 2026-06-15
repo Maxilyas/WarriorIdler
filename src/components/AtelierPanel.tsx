@@ -113,7 +113,11 @@ export function AtelierPanel() {
               treePage,
             ]
           } else if (metier === 'joaillier') {
-            pages = [{ id: 'atelier', label: 'Taillerie', icon: '💎', hint: 'Tes gemmes de condition : broyage, taille, fusion, échoppe.', node: <GemWorkshop /> }, treePage]
+            pages = [
+              { id: 'gemmes', label: 'Mes gemmes', icon: '💎', hint: 'Tes gemmes de condition : fusionner, corrompre, broyer, troquer.', node: <GemStock /> },
+              { id: 'creer', label: 'Créer', icon: '✂️', hint: 'Tailler ou acheter une gemme de condition, au choix par famille.', node: <GemCreate /> },
+              treePage,
+            ]
           } else if (metier === 'runiste') {
             pages = [{ id: 'atelier', label: 'Runes', icon: '🜁', hint: 'Forge et gère tes runes & pactes.', node: <RunisteWorkshop /> }, treePage]
           } else {
@@ -905,159 +909,70 @@ function ForgeProcedes() {
 /* 💎 Joaillier : taillerie (stock + fusion)                           */
 /* ------------------------------------------------------------------ */
 
-function GemWorkshop() {
+/** Marque de qualité ▾/▴ (Polie = rien). */
+function qMark(q: 0 | 1 | 2) {
+  return q !== 1 ? <span style={{ color: GEM_QUALITIES[q].color }}>{GEM_QUALITIES[q].mark}</span> : null
+}
+
+/** 💎 Mes gemmes (v0.28 E2 part 2) — stock en GRILLE DE CARTES par famille + actions (fusion/corruption/
+ *  broyage) et troc. Visuel, scannable, fini le scroll de lignes denses. */
+function GemStock() {
   const gems = useGame((s) => s.gems)
   const gemDust = useGame((s) => s.gemDust)
-  const lastStoneTrade = useGame((s) => s.lastStoneTrade)
   const grindGem = useGame((s) => s.grindGem)
-  const cutGem = useGame((s) => s.cutGem)
   const fuseGems = useGame((s) => s.fuseGems)
   const fuseAllGems = useGame((s) => s.fuseAllGems)
-  const buyGem = useGame((s) => s.buyGem)
   const corruptGem = useGame((s) => s.corruptGem)
   const tradeGems = useGame((s) => s.tradeGems)
+  const lastStoneTrade = useGame((s) => s.lastStoneTrade)
   const metiers = useGame((s) => s.metiers)
   const mods = craftMods(metiers)
-  const [cutOpen, setCutOpen] = useState(false)
-  const [shopOpen, setShopOpen] = useState(false)
-  const [cutFamily, setCutFamily] = useState<GemFamily | 'all'>('all')
+  const [tradeMode, setTradeMode] = useState(false)
   const [tradeSel, setTradeSel] = useState<string[]>([])
-  const [tradeOpen, setTradeOpen] = useState(false)
 
-  // Stock : entrées `cond:id[:rang[:qualité]]` décodées, groupées par famille.
   const stock = Object.entries(gems)
     .filter(([, n]) => n > 0)
     .map(([k, n]) => ({ key: k, parsed: parseCondKey(k), n }))
     .filter((x): x is { key: string; parsed: NonNullable<ReturnType<typeof parseCondKey>>; n: number } => !!x.parsed)
-    .sort((a, b) => a.parsed.def.family.localeCompare(b.parsed.def.family) || a.parsed.def.name.localeCompare(b.parsed.def.name) || a.parsed.rank - b.parsed.rank)
   const total = stock.reduce((a, x) => a + x.n, 0)
-  const cutList = COND_GEM_LIST.filter((g) => cutFamily === 'all' || g.family === cutFamily)
-  const cutCost = Math.round(GEM_CUT_COST * mods.tailleCostMult)
-  // 🛒 (v0.28 B2) Échoppe de base : achat d'une gemme rang 1 sans Joaillier, plus cher que la Taille.
-  const buyCost = GEM_CUT_COST * 2
   const fuseCost = Math.round(GEM_FUSE_COST * mods.fuseCostMult)
-  // A6 — au moins un lot fusionnable (3 identiques sous le rang max) → bouton « Tout fusionner ».
-  const canFuseAny = mods.fusion && stock.some((x) => x.n >= GEM_FUSE_COUNT && x.parsed.rank < gemMaxRank(x.parsed.def))
   const corruptCost = Math.round(GEM_CORRUPT_COST * (mods.corruptSafe ? 2 : 1))
   const [cOdds] = corruptOdds(mods.pacteLapidaire)
-  const [qE, , qP] = cutQualityOdds(mods.mainSure)
+  const canFuseAny = mods.fusion && stock.some((x) => x.n >= GEM_FUSE_COUNT && x.parsed.rank < gemMaxRank(x.parsed.def))
   const today = Math.floor(Date.now() / 86_400_000)
   const tradeDone = lastStoneTrade >= today
-  const qMark = (q: 0 | 1 | 2) => (q !== 1 ? <span style={{ color: GEM_QUALITIES[q].color }}> {GEM_QUALITIES[q].mark}</span> : null)
+  const fams = (Object.keys(GEM_FAMILIES) as GemFamily[])
+    .map((f) => ({ f, items: stock.filter((x) => x.parsed.def.family === f).sort((a, b) => a.parsed.def.name.localeCompare(b.parsed.def.name) || a.parsed.rank - b.parsed.rank) }))
+    .filter((g) => g.items.length)
+
+  const toggleTrade = (key: string, n: number) => {
+    const selCount = tradeSel.filter((k) => k === key).length
+    if (selCount < n && tradeSel.length < 3) setTradeSel([...tradeSel, key])
+    else { const i = tradeSel.indexOf(key); if (i >= 0) setTradeSel(tradeSel.filter((_, j) => j !== i)) }
+  }
 
   return (
-    <div className="mb-3 rounded-xl border border-sky-800/40 bg-sky-950/10 p-2.5">
-      <div className="mb-1.5 flex flex-wrap items-center justify-between gap-1.5">
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-sky-300">💎 Taillerie</span>
-        <div className="flex items-center gap-2">
-          {/* A6 — fusionner TOUS les lots éligibles d'un coup (cascade incluse). */}
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-1.5">
+        <span className="text-[11px] text-slate-400">🔹 {gemDust.toLocaleString('fr-FR')} · {total} gemme{total > 1 ? 's' : ''}</span>
+        <div className="flex gap-1.5">
           {canFuseAny && (
-            <button
-              onClick={fuseAllGems}
-              disabled={gemDust < fuseCost}
-              title="Fusionne d'un coup tous les lots de 3 gemmes identiques fusionnables (les résultats peuvent re-fusionner)."
-              className="rounded bg-orange-900/40 px-2 py-1 text-[10px] font-medium text-orange-200 hover:bg-orange-800/50 disabled:opacity-40"
-            >
-              🔥 Tout fusionner
-            </button>
+            <button onClick={fuseAllGems} disabled={gemDust < fuseCost} title="Fusionne tous les lots de 3 gemmes identiques (cascade incluse)." className="rounded bg-orange-900/40 px-2 py-1 text-[10px] font-medium text-orange-200 hover:bg-orange-800/50 disabled:opacity-40">🔥 Tout fusionner</button>
           )}
-          <span className="text-[10px] text-slate-400">🔹 {gemDust.toLocaleString('fr-FR')} poussière · {total} gemme{total > 1 ? 's' : ''}</span>
+          {mods.marcheAuxPierres && total > 0 && (
+            <button onClick={() => { setTradeMode((m) => !m); setTradeSel([]) }} className={'rounded px-2 py-1 text-[10px] font-medium ' + (tradeMode ? 'bg-amber-600 text-slate-950' : 'bg-slate-800 text-amber-200')}>⚖️ Troquer</button>
+          )}
         </div>
       </div>
-      <p className="mb-1.5 text-[9.5px] leading-snug text-slate-500">
-        Les gemmes de CONDITION programment le combat — 4 familles : 🥁 Rythme, 🌊 Flux, 🌍 Environnement,
-        🛡️ Bastion (biome Physique). Drop par famille selon le biome (rare — la taille/fusion compensent) ;
-        sertis-les via la fiche d'un objet. Qualité : ▾ Éclatée · Polie · ▴ Parfaite (roulée à la taille).
-        {!mods.gems && ' 🔒 Sertissage : apprends le nœud ci-dessus.'}
-      </p>
 
-      {/* Stock */}
-      {total === 0 ? (
-        <div className="text-[10px] italic text-slate-500">
-          Aucune gemme — drops de biome (rare), champions ✦ (8%), raids… ou la TAILLE ci-dessous.
-        </div>
-      ) : (
-        <div className="space-y-1">
-          {stock.map(({ key, parsed, n }) => {
-            const fam = GEM_FAMILIES[parsed.def.family]
-            const dust = Math.round(grindDust(parsed.rank, parsed.quality) * mods.grindMult)
-            const canFuse = mods.fusion && n >= GEM_FUSE_COUNT && parsed.rank < gemMaxRank(parsed.def)
-            const canCorrupt = mods.corruption && parsed.rank < gemMaxRank(parsed.def)
-            const selCount = tradeSel.filter((k) => k === key).length
-            return (
-              <div key={key} className="flex items-center gap-1.5 rounded bg-black/20 px-1.5 py-1 text-[10px]">
-                <span className="shrink-0 font-medium" style={{ color: parsed.def.color }} title={fam.name}>
-                  {fam.icon} {parsed.def.icon} {parsed.def.name}{parsed.rank > 1 ? ` R${parsed.rank}` : ''}{qMark(parsed.quality)} ×{n}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-slate-500">{gemDesc(parsed.def, parsed.rank, parsed.quality)}</span>
-                {tradeOpen && (
-                  <button
-                    onClick={() => {
-                      if (selCount < n && tradeSel.length < 3) setTradeSel([...tradeSel, key])
-                      else setTradeSel(tradeSel.filter((k, i) => !(k === key && i === tradeSel.indexOf(key))))
-                    }}
-                    className={'shrink-0 rounded px-1.5 py-1 ' + (selCount > 0 ? 'bg-amber-600 text-slate-950' : 'bg-slate-800 text-slate-400 hover:text-amber-200')}
-                  >
-                    {selCount > 0 ? `✓×${selCount}` : '⚖️'}
-                  </button>
-                )}
-                {canFuse && (
-                  <button
-                    onClick={() => fuseGems(key)}
-                    disabled={gemDust < fuseCost}
-                    title={`Fusion : 3 exemplaires → 1 au rang ${parsed.rank + 1} (-${fuseCost} 🔹)`}
-                    className="shrink-0 rounded bg-orange-900/40 px-1.5 py-1 font-medium text-orange-200 hover:bg-orange-800/50 disabled:opacity-40"
-                  >
-                    🔥 3→R{parsed.rank + 1}
-                  </button>
-                )}
-                {canCorrupt && (
-                  <button
-                    onClick={() => corruptGem(key)}
-                    disabled={gemDust < corruptCost}
-                    title={`Corruption (-${corruptCost} 🔹) : ${Math.round(cOdds * 100)}% rang +1 · ${mods.corruptSafe ? 'échec = rien (Stabilisation)' : `${Math.round(corruptOdds(mods.pacteLapidaire)[2] * 100)}% broyée`}`}
-                    className="shrink-0 rounded bg-fuchsia-900/40 px-1.5 py-1 font-medium text-fuchsia-200 hover:bg-fuchsia-800/50 disabled:opacity-40"
-                  >
-                    🫦 {Math.round(cOdds * 100)}%
-                  </button>
-                )}
-                {mods.broyage && (
-                  <button
-                    onClick={() => grindGem(key)}
-                    title={`Broyer → +${dust} 🔹`}
-                    className="shrink-0 rounded bg-slate-800 px-1.5 py-1 text-slate-400 hover:text-sky-200"
-                  >
-                    ⚒️ +{dust}
-                  </button>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      )}
-
-      {/* ⚖️ Marché aux pierres : 1/jour, 3 gemmes → 1 au choix (rang = min). */}
-      {mods.marcheAuxPierres && total > 0 && (
-        <div className="mt-2 rounded border border-amber-800/40 bg-amber-950/10 p-1.5">
-          <button onClick={() => { setTradeOpen((o) => !o); setTradeSel([]) }} className="flex w-full items-center justify-between text-[10.5px] font-semibold text-amber-200">
-            <span>⚖️ Marché aux pierres — 3 gemmes → 1 au CHOIX {tradeDone && <span className="font-normal text-slate-500">(déjà utilisé aujourd'hui)</span>}</span>
-            <span>{tradeOpen ? '▾' : '▸'}</span>
-          </button>
-          {tradeOpen && !tradeDone && (
-            <>
-              <p className="mt-1 text-[9px] text-slate-500">Coche 3 gemmes dans le stock ci-dessus ({tradeSel.length}/3), puis choisis la gemme reçue (rang = min des 3).</p>
+      {tradeMode && (
+        <div className="rounded-lg border border-amber-800/40 bg-amber-950/10 p-2 text-[10px] text-amber-200">
+          {tradeDone ? 'Troc déjà utilisé aujourd\'hui.' : (
+            <>Sélectionne 3 gemmes ({tradeSel.length}/3), puis choisis la gemme reçue (rang = min) :
               {tradeSel.length === 3 && (
                 <div className="mt-1 flex flex-wrap gap-1">
                   {COND_GEM_LIST.map((g) => (
-                    <button
-                      key={g.id}
-                      onClick={() => { tradeGems(tradeSel, g.id as CondGemId); setTradeSel([]); setTradeOpen(false) }}
-                      title={gemDesc(g, 1)}
-                      className="rounded border px-1.5 py-1 text-[9.5px] hover:bg-white/5"
-                      style={{ color: g.color, borderColor: g.color + '55' }}
-                    >
-                      {g.icon} {g.name}
-                    </button>
+                    <button key={g.id} onClick={() => { tradeGems(tradeSel, g.id as CondGemId); setTradeSel([]); setTradeMode(false) }} title={gemDesc(g, 1)} className="rounded border px-1.5 py-1 text-[9.5px] hover:bg-white/5" style={{ color: g.color, borderColor: g.color + '55' }}>{g.icon} {g.name}</button>
                   ))}
                 </div>
               )}
@@ -1066,68 +981,97 @@ function GemWorkshop() {
         </div>
       )}
 
-      {/* Taille : façonner la gemme de son choix (déblocage par l'arbre) */}
-      {mods.taille ? (
-        <div className="mt-2">
-          <button onClick={() => setCutOpen((o) => !o)} className="flex w-full items-center justify-between py-1 text-[11px] font-semibold text-sky-200">
-            <span>✂️ Tailler une gemme au choix · {cutCost} 🔹 <span className="font-normal text-slate-500">(▴ Parfaite {Math.round(qP * 100)}% · ▾ Éclatée {Math.round(qE * 100)}%)</span></span>
-            <span>{cutOpen ? '▾' : '▸'}</span>
-          </button>
-          {cutOpen && (
-            <>
-              <div className="mb-1 mt-1 flex flex-wrap gap-1 text-[9px]">
-                <button onClick={() => setCutFamily('all')} className={'rounded px-2 py-1 ' + (cutFamily === 'all' ? 'bg-sky-600 text-slate-50' : 'bg-slate-800 text-slate-400')}>Toutes</button>
-                {(Object.keys(GEM_FAMILIES) as GemFamily[]).map((f) => (
-                  <button key={f} onClick={() => setCutFamily(f)} className={'rounded px-2 py-1 ' + (cutFamily === f ? 'bg-sky-600 text-slate-50' : 'bg-slate-800 text-slate-400')}>
-                    {GEM_FAMILIES[f].icon} {GEM_FAMILIES[f].name}
-                  </button>
-                ))}
-              </div>
-              <div className="space-y-0.5">
-                {cutList.map((def) => (
-                  <button
-                    key={def.id}
-                    disabled={gemDust < cutCost}
-                    onClick={() => cutGem(def.id as CondGemId)}
-                    title={gemDesc(def, 1)}
-                    className="flex w-full items-center gap-1.5 rounded border border-slate-700 px-1.5 py-1 text-left text-[10px] enabled:hover:border-sky-500 disabled:opacity-40"
-                  >
-                    <span className="shrink-0 font-medium" style={{ color: def.color }}>{def.icon} {def.name}</span>
-                    <span className="min-w-0 flex-1 truncate text-slate-500">{gemDesc(def, 1)}</span>
-                    <span className="shrink-0 text-[9px] text-slate-500">rangs : {gemMaxRank(def)}</span>
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
+      {total === 0 ? (
+        <div className="rounded-lg border border-dashed border-slate-700 p-4 text-center text-[11px] text-slate-500">
+          Aucune gemme. Va dans <b className="text-sky-300">✂️ Créer</b> pour en tailler / acheter, ou farme les biomes (drops rares).
         </div>
       ) : (
-        <p className="mt-2 text-[9px] italic text-slate-600">✂️ Taille (gemme au choix) et 🔬 Recoupe (rangs) : nœuds de l'arbre ci-dessus.</p>
-      )}
-
-      {/* 🛒 Échoppe de gemmes (v0.28 B2) — achat de base, accessible SANS le Joaillier. */}
-      <div className="mt-2 border-t border-slate-800 pt-2">
-        <button onClick={() => setShopOpen((o) => !o)} className="flex w-full items-center justify-between py-1 text-[11px] font-semibold text-emerald-200">
-          <span>🛒 Échoppe de gemmes · {buyCost} 🔹 <span className="font-normal text-slate-500">(rang 1, Polie — sans métier)</span></span>
-          <span>{shopOpen ? '▾' : '▸'}</span>
-        </button>
-        {shopOpen && (
-          <div className="mt-1 space-y-0.5">
-            {COND_GEM_LIST.map((def) => (
-              <button
-                key={def.id}
-                disabled={gemDust < buyCost}
-                onClick={() => buyGem(def.id as CondGemId)}
-                title={gemDesc(def, 1)}
-                className="flex w-full items-center gap-1.5 rounded border border-slate-700 px-1.5 py-1 text-left text-[10px] enabled:hover:border-emerald-500 disabled:opacity-40"
-              >
-                <span className="shrink-0 font-medium" style={{ color: def.color }}>{GEM_FAMILIES[def.family].icon} {def.icon} {def.name}</span>
-                <span className="min-w-0 flex-1 truncate text-slate-500">{gemDesc(def, 1)}</span>
-                <span className="shrink-0 text-[9px] text-emerald-300">🛒 {buyCost} 🔹</span>
-              </button>
-            ))}
+        fams.map(({ f, items }) => (
+          <div key={f}>
+            <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-300">{GEM_FAMILIES[f].icon} {GEM_FAMILIES[f].name}</div>
+            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+              {items.map(({ key, parsed, n }) => {
+                const canFuse = mods.fusion && n >= GEM_FUSE_COUNT && parsed.rank < gemMaxRank(parsed.def)
+                const canCorrupt = mods.corruption && parsed.rank < gemMaxRank(parsed.def)
+                const dust = Math.round(grindDust(parsed.rank, parsed.quality) * mods.grindMult)
+                const selCount = tradeSel.filter((k) => k === key).length
+                return (
+                  <div key={key} className={'rounded-lg border p-1.5 ' + (selCount > 0 ? 'ring-1 ring-amber-400' : '')} style={{ borderColor: parsed.def.color + '55', background: parsed.def.color + '0d' }}>
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="truncate text-[10.5px] font-medium" style={{ color: parsed.def.color }}>{parsed.def.icon} {parsed.def.name}</span>
+                      <span className="shrink-0 text-[9px] text-slate-400">R{parsed.rank}{qMark(parsed.quality)} ×{n}</span>
+                    </div>
+                    <div className="mt-0.5 line-clamp-2 text-[8.5px] leading-snug text-slate-500" title={gemDesc(parsed.def, parsed.rank, parsed.quality)}>{gemDesc(parsed.def, parsed.rank, parsed.quality)}</div>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {tradeMode ? (
+                        <button onClick={() => toggleTrade(key, n)} className={'flex-1 rounded px-1.5 py-1 text-[9.5px] ' + (selCount > 0 ? 'bg-amber-600 text-slate-950' : 'bg-slate-800 text-slate-400 hover:text-amber-200')}>{selCount > 0 ? `✓ ×${selCount}` : '⚖️ choisir'}</button>
+                      ) : (
+                        <>
+                          {canFuse && <button onClick={() => fuseGems(key)} disabled={gemDust < fuseCost} title={`Fusion : 3 → rang ${parsed.rank + 1} (-${fuseCost} 🔹)`} className="rounded bg-orange-900/40 px-1.5 py-1 text-[9.5px] font-medium text-orange-200 hover:bg-orange-800/50 disabled:opacity-40">🔥 R{parsed.rank + 1}</button>}
+                          {canCorrupt && <button onClick={() => corruptGem(key)} disabled={gemDust < corruptCost} title={`Corruption (-${corruptCost} 🔹) : ${Math.round(cOdds * 100)}% rang +1, sécurisée (échec = rien)`} className="rounded bg-fuchsia-900/40 px-1.5 py-1 text-[9.5px] font-medium text-fuchsia-200 hover:bg-fuchsia-800/50 disabled:opacity-40">🫦 {Math.round(cOdds * 100)}%</button>}
+                          {mods.broyage && <button onClick={() => grindGem(key)} title={`Broyer → +${dust} 🔹`} className="rounded bg-slate-800 px-1.5 py-1 text-[9.5px] text-slate-400 hover:text-sky-200">⚒️ +{dust}</button>}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
           </div>
-        )}
+        ))
+      )}
+    </div>
+  )
+}
+
+/** ✂️ Créer (v0.28 E2 part 2) — Tailler + Acheter UNIFIÉS : choisis une famille, puis chaque gemme
+ *  est une carte avec ses deux actions côte à côte. Fini les deux listes séparées. */
+function GemCreate() {
+  const gems = useGame((s) => s.gems)
+  const gemDust = useGame((s) => s.gemDust)
+  const cutGem = useGame((s) => s.cutGem)
+  const buyGem = useGame((s) => s.buyGem)
+  const metiers = useGame((s) => s.metiers)
+  const mods = craftMods(metiers)
+  const [family, setFamily] = useState<GemFamily>('rythme')
+  const cutCost = Math.round(GEM_CUT_COST * mods.tailleCostMult)
+  const buyCost = GEM_CUT_COST * 2
+  const [qE, , qP] = cutQualityOdds(mods.mainSure)
+  const list = COND_GEM_LIST.filter((g) => g.family === family)
+  const ownedOf = (id: string) => Object.entries(gems).reduce((a, [k, n]) => a + (parseCondKey(k)?.def.id === id ? n : 0), 0)
+
+  return (
+    <div className="space-y-2">
+      <p className="text-[9.5px] leading-snug text-slate-500">
+        <b className="text-sky-300">✂️ Tailler</b> : qualité ⭐ aléatoire (▴ {Math.round(qP * 100)}% · ▾ {Math.round(qE * 100)}%){mods.taille ? '' : ' — 🔒 nœud Taille de l\'arbre'}. <b className="text-emerald-300">🛒 Acheter</b> : rang 1, Polie (sans métier).
+      </p>
+      <div className="grid grid-cols-4 gap-1.5">
+        {(Object.keys(GEM_FAMILIES) as GemFamily[]).map((f) => (
+          <button key={f} onClick={() => setFamily(f)} className={'flex flex-col items-center gap-0.5 rounded-lg border py-2 text-[9px] ' + (family === f ? 'border-sky-400 bg-sky-900/30 text-sky-200' : 'border-slate-700 text-slate-400 hover:border-slate-500')}>
+            <span className="text-base leading-none">{GEM_FAMILIES[f].icon}</span>
+            <span className="truncate">{GEM_FAMILIES[f].name}</span>
+          </button>
+        ))}
+      </div>
+      <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+        {list.map((def) => {
+          const owned = ownedOf(def.id)
+          return (
+            <div key={def.id} className="rounded-lg border p-2" style={{ borderColor: def.color + '55', background: def.color + '0d' }}>
+              <div className="flex items-center justify-between gap-1">
+                <span className="truncate text-[11px] font-medium" style={{ color: def.color }}>{def.icon} {def.name}</span>
+                {owned > 0 && <span className="shrink-0 text-[9px] text-slate-400">tu en as {owned}</span>}
+              </div>
+              <div className="mt-0.5 text-[9px] leading-snug text-slate-500">{gemDesc(def, 1)} <span className="text-slate-600">· rangs max {gemMaxRank(def)}</span></div>
+              <div className="mt-1.5 flex gap-1.5">
+                {mods.taille && (
+                  <button onClick={() => cutGem(def.id as CondGemId)} disabled={gemDust < cutCost} className="flex-1 rounded bg-sky-800/60 py-1.5 text-[10px] font-medium text-sky-100 hover:bg-sky-700/70 disabled:opacity-40">✂️ Tailler · {cutCost}🔹</button>
+                )}
+                <button onClick={() => buyGem(def.id as CondGemId)} disabled={gemDust < buyCost} className="flex-1 rounded bg-emerald-800/60 py-1.5 text-[10px] font-medium text-emerald-100 hover:bg-emerald-700/70 disabled:opacity-40">🛒 Acheter · {buyCost}🔹</button>
+              </div>
+            </div>
+          )
+        })}
       </div>
     </div>
   )
