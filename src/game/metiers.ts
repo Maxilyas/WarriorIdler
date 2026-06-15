@@ -15,7 +15,7 @@
  * les fonctions — le Savoir-faire 🔧 d'antan devient l'XP du Forgeron (plus une monnaie).
  */
 
-import type { ItemType, SecondaryStat } from './types'
+import type { SecondaryStat } from './types'
 
 export type MetierId = 'forgeron' | 'joaillier' | 'runiste' | 'alchimiste'
 
@@ -28,35 +28,6 @@ export interface MetierDef {
   verb: string
   /** Palier (bestStage) qui ouvre le métier. */
   unlockStage: number
-}
-
-/* ------------------------------------------------------------------ */
-/* Compagnonnages du Forgeron (v0.26) — spécialisation par TYPE de pièce */
-/* ------------------------------------------------------------------ */
-
-export type CorpsId = 'heaumier' | 'cuirassier' | 'equipementier' | 'orfevre'
-
-export interface CorpsDef {
-  id: CorpsId
-  name: string
-  icon: string
-  /** Types de pièces couverts (les ARMES restent hors spé — jugées bien réglées). */
-  types: ItemType[]
-  /** Affixes « Signature » (étage III) : garantis au CHOIX sur ces pièces. */
-  signatures: SecondaryStat[]
-}
-
-export const CORPS: Record<CorpsId, CorpsDef> = {
-  heaumier: { id: 'heaumier', name: 'Heaumier', icon: '🪖', types: ['tete', 'epaules'], signatures: ['critique', 'tenacite'] },
-  cuirassier: { id: 'cuirassier', name: 'Cuirassier', icon: '🥋', types: ['torse', 'jambes', 'armeSecondaire'], signatures: ['reductionDegats', 'barriere'] },
-  equipementier: { id: 'equipementier', name: 'Équipementier', icon: '🧤', types: ['mains', 'poignets', 'taille', 'pieds', 'cape'], signatures: ['hate', 'esquive'] },
-  orfevre: { id: 'orfevre', name: 'Orfèvre', icon: '💍', types: ['cou', 'anneau', 'bijou'], signatures: ['alteration', 'precision'] },
-}
-
-export const CORPS_LIST: CorpsDef[] = Object.values(CORPS)
-
-export function corpsOfType(type: ItemType): CorpsDef | undefined {
-  return CORPS_LIST.find((c) => c.types.includes(type))
 }
 
 /** Coût en Lingots 🧱 de l'affixe Signature (étage III) selon la rareté visée. */
@@ -491,7 +462,6 @@ export interface CraftMods {
   polissage: boolean
   /** Main de maître : rangs (qualité ⭐ des créations). */
   polishFin: number
-  moules: boolean
   automate4: boolean
   /* Joaillier */
   gems: boolean
@@ -619,7 +589,6 @@ export function craftMods(metiers: MetiersState): CraftMods {
     trempeLente: r('forgeron', 'trempeLente') > 0,
     polissage: r('forgeron', 'polissage') > 0,
     polishFin: Math.max(0, r('forgeron', 'polissage') - 1),
-    moules: false,
     automate4: r('forgeron', 'automate4') > 0,
     // v0.28 E2 — Joaillier remappé sur l'arbre réduit (Taillerie + Maîtrise & Sources).
     gems: r('joaillier', 'sertissage') > 0,

@@ -332,8 +332,6 @@ interface SaveData {
   lingots: number
   /** v0.26 : objet au BAC DE TREMPE (🔥 Trempe lente) — +1 iLvl/24 h réelles, 5 max par objet. */
   trempe: { itemId: string; startedAt: number } | null
-  /** v0.26 : 🧩 Moule — photo du dernier craft (re-forger à l'identique : −30%). */
-  mould: CreateOptions | null
   /** v0.26 : 📋 Contrats de forge du jour (jour epoch + état des 3 commandes). */
   forgeContracts: { day: number; done: boolean[] } | null
   /** v0.26 : semaine epoch du dernier CHEF-D'ŒUVRE (Compagnonnage V, 1/semaine). */
@@ -1272,7 +1270,6 @@ function freshSave(): SaveData {
     lastStoneTrade: 0,
     lingots: 0,
     trempe: null,
-    mould: null,
     forgeContracts: null,
     lastMasterwork: 0,
     runeFragments: 0,
@@ -1411,7 +1408,6 @@ function sanitize(save: SaveData): SaveData {
   if (typeof save.lastStoneTrade !== 'number') save.lastStoneTrade = 0
   if (typeof save.lingots !== 'number') save.lingots = 0
   if (save.trempe === undefined) save.trempe = null
-  if (save.mould === undefined) save.mould = null
   if (save.forgeContracts === undefined) save.forgeContracts = null
   if (typeof save.lastMasterwork !== 'number') save.lastMasterwork = 0
   if (typeof save.runeFragments !== 'number') save.runeFragments = 0
@@ -1890,7 +1886,6 @@ function persist(s: GameState) {
     lastStoneTrade: s.lastStoneTrade,
     lingots: s.lingots,
     trempe: s.trempe,
-    mould: s.mould,
     forgeContracts: s.forgeContracts,
     lastMasterwork: s.lastMasterwork,
     runeFragments: s.runeFragments,
@@ -5426,14 +5421,9 @@ export const useGame = create<GameState>((set, get) => {
       const signature = opts.signature && forge.signatures?.includes(opts.signature) ? opts.signature : undefined
       const signCost = signature ? signatureLingotCost(tier) : 0
       if (signature && s.lingots < signCost + (masterwork ? MASTERWORK_LINGOTS : 0)) return
-      // 🧩 Moule : re-forger À L'IDENTIQUE coûte −30%.
-      const mouldHit = mods.moules && s.mould
-        && s.mould.type === opts.type && s.mould.rarity === opts.rarity
-        && s.mould.primary === opts.primary && s.mould.orientation === opts.orientation
-        && s.mould.element === opts.element
-      // Coût : rareté choisie × métier (Économe) × corps (−15%) × moule (−30%) × chef-d'œuvre (×1,5).
+      // Coût : rareté choisie × métier (Économe) × chef-d'œuvre (×1,5).
       const c = createCost(tier, ilvl)
-      const m = mods.costMult * (mouldHit ? 0.7 : 1) * (masterwork ? 1.5 : 1)
+      const m = mods.costMult * (masterwork ? 1.5 : 1)
       const cost = { eclats: Math.round(c.eclats * m), noyau: Math.round(c.noyau * m), fragments: Math.round((c.fragments ?? 0) * m), poussiere: Math.round((c.poussiere ?? 0) * m), cosmic: Math.round((c.cosmic ?? 0) * m) }
       if (s.essence < cost.eclats || s.noyau < cost.noyau || s.fragments < cost.fragments || s.poussiere < cost.poussiere || s.cosmic < cost.cosmic) return
       // 🎲 Prodige : chance de rareté SUPÉRIEURE (corps IV : +12% local) — 💡 Inspiration : DEUX crans.
@@ -5466,7 +5456,7 @@ export const useGame = create<GameState>((set, get) => {
         g.log,
         `${masterwork ? '🏆 CHEF-D\'ŒUVRE : ' : 'Forgé : '}${item.name} (${RARITIES[rarityId].name}${item.stars ? ` ⭐${item.stars}` : ''})`
         + `${inspired ? ' — 💡 INSPIRATION, deux crans !' : lucky && !masterwork ? ' — 🎲 rareté chanceuse !' : ''}`
-        + `${signature ? ` · ✒️ Signature ${signature}` : ''}${mouldHit ? ' · 🧩 moule −30%' : ''} (+${gain} XP 🔨).`,
+        + `${signature ? ` · ✒️ Signature ${signature}` : ''} (+${gain} XP 🔨).`,
         'craft',
       )
       if (refundPct > 0 && refund.eclats > 0) log = pushLog(log, `🍀 Sérendipité : ${Math.round(refundPct * 100)}% des coûts remboursés.`, 'craft')
@@ -5497,7 +5487,6 @@ export const useGame = create<GameState>((set, get) => {
         lingots,
         forgeContracts,
         lastMasterwork: masterwork ? week : s.lastMasterwork,
-        mould: mods.moules ? { type: opts.type, primary: opts.primary, rarity: opts.rarity, orientation: opts.orientation, element: opts.element } : s.mould,
         metiers: g.metiers,
         inventory,
         codex: discoverFromItems(s.codex, [item]),
