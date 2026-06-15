@@ -221,6 +221,30 @@ export const POWERS: PowerDef[] = [
     description: 'Marque la cible : elle subit +45% de TOUS les dégâts (auto-attaques et sorts) pendant 8 s. Scale INT.',
     unlockLevel: 1, cooldown: 20, effect: 'mark', magnitude: 1.45, duration: 8, scaleStat: 'intelligence',
   },
+
+  /* ================= v0.29 : signatures des 36 noyaux de classe ================= */
+  // -- DPS mêlée / agilité --
+  { id: 'griffes_meute', name: 'Griffes de la meute', kind: 'active', description: 'Ton familier lacère le pack (DPS passif idéal en idle). Scale ta stat principale.', unlockLevel: 1, cooldown: 3, effect: 'cleave', magnitude: 3.0, damageType: 'nature' },
+  { id: 'saignement_sauvage', name: 'Saignement sauvage', kind: 'active', description: 'Des plaies de fauve qui saignent (DoT nature). Scale AGI.', unlockLevel: 1, cooldown: 4, effect: 'dot', magnitude: 2.4, scaleStat: 'agilite', damageType: 'nature' },
+  { id: 'piege_explosif', name: 'Piège explosif', kind: 'active', description: 'Un piège qui déchire le pack (zone nature). Scale AGI.', unlockLevel: 1, cooldown: 3.5, effect: 'cleave', magnitude: 2.8, scaleStat: 'agilite', damageType: 'nature' },
+  { id: 'paume_du_tigre', name: 'Paume du tigre', kind: 'active', description: 'Une frappe d\'art martial fulgurante. Scale AGI.', unlockLevel: 1, cooldown: 2.5, effect: 'nuke', magnitude: 3.2, scaleStat: 'agilite' },
+  { id: 'lame_du_chaos', name: 'Lame du chaos', kind: 'active', description: 'Un assaut démoniaque qui balaie le pack (feu/chaos). Scale AGI.', unlockLevel: 1, cooldown: 2.8, effect: 'cleave', magnitude: 3.4, scaleStat: 'agilite', damageType: 'feu' },
+  // -- DPS sorts --
+  { id: 'boule_de_feu', name: 'Boule de feu', kind: 'active', description: 'Un projectile incandescent. Scale INT.', unlockLevel: 1, cooldown: 2.8, effect: 'nuke', magnitude: 3.8, scaleStat: 'intelligence', damageType: 'feu' },
+  { id: 'eclat_de_glace', name: 'Éclat de glace', kind: 'active', description: 'Des éclats gelés qui transpercent (froid). Scale INT.', unlockLevel: 1, cooldown: 2.8, effect: 'cleave', magnitude: 3.4, scaleStat: 'intelligence', damageType: 'froid' },
+  { id: 'nuee_demoniaque', name: 'Nuée démoniaque', kind: 'active', description: 'Tes démons assaillent le pack (DPS passif idle). Scale INT.', unlockLevel: 1, cooldown: 3.2, effect: 'cleave', magnitude: 3.0, scaleStat: 'intelligence', damageType: 'ombre' },
+  { id: 'ruine', name: 'Ruine', kind: 'active', description: 'Une décharge de chaos dévastatrice. Scale INT.', unlockLevel: 1, cooldown: 3, effect: 'nuke', magnitude: 4.4, scaleStat: 'intelligence', damageType: 'feu' },
+  { id: 'fulguration', name: 'Fulguration', kind: 'active', description: 'La foudre des éléments frappe le pack. Scale INT.', unlockLevel: 1, cooldown: 3, effect: 'cleave', magnitude: 3.6, scaleStat: 'intelligence', damageType: 'foudre' },
+  { id: 'souffle_ardent', name: 'Souffle ardent', kind: 'active', description: 'Un souffle draconique à charge. Scale INT.', unlockLevel: 1, cooldown: 4, effect: 'nuke', magnitude: 5.0, scaleStat: 'intelligence', damageType: 'feu' },
+  { id: 'mot_de_lombre', name: 'Mot de l\'ombre', kind: 'active', description: 'Une affliction mentale qui ronge (DoT ombre). Scale INT.', unlockLevel: 1, cooldown: 4.5, effect: 'dot', magnitude: 2.6, scaleStat: 'intelligence', damageType: 'ombre' },
+  // -- Tanks --
+  { id: 'coup_runique', name: 'Coup runique', kind: 'active', description: 'Une frappe de givre-sang qui te soigne. Scale FOR.', unlockLevel: 1, cooldown: 3.5, effect: 'lifeNuke', magnitude: 3.0, scaleStat: 'force', damageType: 'ombre' },
+  { id: 'lacere_chaos', name: 'Lacération du chaos', kind: 'active', description: 'Tu happes le pack et draines leur vie (feu). Scale AGI.', unlockLevel: 1, cooldown: 3, effect: 'cleave', magnitude: 2.8, scaleStat: 'agilite', damageType: 'feu' },
+  // -- Heals (dont non-INT : scale sur la stat dominante) --
+  { id: 'rajeunissement', name: 'Rajeunissement', kind: 'active', description: 'Un soin sur la durée (HoT) sur l\'allié blessé. Scale INT.', unlockLevel: 1, cooldown: 4, effect: 'hot', magnitude: 1.8, scaleStat: 'intelligence' },
+  { id: 'songe_emeraude', name: 'Songe d\'émeraude', kind: 'active', description: 'Un soin à charge qui restaure tout le groupe. Scale INT.', unlockLevel: 1, cooldown: 5, effect: 'buffParty', magnitude: 1.8, scaleStat: 'intelligence' },
+  { id: 'lumiere_sacree', name: 'Lumière sacrée', kind: 'active', description: 'Un soin puissant nourri par tes attaques. Scale sur ta stat principale (soin FORCE possible).', unlockLevel: 1, cooldown: 3.5, effect: 'heal', magnitude: 2.8 },
+  { id: 'brume_revigorante', name: 'Brume revigorante', kind: 'active', description: 'Frapper diffuse une brume qui soigne (fistweaving). Scale sur ta stat principale (soin AGI possible).', unlockLevel: 1, cooldown: 3, effect: 'heal', magnitude: 1.8 },
 ]
 
 const BY_ID = new Map(POWERS.map((p) => [p.id, p]))
@@ -240,6 +264,11 @@ const POWER_ICON: Record<string, string> = {
   // Ultimes
   verdict: '⚖️', soif_du_neant: '🦇', deluge_stellaire: '🌠', aube_salvatrice: '🌅', hemorragie_cosmique: '🧨',
   egide_titanesque: '🔰', phase_etheree: '🌫️', vengeance_differee: '⏳', furie_sanguinaire: '😡', sceau_faiblesse: '🔻',
+  // v0.29 — signatures de classe
+  griffes_meute: '🐾', saignement_sauvage: '🩸', piege_explosif: '💣', paume_du_tigre: '🐯', lame_du_chaos: '😈',
+  boule_de_feu: '🔥', eclat_de_glace: '🧊', nuee_demoniaque: '👹', ruine: '💥', fulguration: '⚡', souffle_ardent: '🐉', mot_de_lombre: '🗯️',
+  coup_runique: '🩸', lacere_chaos: '👿',
+  rajeunissement: '🌱', songe_emeraude: '🍃', lumiere_sacree: '🌟', brume_revigorante: '🌫️',
 }
 
 /** Icône d'un sort : champ explicite, table, puis repli (rôle/type). */
