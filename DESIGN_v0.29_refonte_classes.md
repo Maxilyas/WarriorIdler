@@ -68,12 +68,13 @@ sinon le déséquilibre se propage à 36 classes.
 
 | Problème moteur (v0.28) | Effet mesuré | Correction proposée |
 |---|---|---|
-| **Maîtrise Agi → dégâts crit ×2/frac, NON capé** | écart DPS endgame **×3.40**, l'Agi explose | Maîtrise = **+0,75 dégâts/frac pour les 3 stats** ; l'Agi garde un **petit** bonus crit **capé** (softCap 0.8→1.6) |
-| **Maîtrise Force = réduction (0 dégât)** | Force structurellement **dernière** (idx 69-86) | Donner à Force un **levier de dégâts** : Maîtrise Force = **+DR ET un petit +dégâts** (déjà partiellement le cas), + keystones Force orientés `damageMult` |
+| **Maîtrise Agi → dégâts crit ×2/frac, NON capé** | écart DPS endgame **×3.40**, l'Agi explose | Agi : Maîtrise = **+0,6 dégâts/frac** + bonus crit **capé** `softCap(f×0.6, 0.8, 1.6)` (fini le runaway) ✅ **codé (Lot A)** |
+| **Maîtrise Force = réduction (0 dégât)** | Force semblait **dernière** | En fait son levier EXISTE : Force-Maîtrise = **dégâts ×0,8 ET réduction** → le bruiser stacke la Maîtrise (dégâts + ×3 EHP). Une fois modélisé, Force remonte mid-pack (idx 106-118) ✅ |
+| **Int trop fort** | glass cannon devant | Int : Maîtrise **0,9 → 0,8** (resserre l'écart) ✅ **codé (Lot A)** |
 | **4 axes multiplicatifs** (power × mast × crit × hâte), accès inégal | une classe qui touche les 4 domine | **Chaque noyau garantit l'accès à crit + hâte + ampli** ; l'écart vient du keystone, pas de l'accès à un axe |
-| **`degatsBoss` n'agit que vs boss** | builds exécution faibles en farm (Armes idx 39→86 une fois corrigé) | OK tel quel, mais l'UI doit montrer le **DPS-boss** à part (les anti-boss brillent en donjon/raid) |
+| **`degatsBoss` n'agit que vs boss** | builds exécution faibles en farm | appliqué à ~35 % d'uptime en farm ; l'UI doit montrer le **DPS-boss** à part (anti-boss brillent en donjon/raid) |
 
-Avec ces correctifs (mode `rebalanced` du simulateur) : écart DPS **×1.96**, TANK **×1.47**, HEAL **×1.60**.
+Après Lot A (codé dans `stats.ts`, validé au simulateur) : écart DPS **×1.67**, TANK **×1.41**, HEAL **×1.59**.
 Cible long terme **< ×1.6** sur les DPS via tuning fin des keystones (les 2 specs « burst » en tête sont OK).
 
 ### 3.1 La conversion de type quitte les classes → va dans le STUFF
@@ -185,8 +186,10 @@ Chaque classe = 1 **stat**, 1 **type de dégât signature**, 1 **keystone d'iden
 Hypothèses : stuff **ciblé** (le joueur craft ses stats), identité par **keystones**, bonus conditionnels
 à uptime moyenne. Stuff MID = lvl 50 / iLvl 75 / Épique. Stuff END = lvl 150 / iLvl 225 / Mythique.
 
-**Écarts (mode rebalancé)** : DPS **×1.96** · TANK **×1.47** · HEAL **×1.60**.
+**Écarts (après Lot A)** : DPS **×1.67** · TANK **×1.41** · HEAL **×1.59**.
 **Avant correctif moteur** : DPS **×3.40** (l'Agi écrasait tout).
+> Les ratios entre classes sont **invariants au budget** (toutes reçoivent le même stuff) → ils tiennent
+> même si v0.30 (cap iLvl 700, rareté aplatie) change les valeurs absolues. Re-run du sim à prévoir alors.
 
 ### 6.1 Hybrides simulés (le mixing en chiffres)
 | Build (mix de 2 classes) | Stat | DPS MID (lvl 50) | DPS END (lvl 150) | Idée |

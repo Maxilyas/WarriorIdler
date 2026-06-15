@@ -77,6 +77,7 @@ const SEC = {
   boss:    { degatsBoss: 38, crit: 22, hate: 22, pen: 10, dcrit: 8 },  // anti-boss/exécution
   balA:    { crit: 28, hate: 28, maitrise: 18, pen: 16, dcrit: 10 },   // Agi équilibré
   balF:    { crit: 28, hate: 30, pen: 22, dcrit: 20 },                 // Force équilibré
+  bruiser: { maitrise: 30, crit: 24, hate: 24, pen: 12, dcrit: 10 },   // Force : Maîtrise = dégâts(0.8) + réduction
 }
 
 /* ------------------------------------------------------------------ */
@@ -95,10 +96,12 @@ function derive(main, mainVal, secondVal, alloc, ks) {
     else if (main === 'A') { masteryMult = 1 + masteryFrac * 0.45; critMult += masteryFrac * 2 }
     else masteryMult = 1 + masteryFrac * 0.9
   } else {
-    // REBALANCÉ : même dégât brut par point pour les 3 stats ; l'identité vient des KEYSTONES.
-    // Agi garde un PETIT bonus de crit (saveur), capé pour tuer le runaway.
-    masteryMult = 1 + masteryFrac * 0.75
-    if (main === 'A') critMult += softCap(masteryFrac * 0.5, 0.8, 1.6)
+    // REBALANCÉ (valeurs EXACTES portées dans stats.ts) — on garde l'identité de chaque stat :
+    //   Force = bruiser (0.8 dégât + DR, modélisée à l'EHP) · Int = brut (0.8, ex-0.9 resserré) ·
+    //   Agi = crit, mais le bonus crit est CAPÉ (fini le ×2/frac non capé) et le dégât plat relevé.
+    if (main === 'F') masteryMult = 1 + masteryFrac * 0.8
+    else if (main === 'A') { masteryMult = 1 + masteryFrac * 0.6; critMult += softCap(masteryFrac * 0.6, 0.8, 1.6) }
+    else masteryMult = 1 + masteryFrac * 0.8
   }
   const critChance = softCap(0.05 + (alloc.crit ?? 0) / PER_PCT, 0.75, 0.92)
   const aps = 1 + (alloc.hate ?? 0) / PER_PCT
@@ -150,11 +153,11 @@ const heal = (o) => ({ role: 'HEAL', off: HEAL_OFF, tax: 0.50, ...o })
 
 const CLASSES = [
   /* ===== DPS FORCE (mêlée) ===== */
-  dps({ name: 'Armes',           wow: 'Arms Warrior',      main: 'F', type: 'physique', sec: SEC.boss,  ks: { exec: { th: 0.35, mult: 2.2 }, dmg: 1.10 }, sig: [{ mag: 4.4, cd: 3.5, effect: 'nuke' }] }),
-  dps({ name: 'Fureur',          wow: 'Fury Warrior',      main: 'F', type: 'physique', sec: SEC.haste, ks: { lowHp: { th: 0.5, mult: 1.4 }, ms: 0.20 },   sig: [{ mag: 2.8, cd: 2.5, effect: 'cleave' }] }),
-  dps({ name: 'Vindicte',        wow: 'Ret Paladin',       main: 'F', type: 'arcane',   sec: SEC.critF, ks: { dmg: 1.18, exec: { th: 0.2, mult: 1.8 } },   sig: [{ mag: 4.4, cd: 3.0, effect: 'nuke', type: 'arcane' }] }),
-  dps({ name: 'Profanateur',     wow: 'Unholy DK',         main: 'F', type: 'ombre',    sec: SEC.dotI,  ks: { dot: { frac: 0.30, dur: 6 }, dmg: 1.10 },    sig: [{ mag: 2.6, cd: 4.5, effect: 'dot', type: 'ombre' }] }),
-  dps({ name: 'Givre-mort',      wow: 'Frost DK',          main: 'F', type: 'froid',    sec: SEC.critF, ks: { dmg: 1.15, ms: 0.12 },                       sig: [{ mag: 4.0, cd: 3.5, effect: 'nuke', type: 'froid' }] }),
+  dps({ name: 'Armes',           wow: 'Arms Warrior',      main: 'F', type: 'physique', sec: SEC.bruiser, ks: { exec: { th: 0.35, mult: 2.2 }, dmg: 1.10 }, sig: [{ mag: 4.4, cd: 3.5, effect: 'nuke' }] }),
+  dps({ name: 'Fureur',          wow: 'Fury Warrior',      main: 'F', type: 'physique', sec: SEC.bruiser, ks: { lowHp: { th: 0.5, mult: 1.4 }, ms: 0.20 },   sig: [{ mag: 2.8, cd: 2.5, effect: 'cleave' }] }),
+  dps({ name: 'Vindicte',        wow: 'Ret Paladin',       main: 'F', type: 'arcane',   sec: SEC.bruiser, ks: { dmg: 1.18, exec: { th: 0.2, mult: 1.8 } },   sig: [{ mag: 4.4, cd: 3.0, effect: 'nuke', type: 'arcane' }] }),
+  dps({ name: 'Profanateur',     wow: 'Unholy DK',         main: 'F', type: 'ombre',    sec: SEC.dotI,    ks: { dot: { frac: 0.30, dur: 6 }, dmg: 1.10 },    sig: [{ mag: 2.6, cd: 4.5, effect: 'dot', type: 'ombre' }] }),
+  dps({ name: 'Givre-mort',      wow: 'Frost DK',          main: 'F', type: 'froid',    sec: SEC.bruiser, ks: { dmg: 1.15, ms: 0.12 },                       sig: [{ mag: 4.0, cd: 3.5, effect: 'nuke', type: 'froid' }] }),
 
   /* ===== DPS AGILITÉ ===== */
   dps({ name: 'Maître des bêtes', wow: 'BM Hunter',        main: 'A', type: 'nature',   sec: SEC.balA,  ks: { dmg: 1.22 },                                  sig: [{ mag: 3.0, cd: 3.0, effect: 'cleave', type: 'nature' }] }),

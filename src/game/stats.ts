@@ -182,14 +182,19 @@ export function computeDerived(total: StatBlock): DerivedStats {
   let masteryMult = 1
   let critMult = 2 + (total.degatsCrit ?? 0) / PER_PCT
   let masteryDr = 0
+  // v0.29 (Lot A) — RÉÉQUILIBRAGE inter-stats (validé par scripts/sim-classes.mjs : écart DPS
+  // endgame ×3.40 → ×1.67). Avant : la Maîtrise Agi donnait +crit ×2/frac NON CAPÉ → l'Agi
+  // s'emballait à l'endgame. Désormais les 3 stats donnent ~le même dégât brut ; la Force garde
+  // sa réduction (son levier = dégâts ET survie → le bruiser stacke la Maîtrise sans la gaspiller),
+  // l'Agi garde un bonus de crit CAPÉ (saveur sans runaway).
   if (mainStat === 'force') {
-    masteryMult = 1 + masteryFrac * 0.8 // un peu plus de dégâts bruts (le bruiser n'est pas largué)
+    masteryMult = 1 + masteryFrac * 0.8 // bruiser : dégâts ET réduction (le levier de dégâts de la Force)
     masteryDr = softCap(masteryFrac * 0.85, 0.5, 0.7)
   } else if (mainStat === 'agilite') {
-    masteryMult = 1 + masteryFrac * 0.45 // ajoute un peu de dégâts plats (plancher relevé)
-    critMult += masteryFrac * 2 // critique toujours fort, mais moins extrême
+    masteryMult = 1 + masteryFrac * 0.6 // dégâts plats relevés (0.45→0.6) pour compenser le cap crit
+    critMult += softCap(masteryFrac * 0.6, 0.8, 1.6) // crit CAPÉ (fini le ×2/frac non capé)
   } else {
-    masteryMult = 1 + masteryFrac * 0.9 // glass cannon : encore le meilleur, mais ne gonfle plus à l'infini
+    masteryMult = 1 + masteryFrac * 0.8 // 0.9→0.8 : resserre l'écart avec Force/Agi
   }
 
   const shieldPct = softCap((total.barriere ?? 0) / PER_PCT, 1, 1.6)
