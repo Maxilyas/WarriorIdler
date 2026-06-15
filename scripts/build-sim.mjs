@@ -11,32 +11,34 @@ const M = await load(`
   export { RARITIES } from './src/game/rarities.ts'
   export { ITEM_TYPES, EQUIP_SLOTS } from './src/game/slots.ts'
   export { profileDamageMult } from './src/game/damage.ts'
-  export { DMG_LINE_BASE, DMG_LINE_RANGE, DMG_LINE_TIER_GROWTH } from './src/game/items.ts'
+  export { DMG_LINE_BASE, DMG_LINE_RANGE, DMG_LINE_TIER_GROWTH, SECONDARY_SCALE, SECONDARY_SATURATE } from './src/game/items.ts'
+  export { itemBudget, effItemIlvl } from './src/game/progression.ts'
 `)
-const { makeCharacter, charDerived, charDamageProfile, charDps, charMaxHp, charCombatMods, charResist, setGlobalCombatMods, RARITIES, ITEM_TYPES, EQUIP_SLOTS } = M
+const { makeCharacter, charDerived, charDamageProfile, charDps, charMaxHp, charCombatMods, charResist, setGlobalCombatMods, RARITIES, ITEM_TYPES, EQUIP_SLOTS, itemBudget, effItemIlvl } = M
 setGlobalCombatMods({ power: 1, attackSpeed: 1, vitality: 1 }) // pas d'upgrades marchand (comparaison pure)
 
-// Affixe stat à la valeur MAX (gear optimisé) : même formule que rollLineValue (max roll 1.3).
-const statAffix = (stat, ilvl, statMult, rare = false) => ({ kind: 'stat', stat, value: Math.max(1, Math.round(ilvl * 0.8 * statMult * (rare ? 0.5 : 1) * 1.3)) })
+// Affixe stat à la valeur MAX (gear optimisé) : v0.30 — secondaire = échelle SECONDARY_SCALE sur
+// l'ilvl effectif SATURÉ (≠ budget exponentiel), même formule que rollLineValue (max roll 1.3).
+const statAffix = (stat, ilvl, tier, rare = false) => ({ kind: 'stat', stat, value: Math.max(1, Math.round(M.SECONDARY_SCALE * Math.min(effItemIlvl(ilvl, tier), M.SECONDARY_SATURATE) * (rare ? 0.5 : 1) * 1.3)) })
 // Ligne de type au roll max — mêmes constantes que rollLineValue (plus de copie qui dérive).
 const dmgAffix = (type, tier) => ({ kind: 'dmgType', type, value: Math.round((M.DMG_LINE_BASE + M.DMG_LINE_RANGE) * (1 + tier * M.DMG_LINE_TIER_GROWTH)) })
 
 // Affixes offensifs prioritaires (mêmes pour tous → comparaison contrôlée), + dmgType de l'arme.
-function affixesFor(elem, ilvl, statMult, tier, count) {
+function affixesFor(elem, ilvl, tier, count) {
   const prio = ['maitrise', 'critique', 'degatsCrit', 'hate', 'penetration']
   const out = []
   for (let i = 0; i < count; i++) {
-    if (i < prio.length) out.push(statAffix(prio[i], ilvl, statMult))
+    if (i < prio.length) out.push(statAffix(prio[i], ilvl, tier))
     else out.push(dmgAffix(elem, tier)) // les slots restants en +% du type de l'arme
   }
   return out
 }
 
-// Construit une pièce optimisée (offensif partout pour le DPS max).
+// Construit une pièce optimisée (offensif partout pour le DPS max). v0.30 : budget EXPONENTIEL.
 function makeItem(type, primary, elem, ilvl, rarityId) {
   const r = RARITIES[rarityId]
   const w = ITEM_TYPES[type].weight
-  const budget = ilvl * w * r.statMult
+  const budget = itemBudget(ilvl, r.tier, w, 1)
   const offFrac = 0.82 // offensif
   const isWeapon = type === 'armePrincipale'
   return {
@@ -44,7 +46,7 @@ function makeItem(type, primary, elem, ilvl, rarityId) {
     primaryValue: Math.max(1, Math.round(budget * offFrac * 1.15)),
     endurance: Math.max(1, Math.round(budget * (1 - offFrac) * 1.9 * 1.15)),
     orientation: 'offensif',
-    affixes: affixesFor(elem, ilvl, r.statMult, r.tier, r.affixCount),
+    affixes: affixesFor(elem, ilvl, r.tier, r.affixCount),
     ...(isWeapon ? { damageType: elem } : {}),
   }
 }
