@@ -216,7 +216,6 @@ export const METIER_BRANCHES: Record<MetierId, MetierBranch[]> = {
   alchimiste: [
     { id: 'officine', name: 'Officine', icon: '🧪' },
     { id: 'oeuvre', name: 'Grand Œuvre', icon: '⚗️' },
-    { id: 'matiere', name: 'Matière', icon: '🌿' },
   ],
 }
 
@@ -340,53 +339,35 @@ export const METIER_NODES: Record<MetierId, MetierNode[]> = {
   // v0.26 — arbre REFONDU : l'Alchimiste devient le métier des CONSOMMABLES et du temps réel.
   // Tronc + 🧪 Officine (cuves, recettes, brassins) + ⚗️ Grand Œuvre (quintessences, synthèses)
   // + 🌿 Matière (recyclage, réactifs). ~58 rangs.
+  // v0.28 E2 — arbre RÉDUIT : 2 sections, 12 nœuds. Officine = consommables & cuves.
+  // Grand Œuvre = craft (quintessence/synthèses) + matière (Raffinage) + spé exclusive.
   alchimiste: [
-    /* — tronc commun — */
-    { id: 'quintessence', name: 'Quintessence', icon: '⚗️', maxRank: 1,
-      desc: 'Débloque le craft typé à la QUINTESSENCE (lignes de dégâts / résistance choisies).' },
-    { id: 'paillasse', name: 'Paillasse ordonnée', icon: '🥼', maxRank: 3, minLevel: 4,
-      desc: '+20% d\'XP d\'Alchimiste par rang.' },
-    /* — 🧪 Officine — */
-    { id: 'officine', name: 'Officine', icon: '🫖', maxRank: 1, minLevel: 2, branch: 'officine',
-      desc: 'Débloque l\'OFFICINE : 2 cuves de brassage et l\'EXPÉRIMENTATION (découvre des recettes en combinant 2 réactifs).' },
-    { id: 'cuve3', name: 'Troisième cuve', icon: '🫙', maxRank: 1, minLevel: 8, requires: 'officine', branch: 'officine',
-      desc: 'Une CUVE de brassage supplémentaire (3).' },
-    { id: 'cuve4', name: 'Quatrième cuve', icon: '🛁', maxRank: 1, minLevel: 18, requires: 'cuve3', branch: 'officine',
-      desc: 'Une CUVE de brassage supplémentaire (4).' },
-    { id: 'brassageRapide', name: 'Feu doux maîtrisé', icon: '🔥', maxRank: 3, minLevel: 6, requires: 'officine', branch: 'officine',
-      desc: '−10% de temps de maturation des brassins par rang.' },
-    { id: 'brassageCritique', name: 'Main du maître brasseur', icon: '✋', maxRank: 5, minLevel: 12, requires: 'officine', branch: 'officine',
-      desc: '+4% de chance par rang qu\'un brassin récolté gagne UN cran de qualité.' },
-    { id: 'grandsCrus', name: 'Grands crus', icon: '🍾', maxRank: 3, minLevel: 22, requires: 'brassageCritique', branch: 'officine',
-      desc: '+2% de chance de MILLÉSIME ★ par rang (récoltes Parfaites uniquement).' },
+    /* — 🧪 OFFICINE : consommables & cuves — */
+    { id: 'officine', name: 'Officine', icon: '🫖', maxRank: 3, minLevel: 2, branch: 'officine',
+      desc: 'Débloque l\'OFFICINE et l\'EXPÉRIMENTATION (découvre des recettes). Cuves de brassage : 2 (R1) · 3 (R2) · 4 (R3).' },
+    { id: 'brasseur', name: 'Maître brasseur', icon: '✋', maxRank: 3, minLevel: 6, requires: 'officine', branch: 'officine',
+      desc: 'Par rang : −10% de temps de maturation, +6% de chance de qualité supérieure, +chance de MILLÉSIME ★.' },
     { id: 'transmutJour', name: 'Transmutation du jour', icon: '🌗', maxRank: 1, minLevel: 10, branch: 'officine',
       desc: '1/JOUR réel : 4 Quintessences d\'un type → 1 du type de ton CHOIX.' },
     { id: 'pharmacopee', name: 'Pharmacopée', icon: '📖', maxRank: 1, minLevel: 25, requires: 'officine', branch: 'officine',
       desc: '+5% de durée des élixirs/huiles/antidotes par RECETTE découverte.' },
-    { id: 'philosophale', name: 'Pierre philosophale', icon: '🜍', maxRank: 1, minLevel: 50, minStage: 100, requires: 'officine', branch: 'officine',
-      desc: 'CAPSTONE : débloque le Grand Œuvre ultime — la Pierre (relique de compte : +2% de drops de ressources, pour toujours).' },
-    /* — ⚗️ Grand Œuvre — */
-    { id: 'synthese1', name: 'Synthèse I — Infusion', icon: '✨', maxRank: 1, minLevel: 8, minStage: 80, branch: 'oeuvre',
+    { id: 'philosophale', name: 'Pierre philosophale', icon: '🜍', maxRank: 1, minLevel: 50, minStage: 100, requires: 'officine', branch: 'officine', keystone: true,
+      desc: 'CAPSTONE : la Pierre philosophale (relique de compte : +2% de drops de ressources, pour toujours).' },
+    /* — ⚗️ GRAND ŒUVRE : craft, synthèses, matière & spé — */
+    { id: 'quintessence', name: 'Quintessence', icon: '⚗️', maxRank: 1, branch: 'oeuvre',
+      desc: 'Débloque le craft typé à la QUINTESSENCE (lignes de dégâts / résistance choisies).' },
+    { id: 'raffinage', name: 'Raffinage', icon: '🌿', maxRank: 3, minLevel: 5, requires: 'quintessence', branch: 'oeuvre',
+      desc: 'Par rang : −coût des Quintessences, +éclats & Quintessences au recyclage, +drop de réactifs, +chance de ne pas les consommer.' },
+    { id: 'synthese1', name: 'Synthèse I — Infusion', icon: '✨', maxRank: 1, minLevel: 8, minStage: 80, requires: 'quintessence', branch: 'oeuvre',
       desc: 'Infuser un Fragment d\'éternité : ajoute un effet unique ALÉATOIRE (ou monte son rang).' },
     { id: 'synthese2', name: 'Synthèse II — Essence ciblée', icon: '🧬', maxRank: 1, minLevel: 14, minStage: 80, requires: 'synthese1', branch: 'oeuvre',
       desc: 'Insérer une essence d\'unique recyclé : un effet SEMI-CIBLÉ (celui de l\'essence).' },
-    { id: 'synthese3', name: 'Synthèse III — Invocation', icon: '💫', maxRank: 1, minLevel: 20, minStage: 100, requires: 'synthese2', branch: 'oeuvre',
+    { id: 'synthese3', name: 'Synthèse III — Invocation', icon: '💫', maxRank: 1, minLevel: 20, minStage: 100, requires: 'synthese2', branch: 'oeuvre', keystone: true,
       desc: 'L\'acte final du craft : invoquer l\'effet unique de ton CHOIX (Éclats cosmiques).' },
-    { id: 'rendementQ', name: 'Rendement quintessencié', icon: '⚖️', maxRank: 5, minLevel: 7, requires: 'quintessence', branch: 'oeuvre',
-      desc: '−4% du coût des améliorations à la Quintessence par rang.' },
     { id: 'specTransmutateur', name: 'Catalyseur', icon: '⚗️', maxRank: 5, minLevel: 15, exclusive: 'alchimiste-spec', requires: 'quintessence', branch: 'oeuvre',
-      desc: '◈ I→V : Quintessences −10/−15/−25/−30/−35% · à l\'étage III, le recyclage rembourse 100% des Quintessences investies.' },
-    /* — 🌿 Matière — */
-    { id: 'distillation', name: 'Distillation', icon: '🧪', maxRank: 5, branch: 'matiere',
-      desc: '+10% d\'éclats au recyclage par rang.' },
-    { id: 'condensation', name: 'Condensation', icon: '💧', maxRank: 5, minLevel: 5, branch: 'matiere',
-      desc: '+20% de chance de drop de Quintessence par rang.' },
-    { id: 'herboriste', name: 'Herboriste', icon: '🌿', maxRank: 5, minLevel: 3, branch: 'matiere',
-      desc: '+8% de chance de drop de RÉACTIFS de biome par rang.' },
-    { id: 'doubleDistillation', name: 'Double distillation', icon: '🔁', maxRank: 3, minLevel: 16, requires: 'officine', branch: 'matiere',
-      desc: '+5% de chance par rang de ne PAS consommer les réactifs d\'un brassin.' },
-    { id: 'specDistillateur', name: 'Distillateur', icon: '⚱️', maxRank: 5, minLevel: 15, exclusive: 'alchimiste-spec', requires: 'distillation', branch: 'matiere',
-      desc: '◈ I→V : éclats au recyclage +10/+15/+25/+30/+35% · à l\'étage III, les essences d\'uniques tombent ×2.' },
+      desc: '◈ I→V : Quintessences −10/−15/−25/−30/−35% · étage III : recyclage rembourse 100% des Quintessences. (Re-choix libre.)' },
+    { id: 'specDistillateur', name: 'Distillateur', icon: '⚱️', maxRank: 5, minLevel: 15, exclusive: 'alchimiste-spec', requires: 'quintessence', branch: 'oeuvre',
+      desc: '◈ I→V : éclats au recyclage +10/+15/+25/+30/+35% · étage III : essences d\'uniques ×2. (Re-choix libre.)' },
   ],
 }
 
@@ -690,26 +671,29 @@ export function craftMods(metiers: MetiersState): CraftMods {
     surchargeRunique: r('runiste', 'surchargeRunique') > 0,
     greffierMult: 1 + r('runiste', 'runologue') * 0.1,
     quint: r('alchimiste', 'quintessence') > 0,
-    // ◈ Distillateur I→V : +10/15/25/30/35% (l'étage III = l'ancien rang 1).
-    recycleMult: (1 + r('alchimiste', 'distillation') * 0.1)
+    // v0.28 E2 — Alchimiste remappé sur l'arbre réduit (Officine + Grand Œuvre). Raffinage fond
+    // rendementQ/distillation/condensation/herboriste/doubleDistillation ; Maître brasseur fond
+    // brassageRapide/brassageCritique/grandsCrus ; officine porte le nombre de cuves.
+    // ◈ Distillateur I→V : +10/15/25/30/35% (étage III = ancien rang 1).
+    recycleMult: (1 + r('alchimiste', 'raffinage') * 0.1)
       * (1 + [0, 0.1, 0.15, 0.25, 0.3, 0.35][Math.min(5, r('alchimiste', 'specDistillateur'))]),
-    quintDropMult: 1 + r('alchimiste', 'condensation') * 0.2,
+    quintDropMult: 1 + r('alchimiste', 'raffinage') * 0.2,
     synth1: r('alchimiste', 'synthese1') > 0,
     synth2: r('alchimiste', 'synthese2') > 0,
     synth3: r('alchimiste', 'synthese3') > 0,
     distillateur: r('alchimiste', 'specDistillateur') >= 3,
-    // ◈ Catalyseur I→V (−10/15/25/30/35%) × Rendement quintessencié (−4%/rang).
+    // ◈ Catalyseur I→V (−10/15/25/30/35%) × Raffinage (−4%/rang).
     quintCostMult: [1, 0.9, 0.85, 0.75, 0.7, 0.65][Math.min(5, r('alchimiste', 'specTransmutateur'))]
-      * (1 - r('alchimiste', 'rendementQ') * 0.04),
+      * (1 - r('alchimiste', 'raffinage') * 0.04),
     quintRefundFull: r('alchimiste', 'specTransmutateur') >= 3,
-    alchimisteXpMult: 1 + r('alchimiste', 'paillasse') * 0.2,
+    alchimisteXpMult: 1 + r('alchimiste', 'raffinage') * 0.05,
     officine: r('alchimiste', 'officine') > 0,
-    cuves: r('alchimiste', 'officine') > 0 ? 2 + r('alchimiste', 'cuve3') + r('alchimiste', 'cuve4') : 0,
-    brewTimeMult: 1 - r('alchimiste', 'brassageRapide') * 0.1,
-    brewCrit: r('alchimiste', 'brassageCritique') * 0.04,
-    grandsCrus: r('alchimiste', 'grandsCrus'),
-    herboristeMult: 1 + r('alchimiste', 'herboriste') * 0.08,
-    doubleDistillation: r('alchimiste', 'doubleDistillation') * 0.05,
+    cuves: r('alchimiste', 'officine') > 0 ? 1 + r('alchimiste', 'officine') : 0,
+    brewTimeMult: 1 - r('alchimiste', 'brasseur') * 0.1,
+    brewCrit: r('alchimiste', 'brasseur') * 0.06,
+    grandsCrus: r('alchimiste', 'brasseur'),
+    herboristeMult: 1 + r('alchimiste', 'raffinage') * 0.08,
+    doubleDistillation: r('alchimiste', 'raffinage') * 0.05,
     transmutJour: r('alchimiste', 'transmutJour') > 0,
     pharmacopee: r('alchimiste', 'pharmacopee') > 0,
     philosophaleUnlock: r('alchimiste', 'philosophale') > 0,

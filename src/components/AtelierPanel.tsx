@@ -242,8 +242,8 @@ function MetierTree({ metier, alwaysOpen }: { metier: MetierId; alwaysOpen?: boo
   const [openState, setOpen] = useState(pts > 0)
   const open = alwaysOpen ? true : openState
   const def = METIERS[metier]
-  // E2 : Forgeron + Joaillier + Runiste passent au rendu ARBRE À NŒUDS ; Alchimiste suit.
-  const graph = metier === 'forgeron' || metier === 'joaillier' || metier === 'runiste'
+  // E2 : les 4 métiers sont réduits → tous au rendu ARBRE À NŒUDS (dépendances + keystones).
+  const graph = true
 
   // Branches affichées : tronc commun d'abord, puis les branches déclarées qui ont des nœuds.
   const branches: { id: string; name: string; icon: string }[] = [

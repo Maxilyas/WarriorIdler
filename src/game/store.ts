@@ -86,7 +86,10 @@ import {
 import { SETS } from './sets'
 import { simulateOffline, type OfflineReport } from './offline'
 
-const SAVE_KEY = 'warrior-idler-save-v1'
+// v0.30 — WIPE ASSUMÉ : la refonte de progression (budget d'objet exponentiel, échelle d'ilvl
+// unifiée) rend les anciens objets/paliers incohérents sur la nouvelle courbe. On bumpe la clé →
+// les saves v1 ne sont plus chargées (reset propre, comme un gros prestige). Cf. DESIGN_v0.30.md.
+const SAVE_KEY = 'warrior-idler-save-v030'
 const MAX_LOG = 40
 // v0.25 (DESIGN §2) : inventaire ILLIMITÉ (Sacoches supprimée) — borne purement technique.
 // Le tri se fait par l'auto-recyclage (seuil de rareté) et les outils de masse.
@@ -1287,7 +1290,7 @@ function freshSave(): SaveData {
     armedXpBonus: null,
     lastTransmute: 0,
     philosophale: false,
-    metiersV: 6,
+    metiersV: 7,
     essences: {},
     sceaux: 0,
     dungeonProgress: emptyDungeonProgress(),
@@ -1514,6 +1517,22 @@ function sanitize(save: SaveData): SaveData {
     }
     save.metiers = { ...save.metiers, runiste: { ...save.metiers.runiste, nodes } }
     save.metiersV = 6
+  }
+  // v0.28 E2 — MIGRATION metiersV 7 : arbre Alchimiste RÉDUIT (Officine + Grand Œuvre). Fusionne les
+  // cuves dans officine (R1-3), garde quint/synthèses/spés ; RETIRE le filler (paillasse/brassages/
+  // grandsCrus/rendementQ/distillation/condensation/herboriste/doubleDistillation) → points rendus.
+  if ((save.metiersV ?? 1) < 7 && save.metiers?.alchimiste) {
+    const old: Record<string, number> = save.metiers.alchimiste.nodes ?? {}
+    const g = (id: string) => old[id] ?? 0
+    const nodes: Record<string, number> = {}
+    const officine = Math.min(3, Math.max(g('officine'), g('officine') ? 1 : 0) + g('cuve3') + g('cuve4'))
+    if (officine) nodes.officine = officine
+    for (const [id, max] of [['quintessence', 1], ['transmutJour', 1], ['pharmacopee', 1], ['philosophale', 1], ['synthese1', 1], ['synthese2', 1], ['synthese3', 1], ['specTransmutateur', 5], ['specDistillateur', 5]] as const) {
+      const v = Math.min(max, g(id))
+      if (v) nodes[id] = v
+    }
+    save.metiers = { ...save.metiers, alchimiste: { ...save.metiers.alchimiste, nodes } }
+    save.metiersV = 7
   }
   // v0.26 : 📖 Catalogue — les saves d'avant sont créditées de leurs gemmes déjà possédées
   // (stock + serties), pour ne pas repartir de zéro.
@@ -1889,7 +1908,7 @@ function persist(s: GameState) {
     armedXpBonus: s.armedXpBonus,
     lastTransmute: s.lastTransmute,
     philosophale: s.philosophale,
-    metiersV: s.metiersV ?? 6,
+    metiersV: s.metiersV ?? 7,
     essences: s.essences,
     sceaux: s.sceaux,
     dungeonProgress: s.dungeonProgress,
