@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useGame, powerCooldowns, tutContext } from '../game/store'
 import type { LogKind } from '../game/store'
 import { TUT_QUESTS, tutDone, tutAllClaimed, tutClaimableCount, type TutCtx } from '../game/tutorial'
+import { hasReward, formatInboxReward, inboxUnclaimedCount, type InboxMessage } from '../game/inbox'
 import { Sheet } from './ui'
 import { LevelBadge } from './LevelBadge'
 import { charMaxHp, charDps, charResist, charCombatMods, TALENT_START_LEVEL } from '../game/character'
@@ -62,12 +63,17 @@ export function CombatPanel() {
   const dungeonProgress = useGame((s) => s.dungeonProgress)
   const tut = useGame((s) => s.tut)
   const claimTutorialReward = useGame((s) => s.claimTutorialReward)
+  // ✉ Boîte de réception (v0.31.2) : gains à collecter, sortis de l'écran de combat.
+  const inbox = useGame((s) => s.inbox)
+  const claimInbox = useGame((s) => s.claimInbox)
+  const claimAllInbox = useGame((s) => s.claimAllInbox)
 
   // Biome + palier + verrou fusionnés en une ligne « zone » : le détail s'ouvre en feuille
   // (libère un tiers d'écran pour le journal sur mobile).
   const [zoneOpen, setZoneOpen] = useState(false)
   const [journalOpen, setJournalOpen] = useState(false)
   const [questsOpen, setQuestsOpen] = useState(false)
+  const [inboxOpen, setInboxOpen] = useState(false)
   const [logFilter, setLogFilter] = useState('tout')
 
   const me = characters[activeChar] ?? characters[0]
@@ -97,6 +103,9 @@ export function CombatPanel() {
   const tutActive = !tutAllClaimed(tut.claimed)
   // Récompenses de tuto prêtes à réclamer → red-dot de l'icône 🎯 flottante (cf. cluster live-ops).
   const tutClaimable = tutClaimableCount(tutCtx, tut.claimed)
+  // ✉ Inbox : gains en attente → red-dot de l'icône ✉. Le cluster s'affiche dès qu'il a une icône à montrer.
+  const inboxUnclaimed = inboxUnclaimedCount(inbox)
+  const clusterVisible = !dungeon && !raid && (tutActive || inbox.length > 0)
   const partyDps = characters
     .filter((c) => c.hp > 0)
     .reduce((sum, c) => sum + charDps(c), 0)
@@ -117,31 +126,50 @@ export function CombatPanel() {
   const boss = raid ? true : dungeon ? dungeon.current === dungeon.totalFights - 1 : isBossStage(stage)
 
   return (
-    <div className="relative flex h-full flex-col gap-3">
-      {/* Cluster live-ops flottant : le DÉTAIL des quêtes « Premiers Pas » + récompenses sort de
-          l'écran de combat et vit derrière cette icône (red-dot = gains à réclamer). Masqué en
-          donjon/raid pour garder l'instance épurée. Pensé pour s'empiler (✉ inbox, events à venir). */}
-      {!dungeon && !raid && tutActive && (
-        <div className="absolute right-1 top-1 z-20 flex flex-col gap-2">
-          <button
-            onClick={() => setQuestsOpen(true)}
-            aria-label={`Premiers Pas — ${tutClaimable} récompense${tutClaimable > 1 ? 's' : ''} à réclamer`}
-            className="relative flex h-10 w-10 items-center justify-center rounded-full border border-orange-700/50 bg-[#1a1320]/95 text-xl shadow-lg shadow-black/40 active:scale-95"
-          >
-            🎯
-            {tutClaimable > 0 && (
-              <span className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] animate-pulse items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white ring-2 ring-[#0d111a]">
-                {tutClaimable}
-              </span>
-            )}
-          </button>
-        </div>
-      )}
-      {/* Objectif : fil conducteur d'UNE ligne (le détail des quêtes vit derrière l'icône 🎯).
-          Right-padding tant que le tuto est actif pour ne pas passer sous l'icône flottante. */}
-      {objective && !dungeon && !raid && (
-        <div className={'rounded-xl border border-orange-700/40 bg-orange-950/20 px-3 py-2 text-[11px] leading-snug text-orange-100' + (tutActive ? ' pr-12' : '')}>
-          <span className="font-semibold text-orange-300">🎯 Objectif&nbsp;:</span> {objective}
+    <div className="flex h-full flex-col gap-3">
+      {/* Bandeau du haut : fil conducteur (objectif, 1 ligne) à gauche + cluster live-ops à droite.
+          Le cluster SORT de l'écran de combat le détail des quêtes (🎯) et la boîte de réception (✉) :
+          chaque icône porte un red-dot = gains à réclamer. Rangée en flux normal (zéro chevauchement
+          avec les contrôles de zone). Conçu pour s'étendre (events…). Masqué en donjon/raid. */}
+      {!dungeon && !raid && (objective || clusterVisible) && (
+        <div className="flex items-start justify-end gap-2">
+          {objective && (
+            <div className="min-w-0 flex-1 rounded-xl border border-orange-700/40 bg-orange-950/20 px-3 py-2 text-[11px] leading-snug text-orange-100">
+              <span className="font-semibold text-orange-300">🎯 Objectif&nbsp;:</span> {objective}
+            </div>
+          )}
+          {clusterVisible && (
+            <div className="flex shrink-0 flex-col gap-2">
+              {tutActive && (
+                <button
+                  onClick={() => setQuestsOpen(true)}
+                  aria-label={`Premiers Pas — ${tutClaimable} récompense${tutClaimable > 1 ? 's' : ''} à réclamer`}
+                  className="relative flex h-10 w-10 items-center justify-center rounded-full border border-orange-700/50 bg-[#1a1320] text-xl active:scale-95"
+                >
+                  🎯
+                  {tutClaimable > 0 && (
+                    <span className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] animate-pulse items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white ring-2 ring-[#0d111a]">
+                      {tutClaimable}
+                    </span>
+                  )}
+                </button>
+              )}
+              {inbox.length > 0 && (
+                <button
+                  onClick={() => setInboxOpen(true)}
+                  aria-label={`Boîte de réception — ${inboxUnclaimed} récompense${inboxUnclaimed > 1 ? 's' : ''} à réclamer`}
+                  className="relative flex h-10 w-10 items-center justify-center rounded-full border border-sky-700/50 bg-[#101a26] text-xl active:scale-95"
+                >
+                  ✉
+                  {inboxUnclaimed > 0 && (
+                    <span className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] animate-pulse items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white ring-2 ring-[#0d111a]">
+                      {inboxUnclaimed}
+                    </span>
+                  )}
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -661,6 +689,13 @@ export function CombatPanel() {
         </Sheet>
       )}
 
+      {/* Feuille ✉ Boîte de réception : les gains à collecter (cadeaux, hors-ligne, events). */}
+      {inboxOpen && (
+        <Sheet title="✉ Boîte de réception" onClose={() => setInboxOpen(false)}>
+          <InboxList inbox={inbox} onClaim={claimInbox} onClaimAll={claimAllInbox} />
+        </Sheet>
+      )}
+
       {/* Journal plein écran */}
       {journalOpen && (
         <Sheet title="Journal de combat" onClose={() => setJournalOpen(false)}>
@@ -789,6 +824,47 @@ function QuestList({ ctx, claimed, onClaim }: { ctx: TutCtx; claimed: string[]; 
         )
       })}
     </ul>
+  )
+}
+
+/** ✉ Liste de la boîte de réception (rendue dans une feuille) : gains à collecter + « Tout réclamer ». */
+function InboxList({ inbox, onClaim, onClaimAll }: { inbox: InboxMessage[]; onClaim: (id: string) => void; onClaimAll: () => void }) {
+  if (inbox.length === 0) {
+    return <div className="py-6 text-center text-xs text-slate-500">Aucun message. Tes cadeaux et gains hors-ligne arriveront ici.</div>
+  }
+  const pending = inbox.filter((m) => !m.claimed && hasReward(m.reward)).length
+  return (
+    <div>
+      {pending > 0 && (
+        <button
+          onClick={onClaimAll}
+          className="mb-2 w-full rounded-lg bg-sky-600 py-2 text-xs font-semibold text-white hover:bg-sky-500 active:scale-95"
+        >
+          🎁 Tout réclamer ({pending})
+        </button>
+      )}
+      <ul className="space-y-1.5">
+        {inbox.map((m) => {
+          const reward = hasReward(m.reward)
+          const claimable = reward && !m.claimed
+          return (
+            <li key={m.id} className={'rounded-lg px-2.5 py-2 ' + (m.claimed ? 'opacity-45' : claimable ? 'bg-sky-900/25 ring-1 ring-sky-500/30' : 'bg-slate-900/40')}>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[12px] font-medium text-slate-100">{m.icon} {m.title}</span>
+                {claimable && (
+                  <button onClick={() => onClaim(m.id)} className="shrink-0 rounded bg-sky-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-sky-500 active:scale-95">
+                    Réclamer 🎁
+                  </button>
+                )}
+                {m.claimed && reward && <span className="shrink-0 text-[10px] font-medium text-emerald-400">✅ réclamé</span>}
+              </div>
+              {m.body && <div className="mt-1 text-[11px] leading-snug text-slate-400">{m.body}</div>}
+              {reward && <div className="mt-1 text-[11px] font-medium text-sky-300/90">🎁 {formatInboxReward(m.reward)}</div>}
+            </li>
+          )
+        })}
+      </ul>
+    </div>
   )
 }
 

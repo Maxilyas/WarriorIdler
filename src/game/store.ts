@@ -70,6 +70,7 @@ import { SECONDARY_STATS } from './stats'
 import { DAMAGE_TYPE_LIST, DAMAGE_TYPES, profileDamageMult, type DamageProfile } from './damage'
 import { equipSlotsForType, slotAccepts, EQUIP_SLOTS } from './slots'
 import { TUT_QUESTS, TUT_QUEST_IDS, type TutCtx } from './tutorial'
+import { welcomeMessage, hasReward as inboxHasReward, INBOX_CAP, type InboxMessage } from './inbox'
 import { essenceGain, upgradeCost, insertCost, getUnique, UNIQUE_MAX_RANK, randomUniqueInstance, undiscoveredUnique } from './uniques'
 import {
   generateDungeon, makeDungeonPack, dungeonIlvl, dungeonRegen, getDungeonDef, dungeonLuckTier,
@@ -429,6 +430,8 @@ interface SaveData {
   autoRecycle: boolean
   /** v0.31 — tutoriel « Premiers Pas » : quêtes dont la récompense a été réclamée + flag d'achat marché. */
   tut: { claimed: string[]; bought: boolean }
+  /** ✉ Boîte de réception (v0.31.2) : gains à collecter (cadeaux, hors-ligne, events) — sortis du combat. */
+  inbox: InboxMessage[]
   /** Rune du Karma (pity) : kills depuis le dernier drop Épique+ (compté en permanence). */
   killsSinceEpic: number
   /** Horodatage de la dernière sauvegarde (progression hors-ligne). */
@@ -457,6 +460,12 @@ interface GameState extends SaveData {
   claimOffline: () => void
   /** v0.31 — réclame la récompense d'une quête du tutoriel « Premiers Pas » (si terminée et non réclamée). */
   claimTutorialReward: (id: string) => void
+  /** ✉ Réclame la récompense d'un message d'inbox (crédite puis marque réclamé). */
+  claimInbox: (id: string) => void
+  /** ✉ Réclame TOUS les messages en attente d'un coup. */
+  claimAllInbox: () => void
+  /** ✉ Dépose un message dans la boîte (cadeaux, gains hors-ligne, events). */
+  pushInbox: (msg: InboxMessage) => void
   /** v0.27 (F3) — cycle de vie mobile : l'appli passe en arrière-plan (horodate la mise en veille). */
   markAway: () => void
   /** v0.27 (F3) — retour au premier plan : crédite les gains hors-ligne accumulés en arrière-plan. */
@@ -1362,6 +1371,9 @@ function freshSave(): SaveData {
     recycleThreshold: 4,
     autoRecycle: false,
     tut: { claimed: [], bought: false },
+    // ✉ Boîte de réception semée d'un cadeau de bienvenue (montre OÙ atterrissent les gains). Pour les
+    // saves existantes, le merge `{ ...freshSave(), ...p }` injecte ce message une fois (p.inbox absent).
+    inbox: [welcomeMessage(Date.now())],
     killsSinceEpic: 0,
     lastSeen: Date.now(),
     lastShopRefresh: 0,
@@ -1442,6 +1454,8 @@ function sanitize(save: SaveData): SaveData {
   if (!save.tut || !Array.isArray(save.tut.claimed)) {
     save.tut = { claimed: (save.bestStage ?? 1) >= 15 ? [...TUT_QUEST_IDS] : [], bought: (save.bestStage ?? 1) >= 15 }
   }
+  // ✉ Filet de sécurité (le semis de bienvenue arrive déjà via le merge freshSave → tableau présent).
+  if (!Array.isArray(save.inbox)) save.inbox = []
   {
     const q = emptyQuint()
     const src = (save.quint ?? {}) as Record<string, number>
@@ -2003,6 +2017,7 @@ function persist(s: GameState) {
     inventory: s.inventory,
     recycleThreshold: s.recycleThreshold,
     tut: s.tut,
+    inbox: s.inbox,
     autoRecycle: s.autoRecycle,
     killsSinceEpic: s.killsSinceEpic,
     lastSeen: Date.now(),
@@ -6433,6 +6448,55 @@ export const useGame = create<GameState>((set, get) => {
         tut: { ...s.tut, claimed: [...s.tut.claimed, id] },
         log: pushLog(log, `🎯 Premiers Pas — « ${q.title} » accomplie : ${q.rewardText} !`, 'level'),
       }
+      persist(next)
+      set(next)
+    },
+
+    claimInbox: (id) => {
+      const s = get()
+      const m = s.inbox.find((x) => x.id === id)
+      if (!m || m.claimed || !inboxHasReward(m.reward)) return
+      const r = m.reward
+      const next = {
+        ...s,
+        gold: s.gold + (r.gold ?? 0),
+        essence: s.essence + (r.eclats ?? 0),
+        noyau: s.noyau + (r.noyau ?? 0),
+        sceaux: s.sceaux + (r.sceaux ?? 0),
+        fragments: s.fragments + (r.fragments ?? 0),
+        poussiere: s.poussiere + (r.poussiere ?? 0),
+        inbox: s.inbox.map((x) => (x.id === id ? { ...x, claimed: true } : x)),
+        log: pushLog(s.log, `✉ Récompense réclamée : ${m.title}.`, 'level'),
+      }
+      persist(next)
+      set(next)
+    },
+
+    claimAllInbox: () => {
+      const s = get()
+      const pending = s.inbox.filter((m) => !m.claimed && inboxHasReward(m.reward))
+      if (pending.length === 0) return
+      let gold = s.gold, essence = s.essence, noyau = s.noyau, sceaux = s.sceaux, fragments = s.fragments, poussiere = s.poussiere
+      for (const m of pending) {
+        gold += m.reward.gold ?? 0
+        essence += m.reward.eclats ?? 0
+        noyau += m.reward.noyau ?? 0
+        sceaux += m.reward.sceaux ?? 0
+        fragments += m.reward.fragments ?? 0
+        poussiere += m.reward.poussiere ?? 0
+      }
+      const next = {
+        ...s, gold, essence, noyau, sceaux, fragments, poussiere,
+        inbox: s.inbox.map((m) => (!m.claimed && inboxHasReward(m.reward) ? { ...m, claimed: true } : m)),
+        log: pushLog(s.log, `✉ ${pending.length} récompense${pending.length > 1 ? 's' : ''} réclamée${pending.length > 1 ? 's' : ''}.`, 'level'),
+      }
+      persist(next)
+      set(next)
+    },
+
+    pushInbox: (msg) => {
+      const s = get()
+      const next = { ...s, inbox: [msg, ...s.inbox].slice(0, INBOX_CAP) }
       persist(next)
       set(next)
     },
