@@ -345,8 +345,8 @@ ability('re_hub', 'rempart', 0, 'Rempart', 're_bouclier_coup', 'Entre dans la vo
 // BOUCLIER : la Rage devient de l'absorption.
 minor('re_garde', 'rempart', 1, 'Bloc', 3, { endurance: 20 }, { requires: ['re_hub'] })
 ability('re_revanche', 'rempart', 1, 'Revanche', 're_revanche', 'FINITION : débloque Revanche (finisseur — dégâts × Rage). +16 Force.', { requires: ['re_hub'], statMods: { force: 16 } })
-ks('re_bloc', 'rempart', 2, 'Mur de boucliers', 'TANK : un finisseur t\'accorde un bouclier = 35% de ses dégâts — MAIS borné à 20% de tes PV/coup et le total ≤ tes PV max (le bouclier suit ta SURVIE, pas ton dégât). Exige Bloc au rang max.', { stat: { endurance: 30 }, ks: { finisherShield: 0.35 } }, { requires: ['re_revanche'], requiresRank: { id: 're_garde', rank: 3 } })
-ks('re_mur', 'rempart', 3, 'Inébranlable', 'TANK : +0,15 au bouclier de finisseur ET tes finisseurs +20%.', { stat: { barriere: 20 }, ks: { finisherShield: 0.15, finisherMult: 0.2 } }, { requires: ['re_bloc'], minSpent: 8 })
+ks('re_bloc', 'rempart', 2, 'Mur de boucliers', 'TANK (cooldown 30 s) : un finisseur t\'accorde un bouclier = 35% de ses dégâts — borné à 50% de tes PV max, total ≤ tes PV max. UNE fois toutes les 30 s (vraie capacité défensive, pas un bouclier permanent). Exige Bloc au rang max.', { stat: { endurance: 30 }, ks: { finisherShield: 0.35 } }, { requires: ['re_revanche'], requiresRank: { id: 're_garde', rank: 3 } })
+ks('re_mur', 'rempart', 3, 'Inébranlable', 'TANK : +0,15 au bouclier de Mur de boucliers ET tes finisseurs +20%.', { stat: { barriere: 20 }, ks: { finisherShield: 0.15, finisherMult: 0.2 } }, { requires: ['re_bloc'], minSpent: 8 })
 ability('re_egide', 'rempart', 4, 'Égide titanesque', 'egide_titanesque', 'ULTIME — un ÉNORME bouclier d\'absorption (40% à l\'équipe). Tout au fond : 20 pts dans la voie.', { requires: ['re_mur'], minSpent: 20 })
 // ÉPINES + PROVOCATION : menace & représailles.
 minor('re_acier', 'rempart', 1, 'Peau d\'acier', 3, { reductionDegats: 16 }, { requires: ['re_hub'] })

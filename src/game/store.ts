@@ -928,6 +928,7 @@ const rembUsed = new Set<string>() // ⏪ Rembobinage : héros déjà servis CE 
 // Par héros (clé charId).
 const verreTimer = new Map<string, number>()    // 🪟 Verre trempé : s sans subir de coup
 const carapaceCdMap = new Map<string, number>() // 🐢 Carapace réactive : recharge (s)
+const shieldCdMap = new Map<string, number>()   // 🛡 Mur de boucliers (Rempart) : recharge interne (s)
 const riposteAcc = new Map<string, number>()    // 🤺 Riposte mesurée : s sous le feu
 const echangeurAcc = new Map<string, number>()  // 🔃 Échangeur : fraction de PV subis accumulée
 const egideLeft = new Map<string, number>()     // 🛡️ Égide : coups encore couverts CE combat
@@ -2482,14 +2483,15 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
       const pts = Math.max(1, caster.combo ?? 0)
       const done = hit(magDmg * pts * 0.55 * (1 + cm.finisherMult) * vm)
       caster.combo = cm.comboRefund
-      // REMPART : convertit la dépense de Rage en bouclier — MAIS borné aux PV (anti-invincibilité) :
-      // chaque finisseur ajoute au plus 20% des PV max, et le bouclier de cette source ne dépasse jamais
-      // les PV max. Le bouclier scale donc avec la SURVIE (PV), pas avec le dégât brut (milliards endgame).
-      if (cm.finisherShield > 0) {
+      // REMPART : convertit la dépense de Rage en bouclier — MAIS (1) au plus une fois / 30 s (cooldown
+      // interne, sinon bouclier permanent = trop fort), (2) borné aux PV : au plus 50% des PV max par
+      // déclenchement, total ≤ PV max. Le bouclier suit la SURVIE (PV), pas le dégât brut (milliards endgame).
+      if (cm.finisherShield > 0 && (shieldCdMap.get(caster.id) ?? 0) <= 0) {
         const mh = charMaxHp(caster)
-        const grant = Math.min(done * cm.finisherShield, mh * 0.2)
+        const grant = Math.min(done * cm.finisherShield, mh * 0.5)
         const room = Math.max(0, mh - (caster.absorb ?? 0))
-        caster.absorb = (caster.absorb ?? 0) + Math.min(grant, room)
+        const added = Math.min(grant, room)
+        if (added > 0) { caster.absorb = (caster.absorb ?? 0) + added; shieldCdMap.set(caster.id, 30) }
       }
       return done
     }
@@ -2644,6 +2646,8 @@ function tickHeroStatuses(chars: Character[], dt: number, cond?: CondMods, pact?
     verreTimer.set(c.id, (verreTimer.get(c.id) ?? 0) + dt)
     const ccd = carapaceCdMap.get(c.id)
     if (ccd && ccd > 0) carapaceCdMap.set(c.id, Math.max(0, ccd - dt))
+    const scd = shieldCdMap.get(c.id)
+    if (scd && scd > 0) shieldCdMap.set(c.id, Math.max(0, scd - dt))
     // 💧 Goutte-à-goutte : la réserve se déverse à 2% des PV max par seconde (coupée au Jeûne).
     const pool = hotPool.get(c.id) ?? 0
     if (pool > 0 && c.hp > 0 && !pact?.noHeal) {
