@@ -99,3 +99,8 @@ export function tutDone(q: TutQuest, ctx: TutCtx): boolean {
 export function tutAllClaimed(claimed: string[]): boolean {
   return TUT_QUEST_IDS.every((id) => claimed.includes(id))
 }
+
+/** Nombre de quêtes terminées mais pas encore réclamées — alimente le red-dot de l'icône 🎯 flottante. */
+export function tutClaimableCount(ctx: TutCtx, claimed: string[]): number {
+  return TUT_QUESTS.filter((q) => q.done(ctx) && !claimed.includes(q.id)).length
+}

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useGame, powerCooldowns, tutContext } from '../game/store'
 import type { LogKind } from '../game/store'
-import { TUT_QUESTS, tutDone, tutAllClaimed, type TutCtx } from '../game/tutorial'
+import { TUT_QUESTS, tutDone, tutAllClaimed, tutClaimableCount, type TutCtx } from '../game/tutorial'
 import { Sheet } from './ui'
 import { LevelBadge } from './LevelBadge'
 import { charMaxHp, charDps, charResist, charCombatMods, TALENT_START_LEVEL } from '../game/character'
@@ -67,6 +67,7 @@ export function CombatPanel() {
   // (libère un tiers d'écran pour le journal sur mobile).
   const [zoneOpen, setZoneOpen] = useState(false)
   const [journalOpen, setJournalOpen] = useState(false)
+  const [questsOpen, setQuestsOpen] = useState(false)
   const [logFilter, setLogFilter] = useState('tout')
 
   const me = characters[activeChar] ?? characters[0]
@@ -94,6 +95,8 @@ export function CombatPanel() {
   // v0.31 — Journal « Premiers Pas » : actif tant que toutes les quêtes ne sont pas réclamées.
   const tutCtx = tutContext({ characters, activeChar, bestStage, inventory, dungeonProgress, tut })
   const tutActive = !tutAllClaimed(tut.claimed)
+  // Récompenses de tuto prêtes à réclamer → red-dot de l'icône 🎯 flottante (cf. cluster live-ops).
+  const tutClaimable = tutClaimableCount(tutCtx, tut.claimed)
   const partyDps = characters
     .filter((c) => c.hp > 0)
     .reduce((sum, c) => sum + charDps(c), 0)
@@ -114,14 +117,30 @@ export function CombatPanel() {
   const boss = raid ? true : dungeon ? dungeon.current === dungeon.totalFights - 1 : isBossStage(stage)
 
   return (
-    <div className="flex h-full flex-col gap-3">
-      {/* v0.31 — Journal « Premiers Pas » tant que le tuto est actif, sinon objectif classique. */}
+    <div className="relative flex h-full flex-col gap-3">
+      {/* Cluster live-ops flottant : le DÉTAIL des quêtes « Premiers Pas » + récompenses sort de
+          l'écran de combat et vit derrière cette icône (red-dot = gains à réclamer). Masqué en
+          donjon/raid pour garder l'instance épurée. Pensé pour s'empiler (✉ inbox, events à venir). */}
       {!dungeon && !raid && tutActive && (
-        <QuestJournal ctx={tutCtx} claimed={tut.claimed} onClaim={claimTutorialReward} />
+        <div className="absolute right-1 top-1 z-20 flex flex-col gap-2">
+          <button
+            onClick={() => setQuestsOpen(true)}
+            aria-label={`Premiers Pas — ${tutClaimable} récompense${tutClaimable > 1 ? 's' : ''} à réclamer`}
+            className="relative flex h-10 w-10 items-center justify-center rounded-full border border-orange-700/50 bg-[#1a1320]/95 text-xl shadow-lg shadow-black/40 active:scale-95"
+          >
+            🎯
+            {tutClaimable > 0 && (
+              <span className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] animate-pulse items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white ring-2 ring-[#0d111a]">
+                {tutClaimable}
+              </span>
+            )}
+          </button>
+        </div>
       )}
-      {/* Objectif / tutoriel (disparaît une fois tout débloqué) */}
-      {objective && !dungeon && !raid && !tutActive && (
-        <div className="rounded-xl border border-orange-700/40 bg-orange-950/20 px-3 py-2 text-[11px] leading-snug text-orange-100">
+      {/* Objectif : fil conducteur d'UNE ligne (le détail des quêtes vit derrière l'icône 🎯).
+          Right-padding tant que le tuto est actif pour ne pas passer sous l'icône flottante. */}
+      {objective && !dungeon && !raid && (
+        <div className={'rounded-xl border border-orange-700/40 bg-orange-950/20 px-3 py-2 text-[11px] leading-snug text-orange-100' + (tutActive ? ' pr-12' : '')}>
           <span className="font-semibold text-orange-300">🎯 Objectif&nbsp;:</span> {objective}
         </div>
       )}
@@ -635,6 +654,13 @@ export function CombatPanel() {
         </div>
       </div>
 
+      {/* Feuille « Premiers Pas » : la liste détaillée des quêtes + récompenses, sortie de l'écran de combat. */}
+      {questsOpen && (
+        <Sheet title={`🎯 Premiers Pas — ${tut.claimed.length}/${TUT_QUESTS.length}`} onClose={() => setQuestsOpen(false)}>
+          <QuestList ctx={tutCtx} claimed={tut.claimed} onClaim={claimTutorialReward} />
+        </Sheet>
+      )}
+
       {/* Journal plein écran */}
       {journalOpen && (
         <Sheet title="Journal de combat" onClose={() => setJournalOpen(false)}>
@@ -685,18 +711,29 @@ function statusChips(c: Character): { icon: string; label: string; cls: string; 
   if (c.frenzy) out.push({ icon: '🔥', label: 'frénésie', cls: 'bg-orange-500/20 text-orange-300', title: `Frénésie : dégâts ×${c.frenzy.mult.toFixed(2)}` })
   if (c.charge) out.push({ icon: '⚡', label: 'vengeance', cls: 'bg-amber-500/20 text-amber-300', title: 'Vengeance différée : la riposte frappe à expiration' })
   // RESSOURCE DE CLASSE (build/spend) — RÉSERVE UNIQUE partagée (char.combo) : TOUS les générateurs la
-  // remplissent, TOUS les finisseurs la dépensent, MÊME entre classes (Combo Ombrelame + Concentration
-  // Œil de faucon = la même réserve → combo multi-classe). On affiche les libellés distincts équipés.
+  // remplissent, TOUS les finisseurs la dépensent, MÊME entre classes. On scanne actifs ET générateurs
+  // (les builders vivent dans c.generators depuis v0.30) ; on affiche les libellés distincts équipés.
+  const cmods = charCombatMods(c)
   const resNames = [...new Set(
-    c.powers
+    [...c.powers, ...(c.generators ?? [])]
       .map((p) => (p ? getPower(p) : null))
       .filter((pw) => pw?.effect === 'builder' || pw?.effect === 'finisher')
       .map((pw) => pw?.resource ?? 'Combo'),
   )]
   if (resNames.length) {
     const combo = c.combo ?? 0
-    const cap = 5 + charCombatMods(c).comboCap
-    out.push({ icon: '🗡', label: `${resNames.join(' / ')} ${combo}/${cap}`, cls: 'bg-violet-500/25 text-violet-200 font-semibold', title: 'Réserve UNIQUE partagée : tous tes générateurs la remplissent, tous tes finisseurs la dépensent — même entre classes (Éviscération et Tir visé puisent dans la même réserve).' })
+    const cap = 5 + cmods.comboCap
+    out.push({ icon: '🗡', label: `${resNames.join(' / ')} ${combo}/${cap}`, cls: 'bg-violet-500/25 text-violet-200 font-semibold', title: 'Réserve UNIQUE partagée : tous tes générateurs la remplissent, tous tes finisseurs la dépensent — même entre classes.' })
+  }
+  // 🔥 PYROMANCIEN « Hot Streak » : Chaleur (à plein, ton prochain gros sort de feu est surpuissant).
+  if (cmods.hotStreak) {
+    const heat = Math.floor(c.heat ?? 0)
+    const full = (c.heat ?? 0) >= cmods.hotStreak.cap
+    out.push({ icon: '🔥', label: full ? `CHALEUR MAX (×${cmods.hotStreak.mult})` : `Chaleur ${heat}/${cmods.hotStreak.cap}`, cls: full ? 'bg-orange-500/40 text-orange-100 font-bold' : 'bg-orange-500/20 text-orange-300', title: 'Hot Streak : tes sorts de feu chargent la Chaleur (plus vite avec le Critique). À plein, ton prochain sort de feu DIRECT est surpuissant.' })
+  }
+  // ✨ ARCANISTE « Surcharge instable » : fenêtre de burst au plein de Charges.
+  if ((c.overload ?? 0) > 0) {
+    out.push({ icon: '✨', label: `Surcharge ${(c.overload ?? 0).toFixed(1)}s`, cls: 'bg-fuchsia-500/30 text-fuchsia-100 font-bold', title: 'Surcharge instable : dégâts de sorts ↑ et recharges ×2 — déclenchée au plein de Charges (qui sont consommées).' })
   }
   return out
 }
@@ -725,41 +762,33 @@ function nextObjective(bestStage: number, maxLevel: number, physiqueBest: number
   return null
 }
 
-/** v0.31 — Journal de quêtes « Premiers Pas » : chaîne d'onboarding avec récompenses à réclamer. */
-function QuestJournal({ ctx, claimed, onClaim }: { ctx: TutCtx; claimed: string[]; onClaim: (id: string) => void }) {
-  const [open, setOpen] = useState(true)
+/** v0.31 — Liste de quêtes « Premiers Pas » (rendue DANS une feuille : pas d'encadré ni de repli ici,
+ *  la Sheet fournit déjà le conteneur + le titre). Chaîne d'onboarding avec récompenses à réclamer. */
+function QuestList({ ctx, claimed, onClaim }: { ctx: TutCtx; claimed: string[]; onClaim: (id: string) => void }) {
   return (
-    <div className="rounded-xl border border-orange-700/40 bg-orange-950/20 px-3 py-2">
-      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center justify-between text-[11px] font-semibold text-orange-300">
-        <span>🎯 Premiers Pas&nbsp;— {claimed.length}/{TUT_QUESTS.length}</span>
-        <span className="text-orange-400/70">{open ? '▾' : '▸'}</span>
-      </button>
-      {open && (
-        <ul className="mt-1.5 space-y-1">
-          {TUT_QUESTS.map((q) => {
-            const isClaimed = claimed.includes(q.id)
-            const isDone = tutDone(q, ctx)
-            const claimable = isDone && !isClaimed
-            return (
-              <li key={q.id} className={'rounded-lg px-2 py-1.5 ' + (isClaimed ? 'opacity-45' : claimable ? 'bg-orange-900/30 ring-1 ring-orange-500/40' : 'bg-slate-900/40')}>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[11px] font-medium text-orange-100">
-                    {isClaimed ? '✅' : isDone ? '🟡' : '⬜'} {q.icon} {q.title}
-                  </span>
-                  {claimable && (
-                    <button onClick={() => onClaim(q.id)} className="shrink-0 rounded bg-orange-600 px-2 py-0.5 text-[10px] font-semibold text-white hover:bg-orange-500 active:scale-95">
-                      Réclamer 🎁
-                    </button>
-                  )}
-                </div>
-                {!isClaimed && <div className="mt-0.5 text-[10px] leading-snug text-orange-200/70">{q.desc}</div>}
-                {!isClaimed && <div className="mt-0.5 text-[10px] font-medium text-amber-300/80">🎁 {q.rewardText}</div>}
-              </li>
-            )
-          })}
-        </ul>
-      )}
-    </div>
+    <ul className="space-y-1.5">
+      {TUT_QUESTS.map((q) => {
+        const isClaimed = claimed.includes(q.id)
+        const isDone = tutDone(q, ctx)
+        const claimable = isDone && !isClaimed
+        return (
+          <li key={q.id} className={'rounded-lg px-2.5 py-2 ' + (isClaimed ? 'opacity-45' : claimable ? 'bg-orange-900/30 ring-1 ring-orange-500/40' : 'bg-slate-900/40')}>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[12px] font-medium text-orange-100">
+                {isClaimed ? '✅' : isDone ? '🟡' : '⬜'} {q.icon} {q.title}
+              </span>
+              {claimable && (
+                <button onClick={() => onClaim(q.id)} className="shrink-0 rounded bg-orange-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-orange-500 active:scale-95">
+                  Réclamer 🎁
+                </button>
+              )}
+            </div>
+            {!isClaimed && <div className="mt-1 text-[11px] leading-snug text-orange-200/70">{q.desc}</div>}
+            {!isClaimed && <div className="mt-1 text-[11px] font-medium text-amber-300/80">🎁 {q.rewardText}</div>}
+          </li>
+        )
+      })}
+    </ul>
   )
 }
 
