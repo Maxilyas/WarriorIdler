@@ -2,7 +2,7 @@ import type { Enemy, DamageType, EnemyAbility } from './types'
 import { DAMAGE_TYPE_LIST } from './damage'
 import type { BiomeId } from './biomes'
 import { farmReq } from './resist'
-import { enemyHp, enemyDmg, enemyArmor, farmDifficultyIlvl, ilvlFarm, type EnemyClass } from './progression'
+import { enemyHp, enemyDmg, enemyArmor, farmDifficultyIlvl, ilvlFarm } from './progression'
 
 /**
  * Technique SIGNATURE par biome (l'« autre chose » qui s'ajoute aux frappes physiques de base).
@@ -100,6 +100,23 @@ export function stageResistRamp(stage: number): number {
   return Math.min(RESIST_RAMP_CAP, (stage - RESIST_RAMP_FROM) * RESIST_RAMP_PER_STAGE)
 }
 
+/**
+ * FACTEUR DE DIFFICULTÉ DU FARM (v0.30.1) — deux rôles :
+ *  1. RAMPE D'ONBOARDING : les premiers paliers sont très faibles → un perso NU démarre de zéro
+ *     (palier 1 ~50 PV, tuable en 2-3 s), loote ses 1ers objets, s'équipe, progresse.
+ *  2. PLATEAU DE FARM : au-delà de `ONBOARD_STAGES`, le farm plafonne à `FARM_PLATEAU` (~0,55) de la
+ *     courbe calibrée — car les sims TTK calibrent sur du LÉGENDAIRE, alors qu'un farmeur a du stuff de
+ *     FARM (~épique, ~2× moins de DPS). Sans ça le farm serait ~2× trop lent. Les RAIDS (qui donnent
+ *     un meilleur stuff) ne passent PAS par ici → restent à pleine échelle (boss 35-40 s).
+ * Le « mur de farm » (au-delà du cap de loot ilvl 200) subsiste : les PV montent toujours en b^ilvl.
+ */
+export const ONBOARD_STAGES = 20
+export const FARM_PLATEAU = 0.55
+export function onboardingMult(stage: number): number {
+  if (stage >= ONBOARD_STAGES) return FARM_PLATEAU
+  return Math.max(0.005, FARM_PLATEAU * Math.pow(stage / ONBOARD_STAGES, 1.7))
+}
+
 /** Crée l'ennemi correspondant à un palier (stage) dans un biome donné. Boss tous les 10 paliers.
  *  `championMult` (v0.26, 🍖 rune d'Appât) : multiplie la chance d'apparition des champions ✦. */
 export function makeEnemy(stage: number, biome: BiomeId = 'physique', championMult = 1): Enemy {
@@ -110,15 +127,18 @@ export function makeEnemy(stage: number, biome: BiomeId = 'physique', championMu
   // Trait déterministe sur certains paliers (cycle), hors boss/élite/champion.
   const trait = !isBoss && !isElite && !isChampion && stage % 3 === 0 ? TRAITS[Math.floor(stage / 3) % TRAITS.length] : undefined
 
-  // v0.30 — courbe UNIFIÉE : PV/dégâts = base commune b^ilvl (progression.ts), classe d'ennemi =
-  // multiplicateur (ratio de TTK). La difficulté suit le STAGE (non capée → mur de farm naturel) ;
-  // les traits (Massif, Féroce…) restent des multiplicateurs en plus.
-  const cls: EnemyClass = isBoss ? 'boss' : isElite ? 'elite' : isChampion ? 'champion' : 'trash'
+  // v0.30 — courbe UNIFIÉE : PV/dégâts = base commune b^ilvl (progression.ts) à partir du trash, ×
+  // multiplicateur de CLASSE propre au FARM. Les boss de farm (jalon tous les 10 paliers) restent
+  // LÉGERS (×5, comme à l'origine) — pas des murs de 35 s façon raid. Difficulté = STAGE (non capée).
+  const farmHpMult = isBoss ? 5 : isElite ? 2.7 : isChampion ? 4 : 1
+  const farmDmgMult = isBoss ? 1.8 : isElite ? 1.4 : isChampion ? 1.25 : 1
   const diffIlvl = farmDifficultyIlvl(stage)
   const traitHp = trait?.hpMult ?? 1
   const traitDmg = trait?.dmgMult ?? 1
   const armorMult = trait?.armorMult ?? 1
-  const maxHp = Math.round(enemyHp(diffIlvl, cls) * traitHp)
+  // v0.30.1 — rampe d'onboarding : PV & dégâts des premiers paliers atténués (démarrage de zéro).
+  const onboard = onboardingMult(stage)
+  const maxHp = Math.round(enemyHp(diffIlvl, 'trash') * farmHpMult * traitHp * onboard)
   const pool = BIOME_ENEMIES[biome]
   const baseName = pool[(stage - 1) % pool.length]
   const bosses = BIOME_BOSSES[biome]
@@ -153,7 +173,7 @@ export function makeEnemy(stage: number, biome: BiomeId = 'physique', championMu
     // Dégâts : MÊME base b que les PV (et que le joueur) → la pression suit la montée, fini le
     // one-shot exponentiel ET le « trop mou ». La menace vient des techniques télégraphiées + du
     // check de résistance (req), pas d'un mur sec. La classe encode le ratio (boss ×1,8 trash).
-    damage: Math.round(enemyDmg(diffIlvl, cls) * traitDmg),
+    damage: Math.round(enemyDmg(diffIlvl, 'trash') * farmDmgMult * traitDmg * onboard),
     // XP rare (monter de niveau se mérite — levelling volontairement lent au début).
     xp: Math.round((isBoss ? 38 : isElite || isChampion ? 17 : 4) * Math.pow(1.115, stage - 1)),
     resist,

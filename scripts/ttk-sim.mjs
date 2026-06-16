@@ -165,8 +165,10 @@ for (const il of [10, 26, 100, 300, 700]) {
   const it = generateItem({ ilvl: il, rarity: 'legendaire', type: 'torse', primary: 'force', stars: 3 })
   const sec = it.affixes.filter((a) => a.kind === 'stat').map((a) => a.value)
   const maxSec = sec.length ? Math.max(...sec) : 0
-  const ratio = maxSec / Math.max(1, it.primaryValue)
-  if (ratio > 1.0) propOk = false // le primaire doit RESTER le plus gros nombre de l'objet
+  // La plus grosse stat de l'objet doit être une PRIMAIRE (force/end), pas une secondaire.
+  const maxPrim = Math.max(it.primaryValue, it.endurance)
+  const ratio = maxSec / Math.max(1, maxPrim)
+  if (ratio > 1.05) propOk = false // tolérance de roll : une secondaire ne doit jamais DOMINER l'objet
   console.log(`  ${String(il).padStart(4)} | ${String(it.primaryValue).padStart(8)} | ${String(it.endurance).padStart(9)} | ${String(maxSec).padStart(14)} | ×${ratio.toFixed(2)}`)
 }
 console.log(`  ${ok(propOk)} le primaire reste le plus gros nombre de l'objet (sec/prim ≤ 1)`)

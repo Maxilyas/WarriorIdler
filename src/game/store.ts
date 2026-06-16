@@ -89,7 +89,7 @@ import { simulateOffline, type OfflineReport } from './offline'
 // v0.30 — WIPE ASSUMÉ : la refonte de progression (budget d'objet exponentiel, échelle d'ilvl
 // unifiée) rend les anciens objets/paliers incohérents sur la nouvelle courbe. On bumpe la clé →
 // les saves v1 ne sont plus chargées (reset propre, comme un gros prestige). Cf. DESIGN_v0.30.md.
-const SAVE_KEY = 'warrior-idler-save-v030b'
+const SAVE_KEY = 'warrior-idler-save-v030c'
 const MAX_LOG = 40
 // v0.25 (DESIGN §2) : inventaire ILLIMITÉ (Sacoches supprimée) — borne purement technique.
 // Le tri se fait par l'auto-recyclage (seuil de rareté) et les outils de masse.
@@ -1247,21 +1247,11 @@ function shiftProfile(p: DamageProfile, to: DamageType, frac: number): DamagePro
   return { ...p, profile }
 }
 
-/** v0.30.1 — ÉQUIPEMENT DE DÉPART : avec le budget exponentiel, un perso NU ne peut pas entamer les
- *  ennemis (PV calés sur du stuff). On dote le héros d'un set complet de bas ilvl → l'ouverture est
- *  fluide (paliers 1-15 confortables), puis on gear via les drops. */
-function seedStarterEquipment(hero: Character): void {
-  for (const s of EQUIP_SLOTS) {
-    hero.equipment[s.id] = generateItem({ ilvl: 40, rarity: 'rare', type: s.accepts, primaryBias: 'force', stars: 2 })
-  }
-  hero.hp = charMaxHp(hero)
-}
-
 function freshSave(): SaveData {
-  const hero = makeCharacter('Héros', 1, 'force')
-  seedStarterEquipment(hero)
+  // v0.30.1 — on part NU (zéro stuff) : la rampe d'onboarding (enemies.ts) rend les premiers paliers
+  // faibles pour qu'on loote et s'équipe de zéro, en découvrant les concepts/donjons/métiers.
   return {
-    characters: [hero],
+    characters: [makeCharacter('Héros', 1, 'force')],
     activeChar: 0,
     stage: 1,
     bestStage: 1,
