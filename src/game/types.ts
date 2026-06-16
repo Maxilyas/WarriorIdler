@@ -378,6 +378,12 @@ export interface Character {
   frenzy?: { mult: number; remaining: number }
   /** OMBRELAME (v0.29.1) : Points de Combo accumulés (builders +1, finishers consomment). Transitoire. */
   combo?: number
+  /** PYROMANCIEN (v0.31) « Hot Streak » : Chaleur accumulée par tes sorts de feu (montée pondérée par le
+   *  Critique) ; à plein, ton prochain gros sort de feu est SURPUISSANT puis remet la Chaleur à 0. Transitoire. */
+  heat?: number
+  /** ARCANISTE (v0.31) « Surcharge instable » : secondes restantes de la fenêtre de Surcharge (déclenchée
+   *  quand les Charges atteignent le max) — pendant, dégâts arcanes ↑ et recharges ↑↑. Transitoire. */
+  overload?: number
 }
 
 // ---- Sorts ennemis (techniques télégraphiées, miroir du kit héros) ----

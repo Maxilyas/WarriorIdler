@@ -251,7 +251,19 @@ function abilityDps(p: PowerDef, derived: DerivedStats, profileMult: number, dmg
   if (p.kind !== 'active' || !p.effect) return 0
   let tagMult = 1
   if (p.tags) for (const t of p.tags) tagMult *= (cm.tagBonus[t] ?? 1)
-  const value = (p.magnitude ?? 0) * abilityPower(derived, powerScale(p)) * profileMult * dmgMult * tagMult
+  // v0.31 : EV des procs signature du Mage (Hot Streak feu, Surcharge arcane).
+  let procMult = 1
+  const isNuke = p.effect === 'nuke' || p.effect === 'cleave' || p.effect === 'megaCleave'
+  if (cm.hotStreak && isNuke && p.tags?.includes('feu') && p.tags?.includes('direct')) {
+    const gain = 1 + 2 * derived.critChance // la Chaleur monte plus vite avec le Critique
+    procMult *= 1 + (cm.hotStreak.mult - 1) * Math.min(1, gain / cm.hotStreak.cap)
+  }
+  if (cm.overload) {
+    const cap = 5 + cm.comboCap
+    const uptime = genPerSec > 0 ? cm.overload.window / (cm.overload.window + cap / genPerSec) : 0
+    procMult *= 1 + (cm.overload.mult - 1) * uptime // la Surcharge booste TOUS tes sorts pendant la fenêtre
+  }
+  const value = (p.magnitude ?? 0) * abilityPower(derived, powerScale(p)) * profileMult * dmgMult * tagMult * procMult
   const cd = Math.max(0.5, (p.cooldown ?? 3) * (1 - derived.cdr))
   switch (p.effect) {
     case 'nuke': case 'cleave': case 'megaCleave': case 'lifeNuke': return value / cd
@@ -459,6 +471,10 @@ export interface CombatMods {
   igniteOnCrit?: { frac: number; duration: number }
   /** REMPART : un finisseur accorde un bouclier = finisherShield × ses dégâts (somme). */
   finisherShield: number
+  /** PYROMANCIEN « Hot Streak » : empower des sorts [feu][direct] à pleine Chaleur (le plus fort). */
+  hotStreak?: { cap: number; mult: number }
+  /** ARCANISTE « Surcharge instable » : fenêtre de burst au plein de Charges (le plus fort). */
+  overload?: { window: number; mult: number }
 }
 
 export function charCombatMods(char: Character): CombatMods {
@@ -534,6 +550,8 @@ export function charCombatMods(char: Character): CombatMods {
         : { ...k.igniteOnCrit }
     }
     if (k.finisherShield) out.finisherShield += k.finisherShield
+    if (k.hotStreak) out.hotStreak = out.hotStreak ? { cap: Math.min(out.hotStreak.cap, k.hotStreak.cap), mult: Math.max(out.hotStreak.mult, k.hotStreak.mult) } : { ...k.hotStreak }
+    if (k.overload) out.overload = out.overload ? { window: Math.max(out.overload.window, k.overload.window), mult: Math.max(out.overload.mult, k.overload.mult) } : { ...k.overload }
     if (k.multiTypeBonus) {
       multiType = multiType
         ? { per: multiType.per + k.multiTypeBonus.per, threshold: Math.min(multiType.threshold, k.multiTypeBonus.threshold) }

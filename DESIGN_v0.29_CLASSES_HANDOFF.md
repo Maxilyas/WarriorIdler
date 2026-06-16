@@ -115,6 +115,8 @@ Chaque sort porte des **tags** (`PowerDef.tags` / `SpellSpec.tags`). **12 tags d
 | **Embrasement sur crit** | keystone `igniteOnCrit:{frac,duration}` (frac somme, durée max) | les 2 pas de combat (sur `hit.crit`) + estim. fiche `igniteDps` (ligne 🔥) | Pyromancien ✓ |
 | **Finisseur → bouclier** | keystone `finisherShield` (somme) | `fireActive` cas `finisher` : absorb += min(done×frac, 20%·PVmax), **total ≤ PVmax** (anti-invincibilité : suit la SURVIE, pas le dégât) | Rempart ✓ (tank Rage→bouclier) |
 | **Atonement (soin↔dégâts)** | keystone `healToDamage` (somme) | `fireActive` `bleedHeal` (une part du soin frappe l'ennemi) | Lumière ✓ (heal qui peut solo) |
+| **Hot Streak** | keystone `hotStreak:{cap,mult}` ; `char.heat` | `fireActive` (sorts [feu] chargent heat pondéré crit ; un [feu][direct] à plein ×mult, reset) + estim. `abilityDps` | Pyromancien ✓ |
+| **Surcharge instable** | keystone `overload:{window,mult}` ; `char.overload` | `fireActive` builder (au plein de combo → fenêtre, combo→0) ; les 2 pas (dégâts ×mult, cdTick ×2) ; décr. `tickHeroStatuses` | Arcaniste ✓ |
 | **Deck 5+3+3** | `char.powers` (5 actifs) + `char.generators` (3 builders, v0.30) + `char.passives` (3) | combat fire un « deck » (actifs auto/manuel + générateurs auto pur) ; `charDeck()` ; `setPower`/`setGenerator`/`setPassive` | toutes |
 
 > ⚠️ `enemy.dot` est **un seul slot** (Math.max garde le plus fort) : venin / saignement / Embrasement / Immolation
@@ -207,10 +209,12 @@ Format : **Nom** (rôle) — *boucle unique* — `tags` clés. (Noms = identité
 - **Pestilence** (DPS) — gère **plusieurs DoT** ; un drain qui les **étend/détone** tous. `dot, finisseur, zone, ombre`
 - **Légion** (DPS) — **invoque des démons** cumulés (`invocation`) + Tyran qui les survolte. `invocation, ombre`
 
-### ✨ MAGE (Tissu) — ✅ FAIT
-- **Pyromancien** (DPS) — **crits embrasent** (DoT feu via `igniteOnCrit`) + Combustion (cumule frac + [feu]). `direct, dot, feu`
-- **Cryomancien** (DPS) — **gèle** (`controle` : Cône/Nova/Gangue) puis **fracasse** (`shatter` +0,45 sur gelé, SORTS). `mono, direct, controle, froid`
-- **Arcaniste** (DPS) — **Charge des arcanes** (`char.combo`) → surcharge ; Cascade (`cdrOnCast`) = spam. `mono, finisseur, arcane`
+### ✨ MAGE (Tissu) — ✅ FAIT + REFONTE v0.31 (arbres ASYMÉTRIQUES, easy→hard, 1 méca signature/spec)
+- **Pyromancien** (DPS) — **HOT STREAK** (`hotStreak` + `char.heat`) : sorts [feu] chargent la Chaleur (vite si Critique) ; à plein, prochain [feu][direct] ×2,2 (Combustion → cap 2/×2,6). EASY = crits embrasent (`igniteOnCrit`). HARD = timer Pyroblast à pleine Chaleur. `direct, dot, feu`
+- **Cryomancien** (DPS) — gel + **shatter ESCALADANT** (Fracas 0,2 → Glaciation 0,25 → Abîme 0,3 = +0,75 sur gelé). EASY = geler+frapper ; HARD = Comète sur gelé. (pas de méca neuve — choix joueur.) `mono, direct, controle, froid`
+- **Arcaniste** (DPS) — **SURCHARGE INSTABLE** (`overload` + `char.overload`) : au plein de Charges → fenêtre 5 s (sorts ×1,4, recharges ×2) qui CONSOMME les Charges. EASY = générer ; HARD = déclencher cooldowns prêts. (branche signature ramp vs branche finisseur = asymétrie.) `mono, finisseur, arcane`
+
+> 🎛 **Gabarit de refonte d'archétype (v0.31, à reproduire)** : (1) branches **asymétriques** (1 longue signature menant à l'ultime, 1 médium 2e-sort, 1 courte survie) ; (2) sorts forts **gatés** (chaîne + `minSpent` ≥10 pour le gros nuke, 20 pour l'ultime) ; (3) puissance brute **gatée** (`requiresRank` mineur@max, `minSpent`) ; (4) **1 méca signature** « easy-to-learn / hard-to-master » où bien jouer monte le DPS (proc/stack/fenêtre), DISTINCTE des autres classes ; (5) estimer la méca en fiche (`abilityDps` EV).
 
 ### ✚ PRÊTRE (Tissu) — ✅ FAIT
 - **Lumière** (HEAL ✓ 1er) — soigne + **châtie** (`healToDamage` : une part du soin frappe l'ennemi → solo viable) + boucliers ; ultime = Aube. `soin, protection, direct`

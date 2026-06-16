@@ -83,6 +83,14 @@ export interface KeystoneEffect {
   /** REMPART : un FINISSEUR accorde au lanceur un bouclier d'absorption = `finisherShield` × ses dégâts.
    *  Convertit la dépense de Rage en survie (Bloc/Ignore Pain). Somme entre keystones. */
   finisherShield?: number
+
+  /* ---- v0.31 : MAGE (mécaniques signature) ---- */
+  /** PYROMANCIEN « Hot Streak » : tes sorts [feu] accumulent de la Chaleur (montée pondérée par le Critique) ;
+   *  à `cap`, ton prochain sort [feu][direct] inflige ×`mult` (puis Chaleur → 0). On garde le plus fort. */
+  hotStreak?: { cap: number; mult: number }
+  /** ARCANISTE « Surcharge instable » : quand tes Charges atteignent le max, tu entres en Surcharge `window` s
+   *  (dégâts ×`mult`, recharges ×2) ; la Surcharge CONSOMME tes Charges. On garde la plus longue/forte. */
+  overload?: { window: number; mult: number }
 }
 
 /** Vocabulaire des TAGS de comportement (12) — les 7 types de dégâts servent aussi de tags. */

@@ -1863,6 +1863,8 @@ function sanitize(save: SaveData): SaveData {
     c.stun = 0
     c.dots = undefined
     c.weaken = undefined
+    c.heat = undefined
+    c.overload = undefined
   }
 
   // Grimoire : amorce les découvertes depuis l'inventaire + l'équipement de l'équipe.
@@ -2385,7 +2387,19 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
   // CONTRÔLE (v0.29.6) : un sort [controle] gèle/ralentit ; SHATTER : +dégâts aux ennemis contrôlés.
   if (p.tags?.includes('controle')) enemy.controlled = Math.max(enemy.controlled ?? 0, p.duration ?? 4)
   const shatterMult = (enemy.controlled ?? 0) > 0 ? 1 + cm.shatter : 1
-  const magDmg = base * profileDamageMult(profile) * dmgMult * tagMult * shatterMult // profil + keystones + tags + shatter
+  // PYROMANCIEN « Hot Streak » (v0.31) : tes sorts [feu] chargent la Chaleur (montée pondérée par le Critique).
+  // Un sort [feu][direct] lancé à PLEINE Chaleur est SURPUISSANT (×mult) puis remet la Chaleur à 0.
+  let hotMult = 1
+  if (cm.hotStreak && p.tags?.includes('feu')) {
+    const isNuke = p.effect === 'nuke' || p.effect === 'cleave' || p.effect === 'megaCleave'
+    if (isNuke && p.tags.includes('direct') && (caster.heat ?? 0) >= cm.hotStreak.cap) {
+      hotMult = cm.hotStreak.mult
+      caster.heat = 0
+    } else {
+      caster.heat = Math.min(cm.hotStreak.cap, (caster.heat ?? 0) + 1 + 2 * derived.critChance)
+    }
+  }
+  const magDmg = base * profileDamageMult(profile) * dmgMult * tagMult * shatterMult * hotMult // profil + keystones + tags + shatter + Hot Streak
   // Boucliers : scalent sur la MEILLEURE de (stat principale, Endurance) → un tank qui empile
   // l'Endurance obtient un énorme bouclier (levier de survie qui suit l'Endurance).
   const shieldBase = (p.magnitude ?? 1) * Math.max(abilityPower(derived, powerScale(p)), derived.endurancePower)
@@ -2475,7 +2489,13 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
     }
     case 'builder': {
       // OMBRELAME : +1 Point de Combo (+ petit coup).
-      caster.combo = Math.min(5 + cm.comboCap, (caster.combo ?? 0) + 1 + cm.comboGen)
+      const cap = 5 + cm.comboCap
+      caster.combo = Math.min(cap, (caster.combo ?? 0) + 1 + cm.comboGen)
+      // ARCANISTE « Surcharge instable » : au PLEIN de Charges, déclenche la fenêtre (et CONSOMME les Charges).
+      if (cm.overload && (caster.overload ?? 0) <= 0 && (caster.combo ?? 0) >= cap) {
+        caster.overload = cm.overload.window
+        caster.combo = 0
+      }
       return hit(magDmg * vm)
     }
     case 'finisher': {
@@ -2641,6 +2661,7 @@ function tickHeroStatuses(chars: Character[], dt: number, cond?: CondMods, pact?
     if (c.weaken) { c.weaken.remaining -= dt; if (c.weaken.remaining <= 0) c.weaken = undefined }
     if ((c.invuln ?? 0) > 0) { c.invuln = Math.max(0, c.invuln! - dt); if ((c.invuln ?? 0) <= 0) c.invuln = undefined }
     if (c.frenzy) { c.frenzy.remaining -= dt; if (c.frenzy.remaining <= 0) c.frenzy = undefined }
+    if ((c.overload ?? 0) > 0) { c.overload = Math.max(0, c.overload! - dt) || undefined } // ✨ Surcharge Arcaniste
     if (c.charge) c.charge.remaining -= dt // la frappe différée est résolue dans le pas de combat
     // v0.26 : horloges par héros des gemmes de Bastion/Flux.
     verreTimer.set(c.id, (verreTimer.get(c.id) ?? 0) + dt)
@@ -2871,6 +2892,9 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
     const d = info[i]
     if (!d) return
     const stunned = (c.stun ?? 0) > 0
+    // ARCANISTE « Surcharge » (v0.31) : pendant la fenêtre, recharges ×2 et dégâts de sorts ×mult.
+    const overloadOn = (c.overload ?? 0) > 0 && !!d.cmods.overload
+    const overloadMult = overloadOn ? d.cmods.overload!.mult : 1
     // v0.30 : le « deck » de combat = 5 actifs (auto/manuel) + 3 générateurs (auto pur, fabriquent la ressource).
     const deck: { pid: string; auto: boolean }[] = []
     c.powers.forEach((pid, slot) => { if (pid) deck.push({ pid, auto: c.powerAuto?.[slot] !== false }) })
@@ -2880,7 +2904,7 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
       if (!p || p.kind !== 'active') return
       const key = `${c.id}:${pid}`
       // ⌛ Sabliers liés (v0.26) : les recharges défilent plus vite pendant une incantation ennemie.
-      const cdTick = dt * (1 + (enemyCasting && mods?.runes?.sabliers ? mods.runes.sabliers : 0))
+      const cdTick = dt * (1 + (enemyCasting && mods?.runes?.sabliers ? mods.runes.sabliers : 0)) * (overloadOn ? 2 : 1)
       const cd = (cooldowns.get(key) ?? 0) - cdTick
       if (cd <= 0 && !stunned && (auto || manualFire.has(key)) && autoSpenderReady(p, c, enemy, manualFire.has(key))) {
         // 🩸 Pacte sanglant : recharges raccourcies, mais chaque lancement coûte 2% des PV max.
@@ -2899,7 +2923,7 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
         }
         // Sorts : keystones + ×sorts + 🩸 pactes (Pacifiste, Verre) + 🪦 Usure/💀 Memento.
         lastCastGlobal = { charId: c.id, pid } // 🌀 Écho temporel : mémorise la dernière capacité
-        const spellMult = d.cmods.damageMult * d.cmods.spellMult
+        const spellMult = d.cmods.damageMult * d.cmods.spellMult * overloadMult
           * (mods?.pact?.spellMult ?? 1) * runePactOffense(enemy.age ?? 0, mods?.runes, mods?.pact)
         const dealt = fireActive(p, c, d.derived, d.profile, chars, enemy, d.cmods.hot, spellMult, d.cmods.healToDamage, mods?.cond, mods?.pact)
         // Vengeance différée : compte AUSSI les dégâts des sorts dans le cumul.
@@ -3309,6 +3333,9 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
     const d = info[i]
     if (!d) return
     const stunned = (c.stun ?? 0) > 0
+    // ARCANISTE « Surcharge » (v0.31) : pendant la fenêtre, recharges ×2 et dégâts de sorts ×mult.
+    const overloadOn = (c.overload ?? 0) > 0 && !!d.cmods.overload
+    const overloadMult = overloadOn ? d.cmods.overload!.mult : 1
     // v0.30 : deck = 5 actifs (auto/manuel) + 3 générateurs (auto pur).
     const deck: { pid: string; auto: boolean }[] = []
     c.powers.forEach((pid, slot) => { if (pid) deck.push({ pid, auto: c.powerAuto?.[slot] !== false }) })
@@ -3318,7 +3345,7 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
       if (!p || p.kind !== 'active') return
       const key = `${c.id}:${pid}`
       // ⌛ Sabliers liés (v0.26) : les recharges défilent plus vite pendant une incantation ennemie.
-      const cdTick = dt * (1 + (anyCasting && mods?.runes?.sabliers ? mods.runes.sabliers : 0))
+      const cdTick = dt * (1 + (anyCasting && mods?.runes?.sabliers ? mods.runes.sabliers : 0)) * (overloadOn ? 2 : 1)
       const cd = (cooldowns.get(key) ?? 0) - cdTick
       if (cd <= 0 && !stunned && (auto || manualFire.has(key)) && autoSpenderReady(p, c, focus(), manualFire.has(key))) {
         // 🩸 Pacte sanglant : recharges raccourcies contre 2% des PV max par lancement.
@@ -3339,7 +3366,7 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
         const cast = (mult: number): number => {
           let dd = 0
           // 🩸 Pactes : ×sorts (Pacifiste), dégâts globaux + 🪦 Usure / 💀 Memento.
-          const sm = d.cmods.damageMult * d.cmods.spellMult * mult
+          const sm = d.cmods.damageMult * d.cmods.spellMult * mult * overloadMult
             * (mods?.pact?.spellMult ?? 1) * runePactOffense(mods?.fightTime ?? 0, mods?.runes, mods?.pact)
           if (p.effect === 'cleave' || p.effect === 'megaCleave') {
             const offFocus = mods?.pact?.offFocusMult ?? 1

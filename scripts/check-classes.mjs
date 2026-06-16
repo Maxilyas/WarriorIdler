@@ -28,14 +28,14 @@ function build1(name, bias, talents, powers) {
 }
 
 const cases = [
-  ['Pyromancien (ignite)', 'intelligence',
-    { cat_tissu: 1, cl_mage: 1, py_hub: 1, py_chaleur: 1, py_embrase: 1, py_fournaise: 1, py_braise: 1, py_pyromanie: 1, py_pyroblast: 1, py_combustion: 1 },
+  ['Pyromancien (Hot Streak)', 'intelligence',
+    { cat_tissu: 1, cl_mage: 1, py_hub: 1, py_chaleur: 3, py_embrase: 1, py_fournaise: 1, py_hotstreak: 1, py_braise: 1, py_pyromanie: 1, py_pyroblast: 1, py_combustion: 1 },
     ['py_boule', 'py_pyroblast', 'py_immolation'], '🔥 Embrasement'],
   ['Cryomancien (shatter)', 'intelligence',
-    { cat_tissu: 1, cl_mage: 1, cr_hub: 1, cr_froidure: 1, cr_cone: 1, cr_fracas: 1, cr_glaciation: 1, cr_comete: 1, cr_givre: 1 },
+    { cat_tissu: 1, cl_mage: 1, cr_hub: 1, cr_froidure: 3, cr_cone: 1, cr_fracas: 1, cr_glaciation: 1, cr_comete: 1, cr_abime: 1, cr_givre: 1 },
     ['cr_eclat', 'cr_cone', 'cr_comete'], null],
-  ['Arcaniste (charges)', 'intelligence',
-    { cat_tissu: 1, cl_mage: 1, ar_hub: 1, ar_etude: 1, ar_flux: 1, ar_resonance: 1, ar_deflag: 1, ar_finamp: 1, ar_surcharge: 1, ar_cascade: 1 },
+  ['Arcaniste (Surcharge)', 'intelligence',
+    { cat_tissu: 1, cl_mage: 1, ar_hub: 1, ar_etude: 3, ar_affinite: 1, ar_flux: 1, ar_resonance: 1, ar_overload: 1, ar_deflag: 1, ar_finamp: 1, ar_surcharge: 1, ar_cascade: 1 },
     ['ar_trait', 'ar_deflag', 'ar_orbe'], null],
   ['Meneur de meute (pet)', 'agilite',
     { cat_mailles: 1, cl_chasseur: 1, me_hub: 1, me_dressage: 1, me_familier: 1, me_meute: 1, me_alpha: 1, me_griffes: 1, me_nature: 1 },
@@ -69,7 +69,7 @@ for (const [name, bias, talents, powers, expectLine] of cases) {
   if (nan || !hasExpected || total <= 0) bad++
   console.log(`\n■ ${name}`)
   console.log(`  DPS total : ${Math.round(total).toLocaleString('fr-FR')}${nan ? '  ⚠ NaN!' : ''}`)
-  console.log(`  igniteOnCrit=${cm.igniteOnCrit ? `frac ${cm.igniteOnCrit.frac.toFixed(2)}/${cm.igniteOnCrit.duration}s` : '—'}  petDps=${cm.petDps}  comboCap=+${cm.comboCap}  comboGen=+${cm.comboGen}  finisherMult=+${cm.finisherMult}  shatter=+${cm.shatter}  cdrOnCast=${cm.cdrOnCast}  finisherShield=${cm.finisherShield}  thorns=${cm.thorns}  healToDmg=${cm.healToDamage}  dotLeech=${cm.dotLeech}`)
+  console.log(`  igniteOnCrit=${cm.igniteOnCrit ? `frac ${cm.igniteOnCrit.frac.toFixed(2)}/${cm.igniteOnCrit.duration}s` : '—'}  hotStreak=${cm.hotStreak ? `${cm.hotStreak.cap}→×${cm.hotStreak.mult}` : '—'}  overload=${cm.overload ? `${cm.overload.window}s ×${cm.overload.mult}` : '—'}  shatter=+${cm.shatter}  petDps=${cm.petDps}  comboCap=+${cm.comboCap}  finisherShield=${cm.finisherShield}  thorns=${cm.thorns}  healToDmg=${cm.healToDamage}  dotLeech=${cm.dotLeech}`)
   console.log(`  tagBonus=${JSON.stringify(cm.tagBonus)}`)
   console.log(`  sorts : ${lines}`)
   if (expectLine && !hasExpected) console.log(`  ✗ ligne attendue manquante : « ${expectLine} »`)

@@ -188,69 +188,73 @@ ks('om_precis', 'ombrelame', 3, 'Précision létale', 'CHOIX : +24 Critique, +24
 node('cl_mage', 'mage', 'ability', 0, 1, 'Mage', 'Maître des éléments et de l\'arcane. Débloque Trait magique et ouvre ses trois archétypes. +30 Intelligence.',
   { requires: ['cat_tissu'], statMods: { intelligence: 30 }, unlockPower: 'ma_eclair' })
 
-/* ---- PYROMANCIEN — les crits EMBRASENT (DoT feu) ; Combustion = pic de feu. ----
- * 1 sort de départ. Pyroblast se mérite (derrière l'ignite). Ultime tout au fond. */
+/* ---- PYROMANCIEN — HOT STREAK : tes sorts de feu chargent la Chaleur (vite si Critique) ; à plein,
+ *   ton prochain gros sort de feu est SURPUISSANT. EASY : les crits embrasent. HARD : enchaîner les
+ *   fenêtres Hot Streak (timer Pyroblast à pleine Chaleur). Branches ASYMÉTRIQUES (longue signature). */
 ability('py_hub', 'pyromancien', 0, 'Pyromancien', 'py_boule', 'Entre dans la voie du Pyromancien : débloque Boule de feu. +18 Intelligence, +12 Critique.', { requires: ['cl_mage'], statMods: { intelligence: 18, critique: 12 } })
-// IGNITE : crits → Embrasement → Pyroblast (gaté) → Combustion → ultime.
+// ── LONGUE branche SIGNATURE : Embrasement → Hot Streak → Pyroblast → Combustion → Météore.
 minor('py_chaleur', 'pyromancien', 1, 'Chaleur ardente', 3, { critique: 18 }, { requires: ['py_hub'] })
-ks('py_embrase', 'pyromancien', 2, 'Embrasement', 'Tes coups CRITIQUES posent un Embrasement (DoT feu = 30% du coup/s, 6 s). Amplifié par l\'Altération.', { stat: { alteration: 14 }, ks: { igniteOnCrit: { frac: 0.3, duration: 6 } } }, { requires: ['py_chaleur'] })
+ks('py_embrase', 'pyromancien', 2, 'Embrasement', 'EASY : tes coups CRITIQUES posent un Embrasement (DoT feu = 30% du coup/s, 6 s). Amplifié par l\'Altération.', { stat: { alteration: 14 }, ks: { igniteOnCrit: { frac: 0.3, duration: 6 } } }, { requires: ['py_chaleur'] })
 ks('py_fournaise', 'pyromancien', 3, 'Fournaise', 'CHOIX : Embrasement plus intense (+0,25 de frac par crit).', { stat: { alteration: 12 }, ks: { igniteOnCrit: { frac: 0.25, duration: 0 } } }, { requires: ['py_embrase'], exclusive: 'py_ignite' })
-ks('py_etincelles', 'pyromancien', 3, 'Pluie d\'étincelles', 'CHOIX : tes sorts [dot] +12% (marche aussi pour les autres classes).', { stat: { alteration: 12 }, ks: { tagBonus: { tag: 'dot', damageMult: 1.12 } } }, { requires: ['py_embrase'], exclusive: 'py_ignite' })
-ability('py_pyroblast', 'pyromancien', 4, 'Pyroblast', 'py_pyroblast', 'Débloque Pyroblast : une frappe de feu colossale. Gatée : 6 pts dans la voie.', { requires: ['py_embrase'], minSpent: 6 })
-ks('py_combustion', 'pyromancien', 5, 'Combustion', 'PIC : tes sorts [feu] +18% et ton Embrasement encore plus fort (+0,3 de frac).', { stat: { degatsCrit: 18 }, ks: { tagBonus: { tag: 'feu', damageMult: 1.18 }, igniteOnCrit: { frac: 0.3, duration: 0 } } }, { requires: ['py_pyroblast'] })
-ability('py_meteore', 'pyromancien', 6, 'Météore', 'py_meteore', 'ULTIME — un météore pulvérise tout le pack. Tout au fond : 20 pts dans la voie.', { requires: ['py_combustion'], minSpent: 20 })
-// FEU DIRECT : crit + tags, choix de 2e sort.
+ks('py_etincelles', 'pyromancien', 3, 'Pluie d\'étincelles', 'CHOIX : tes sorts [dot] +12% (cross-classe).', { stat: { alteration: 12 }, ks: { tagBonus: { tag: 'dot', damageMult: 1.12 } } }, { requires: ['py_embrase'], exclusive: 'py_ignite' })
+ks('py_hotstreak', 'pyromancien', 4, 'Hot Streak', 'SIGNATURE : tes sorts [feu] chargent la Chaleur (plus vite avec le Critique) ; à PLEIN, ton prochain sort [feu][direct] inflige ×2,2 puis remet la Chaleur à 0. Exige Chaleur ardente au rang max.', { stat: { critique: 16 }, ks: { hotStreak: { cap: 3, mult: 2.2 } } }, { requires: ['py_embrase'], requiresRank: { id: 'py_chaleur', rank: 3 } })
+ability('py_pyroblast', 'pyromancien', 5, 'Pyroblast', 'py_pyroblast', 'Débloque Pyroblast : une frappe de feu COLOSSALE (LE sort à lâcher à pleine Chaleur). Gaté : 10 pts dans la voie.', { requires: ['py_hotstreak'], minSpent: 10 })
+ks('py_combustion', 'pyromancien', 6, 'Combustion', 'PIC : la Chaleur se déclenche dès 2 et frappe ×2,6, ET tes sorts [feu] +18%. Profond : 14 pts dans la voie.', { stat: { degatsCrit: 18 }, ks: { hotStreak: { cap: 2, mult: 2.6 }, tagBonus: { tag: 'feu', damageMult: 1.18 } } }, { requires: ['py_pyroblast'], minSpent: 14 })
+ability('py_meteore', 'pyromancien', 7, 'Météore', 'py_meteore', 'ULTIME — un météore pulvérise tout le pack. Tout au fond : 20 pts dans la voie.', { requires: ['py_combustion'], minSpent: 20 })
+// ── MÉDIUM : feu direct + choix de 2e sort.
 minor('py_braise', 'pyromancien', 1, 'Braises', 3, { degatsCrit: 18 }, { requires: ['py_hub'] })
-ks('py_pyromanie', 'pyromancien', 2, 'Pyromanie', 'Tes sorts [direct] +12% (marche aussi pour les autres classes).', { stat: { critique: 14 }, ks: { tagBonus: { tag: 'direct', damageMult: 1.12 } } }, { requires: ['py_braise'] })
-ks('py_surchauffe', 'pyromancien', 3, 'Surchauffe', '+24 Critique, +24 Dégâts crit.', { stat: { critique: 24, degatsCrit: 24 } }, { requires: ['py_pyromanie'] })
+ks('py_pyromanie', 'pyromancien', 2, 'Pyromanie', 'Tes sorts [direct] +12% (cross-classe).', { stat: { critique: 14 }, ks: { tagBonus: { tag: 'direct', damageMult: 1.12 } } }, { requires: ['py_braise'] })
 ability('py_flammes', 'pyromancien', 3, 'Flammes incandescentes', 'py_flammes', 'CHOIX de SORT : un torrent de flammes sur tout le pack. Gaté : 8 pts dans la voie.', { requires: ['py_pyromanie'], exclusive: 'py_arme2', minSpent: 8 })
 ability('py_immolation', 'pyromancien', 3, 'Immolation', 'py_immolation', 'CHOIX de SORT : embrase la cible (gros DoT mono soutenu). Gaté : 8 pts dans la voie.', { requires: ['py_pyromanie'], exclusive: 'py_arme2', minSpent: 8 })
-// SURVIE : robe ignifugée.
+// ── COURTE : survie.
 minor('py_robe', 'pyromancien', 1, 'Robe ignifugée', 3, { regen: 16 }, { requires: ['py_hub'] })
-ks('py_bouclierflam', 'pyromancien', 2, 'Bouclier de flammes', 'SURVIE : -8% de dégâts subis, +20 Régén, tes assaillants se brûlent (épines 10%). Exige Robe ignifugée au rang max.', { stat: { regen: 20 }, ks: { flatDr: 0.08, thorns: 0.1 } }, { requires: ['py_robe'], requiresRank: { id: 'py_robe', rank: 3 } })
 ability('py_souffle', 'pyromancien', 2, 'Second souffle', 'second_souffle', 'SURVIE : débloque Second souffle (auto-soin) pour tenir en solo.', { requires: ['py_robe'] })
+ks('py_bouclierflam', 'pyromancien', 2, 'Bouclier de flammes', 'SURVIE : -8% de dégâts subis, +20 Régén, tes assaillants se brûlent (épines 10%). Exige Robe ignifugée au rang max.', { stat: { regen: 20 }, ks: { flatDr: 0.08, thorns: 0.1 } }, { requires: ['py_robe'], requiresRank: { id: 'py_robe', rank: 3 } })
 
-/* ---- CRYOMANCIEN — gèle (contrôle) puis FRACASSE (shatter). ---- */
+/* ---- CRYOMANCIEN — GÈLE puis FRACASSE : contre une cible gelée, tes sorts gagnent un bonus de Fracas
+ *   qui ESCALADE (Fracas → Glaciation → Abîme). EASY : geler + frapper. HARD : maintenir le gel et
+ *   lâcher la Comète sur cible gelée au bon moment. Branches ASYMÉTRIQUES (longue signature). */
 ability('cr_hub', 'cryomancien', 0, 'Cryomancien', 'cr_eclat', 'Entre dans la voie du Cryomancien : débloque Éclat de givre. +18 Intelligence, +12 Critique.', { requires: ['cl_mage'], statMods: { intelligence: 18, critique: 12 } })
-// CONTRÔLE → SHATTER → Comète (gaté) → ultime.
+// ── LONGUE branche SIGNATURE : Cône (gel) → Fracas → Glaciation → Comète → Abîme → Hiver.
 minor('cr_froidure', 'cryomancien', 1, 'Froidure', 3, { intelligence: 16 }, { requires: ['cr_hub'] })
-ability('cr_cone', 'cryomancien', 2, 'Cône de givre', 'cr_cone', 'Débloque Cône de givre : GÈLE tout le pack (contrôle) — la mise en place du fracas.', { requires: ['cr_froidure'] })
+ability('cr_cone', 'cryomancien', 2, 'Cône de givre', 'cr_cone', 'EASY : débloque Cône de givre — GÈLE tout le pack (contrôle), la mise en place du fracas.', { requires: ['cr_froidure'] })
 ks('cr_fracas', 'cryomancien', 3, 'Fracas', 'SHATTER : tes sorts infligent +20% contre une cible GELÉE/contrôlée.', { stat: { degatsCrit: 16 }, ks: { shatter: 0.2 } }, { requires: ['cr_cone'] })
-ks('cr_glaciation', 'cryomancien', 4, 'Glaciation', 'SHATTER renforcé : +25% de plus contre les ennemis contrôlés.', { stat: { degatsCrit: 18 }, ks: { shatter: 0.25 } }, { requires: ['cr_fracas'] })
-ability('cr_comete', 'cryomancien', 4, 'Comète de glace', 'cr_comete', 'Débloque Comète de glace : frappe colossale, dévastatrice sur cible gelée. Gatée : 6 pts dans la voie.', { requires: ['cr_fracas'], minSpent: 6 })
-ability('cr_hiver', 'cryomancien', 6, 'Hiver éternel', 'cr_hiver', 'ULTIME — un blizzard gèle ET pulvérise tout le pack. Tout au fond : 20 pts dans la voie.', { requires: ['cr_glaciation'], minSpent: 20 })
-// GIVRE : tags froid/direct + choix de 2e contrôle.
+ks('cr_glaciation', 'cryomancien', 4, 'Glaciation', 'SHATTER +25% de plus contre les gelés. Exige Froidure au rang max.', { stat: { degatsCrit: 18 }, ks: { shatter: 0.25 } }, { requires: ['cr_fracas'], requiresRank: { id: 'cr_froidure', rank: 3 } })
+ability('cr_comete', 'cryomancien', 5, 'Comète de glace', 'cr_comete', 'Débloque Comète de glace : frappe COLOSSALE, dévastatrice sur cible gelée (le coup du fracas). Gaté : 10 pts dans la voie.', { requires: ['cr_glaciation'], minSpent: 10 })
+ks('cr_abime', 'cryomancien', 6, 'Abîme glaciaire', 'SHATTER ultime : +30% de plus contre les gelés. Profond : 14 pts dans la voie.', { stat: { degatsCrit: 20 }, ks: { shatter: 0.3 } }, { requires: ['cr_comete'], minSpent: 14 })
+ability('cr_hiver', 'cryomancien', 7, 'Hiver éternel', 'cr_hiver', 'ULTIME — un blizzard gèle ET pulvérise tout le pack. Tout au fond : 20 pts dans la voie.', { requires: ['cr_abime'], minSpent: 20 })
+// ── MÉDIUM : tags froid/direct + choix de 2e contrôle.
 minor('cr_gelure', 'cryomancien', 1, 'Gelure', 3, { critique: 18 }, { requires: ['cr_hub'] })
-ks('cr_givre', 'cryomancien', 2, 'Maîtrise du givre', 'Tes sorts [froid] +12% (marche aussi pour les autres classes).', { stat: { intelligence: 12 }, ks: { tagBonus: { tag: 'froid', damageMult: 1.12 } } }, { requires: ['cr_gelure'] })
-ks('cr_perce', 'cryomancien', 3, 'Éclats perçants', 'Tes sorts [direct] +12% (marche aussi pour les autres classes).', { stat: { penetration: 16 }, ks: { tagBonus: { tag: 'direct', damageMult: 1.12 } } }, { requires: ['cr_givre'] })
+ks('cr_givre', 'cryomancien', 2, 'Maîtrise du givre', 'Tes sorts [froid] +12% (cross-classe).', { stat: { intelligence: 12 }, ks: { tagBonus: { tag: 'froid', damageMult: 1.12 } } }, { requires: ['cr_gelure'] })
+ks('cr_perce', 'cryomancien', 3, 'Éclats perçants', 'Tes sorts [direct] +12% (cross-classe).', { stat: { penetration: 16 }, ks: { tagBonus: { tag: 'direct', damageMult: 1.12 } } }, { requires: ['cr_givre'] })
 ability('cr_gangue', 'cryomancien', 3, 'Gangue de glace', 'cr_gangue', 'CHOIX de SORT : emprisonne une cible (contrôle mono long) pour la fracasser. Gaté : 8 pts dans la voie.', { requires: ['cr_givre'], exclusive: 'cr_arme2', minSpent: 8 })
 ability('cr_nova', 'cryomancien', 3, 'Nova de givre', 'cr_nova', 'CHOIX de SORT : une nova gèle tout le pack autour de toi. Gaté : 8 pts dans la voie.', { requires: ['cr_givre'], exclusive: 'cr_arme2', minSpent: 8 })
-// SURVIE : carapace de givre.
+// ── COURTE : survie.
 minor('cr_carapace', 'cryomancien', 1, 'Carapace de givre', 3, { barriere: 18 }, { requires: ['cr_hub'] })
 ability('cr_barriere', 'cryomancien', 2, 'Barrière de glace', 'bouclier_runique', 'SURVIE : débloque Barrière de glace (bouclier d\'absorption).', { requires: ['cr_carapace'] })
 ks('cr_frimas', 'cryomancien', 2, 'Frimas protecteur', 'SURVIE : +30 Esquive, -8% de dégâts subis (le froid ralentit tes assaillants). Exige Carapace de givre au rang max.', { stat: { esquive: 30 }, ks: { flatDr: 0.08 } }, { requires: ['cr_carapace'], requiresRank: { id: 'cr_carapace', rank: 3 } })
 
-/* ---- ARCANISTE — « Charge des arcanes » : build/spend + surcharge (CDR/spam). ---- */
+/* ---- ARCANISTE — SURCHARGE INSTABLE : monte tes Charges ; au PLEIN, tu entres en Surcharge (dégâts de
+ *   sorts ↑, recharges ×2) qui CONSOMME tes Charges. EASY : générer. HARD : déclencher la fenêtre quand
+ *   tes gros sorts sont prêts et l'exploiter à fond. Branches ASYMÉTRIQUES (signature ramp vs finisseur). */
 ability('ar_hub', 'arcaniste', 0, 'Arcaniste', 'ar_trait', 'Entre dans la voie de l\'Arcaniste : débloque Trait des arcanes (générateur de Charges des arcanes). +18 Intelligence, +12 Hâte.', { requires: ['cl_mage'], statMods: { intelligence: 18, hate: 12 } })
-// GÉNÉRATION (charges).
+// ── LONGUE branche SIGNATURE : génération → Surcharge instable → Singularité.
 minor('ar_etude', 'arcaniste', 1, 'Étude arcanique', 3, { hate: 16 }, { requires: ['ar_hub'] })
-ks('ar_affinite', 'arcaniste', 1, 'Affinité arcanique', 'Tes sorts [arcane] +12% (marche aussi pour les autres classes).', { stat: { intelligence: 12 }, ks: { tagBonus: { tag: 'arcane', damageMult: 1.12 } } }, { requires: ['ar_etude'] })
-ks('ar_flux', 'arcaniste', 2, 'Flux de mana', 'GÉNÉRATION : tes générateurs donnent +1 Charge des arcanes.', { stat: { hate: 16 }, ks: { comboGen: 1 } }, { requires: ['ar_etude'] })
-ks('ar_resonance', 'arcaniste', 3, 'Résonance', 'CHOIX : +2 Charges max (surcharge plus haut).', { stat: { intelligence: 16 }, ks: { comboCap: 2 } }, { requires: ['ar_flux'], exclusive: 'ar_gen' })
-ks('ar_cadence', 'arcaniste', 3, 'Cadence arcanique', 'CHOIX : +24 Hâte (incantation rapide et régulière).', { stat: { hate: 24 } }, { requires: ['ar_flux'], exclusive: 'ar_gen' })
-// SURCHARGE (finisher) + spam/CDR.
+ks('ar_affinite', 'arcaniste', 1, 'Affinité arcanique', 'Tes sorts [arcane] +12% (cross-classe).', { stat: { intelligence: 12 }, ks: { tagBonus: { tag: 'arcane', damageMult: 1.12 } } }, { requires: ['ar_etude'] })
+ks('ar_flux', 'arcaniste', 2, 'Flux de mana', 'GÉNÉRATION : tes générateurs donnent +1 Charge des arcanes.', { stat: { hate: 16 }, ks: { comboGen: 1 } }, { requires: ['ar_affinite'] })
+ks('ar_resonance', 'arcaniste', 3, 'Résonance', 'CHOIX : +2 Charges max (Surcharge plus haute, plus rare).', { stat: { intelligence: 16 }, ks: { comboCap: 2 } }, { requires: ['ar_flux'], exclusive: 'ar_gen' })
+ks('ar_cadence', 'arcaniste', 3, 'Cadence arcanique', 'CHOIX : +24 Hâte (Charges plus vite).', { stat: { hate: 24 } }, { requires: ['ar_flux'], exclusive: 'ar_gen' })
+ks('ar_overload', 'arcaniste', 4, 'Surcharge instable', 'SIGNATURE : au PLEIN de Charges, tu entres en Surcharge 5 s (dégâts de sorts ×1,4, recharges ×2) — qui CONSOMME tes Charges. Exige Étude arcanique au rang max.', { stat: { intelligence: 16 }, ks: { overload: { window: 5, mult: 1.4 } } }, { requires: ['ar_flux'], requiresRank: { id: 'ar_etude', rank: 3 } })
+ability('ar_singularite', 'arcaniste', 5, 'Singularité', 'ar_singularite', 'ULTIME — une singularité consume toutes tes Charges en une détonation arcanique. Tout au fond : 20 pts dans la voie.', { requires: ['ar_overload'], minSpent: 20 })
+// ── MÉDIUM : dépense (finisseur) + spam + choix de 2e sort.
 ability('ar_deflag', 'arcaniste', 1, 'Déflagration des arcanes', 'ar_deflag', 'SURCHARGE : débloque Déflagration (finisseur — dégâts × Charges). +16 Intelligence.', { requires: ['ar_hub'], statMods: { intelligence: 16 } })
-ks('ar_finamp', 'arcaniste', 2, 'Maîtrise des surcharges', 'Tes sorts [finisseur] +15% (marche aussi pour les autres classes).', { stat: { degatsCrit: 12 }, ks: { tagBonus: { tag: 'finisseur', damageMult: 1.15 } } }, { requires: ['ar_deflag'] })
-ks('ar_surcharge', 'arcaniste', 2, 'Surcharge', 'Tes finisseurs frappent +25% plus fort.', { stat: { degatsCrit: 20 }, ks: { finisherMult: 0.25 } }, { requires: ['ar_deflag'] })
-ks('ar_cascade', 'arcaniste', 3, 'Cascade temporelle', 'SPAM : chaque sort lancé rembourse 0,4 s de recharge à tes autres sorts.', { stat: { hate: 14 }, ks: { cdrOnCast: 0.4 } }, { requires: ['ar_surcharge'] })
-// CONVERGENCE : exige Génération ET Surcharge.
-ks('ar_apogee', 'arcaniste', 4, 'Apogée arcanique', 'IDENTITÉ (carrefour) : +2 Charges max et +15% de dégâts. Exige Flux de mana ET Surcharge.', { stat: { intelligence: 18 }, ks: { comboCap: 2, damageMult: 1.15 } }, { requiresAll: ['ar_flux', 'ar_surcharge'], minSpent: 8 })
-ability('ar_singularite', 'arcaniste', 5, 'Singularité', 'ar_singularite', 'ULTIME — une singularité consume toutes tes Charges en une détonation arcanique. Tout au fond : 20 pts dans la voie.', { requires: ['ar_apogee'], minSpent: 20 })
-// 2e SORT : choix exclusif (AoE vs anti-boss) + écho.
-minor('ar_savoir', 'arcaniste', 1, 'Savoir interdit', 3, { critique: 16 }, { requires: ['ar_hub'] })
-ks('ar_echo', 'arcaniste', 2, 'Écho des arcanes', 'COMBO : un finisseur te REND 2 Charges (spam de surcharges).', { stat: { hate: 14 }, ks: { comboRefund: 2 } }, { requires: ['ar_savoir'] })
-ability('ar_orbe', 'arcaniste', 3, 'Orbe des arcanes', 'ar_orbe', 'CHOIX de SORT : un orbe instable balaie le pack (zone). Gaté : 8 pts dans la voie.', { requires: ['ar_savoir'], exclusive: 'ar_arme2', minSpent: 8 })
-ability('ar_rupture', 'arcaniste', 3, 'Rupture des arcanes', 'ar_rupture', 'CHOIX de SORT : exécution arcane (amplifiée par les PV manquants). Gaté : 8 pts dans la voie.', { requires: ['ar_savoir'], exclusive: 'ar_arme2', minSpent: 8 })
+ks('ar_finamp', 'arcaniste', 2, 'Maîtrise des surcharges', 'Tes sorts [finisseur] +15% (cross-classe).', { stat: { degatsCrit: 12 }, ks: { tagBonus: { tag: 'finisseur', damageMult: 1.15 } } }, { requires: ['ar_deflag'] })
+ks('ar_surcharge', 'arcaniste', 2, 'Trop-plein', 'Tes finisseurs frappent +25% plus fort.', { stat: { degatsCrit: 20 }, ks: { finisherMult: 0.25 } }, { requires: ['ar_deflag'] })
+ks('ar_cascade', 'arcaniste', 3, 'Cascade temporelle', 'SPAM : chaque sort lancé rembourse 0,4 s de recharge à tes autres sorts. Profond : 8 pts dans la voie.', { stat: { hate: 14 }, ks: { cdrOnCast: 0.4 } }, { requires: ['ar_surcharge'], minSpent: 8 })
+ability('ar_orbe', 'arcaniste', 3, 'Orbe des arcanes', 'ar_orbe', 'CHOIX de SORT : un orbe instable balaie le pack (zone). Gaté : 8 pts dans la voie.', { requires: ['ar_surcharge'], exclusive: 'ar_arme2', minSpent: 8 })
+ability('ar_rupture', 'arcaniste', 3, 'Rupture des arcanes', 'ar_rupture', 'CHOIX de SORT : exécution arcane (amplifiée par les PV manquants). Gaté : 8 pts dans la voie.', { requires: ['ar_surcharge'], exclusive: 'ar_arme2', minSpent: 8 })
+// ── CARREFOUR optionnel : exige Génération ET Trop-plein.
+ks('ar_apogee', 'arcaniste', 4, 'Apogée arcanique', 'IDENTITÉ (carrefour) : +2 Charges max et +15% de dégâts. Exige Flux de mana ET Trop-plein.', { stat: { intelligence: 18 }, ks: { comboCap: 2, damageMult: 1.15 } }, { requiresAll: ['ar_flux', 'ar_surcharge'], minSpent: 10 })
 // SURVIE : voile arcanique.
 minor('ar_voile', 'arcaniste', 1, 'Voile arcanique', 3, { barriere: 18 }, { requires: ['ar_hub'] })
 ability('ar_barriere', 'arcaniste', 2, 'Bouclier des arcanes', 'bouclier_runique', 'SURVIE : débloque Bouclier des arcanes (absorption).', { requires: ['ar_voile'] })
