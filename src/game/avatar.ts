@@ -68,19 +68,71 @@ export const AVATAR_EMBLEMS: AvatarEmblem[] = [
 const CLASS_DEFAULT_EMBLEM: Record<PrimaryStat, string> = { force: 'epee', agilite: 'arc', intelligence: 'sort', endurance: 'bouclier' }
 const CLASS_DEFAULT_PALETTE: Record<PrimaryStat, string> = { force: 'sang', agilite: 'foret', intelligence: 'arcane', endurance: 'acier' }
 
+/**
+ * 🏅 PARURES DE PRESTIGE (v0.32) — bordures (anneau décoratif) et auras (halo) débloquées par les
+ * HAUTS FAITS endgame (pas d'achat : le haut fait obtenu EST le déblocage, comme les titres). Le
+ * mapping haut-fait → cosmétique vit dans achievements.ts ; ici on ne décrit que le RENDU.
+ */
+export type BorderStyle = 'double' | 'dashed' | 'studded' | 'spikes' | 'runic'
+export interface AvatarBorder {
+  id: string
+  name: string
+  /** Couleurs de l'anneau (trait → reflet). */
+  c1: string
+  c2: string
+  style: BorderStyle
+}
+export interface AvatarAura {
+  id: string
+  name: string
+  /** Couleur dominante du halo. */
+  color: string
+  /** Halo pulsé (animation CSS) — réservé aux parures les plus prestigieuses. */
+  anim?: boolean
+}
+
+export const AVATAR_BORDERS: AvatarBorder[] = [
+  { id: 'couronne', name: 'Couronne', c1: '#b8860b', c2: '#ffe08a', style: 'studded' },
+  { id: 'fracture', name: 'Fracture', c1: '#b91c1c', c2: '#fb923c', style: 'spikes' },
+  { id: 'constellation', name: 'Constellation', c1: '#4338ca', c2: '#c7d2fe', style: 'studded' },
+  { id: 'runique', name: 'Runique', c1: '#92610a', c2: '#fcd34d', style: 'runic' },
+  { id: 'gemmee', name: 'Gemmée', c1: '#0f766e', c2: '#5eead4', style: 'studded' },
+  { id: 'pactes', name: 'Pactes', c1: '#166534', c2: '#86efac', style: 'runic' },
+  { id: 'triade', name: 'Triade', c1: '#9d174d', c2: '#fda4af', style: 'double' },
+]
+
+export const AVATAR_AURAS: AvatarAura[] = [
+  { id: 'doree', name: 'Dorée', color: '#fbbf24' },
+  { id: 'abyssale', name: 'Abyssale', color: '#a855f7', anim: true },
+  { id: 'primordiale', name: 'Primordiale', color: '#8b5cf6', anim: true },
+  { id: 'arcane', name: 'Arcane', color: '#60a5fa' },
+  { id: 'prismatique', name: 'Prismatique', color: '#22d3ee', anim: true },
+  { id: 'arcenciel', name: 'Arc-en-ciel', color: '#f472b6', anim: true },
+  { id: 'primordialePlus', name: 'Primordiale absolue', color: '#e879f9', anim: true },
+  { id: 'flamme', name: 'Flamme', color: '#f97316', anim: true },
+]
+
+const BORDER_BY_ID = new Map(AVATAR_BORDERS.map((b) => [b.id, b]))
+const AURA_BY_ID = new Map(AVATAR_AURAS.map((a) => [a.id, a]))
+export function getBorder(id?: string): AvatarBorder | undefined { return id ? BORDER_BY_ID.get(id) : undefined }
+export function getAura(id?: string): AvatarAura | undefined { return id ? AURA_BY_ID.get(id) : undefined }
+
 /** Sélection de portrait stockée sur le personnage (champs optionnels = défaut par classe). */
 export interface AvatarSel {
   palette?: string
   emblem?: string
+  /** Parures de prestige (débloquées par haut fait) — absentes = aucune. */
+  border?: string
+  aura?: string
 }
 
-/** Résout la palette + l'emblème effectifs d'un héros (défauts dérivés de sa classe). */
-export function resolveAvatar(bias: PrimaryStat, sel?: AvatarSel): { pal: AvatarPalette; emb: AvatarEmblem } {
+/** Résout la palette + l'emblème + les parures effectifs d'un héros (défauts dérivés de sa classe). */
+export function resolveAvatar(bias: PrimaryStat, sel?: AvatarSel): { pal: AvatarPalette; emb: AvatarEmblem; border?: AvatarBorder; aura?: AvatarAura } {
   const palId = sel?.palette ?? CLASS_DEFAULT_PALETTE[bias] ?? 'acier'
   const embId = sel?.emblem ?? CLASS_DEFAULT_EMBLEM[bias] ?? 'epee'
   const pal = AVATAR_PALETTES.find((p) => p.id === palId) ?? AVATAR_PALETTES[0]
   const emb = AVATAR_EMBLEMS.find((e) => e.id === embId) ?? AVATAR_EMBLEMS[0]
-  return { pal, emb }
+  return { pal, emb, border: getBorder(sel?.border), aura: getAura(sel?.aura) }
 }
 
 /** Coût de déblocage (🌌) d'un cosmétique (palette ou emblème), 0 si gratuit/inconnu. */

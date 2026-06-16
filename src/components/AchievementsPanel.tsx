@@ -4,8 +4,18 @@ import {
   type AchvCategory, type AchvBonusKey,
 } from '../game/achievements'
 import { getMaitriseNode } from '../game/maitrise'
+import { getBorder, getAura } from '../game/avatar'
 
-const CAT_ORDER: AchvCategory[] = ['progression', 'stuff', 'collection', 'metiers', 'combat']
+const CAT_ORDER: AchvCategory[] = ['progression', 'stuff', 'collection', 'metiers', 'combat', 'legende']
+
+/** Libellé de la parure (bordure/aura) débloquée par un haut fait, ou null. */
+function parureLabel(border?: string, aura?: string): string | null {
+  const b = getBorder(border)
+  if (b) return `bordure ${b.name}`
+  const a = getAura(aura)
+  if (a) return `aura ${a.name}`
+  return null
+}
 
 /** Puce de récompense : « ⚔️ +0,8% » (rangs façon Maîtrise → effet réel via perRank). */
 function RewardChips({ reward }: { reward: Partial<Record<AchvBonusKey, number>> }) {
@@ -98,6 +108,7 @@ export function AchievementsPanel() {
                       <div className="flex items-center gap-1.5">
                         <span className={'truncate text-[12px] font-medium ' + (got ? 'text-slate-100' : 'text-slate-400')}>{a.name}</span>
                         {a.title && <span className="shrink-0 rounded bg-fuchsia-500/20 px-1 text-[8.5px] text-fuchsia-200" title={`Titre : « ${a.title} »`}>🎖 titre</span>}
+                        {parureLabel(a.border, a.aura) && <span className="shrink-0 rounded bg-amber-500/20 px-1 text-[8.5px] text-amber-200" title={`Parure : ${parureLabel(a.border, a.aura)}`}>🏅 parure</span>}
                       </div>
                       <div className="truncate text-[10px] text-slate-500">{a.desc}</div>
                     </div>

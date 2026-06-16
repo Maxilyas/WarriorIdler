@@ -81,7 +81,7 @@ import {
 import {
   generateRaid, makeRaidAdd, raidMaxAdds, getRaidDef, raidUnlocked, raidBossVariant,
   raidIlvl, raidRarityWindow, rollRaidLootCount, raidTrophyGain, raidTierUnlockCost,
-  raidFragments, raidCosmicChance, raidCosmicQty, pickRaidLootType,
+  raidFragments, raidCosmicChance, raidCosmicQty, pickRaidLootType, globalTier,
   PAIR_ENRAGE_MULT, NOVA_MULT, RAIDS, RAID_LIST, type ActiveRaid, type RaidId,
 } from './raids'
 import { SETS } from './sets'
@@ -387,6 +387,8 @@ interface SaveData {
   echos: number
   /** Nombre d'Éveils accomplis. */
   prestigeRank: number
+  /** Horodatage (ms) du dernier Éveil — pour le haut fait « Renaissance Fulgurante ». */
+  lastPrestigeAt?: number
   /** Rangs alloués dans la Constellation (méta-arbre de prestige). */
   constellation: Record<string, number>
   /** Relique conservée au dernier Éveil (1 pièce, iLvl plancher) — versée dans le sac au reset. */
@@ -587,7 +589,7 @@ interface GameState extends SaveData {
   /** 🏆 (v0.28) Choisit le TITRE affiché d'un héros (id de haut fait débloqué, ou null). */
   selectTitle: (charId: string, achId: string | null) => void
   /** 🎨 (v0.28) Personnalise le portrait d'un héros (palette / emblème). */
-  setAvatar: (charId: string, sel: { palette?: string; emblem?: string }) => void
+  setAvatar: (charId: string, sel: { palette?: string; emblem?: string; border?: string; aura?: string }) => void
   /** 🎨 (v0.28 B2) Débloque un cosmétique premium contre de la Poussière d'étoile 🌌. */
   unlockCosmetic: (id: string) => void
   /** Coffre du Destin : garde l'objet à cet index, recycle les autres. */
@@ -6319,6 +6321,16 @@ export const useGame = create<GameState>((set, get) => {
         metierMaxLevel: metierLevels.reduce((a, b) => Math.max(a, b), 0),
         metierMinLevel: metierLevels.reduce((a, b) => Math.min(a, b), Infinity),
         characters: s.characters,
+        // ---- v0.32 : étage Légende ----
+        curStage: s.stage,
+        maxEquippedIlvl: s.characters.reduce((m, ch) => Math.max(m, fullyEquippedMinIlvl(ch)), 0),
+        minRaidWorldTier: RAID_LIST.reduce((m, def) => Math.min(m, globalTier(def, s.raidProgress[def.id] ?? 0)), Infinity),
+        abyssWorldTier: globalTier(getRaidDef('abysse'), s.raidProgress.abysse ?? 0),
+        constellationAlloc: s.constellation,
+        cosmeticsUnlocked: Object.keys(s.cosmetics).filter((id) => cosmeticCost(id) > 0).length,
+        pactsEquipped: equippedPacts(s.characters).length,
+        achvUnlockedCount: Object.keys(s.achievements).length,
+        msSincePrestige: s.lastPrestigeAt ? Date.now() - s.lastPrestigeAt : Infinity,
       }
       const fresh = evaluateNewAchievements(ctx, s.achievements)
       if (!fresh.length) return
@@ -6546,6 +6558,7 @@ export const useGame = create<GameState>((set, get) => {
         ...fresh,
         echos: s.echos + gained,
         prestigeRank: s.prestigeRank + 1,
+        lastPrestigeAt: Date.now(), // ⏱️ départ du chrono « Renaissance Fulgurante »
         constellation: s.constellation,
         achievements: s.achievements, // 🏆 hauts faits conservés (permanents au compte)
         cosmetics: s.cosmetics,       // 🎨 cosmétiques débloqués conservés

@@ -118,3 +118,6 @@ body {
 /* Petite pluie d'étincelles. */
 @keyframes sparkleFloat { 0% { opacity: 0; transform: translateY(6px) scale(0.6); } 30% { opacity: 1; } 100% { opacity: 0; transform: translateY(-22px) scale(1.1); } }
 .sparkle { animation: sparkleFloat 1.4s ease-out infinite; }
+/* 🏅 Aura de prestige (parures de hauts faits) : halo qui respire doucement. */
+@keyframes avAuraPulse { 0%, 100% { opacity: 0.4; transform: scale(0.94); } 50% { opacity: 0.7; transform: scale(1.06); } }
+.av-aura-pulse { animation: avAuraPulse 2.4s ease-in-out infinite; }

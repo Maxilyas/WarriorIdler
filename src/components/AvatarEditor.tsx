@@ -1,9 +1,11 @@
 import { useGame } from '../game/store'
-import { AVATAR_PALETTES, AVATAR_EMBLEMS, resolveAvatar } from '../game/avatar'
+import { AVATAR_PALETTES, AVATAR_EMBLEMS, AVATAR_BORDERS, AVATAR_AURAS, resolveAvatar } from '../game/avatar'
+import { unlockedCosmetics } from '../game/achievements'
 import { LevelBadge } from './LevelBadge'
 
 /** 🎨 Éditeur de portrait (v0.28, C1 + B2) — palette + emblème par héros, avec cosmétiques premium
- *  débloqués contre Poussière d'étoile 🌌. Aperçu live via LevelBadge. */
+ *  débloqués contre Poussière d'étoile 🌌. v0.32 : parures de prestige (bordure + aura) débloquées
+ *  par les hauts faits de l'étage Légende. Aperçu live via LevelBadge. */
 export function AvatarEditor() {
   const characters = useGame((s) => s.characters)
   const activeChar = useGame((s) => s.activeChar)
@@ -11,9 +13,14 @@ export function AvatarEditor() {
   const cosmetics = useGame((s) => s.cosmetics)
   const poussiere = useGame((s) => s.poussiere)
   const unlockCosmetic = useGame((s) => s.unlockCosmetic)
+  const achievements = useGame((s) => s.achievements)
   const char = characters[activeChar] ?? characters[0]
   if (!char) return null
-  const { pal, emb } = resolveAvatar(char.primaryBias, char.avatar)
+  const { pal, emb, border, aura } = resolveAvatar(char.primaryBias, char.avatar)
+
+  const parures = unlockedCosmetics(achievements)
+  const myBorders = AVATAR_BORDERS.filter((b) => parures.borders.includes(b.id))
+  const myAuras = AVATAR_AURAS.filter((a) => parures.auras.includes(a.id))
 
   const isLocked = (cost?: number, id?: string) => !!cost && cost > 0 && !cosmetics[id ?? '']
 
@@ -65,6 +72,54 @@ export function AvatarEditor() {
                 )
               })}
             </div>
+          </div>
+          {/* 🏅 Parures de prestige — débloquées par les hauts faits Légende (pas d'achat). */}
+          <div>
+            <div className="mb-1 text-[10px] text-slate-500">🏅 Parures <span className="text-slate-600">· débloquées par hauts faits Légende 👑</span></div>
+            {myBorders.length === 0 && myAuras.length === 0 ? (
+              <div className="text-[10px] italic text-slate-600">Aucune parure pour l'instant — décroche un haut fait Légende.</div>
+            ) : (
+              <div className="space-y-1.5">
+                {myBorders.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="w-12 shrink-0 text-[9px] uppercase tracking-wide text-slate-600">Bordure</span>
+                    <button
+                      onClick={() => setAvatar(char.id, { border: undefined })}
+                      title="Aucune bordure"
+                      className={'flex h-7 w-7 items-center justify-center rounded-full text-[9px] ring-2 transition ' + (!border ? 'ring-orange-400' : 'ring-transparent hover:ring-slate-500')}
+                    >∅</button>
+                    {myBorders.map((b) => (
+                      <button
+                        key={b.id}
+                        onClick={() => setAvatar(char.id, { border: b.id })}
+                        title={`Bordure ${b.name}`}
+                        className={'h-7 w-7 rounded-full bg-[#0a0e16] ring-2 transition ' + (border?.id === b.id ? 'ring-orange-400' : 'ring-transparent hover:ring-slate-500')}
+                        style={{ boxShadow: `inset 0 0 0 2.5px ${b.c2}, inset 0 0 0 4px ${b.c1}` }}
+                      />
+                    ))}
+                  </div>
+                )}
+                {myAuras.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="w-12 shrink-0 text-[9px] uppercase tracking-wide text-slate-600">Aura</span>
+                    <button
+                      onClick={() => setAvatar(char.id, { aura: undefined })}
+                      title="Aucune aura"
+                      className={'flex h-7 w-7 items-center justify-center rounded-full text-[9px] ring-2 transition ' + (!aura ? 'ring-orange-400' : 'ring-transparent hover:ring-slate-500')}
+                    >∅</button>
+                    {myAuras.map((a) => (
+                      <button
+                        key={a.id}
+                        onClick={() => setAvatar(char.id, { aura: a.id })}
+                        title={`Aura ${a.name}`}
+                        className={'h-7 w-7 rounded-full ring-2 transition ' + (aura?.id === a.id ? 'ring-orange-400' : 'ring-transparent hover:ring-slate-500')}
+                        style={{ background: `radial-gradient(circle, ${a.color} 10%, transparent 72%)` }}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
