@@ -80,7 +80,6 @@ export function CombatPanel() {
   const activeBiomeBest = Math.max(1, biomeBest[activeBiome] ?? 1)
   // Bonus de biome : surcharge tournante + Maîtrise des Zones (v0.25 : Élan supprimé).
   const surge = surgeBiome()
-  const surgeOn = surge === activeBiome
   const maitrise = maitriseBonus(biomeBest)
 
   // Donjons/raids = combat à PLUSIEURS adversaires. En combat classique, un seul ennemi.
@@ -186,12 +185,7 @@ export function CombatPanel() {
         </div>
       )}
 
-      {/* Surcharge tournante (la Maîtrise des Zones vit désormais dans la feuille Zone, pour gagner de la place) */}
-      {!dungeon && !raid && surgeOn && (
-        <div className="flex flex-wrap gap-1.5 text-[10px]">
-          <span className="rounded bg-amber-500/15 px-1.5 py-0.5 font-medium text-amber-300">⚡ Surcharge : +50% or & XP · quintessence ×2</span>
-        </div>
-      )}
+      {/* Surcharge tournante : affichée uniquement dans la feuille Zone (cf. plus bas) pour ne pas encombrer l'écran sur mobile */}
 
       {/* Ligne « zone » : biome (→ feuille) + stepper de palier + cadenas, le tout inline */}
       {!dungeon && !raid && (
