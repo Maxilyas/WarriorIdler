@@ -305,6 +305,17 @@ export function charDps(char: Character): number {
   return dps
 }
 
+/** DPS estimé d'UN sort actif équipé (mêmes maths que la fiche) — pour l'affichage par carte (Capacités).
+ *  Renvoie 0 pour les sorts qui ne sont pas un DPS direct (soins/boucliers/buffs). */
+export function spellDps(char: Character, p: PowerDef): number {
+  if (p.kind !== 'active' || !p.effect) return 0
+  const derived = charDerived(char)
+  const profile = charDamageProfile(char)
+  const cm = charCombatMods(char)
+  const gen = comboGenPerSec(char, derived, cm.comboGen)
+  return abilityDps(p, derived, profileDamageMult(profile), cm.damageMult, cm, gen)
+}
+
 /**
  * DÉTAIL du DPS affiché — exact PAR CONSTRUCTION : il appelle les mêmes fonctions que charDps
  * (theoreticalDps + abilityDps), il ne peut donc pas diverger. Sert la transparence : « pourquoi

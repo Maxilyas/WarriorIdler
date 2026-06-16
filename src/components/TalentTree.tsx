@@ -628,11 +628,13 @@ function NodeDetail({
   const gate = gateInfo(node, char.talents)
   const gateLocked = gate.need > 0 && gate.spent < gate.need
   const exclLocked = !!gate.exclusiveBlocked
+  const rankLocked = !!gate.rankReq
 
   let btnLabel: string
   if (maxed) btnLabel = `✓ Rang maximum (${rank}/${node.maxRank})`
   else if (exclLocked) btnLabel = `🔒 Choix verrouillé par « ${gate.exclusiveBlocked} »`
   else if (!reachable) btnLabel = '🔒 Aucun nœud voisin alloué'
+  else if (rankLocked) btnLabel = `🔒 Monte « ${gate.rankReq!.name} » au rang ${gate.rankReq!.need} (${gate.rankReq!.have}/${gate.rankReq!.need})`
   else if (gateLocked) btnLabel = `🔒 Investis ${gate.need} pts dans la voie (${gate.spent}/${gate.need})`
   else if (char.talentPoints <= 0) btnLabel = 'Aucun point disponible'
   else btnLabel = node.maxRank > 1 ? `Allouer 1 point  (${rank} → ${rank + 1}/${node.maxRank})` : 'Allouer 1 point'
@@ -694,7 +696,12 @@ function NodeDetail({
       {!reachable && !exclLocked && (
         <p className="mb-1 text-[10px] text-rose-300">🔒 Relie ce nœud : alloue d'abord un nœud voisin.</p>
       )}
-      {gateLocked && reachable && !exclLocked && !maxed && (
+      {rankLocked && reachable && !exclLocked && !maxed && (
+        <p className="mb-1 text-[10px] text-amber-300">
+          ⛓ Puissance gatée : monte d'abord « {gate.rankReq!.name} » au rang {gate.rankReq!.need} ({gate.rankReq!.have}/{gate.rankReq!.need}).
+        </p>
+      )}
+      {gateLocked && reachable && !exclLocked && !rankLocked && !maxed && (
         <p className="mb-1 text-[10px] text-amber-300">
           ⛩ Investis {gate.need} pts dans {meta.icon} {meta.name} ({gate.spent}/{gate.need}) — n'importe où dans la voie.
         </p>

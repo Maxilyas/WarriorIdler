@@ -23,12 +23,13 @@ for (const t of TALENTS) {
   byId.set(t.id, t)
 }
 
-// 1) requires pointant vers un id inexistant
+// 1) requires (+ requiresAll + requiresRank.id) pointant vers un id inexistant
 const broken = []
 for (const t of TALENTS) {
-  for (const r of t.requires ?? []) {
+  for (const r of [...(t.requires ?? []), ...(t.requiresAll ?? [])]) {
     if (!byId.has(r)) broken.push({ node: t.id, name: t.name, missing: r })
   }
+  if (t.requiresRank && !byId.has(t.requiresRank.id)) broken.push({ node: t.id, name: t.name, missing: t.requiresRank.id })
 }
 
 // 2) accessibilité depuis le Cœur (mêmes arêtes que le moteur : requires)

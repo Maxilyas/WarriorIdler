@@ -59,6 +59,10 @@ export interface TalentNode {
   exclusive?: string
   /** BUDGET : points à dépenser dans la constellation avant de pouvoir l'allouer. */
   minSpent?: number
+  /** RANG PRÉREQUIS (v0.30) : un nœud précis doit être à AU MOINS ce rang (souvent son maximum) avant
+   *  d'allouer celui-ci. Sert à GATER la puissance brute (DR/épines/+%dégâts) derrière un vrai
+   *  investissement dans la node d'avant — « monte d'abord ce mineur au max ». */
+  requiresRank?: { id: string; rank: number }
   statMods?: StatBlock
   resistMods?: Partial<Record<DamageType, number>>
   unlockPower?: string
@@ -80,7 +84,7 @@ const STAT_FR: Record<string, string> = {
 function sd(mods: StatBlock): string {
   return Object.entries(mods).map(([k, v]) => `+${v} ${STAT_FR[k] ?? k}`).join(', ')
 }
-type Opt = Partial<Pick<TalentNode, 'requires' | 'links' | 'requiresAll' | 'exclusive' | 'minSpent' | 'statMods' | 'resistMods' | 'unlockPower' | 'keystone'>>
+type Opt = Partial<Pick<TalentNode, 'requires' | 'links' | 'requiresAll' | 'exclusive' | 'minSpent' | 'requiresRank' | 'statMods' | 'resistMods' | 'unlockPower' | 'keystone'>>
 function node(id: string, c: ConstellationId, kind: TalentKind, tier: number, maxRank: number, name: string, description: string, opt: Opt = {}) {
   TALENTS.push({ id, name, constellation: c, kind, tier, maxRank, description, ...opt })
 }
@@ -141,9 +145,9 @@ ks('as_spores', 'assassin', 4, 'Spores', 'Ta Nuée propage les altérations à t
 
 // --- DRAIN (SURVIE — profil poison/drain) ---
 minor('as_sang', 'assassin', 1, 'Sangsue', 3, { volDeVie: 10 }, { requires: ['as_hub'] })
-ks('as_vamp', 'assassin', 2, 'Vampirisme toxique', 'SURVIE : tes DoT te soignent (25% du tick). +20 Régén.', { stat: { regen: 20 }, ks: { dotLeech: 0.25 } }, { requires: ['as_sang'] })
+ks('as_vamp', 'assassin', 2, 'Vampirisme toxique', 'SURVIE : tes DoT te soignent (25% du tick). +20 Régén. Exige Sangsue au rang max.', { stat: { regen: 20 }, ks: { dotLeech: 0.25 } }, { requires: ['as_sang'], requiresRank: { id: 'as_sang', rank: 3 } })
 ability('as_reprise', 'assassin', 2, 'Reprise', 'second_souffle', 'SURVIE : débloque Reprise (auto-soin) — pour tenir en solo dès le début.', { requires: ['as_sang'] })
-ks('as_meta', 'assassin', 3, 'Métabolisme morbide', 'SURVIE : +30 Régén, +12 Vol de vie, -8% de dégâts subis.', { stat: { regen: 30, volDeVie: 12 }, ks: { flatDr: 0.08 } }, { requires: ['as_vamp'] })
+ks('as_meta', 'assassin', 3, 'Métabolisme morbide', 'SURVIE : +30 Régén, +12 Vol de vie, -8% de dégâts subis. Profond : 8 pts dans la voie.', { stat: { regen: 30, volDeVie: 12 }, ks: { flatDr: 0.08 } }, { requires: ['as_vamp'], minSpent: 8 })
 
 /* ================= OMBRELAME — combo & ombre (PROFONDEUR : finisseurs gatés + combos) ================= */
 ability('om_hub', 'ombrelame', 0, 'Ombrelame', 'om_frappe_sournoise', 'Entre dans la voie de l\'Ombrelame : débloque Frappe sournoise (générateur de Points de Combo). +18 Agilité, +12 Critique.', { requires: ['cl_voleur'], statMods: { agilite: 18, critique: 12 } })
@@ -168,7 +172,7 @@ ability('om_linceul', 'ombrelame', 5, 'Linceul', 'om_linceul', 'ULTIME — un fi
 // --- FURTIVITÉ (SURVIE = esquive) + CHOIX EXCLUSIF d'ouverture ---
 minor('om_cele', 'ombrelame', 1, 'Célérité', 3, { esquive: 18, hate: 8 }, { requires: ['om_hub'] })
 ability('om_voile', 'ombrelame', 2, 'Voile d\'ombre', 'posture_defensive', 'SURVIE : débloque Voile d\'ombre (passif : -18% de dégâts subis).', { requires: ['om_cele'] })
-ks('om_derob', 'ombrelame', 2, 'Dérobade', 'Tu frappes depuis l\'ombre : +12% de dégâts, +30 Esquive.', { stat: { esquive: 30 }, ks: { damageMult: 1.12 } }, { requires: ['om_cele'] })
+ks('om_derob', 'ombrelame', 2, 'Dérobade', 'Tu frappes depuis l\'ombre : +12% de dégâts, +30 Esquive. Exige Célérité au rang max.', { stat: { esquive: 30 }, ks: { damageMult: 1.12 } }, { requires: ['om_cele'], requiresRank: { id: 'om_cele', rank: 3 } })
 ability('om_embus', 'ombrelame', 3, 'Embuscade', 'om_embuscade', 'CHOIX de SORT : énorme nuke d\'ouverture mono. Gaté : 8 pts dans la voie.', { requires: ['om_derob'], exclusive: 'om_arme2', minSpent: 8 })
 ability('om_eventail', 'ombrelame', 3, 'Éventail de couteaux', 'om_eventail', 'CHOIX de SORT : finisseur de ZONE. Gaté : 8 pts dans la voie.', { requires: ['om_derob'], exclusive: 'om_arme2', minSpent: 8 })
 
@@ -203,7 +207,7 @@ ability('py_flammes', 'pyromancien', 3, 'Flammes incandescentes', 'py_flammes', 
 ability('py_immolation', 'pyromancien', 3, 'Immolation', 'py_immolation', 'CHOIX de SORT : embrase la cible (gros DoT mono soutenu). Gaté : 8 pts dans la voie.', { requires: ['py_pyromanie'], exclusive: 'py_arme2', minSpent: 8 })
 // SURVIE : robe ignifugée.
 minor('py_robe', 'pyromancien', 1, 'Robe ignifugée', 3, { regen: 16 }, { requires: ['py_hub'] })
-ks('py_bouclierflam', 'pyromancien', 2, 'Bouclier de flammes', 'SURVIE : -8% de dégâts subis, +20 Régén, tes assaillants se brûlent (épines 10%).', { stat: { regen: 20 }, ks: { flatDr: 0.08, thorns: 0.1 } }, { requires: ['py_robe'] })
+ks('py_bouclierflam', 'pyromancien', 2, 'Bouclier de flammes', 'SURVIE : -8% de dégâts subis, +20 Régén, tes assaillants se brûlent (épines 10%). Exige Robe ignifugée au rang max.', { stat: { regen: 20 }, ks: { flatDr: 0.08, thorns: 0.1 } }, { requires: ['py_robe'], requiresRank: { id: 'py_robe', rank: 3 } })
 ability('py_souffle', 'pyromancien', 2, 'Second souffle', 'second_souffle', 'SURVIE : débloque Second souffle (auto-soin) pour tenir en solo.', { requires: ['py_robe'] })
 
 /* ---- CRYOMANCIEN — gèle (contrôle) puis FRACASSE (shatter). ---- */
@@ -224,7 +228,7 @@ ability('cr_nova', 'cryomancien', 3, 'Nova de givre', 'cr_nova', 'CHOIX de SORT 
 // SURVIE : carapace de givre.
 minor('cr_carapace', 'cryomancien', 1, 'Carapace de givre', 3, { barriere: 18 }, { requires: ['cr_hub'] })
 ability('cr_barriere', 'cryomancien', 2, 'Barrière de glace', 'bouclier_runique', 'SURVIE : débloque Barrière de glace (bouclier d\'absorption).', { requires: ['cr_carapace'] })
-ks('cr_frimas', 'cryomancien', 2, 'Frimas protecteur', 'SURVIE : +30 Esquive, -8% de dégâts subis (le froid ralentit tes assaillants).', { stat: { esquive: 30 }, ks: { flatDr: 0.08 } }, { requires: ['cr_carapace'] })
+ks('cr_frimas', 'cryomancien', 2, 'Frimas protecteur', 'SURVIE : +30 Esquive, -8% de dégâts subis (le froid ralentit tes assaillants). Exige Carapace de givre au rang max.', { stat: { esquive: 30 }, ks: { flatDr: 0.08 } }, { requires: ['cr_carapace'], requiresRank: { id: 'cr_carapace', rank: 3 } })
 
 /* ---- ARCANISTE — « Charge des arcanes » : build/spend + surcharge (CDR/spam). ---- */
 ability('ar_hub', 'arcaniste', 0, 'Arcaniste', 'ar_trait', 'Entre dans la voie de l\'Arcaniste : débloque Trait des arcanes (générateur de Charges des arcanes). +18 Intelligence, +12 Hâte.', { requires: ['cl_mage'], statMods: { intelligence: 18, hate: 12 } })
@@ -275,7 +279,7 @@ ability('me_morsure', 'meute', 3, 'Morsure du fauve', 'me_morsure', 'CHOIX de SO
 ability('me_saignee', 'meute', 3, 'Saignée bestiale', 'me_saignee', 'CHOIX de SORT : des plaies de fauve qui saignent (DoT). Gaté : 8 pts dans la voie.', { requires: ['me_nature'], exclusive: 'me_arme2', minSpent: 8 })
 // SURVIE : lien au familier.
 minor('me_endurci', 'meute', 1, 'Cuir épais', 3, { regen: 16 }, { requires: ['me_hub'] })
-ks('me_symbiose', 'meute', 2, 'Symbiose', 'SURVIE : ton familier te protège — -10% de dégâts subis, +12 Vol de vie.', { stat: { volDeVie: 12 }, ks: { flatDr: 0.1 } }, { requires: ['me_endurci'] })
+ks('me_symbiose', 'meute', 2, 'Symbiose', 'SURVIE : ton familier te protège — -10% de dégâts subis, +12 Vol de vie. Exige Cuir épais au rang max.', { stat: { volDeVie: 12 }, ks: { flatDr: 0.1 } }, { requires: ['me_endurci'], requiresRank: { id: 'me_endurci', rank: 3 } })
 ability('me_souffle', 'meute', 2, 'Second souffle', 'second_souffle', 'SURVIE : débloque Second souffle (auto-soin).', { requires: ['me_endurci'] })
 
 /* ---- ŒIL DE FAUCON — « Concentration » : visée (générateur) → tir énorme (finisseur) + exécution. ---- */
@@ -302,7 +306,7 @@ ability('fa_mortel', 'faucon', 3, 'Tir mortel', 'fa_mortel', 'CHOIX de SORT : ex
 // SURVIE : camouflage.
 minor('fa_camo', 'faucon', 1, 'Camouflage', 3, { esquive: 18 }, { requires: ['fa_hub'] })
 ability('fa_posture', 'faucon', 2, 'Posture défensive', 'posture_defensive', 'SURVIE : débloque Posture défensive (-18% de dégâts subis).', { requires: ['fa_camo'] })
-ks('fa_retraite', 'faucon', 2, 'Retraite feinte', 'SURVIE : +30 Esquive, +12% de dégâts (tu frappes en reculant).', { stat: { esquive: 30 }, ks: { damageMult: 1.12 } }, { requires: ['fa_camo'] })
+ks('fa_retraite', 'faucon', 2, 'Retraite feinte', 'SURVIE : +30 Esquive, +12% de dégâts (tu frappes en reculant). Exige Camouflage au rang max.', { stat: { esquive: 30 }, ks: { damageMult: 1.12 } }, { requires: ['fa_camo'], requiresRank: { id: 'fa_camo', rank: 3 } })
 
 /* ================================================================== */
 /* GUERRIER (Plaque) — Sentence (DPS) · Rempart (TANK, ressource Rage). */
@@ -333,7 +337,7 @@ ability('se_saignement', 'sentence', 3, 'Saignement profond', 'se_saignement', '
 ability('se_tourmente', 'sentence', 3, 'Tourmente', 'se_tourmente', 'CHOIX de SORT : balaie tout le pack (zone). Gaté : 8 pts dans la voie.', { requires: ['se_hemo'], exclusive: 'se_arme2', minSpent: 8 })
 // SURVIE : garde du combattant.
 minor('se_garde', 'sentence', 1, 'Garde haute', 3, { reductionDegats: 16 }, { requires: ['se_hub'] })
-ks('se_resilience', 'sentence', 2, 'Résilience', 'SURVIE : -10% de dégâts subis, +12 Vol de vie.', { stat: { volDeVie: 12 }, ks: { flatDr: 0.1 } }, { requires: ['se_garde'] })
+ks('se_resilience', 'sentence', 2, 'Résilience', 'SURVIE : -10% de dégâts subis, +12 Vol de vie. Exige Garde haute au rang max.', { stat: { volDeVie: 12 }, ks: { flatDr: 0.1 } }, { requires: ['se_garde'], requiresRank: { id: 'se_garde', rank: 3 } })
 ability('se_souffle', 'sentence', 2, 'Second souffle', 'second_souffle', 'SURVIE : débloque Second souffle (auto-soin).', { requires: ['se_garde'] })
 
 /* ---- REMPART (TANK) — Rage → BOUCLIER (finisherShield) + épines + provocation. ---- */
@@ -341,19 +345,19 @@ ability('re_hub', 'rempart', 0, 'Rempart', 're_bouclier_coup', 'Entre dans la vo
 // BOUCLIER : la Rage devient de l'absorption.
 minor('re_garde', 'rempart', 1, 'Bloc', 3, { endurance: 20 }, { requires: ['re_hub'] })
 ability('re_revanche', 'rempart', 1, 'Revanche', 're_revanche', 'FINITION : débloque Revanche (finisseur — dégâts × Rage). +16 Force.', { requires: ['re_hub'], statMods: { force: 16 } })
-ks('re_bloc', 'rempart', 2, 'Mur de boucliers', 'TANK : un finisseur t\'accorde un bouclier d\'absorption = 50% de ses dégâts.', { stat: { endurance: 30 }, ks: { finisherShield: 0.5 } }, { requires: ['re_revanche'] })
-ks('re_mur', 'rempart', 3, 'Inébranlable', 'TANK : +0,5 au bouclier de finisseur ET tes finisseurs +20%.', { stat: { barriere: 20 }, ks: { finisherShield: 0.5, finisherMult: 0.2 } }, { requires: ['re_bloc'] })
+ks('re_bloc', 'rempart', 2, 'Mur de boucliers', 'TANK : un finisseur t\'accorde un bouclier = 35% de ses dégâts — MAIS borné à 20% de tes PV/coup et le total ≤ tes PV max (le bouclier suit ta SURVIE, pas ton dégât). Exige Bloc au rang max.', { stat: { endurance: 30 }, ks: { finisherShield: 0.35 } }, { requires: ['re_revanche'], requiresRank: { id: 're_garde', rank: 3 } })
+ks('re_mur', 'rempart', 3, 'Inébranlable', 'TANK : +0,15 au bouclier de finisseur ET tes finisseurs +20%.', { stat: { barriere: 20 }, ks: { finisherShield: 0.15, finisherMult: 0.2 } }, { requires: ['re_bloc'], minSpent: 8 })
 ability('re_egide', 'rempart', 4, 'Égide titanesque', 'egide_titanesque', 'ULTIME — un ÉNORME bouclier d\'absorption (40% à l\'équipe). Tout au fond : 20 pts dans la voie.', { requires: ['re_mur'], minSpent: 20 })
 // ÉPINES + PROVOCATION : menace & représailles.
 minor('re_acier', 'rempart', 1, 'Peau d\'acier', 3, { reductionDegats: 16 }, { requires: ['re_hub'] })
 ability('re_provoc', 'rempart', 2, 'Provocation', 'provocation', 'MENACE : débloque Provocation (attire les attaques — le rôle de tank).', { requires: ['re_acier'] })
-ks('re_epines', 'rempart', 2, 'Épines', 'Tes assaillants encaissent 30% de tes dégâts d\'auto en retour.', { stat: { endurance: 20 }, ks: { thorns: 0.3 } }, { requires: ['re_acier'] })
-ks('re_represailles', 'rempart', 3, 'Représailles', '+30% d\'épines de plus ET -8% de dégâts subis.', { stat: { reductionDegats: 14 }, ks: { thorns: 0.3, flatDr: 0.08 } }, { requires: ['re_epines'] })
+ks('re_epines', 'rempart', 2, 'Épines', 'Tes assaillants encaissent 30% de tes dégâts d\'auto en retour. Exige Peau d\'acier au rang max.', { stat: { endurance: 20 }, ks: { thorns: 0.3 } }, { requires: ['re_acier'], requiresRank: { id: 're_acier', rank: 3 } })
+ks('re_represailles', 'rempart', 3, 'Représailles', '+40% d\'épines de plus (le reflet devient une vraie source de dégâts). Profond : 8 pts dans la voie.', { stat: { reductionDegats: 14 }, ks: { thorns: 0.4 } }, { requires: ['re_epines'], minSpent: 8 })
 // RÉSISTANCE : colosse.
 minor('re_endurci', 'rempart', 1, 'Endurci', 3, { endurance: 22 }, { requires: ['re_hub'] })
-ks('re_inebranlable', 'rempart', 2, 'Forteresse', 'SURVIE : -12% de dégâts subis.', { stat: { endurance: 20 }, ks: { flatDr: 0.12 } }, { requires: ['re_endurci'] })
+ks('re_inebranlable', 'rempart', 2, 'Forteresse', 'SURVIE : -12% de dégâts subis. Exige Endurci au rang max.', { stat: { endurance: 20 }, ks: { flatDr: 0.12 } }, { requires: ['re_endurci'], requiresRank: { id: 're_endurci', rank: 3 } })
 ability('re_bouclier', 'rempart', 2, 'Bouclier runique', 'bouclier_runique', 'SURVIE : débloque Bouclier runique (absorption à la demande).', { requires: ['re_endurci'] })
-ks('re_colosse', 'rempart', 3, 'Colosse', 'À plus de 60% de PV, +20% de dégâts (un mur qui frappe).', { stat: { force: 16 }, ks: { highHpBonus: { threshold: 0.6, mult: 1.2 } } }, { requires: ['re_inebranlable'] })
+ks('re_colosse', 'rempart', 3, 'Colosse', 'À plus de 60% de PV, +20% de dégâts (un mur qui frappe). Profond : 10 pts dans la voie.', { stat: { force: 16 }, ks: { highHpBonus: { threshold: 0.6, mult: 1.2 } } }, { requires: ['re_inebranlable'], minSpent: 10 })
 
 /* ================================================================== */
 /* PRÊTRE (Tissu) — Lumière (HEAL) · Vide (DPS).                        */
@@ -373,12 +377,12 @@ minor('lu_zele', 'lumiere', 1, 'Zèle', 3, { critique: 16 }, { requires: ['lu_hu
 ks('lu_chatiment', 'lumiere', 2, 'Châtiment', 'ATONEMENT : 40% de tes soins frappent AUSSI l\'ennemi (tu soignes en châtiant — solo viable).', { stat: { intelligence: 12 }, ks: { healToDamage: 0.4 } }, { requires: ['lu_zele'] })
 ks('lu_devotion', 'lumiere', 3, 'Dévotion', 'CHOIX : soins renforcés (+régén, +soin sur la durée).', { stat: { regen: 24 }, ks: { hot: 0.5 } }, { requires: ['lu_chatiment'], exclusive: 'lu_voie' })
 ks('lu_inquisition', 'lumiere', 3, 'Inquisition', 'CHOIX : +40% de châtiment (tes soins frappent bien plus fort).', { stat: { intelligence: 14 }, ks: { healToDamage: 0.4 } }, { requires: ['lu_chatiment'], exclusive: 'lu_voie' })
-ks('lu_ferveur', 'lumiere', 4, 'Ferveur', 'Tes sorts [soin] +15% et +12% de dégâts.', { stat: { intelligence: 16 }, ks: { tagBonus: { tag: 'soin', damageMult: 1.15 }, damageMult: 1.12 } }, { requires: ['lu_chatiment'] })
+ks('lu_ferveur', 'lumiere', 4, 'Ferveur', 'Tes sorts [soin] +15% et +12% de dégâts. Profond : 8 pts dans la voie.', { stat: { intelligence: 16 }, ks: { tagBonus: { tag: 'soin', damageMult: 1.15 }, damageMult: 1.12 } }, { requires: ['lu_chatiment'], minSpent: 8 })
 ability('lu_aube', 'lumiere', 5, 'Aube salvatrice', 'lu_aube', 'ULTIME — une vague de lumière qui restaure ÉNORMÉMENT tout le groupe. Tout au fond : 20 pts dans la voie.', { requires: ['lu_ferveur'], minSpent: 20 })
 // SURVIE : grâce protectrice.
 minor('lu_grace', 'lumiere', 1, 'Grâce', 3, { barriere: 18 }, { requires: ['lu_hub'] })
 ability('lu_bouclier', 'lumiere', 2, 'Bouclier sacré', 'bouclier_runique', 'SURVIE : débloque Bouclier sacré (absorption).', { requires: ['lu_grace'] })
-ks('lu_protection', 'lumiere', 2, 'Protection divine', 'SURVIE : -10% de dégâts subis, +20 Régén.', { stat: { regen: 20 }, ks: { flatDr: 0.1 } }, { requires: ['lu_grace'] })
+ks('lu_protection', 'lumiere', 2, 'Protection divine', 'SURVIE : -10% de dégâts subis, +20 Régén. Exige Grâce au rang max.', { stat: { regen: 20 }, ks: { flatDr: 0.1 } }, { requires: ['lu_grace'], requiresRank: { id: 'lu_grace', rank: 3 } })
 
 /* ---- VIDE (DPS) — DoT d'ombre + Forme du Vide (frenzy = Folie) + drain. ---- */
 ability('vi_hub', 'vide', 0, 'Vide', 'vi_mot_ombre', 'Entre dans la voie du Vide : débloque Mot de l\'ombre (DoT d\'ombre). +18 Intelligence, +12 Altération.', { requires: ['cl_pretre'], statMods: { intelligence: 18, alteration: 12 } })
@@ -390,14 +394,14 @@ ability('vi_douleur', 'vide', 2, 'Douleur', 'vi_douleur', 'Débloque Douleur (fr
 // FOLIE : Forme du Vide (frenzy) + choix de 2e sort.
 minor('vi_demence', 'vide', 1, 'Démence', 3, { degatsCrit: 18 }, { requires: ['vi_hub'] })
 ability('vi_forme', 'vide', 2, 'Forme du Vide', 'vi_forme', 'FOLIE : débloque Forme du Vide (+60% de dégâts, 8 s — la fenêtre de Folie). Gatée : 6 pts dans la voie.', { requires: ['vi_demence'], minSpent: 6 })
-ks('vi_insanite', 'vide', 3, 'Insanité', 'PIC : +15% de dégâts permanent.', { stat: { degatsCrit: 18 }, ks: { damageMult: 1.15 } }, { requires: ['vi_forme'] })
+ks('vi_insanite', 'vide', 3, 'Insanité', 'PIC : +15% de dégâts permanent. Profond : 10 pts dans la voie.', { stat: { degatsCrit: 18 }, ks: { damageMult: 1.15 } }, { requires: ['vi_forme'], minSpent: 10 })
 ability('vi_devorer', 'vide', 3, 'Dévorer l\'esprit', 'vi_devorer', 'CHOIX de SORT : exécution d\'ombre (amplifiée par les PV manquants). Gaté : 8 pts dans la voie.', { requires: ['vi_forme'], exclusive: 'vi_arme2', minSpent: 8 })
 ability('vi_tourment', 'vide', 3, 'Tourment', 'vi_tourment', 'CHOIX de SORT : un tourment d\'ombre balaie le pack (zone). Gaté : 8 pts dans la voie.', { requires: ['vi_forme'], exclusive: 'vi_arme2', minSpent: 8 })
 ability('vi_folie', 'vide', 5, 'Folie dévorante', 'vi_folie', 'ULTIME — un cataclysme d\'ombre engloutit tout le pack. Tout au fond : 20 pts dans la voie.', { requires: ['vi_insanite'], minSpent: 20 })
 // DRAIN : survie via les DoT.
 minor('vi_soif', 'vide', 1, 'Soif d\'âmes', 3, { volDeVie: 10 }, { requires: ['vi_hub'] })
-ks('vi_drain', 'vide', 2, 'Drain d\'ombre', 'SURVIE : tes DoT te soignent (25% du tick), +20 Régén.', { stat: { regen: 20 }, ks: { dotLeech: 0.25 } }, { requires: ['vi_soif'] })
-ks('vi_meta', 'vide', 3, 'Communion morbide', 'SURVIE : -8% de dégâts subis, +12 Vol de vie.', { stat: { volDeVie: 12 }, ks: { flatDr: 0.08 } }, { requires: ['vi_drain'] })
+ks('vi_drain', 'vide', 2, 'Drain d\'ombre', 'SURVIE : tes DoT te soignent (25% du tick), +20 Régén. Exige Soif d\'âmes au rang max.', { stat: { regen: 20 }, ks: { dotLeech: 0.25 } }, { requires: ['vi_soif'], requiresRank: { id: 'vi_soif', rank: 3 } })
+ks('vi_meta', 'vide', 3, 'Communion morbide', 'SURVIE : -8% de dégâts subis, +12 Vol de vie. Profond : 8 pts dans la voie.', { stat: { volDeVie: 12 }, ks: { flatDr: 0.08 } }, { requires: ['vi_drain'], minSpent: 8 })
 
 /* ------------------------------------------------------------------ */
 /* Méta de constellation.                                             */
@@ -498,13 +502,23 @@ export interface GateInfo {
   need: number
   spent: number
   exclusiveBlocked?: string
+  /** RANG PRÉREQUIS non atteint : nom du nœud + rang requis + rang actuel (pour l'UI). */
+  rankReq?: { name: string; need: number; have: number }
 }
 export function gateInfo(node: TalentNode, talents: Record<string, number>): GateInfo {
   const blk = exclusiveBlocker(node, talents)
+  let rankReq: GateInfo['rankReq']
+  if (node.requiresRank) {
+    const have = talents[node.requiresRank.id] ?? 0
+    if (have < node.requiresRank.rank) {
+      rankReq = { name: BY_ID.get(node.requiresRank.id)?.name ?? node.requiresRank.id, need: node.requiresRank.rank, have }
+    }
+  }
   return {
     need: node.minSpent ?? 0,
     spent: node.minSpent ? spentInConstellation(talents, node.constellation) : 0,
     ...(blk ? { exclusiveBlocked: blk.name } : {}),
+    ...(rankReq ? { rankReq } : {}),
   }
 }
 
@@ -514,5 +528,6 @@ export function canAllocate(node: TalentNode, talents: Record<string, number>, p
   if (!isReachable(node, talents)) return false
   if (exclusiveBlocker(node, talents)) return false
   if (node.minSpent && spentInConstellation(talents, node.constellation) < node.minSpent) return false
+  if (node.requiresRank && (talents[node.requiresRank.id] ?? 0) < node.requiresRank.rank) return false
   return true
 }

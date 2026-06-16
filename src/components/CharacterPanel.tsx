@@ -5,7 +5,7 @@ import type { StatEffect } from '../game/stats'
 import type { PrimaryStat, DamageType, Character, PowerDef } from '../game/types'
 import type { DerivedStats } from '../game/stats'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST, profileDamageMult } from '../game/damage'
-import { charTotalStats, charDerived, charMaxHp, charDamageProfile, charResist, abilityPower, powerScale, dpsBreakdown, isGenerator } from '../game/character'
+import { charTotalStats, charDerived, charMaxHp, charDamageProfile, charResist, abilityPower, powerScale, dpsBreakdown, isGenerator, spellDps } from '../game/character'
 import { setBonuses, getSet } from '../game/sets'
 import { getPower, POWER_EFFECT_META, scaleLabel, powerDamageType } from '../game/powers'
 import { RAID_LIST, getRaidDef, raidUnlocked, raidReqs, type RaidId } from '../game/raids'
@@ -29,6 +29,24 @@ function powerDetail(p: PowerDef, derived: DerivedStats, weaponType: DamageType)
   // Sans type explicite, un sort de dégâts prend le type de l'ARME équipée (Ombre, Feu…).
   const type: DamageType | undefined = isDmg ? powerDamageType(p, weaponType) : p.damageType
   return { value, cd, type, dmg: isDmg, scale: scaleLabel(p), showValue: VALUE_EFFECTS.has(p.effect ?? '') }
+}
+
+/** Infobulle de scaling : TOUT sort scale sur la MEILLEURE de (son affinité, ta stat dominante). */
+function scaleHint(scale: string): string {
+  return `Scale sur la MEILLEURE de ${scale} et de ta stat DOMINANTE. Un sort « ${scale} » sur un build d'une autre stat scale quand même sur ta stat dominante (c'est pour ça qu'un finisseur « FOR » fait gros sur un build AGI).`
+}
+/** Infobulle « d'où vient le DPS » : la formule selon l'effet (puissance = ta stat dominante). */
+function dpsHint(p: PowerDef): string {
+  const base = 'DPS moyen estimé, hors cible (armure/résist/pénétration s\'appliquent en plus en combat). Puissance = ta stat DOMINANTE.'
+  switch (p.effect) {
+    case 'finisher': return `${base}\nFinisseur = magnitude × puissance × combo moyen × 0,55 × (1 + bonus finisseur) × tags ÷ recharge.`
+    case 'builder': return `${base}\nGénérateur = magnitude × puissance ÷ recharge (+1 à ta ressource par lancement).`
+    case 'dot': return `${base}\nDoT = magnitude × puissance × Altération, en continu.`
+    case 'poison': return `${base}\nVenin = stacks max × intensité × puissance × Altération.`
+    case 'detonate': return `${base}\nDétonation = magnitude × puissance × stacks ÷ recharge.`
+    case 'executeNuke': return `${base}\nExécution = magnitude × puissance × ~1,8 (PV manquants moyen) ÷ recharge.`
+    default: return `${base}\nmagnitude × puissance × profil de dégâts × tags ÷ recharge.`
+  }
 }
 
 const SPEC_INFO: Record<PrimaryStat, string> = {
@@ -451,6 +469,7 @@ function PowersSection({ char }: { char: Character }) {
             if (!p) return <div key={slot} className="rounded-lg border border-slate-800 bg-black/20 px-2 py-1.5 text-[11px] italic text-slate-600">— actif {slot + 1} libre —</div>
             const auto = char.powerAuto?.[slot] !== false
             const det = powerDetail(p, derived, weaponType)
+            const dps = spellDps(char, p)
             return (
               <div key={slot} className="rounded-lg border border-slate-700 bg-black/20 px-2 py-1.5">
                 <div className="flex items-center gap-2">
@@ -465,9 +484,9 @@ function PowersSection({ char }: { char: Character }) {
                   <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-slate-400">
                     {det.type && <span style={{ color: DAMAGE_TYPES[det.type].color }}>{DAMAGE_TYPES[det.type].icon} {DAMAGE_TYPES[det.type].name}</span>}
                     <span>{POWER_EFFECT_META[p.effect ?? 'nuke'].label}</span>
-                    {det.scale && <span className="text-amber-300/80">📈 {det.scale}</span>}
+                    {det.scale && <span className="text-amber-300/80" title={scaleHint(det.scale)}>📈 {det.scale}</span>}
                     <span>CD {det.cd.toFixed(1)}s</span>
-                    {det.showValue && <span className="text-slate-200">≈ {det.value.toLocaleString('fr-FR')}/s {det.dmg ? 'dég.' : 'PV'}</span>}
+                    {dps > 0 && <span className="font-semibold text-emerald-300" title={dpsHint(p)}>≈ {Math.round(dps).toLocaleString('fr-FR')} DPS</span>}
                   </div>
                 )}
                 <p className="mt-0.5 text-[10px] leading-snug text-slate-500">{p.description}</p>
@@ -498,6 +517,7 @@ function PowersSection({ char }: { char: Character }) {
             const p = pid ? getPower(pid) : null
             if (!p) return <div key={slot} className="rounded-lg border border-slate-800 bg-black/20 px-2 py-1.5 text-[11px] italic text-slate-600">— générateur {slot + 1} libre —</div>
             const det = powerDetail(p, derived, weaponType)
+            const dps = spellDps(char, p)
             return (
               <div key={slot} className="rounded-lg border border-slate-700 bg-black/20 px-2 py-1.5">
                 <div className="flex items-center gap-2">
@@ -508,8 +528,9 @@ function PowersSection({ char }: { char: Character }) {
                   <button onClick={() => setGenerator(slot, null)} className="rounded px-2 py-1 text-sm text-slate-500 hover:text-red-400" title="Retirer">✕</button>
                 </div>
                 <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-slate-400">
-                  {det.scale && <span className="text-amber-300/80">📈 {det.scale}</span>}
+                  {det.scale && <span className="text-amber-300/80" title={scaleHint(det.scale)}>📈 {det.scale}</span>}
                   <span>CD {det.cd.toFixed(1)}s</span>
+                  {dps > 0 && <span className="font-semibold text-emerald-300" title={dpsHint(p)}>≈ {Math.round(dps).toLocaleString('fr-FR')} DPS</span>}
                 </div>
                 <p className="mt-0.5 text-[10px] leading-snug text-slate-500">{p.description}</p>
               </div>

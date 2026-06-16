@@ -59,8 +59,17 @@ co_start (Éveil, racine)
 - `exclusive: 'groupe'` = **choix exclusif** (prendre A verrouille ses frères de groupe ; l'UI grise ⊘).
 - `minSpent: N` = **porte de budget** (N points dépensés dans la constellation avant d'allouer) — pour gater
   les sorts/ultimes profonds **sans** forcer un chemin.
+- `requiresRank: { id, rank }` (v0.30) = **porte de RANG** : le nœud `id` doit être à ≥ `rank` (souvent son
+  max) avant d'allouer celui-ci. **C'est LE garde-fou anti-empilement** : la puissance brute (DR/épines/
+  +%dégâts/vol de vie) se gate derrière « monte d'abord ce mineur au max » (= 3 pts investis). Garder aussi
+  `requires` vers ce nœud (adjacence + layout). Résolu dans `canAllocate`/`gateInfo`.
+- **PHILOSOPHIE D'ÉQUILIBRAGE (v0.30)** : les mécaniques d'**identité** (tags, combo, venin, shatter, pet,
+  igniteOnCrit, finisherMult, executeBonus) restent **accessibles** (fun multi-classe). La **puissance brute
+  EMPILABLE** (`damageMult` inconditionnel, `flatDr`, `thorns`, `dotLeech`, `highHpBonus`, `finisherShield`)
+  doit **coûter** : 1er nœud d'un cluster derrière `requiresRank` (mineur au max), 2e+ derrière `minSpent` ;
+  **jamais 2 multiplicateurs défensifs bruts dans un seul nœud** (split). Reproduire ce gabarit sur les classes à venir.
 - Helpers d'écriture : `node()`, `minor(id,c,tier,name,maxRank,stat,opt)`, `ks(id,c,tier,name,desc,{stat?,ks?,resist?},opt)`,
-  `ability(id,c,tier,name,powerId,desc,opt)`. `opt` = `{requires, links, requiresAll, exclusive, minSpent, statMods…}`.
+  `ability(id,c,tier,name,powerId,desc,opt)`. `opt` = `{requires, links, requiresAll, exclusive, minSpent, requiresRank, statMods…}`.
 
 ---
 
@@ -104,7 +113,7 @@ Chaque sort porte des **tags** (`PowerDef.tags` / `SpellSpec.tags`). **12 tags d
 | **Invocation (pet)** | keystone `petDps` (× DPS auto, continu) | les 2 pas de combat + `charDps`/`dpsBreakdown` (ligne 🐾) | Chasseur (meute), Démoniste (Légion), totems |
 | **Contrôle** | `enemy.controlled` (posé par sorts taggés `controle`) ; keystone `shatter` (+dégâts vs contrôlés, SORTS only) | `fireActive` (pose + bonus), décrément au tick | Cryomancien ✓, DK Givre-mort |
 | **Embrasement sur crit** | keystone `igniteOnCrit:{frac,duration}` (frac somme, durée max) | les 2 pas de combat (sur `hit.crit`) + estim. fiche `igniteDps` (ligne 🔥) | Pyromancien ✓ |
-| **Finisseur → bouclier** | keystone `finisherShield` (somme) | `fireActive` cas `finisher` (absorb += done × frac) | Rempart ✓ (tank Rage→bouclier) |
+| **Finisseur → bouclier** | keystone `finisherShield` (somme) | `fireActive` cas `finisher` : absorb += min(done×frac, 20%·PVmax), **total ≤ PVmax** (anti-invincibilité : suit la SURVIE, pas le dégât) | Rempart ✓ (tank Rage→bouclier) |
 | **Atonement (soin↔dégâts)** | keystone `healToDamage` (somme) | `fireActive` `bleedHeal` (une part du soin frappe l'ennemi) | Lumière ✓ (heal qui peut solo) |
 | **Deck 5+3+3** | `char.powers` (5 actifs) + `char.generators` (3 builders, v0.30) + `char.passives` (3) | combat fire un « deck » (actifs auto/manuel + générateurs auto pur) ; `charDeck()` ; `setPower`/`setGenerator`/`setPassive` | toutes |
 

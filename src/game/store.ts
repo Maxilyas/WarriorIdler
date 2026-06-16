@@ -2482,8 +2482,15 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
       const pts = Math.max(1, caster.combo ?? 0)
       const done = hit(magDmg * pts * 0.55 * (1 + cm.finisherMult) * vm)
       caster.combo = cm.comboRefund
-      // REMPART : convertit la dépense de Rage en bouclier d'absorption (Bloc/Ignore Pain).
-      if (cm.finisherShield > 0) caster.absorb = (caster.absorb ?? 0) + done * cm.finisherShield
+      // REMPART : convertit la dépense de Rage en bouclier — MAIS borné aux PV (anti-invincibilité) :
+      // chaque finisseur ajoute au plus 20% des PV max, et le bouclier de cette source ne dépasse jamais
+      // les PV max. Le bouclier scale donc avec la SURVIE (PV), pas avec le dégât brut (milliards endgame).
+      if (cm.finisherShield > 0) {
+        const mh = charMaxHp(caster)
+        const grant = Math.min(done * cm.finisherShield, mh * 0.2)
+        const room = Math.max(0, mh - (caster.absorb ?? 0))
+        caster.absorb = (caster.absorb ?? 0) + Math.min(grant, room)
+      }
       return done
     }
   }
