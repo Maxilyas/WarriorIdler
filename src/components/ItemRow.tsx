@@ -82,13 +82,18 @@ export function ItemRow({ item, dpsDelta, ehpDelta, selected, bulkSelected, bulk
   const type = ITEM_TYPES[item.type]
   const showDelta = dpsDelta != null && Math.abs(dpsDelta) >= 1
   const showEhp = ehpDelta != null && Math.abs(ehpDelta) >= 1
+  // L5 — une pièce qui est un GAIN NET de DPS se fait remarquer : léger lavis émeraude (le ▲ vert
+  // chiffré reste le signal fort). Cédé à la sélection (orange) / multi-sélection (bleu).
+  const isUpgrade = dpsDelta != null && dpsDelta >= 1
 
   // A8 — surbrillance NETTE de l'objet sélectionné ; A3 — état de multi-sélection distinct (bleu).
   const stateCls = bulkSelected
     ? 'bg-sky-500/20 ring-2 ring-sky-400/80'
     : selected
       ? 'bg-orange-500/20 ring-2 ring-orange-400/90 shadow-[0_0_10px_-2px] shadow-orange-500/40'
-      : 'hover:bg-white/5'
+      : isUpgrade
+        ? 'bg-emerald-500/[0.08] hover:bg-emerald-500/[0.14]'
+        : 'hover:bg-white/5'
 
   return (
     <button
