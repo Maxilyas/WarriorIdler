@@ -1064,9 +1064,7 @@ function GemCreate() {
               </div>
               <div className="mt-0.5 text-[9px] leading-snug text-slate-500">{gemDesc(def, 1)} <span className="text-slate-600">· rangs max {gemMaxRank(def)}</span></div>
               <div className="mt-1.5 flex gap-1.5">
-                {mods.taille && (
-                  <button onClick={() => cutGem(def.id as CondGemId)} disabled={gemDust < cutCost} className="flex-1 rounded bg-sky-800/60 py-1.5 text-[10px] font-medium text-sky-100 hover:bg-sky-700/70 disabled:opacity-40">✂️ Tailler · {cutCost}🔹</button>
-                )}
+                <button onClick={() => cutGem(def.id as CondGemId)} disabled={!mods.taille || gemDust < cutCost} title={mods.taille ? undefined : 'Apprends le nœud ✂️ Taille (onglet 🌳 Arbre) — il s\'ouvre dès le Sertissage.'} className="flex-1 rounded bg-sky-800/60 py-1.5 text-[10px] font-medium text-sky-100 hover:bg-sky-700/70 disabled:opacity-40">{mods.taille ? '✂️ Tailler' : '🔒 Tailler'} · {cutCost}🔹</button>
                 <button onClick={() => buyGem(def.id as CondGemId)} disabled={gemDust < buyCost} className="flex-1 rounded bg-emerald-800/60 py-1.5 text-[10px] font-medium text-emerald-100 hover:bg-emerald-700/70 disabled:opacity-40">🛒 Acheter · {buyCost}🔹</button>
               </div>
             </div>

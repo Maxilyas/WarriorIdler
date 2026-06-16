@@ -249,8 +249,8 @@ export const METIER_NODES: Record<MetierId, MetierNode[]> = {
     /* — 💎 TAILLERIE : faire & améliorer ses gemmes (3 premiers = indispensables) — */
     { id: 'sertissage', name: 'Sertissage', icon: '💎', maxRank: 1, branch: 'taillerie',
       desc: 'Débloque le SERTISSAGE : poser des gemmes dans les châsses (Rare+).' },
-    { id: 'taille', name: 'Taille', icon: '✂️', maxRank: 2, minLevel: 6, requires: 'sertissage', branch: 'taillerie',
-      desc: 'Débloque le BROYAGE (gemme → poussière 🔹) et la TAILLE (gemme au CHOIX). Rang 2 : meilleure qualité + chance de tailler au rang 2.' },
+    { id: 'taille', name: 'Taille', icon: '✂️', maxRank: 2, requires: 'sertissage', branch: 'taillerie',
+      desc: 'Débloque le BROYAGE (gemme → poussière 🔹) et la TAILLE (gemme au CHOIX) — le verbe « créer » du Joaillier, dès Sertissage. Rang 2 : meilleure qualité + chance de tailler au rang 2.' },
     { id: 'recoupe', name: 'Recoupe', icon: '🔬', maxRank: 1, minLevel: 10, requires: 'taille', branch: 'taillerie',
       desc: 'Débloque la RECOUPE : monter le RANG d\'une gemme sertie, cran par cran.' },
     { id: 'fusion', name: 'Fusion', icon: '🔥', maxRank: 1, minLevel: 7, requires: 'taille', branch: 'taillerie',
