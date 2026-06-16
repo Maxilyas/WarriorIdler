@@ -15,8 +15,12 @@ import type { Item } from './types'
 
 // ---- Courbe maîtresse ----
 
-/** Base de puissance : +3 %/ilvl → ×2 tous les ~23,4 ilvl. Plage 1→700 ≈ ×9,4·10^8. */
-export const POW_BASE = 1.03
+/** Base de puissance : +1,8 %/ilvl → ×2 tous les ~38,9 ilvl. Plage 1→700 ≈ ×2,7·10^5.
+ *  v0.32.1 : abaissée de 1.03 → 1.018 pour APLATIR la courbe (chiffres lisibles : le primaire d'arme
+ *  reste < 1 M jusqu'à ilvl ~630, plafond ~3,5 M à 700, au lieu de milliards). TTK INVARIANT : joueur
+ *  ET ennemis partagent `b` via powerAt → le ratio puissance/PV ne dépend pas de `b` (cf. npm run ttk).
+ *  Effet voulu : gap par +10 ilvl réduit (+20 % au lieu de +34 %) → le stuff reste pertinent plus longtemps. */
+export const POW_BASE = 1.018
 /** Cap DUR d'ilvl : aucun drop / craft / surillvl / boss de raid ne dépasse cette valeur. */
 export const ILVL_MAX = 700
 /** Rareté = bonus ADDITIF en ilvl-équivalent (au lieu d'un multiplicateur de budget qui se faisait
@@ -66,8 +70,10 @@ export const ENEMY_DMG_CLASS: Record<EnemyClass, number> = {
 }
 
 /** Échelle de PV de base (ennemi trash, ilvl 0). Calibrée par `npm run ttk` (médian implicite) pour
- *  que le trash meure en ~`TTK.trash` à stuff calé. v0.30.1 : ×8 (suit ITEM_BUDGET0, ratio préservé). */
-export const ENEMY_HP0 = 9000
+ *  que le trash meure en ~`TTK.trash` à stuff calé. v0.30.1 : ×8 (suit ITEM_BUDGET0, ratio préservé).
+ *  v0.32.1 : recalé 9000 → 7500 — avec b=1.018 (courbe plus plate) les secondaires soft-capés montent
+ *  plus lentement → DPS mid-game un peu plus bas → TTK avait dérivé +20 %. Recentre boss endgame ~35 s. */
+export const ENEMY_HP0 = 7500
 /** Échelle de dégâts de base. Calibrée par `npm run ttk` pour viser `SURVIVE_SECONDS` à stuff calé. */
 export const ENEMY_DMG0 = 320
 

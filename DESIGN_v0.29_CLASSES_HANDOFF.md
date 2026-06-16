@@ -63,6 +63,11 @@ co_start (Éveil, racine)
   max) avant d'allouer celui-ci. **C'est LE garde-fou anti-empilement** : la puissance brute (DR/épines/
   +%dégâts/vol de vie) se gate derrière « monte d'abord ce mineur au max » (= 3 pts investis). Garder aussi
   `requires` vers ce nœud (adjacence + layout). Résolu dans `canAllocate`/`gateInfo`.
+- **NŒUDS TAMPON (v0.31, anti multi-classe)** : chaque branche de chaque archétype a un **mineur `maxRank 5`**
+  (un « tampon » qui donne des stats de base) que le nœud suivant exige au max (`requiresRank buf@5`). Il faut
+  donc **dépenser 5 pts pour continuer** plus profond → avec ~200 pts, on ne peut plus s'offrir 5-6 classes à
+  fond. Pattern : `minor('xx_buf_…', c, tier, 'Nom', 5, {stat:8}, {requires:[early]})` puis le sort/keystone
+  profond `requires:['xx_buf_…'], requiresRank:{id:'xx_buf_…',rank:5}`. **Reproduire sur chaque nouvelle classe.**
 - **PHILOSOPHIE D'ÉQUILIBRAGE (v0.30)** : les mécaniques d'**identité** (tags, combo, venin, shatter, pet,
   igniteOnCrit, finisherMult, executeBonus) restent **accessibles** (fun multi-classe). La **puissance brute
   EMPILABLE** (`damageMult` inconditionnel, `flatDr`, `thorns`, `dotLeech`, `highHpBonus`, `finisherShield`)

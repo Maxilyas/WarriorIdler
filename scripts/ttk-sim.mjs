@@ -81,15 +81,18 @@ for (const ci of [50, 100, 150, 200, 300, 400, 500, 600, 700]) {
   rows.push({ ci, dps, tTrash, tBoss, hp0impl })
   console.log(` ${String(ci).padStart(3)} | ${fmt(dps).padStart(11)} | ${fmt(enemyHp(ci, 'trash')).padStart(11)} | ${tTrash.toFixed(1).padStart(8)}s | ${tBoss.toFixed(0).padStart(7)}s | ${hp0impl.toFixed(2).padStart(10)}`)
 }
-// L'ANTI-SNOWBALL se juge sur la zone ENDGAME (ci ≥ 300, la frontière des raids) : c'est LÀ que le TTK
-// doit être plat. La « dérive » 50→300 est le build qui s'allume (secondaires saturant à 300) — voulu.
-const endgame = rows.filter((r) => r.ci >= 300)
+// L'ANTI-SNOWBALL se juge sur la zone ENDGAME (ci ≥ 400, la frontière des raids) : c'est LÀ que le TTK
+// doit être plat. La « dérive » 50→400 est le build qui s'allume (secondaires soft-capés qui se
+// remplissent). v0.32.1 : seuil 300→400 — la courbe plus plate (b=1.018) étale cette rampe d'allumage
+// plus loin (le budget par ilvl est plus petit → les soft-caps se remplissent plus tard) ; le palier
+// stable commence donc vers ci 400, pas 300. (Critère curve-dependent, cf. commentaire d'origine.)
+const endgame = rows.filter((r) => r.ci >= 400)
 const egTrash = endgame.map((r) => r.tTrash), egBoss = endgame.map((r) => r.tBoss)
 const egDpsFlat = Math.max(...endgame.map((r) => r.hp0impl)) / Math.min(...endgame.map((r) => r.hp0impl))
 const trashErr = Math.max(...rows.map((r) => Math.abs(r.tTrash - TTK.trash) / TTK.trash))
 const bossErr = Math.max(...rows.map((r) => Math.abs(r.tBoss - TTK.boss) / TTK.boss))
-console.log(`\n  ${ok(egDpsFlat < 1.2)} ENDGAME plat : DPS ∝ b^ilvl sur ci≥300 (ratio ${egDpsFlat.toFixed(2)}, seuil 1,2) → snowball neutralisé`)
-console.log(`     (rampe 50→300 = build qui s'allume, voulu · médian ENEMY_HP0 ${rows.map(r=>r.hp0impl).sort((a,b)=>a-b)[4].toFixed(0)})`)
+console.log(`\n  ${ok(egDpsFlat < 1.2)} ENDGAME plat : DPS ∝ b^ilvl sur ci≥400 (ratio ${egDpsFlat.toFixed(2)}, seuil 1,2) → snowball neutralisé`)
+console.log(`     (rampe 50→400 = build qui s'allume, voulu · médian ENEMY_HP0 ${rows.map(r=>r.hp0impl).sort((a,b)=>a-b)[4].toFixed(0)})`)
 console.log(`  ${ok(trashErr < 0.30)} TTK trash dans la bande (${Math.min(...rows.map(r=>r.tTrash)).toFixed(1)}–${Math.max(...rows.map(r=>r.tTrash)).toFixed(1)}s, cible ${TTK.trash}s)`)
 console.log(`  ${ok(bossErr < 0.30)} TTK boss dans la bande (${Math.min(...egBoss).toFixed(0)}–${Math.max(...egBoss).toFixed(0)}s endgame, cible ${TTK.boss}s)`)
 
@@ -132,9 +135,9 @@ for (const ci of [50, 150, 300, 400, 500, 700]) {
   const dmg0impl = eh / (SURVIVE_SECONDS * powerAt(ci) * 1.8) // ENEMY_DMG0 pour survie = cible
   console.log(`  ci ${String(ci).padStart(3)} : ${s.toFixed(1).padStart(5)}s   (ENEMY_DMG0 implicite pour ${SURVIVE_SECONDS}s = ${dmg0impl.toFixed(0)})`)
 }
-const egSurv = survRows.filter((r) => r.ci >= 300).map((r) => r.s)
+const egSurv = survRows.filter((r) => r.ci >= 400).map((r) => r.s)
 const survFlat = Math.max(...egSurv) / Math.min(...egSurv)
-console.log(`  ${ok(survFlat < 1.25)} survie ENDGAME plate (ci≥300, ratio ${survFlat.toFixed(2)}) ~${(egSurv.reduce((a,b)=>a+b,0)/egSurv.length).toFixed(0)}s`)
+console.log(`  ${ok(survFlat < 1.25)} survie ENDGAME plate (ci≥400, ratio ${survFlat.toFixed(2)}) ~${(egSurv.reduce((a,b)=>a+b,0)/egSurv.length).toFixed(0)}s`)
 
 // ---- (6) RAIDS : bande d'ilvl linéaire + TTK boss à stuff calé (le contenu ex-snowball) ----
 console.log('\n=== (6) Raids : ilvl par tier + TTK boss à stuff calé ===')

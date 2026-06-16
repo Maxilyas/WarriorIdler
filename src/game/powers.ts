@@ -295,7 +295,7 @@ const VOLEUR_SPELLS: SpellSpec[] = [
   { id: 'om_eviscaration', name: 'Éviscération', icon: '🔪', effect: 'finisher', mag: 1.4, cd: 3.5, type: 'ombre', scale: 'agilite', tags: ['mono', 'direct', 'finisseur'] },
   { id: 'om_embuscade', name: 'Embuscade', icon: '💨', effect: 'nuke', mag: 7.5, cd: 12, type: 'ombre', scale: 'agilite', tags: ['mono', 'direct', 'furtif'] },
   { id: 'om_eventail', name: 'Éventail de couteaux', icon: '🔪', effect: 'finisher', mag: 1.0, cd: 4, type: 'physique', scale: 'agilite', tags: ['zone', 'direct', 'finisseur'] },
-  { id: 'om_linceul', name: 'Linceul', icon: '🌑', effect: 'finisher', mag: 2.6, cd: 22, type: 'ombre', scale: 'agilite', tags: ['mono', 'direct', 'finisseur', 'ultime'] },
+  { id: 'om_linceul', name: 'Linceul', icon: '🌑', effect: 'finisher', mag: 7.0, cd: 14, type: 'ombre', scale: 'agilite', tags: ['mono', 'direct', 'finisseur', 'ultime'] },
 ]
 for (const s of VOLEUR_SPELLS) POWERS.push(specToPower(s))
 
