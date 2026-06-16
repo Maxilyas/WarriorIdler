@@ -344,6 +344,15 @@ export interface CombatMods {
   adaptiveResist?: { gain: number; cap: number }
   /** Purgateur : carburant d'affliction (per somme, cap max). */
   afflictionFuel?: { per: number; cap: number }
+  // --- v0.29.2 : socle VOLEUR ---
+  /** ASSASSIN : venin cumulatif (base + bonus des keystones). */
+  poison: { perStack: number; maxStacks: number }
+  /** OMBRELAME : plafond de Points de Combo au-delà de 5 (somme). */
+  comboCap: number
+  /** OMBRELAME : Points de Combo générés en plus par les builders (somme). */
+  comboGen: number
+  /** OMBRELAME : amplification des finisseurs (somme). */
+  finisherMult: number
 }
 
 export function charCombatMods(char: Character): CombatMods {
@@ -351,6 +360,7 @@ export function charCombatMods(char: Character): CombatMods {
     damageMult: 1, flatDr: 0, hot: 0, thorns: 0, multistrike: 0,
     healToDamage: 0, cleaveAuto: 0, perEnemyBonus: 0, dotLeech: 0, dotAoe: 0,
     spellMult: 1, cdrOnCast: 0, reqReduction: 0, surplusToDamage: 0, shareResist: 0, surplusRegen: 0,
+    poison: { perStack: 0.08, maxStacks: 4 }, comboCap: 0, comboGen: 0, finisherMult: 0,
   }
   // Multiplicateur de dégâts des bonus de SET (s'applique aux auto-attaques ET aux sorts,
   // et donc au DPS affiché via charDps — même chemin que les keystones).
@@ -401,6 +411,11 @@ export function charCombatMods(char: Character): CombatMods {
         ? { per: out.afflictionFuel.per + k.afflictionFuel.per, cap: Math.max(out.afflictionFuel.cap, k.afflictionFuel.cap) }
         : { ...k.afflictionFuel }
     }
+    // --- v0.29.2 : socle VOLEUR ---
+    if (k.poison) { out.poison.perStack += k.poison.perStack; out.poison.maxStacks += k.poison.maxStacks }
+    if (k.comboCap) out.comboCap += k.comboCap
+    if (k.comboGen) out.comboGen += k.comboGen
+    if (k.finisherMult) out.finisherMult += k.finisherMult
     if (k.multiTypeBonus) {
       multiType = multiType
         ? { per: multiType.per + k.multiTypeBonus.per, threshold: Math.min(multiType.threshold, k.multiTypeBonus.threshold) }

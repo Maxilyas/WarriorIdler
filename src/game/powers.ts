@@ -1,5 +1,5 @@
 import type { PowerDef, PowerEffect, DamageType, OffensiveStat } from './types'
-import { ALL_SPELLS, type SpellSpec } from './classData'
+import type { SpellSpec } from './classData'
 
 /**
  * Registre des capacités équipables (powers).
@@ -256,6 +256,8 @@ const EFFECT_FR: Record<PowerEffect, string> = {
   frenzy: 'transe (+dégâts)', executeNuke: 'exécution (PV manquants)', megaCleave: 'cataclysme de zone',
   bigHeal: 'soin massif de groupe', lifeNuke: 'frappe vampirique', rupture: 'brise-régén + DoT',
   mark: 'vulnérabilité',
+  poison: 'venin cumulatif (+1 stack)', detonate: 'détonation des stacks de venin',
+  builder: 'générateur (+1 Point de Combo)', finisher: 'finisseur (× Points de Combo)',
 }
 const SCALE_FR: Record<OffensiveStat, string> = { force: 'FOR', agilite: 'AGI', intelligence: 'INT' }
 function spellDescription(s: SpellSpec): string {
@@ -276,7 +278,21 @@ function specToPower(s: SpellSpec): PowerDef {
     ...(s.icon ? { icon: s.icon } : {}),
   }
 }
-for (const s of ALL_SPELLS) POWERS.push(specToPower(s))
+/* Sorts du VOLEUR (handcrafted). Catégorie Cuir → Assassin (venin) + Ombrelame (combo/ombre). */
+const VOLEUR_SPELLS: SpellSpec[] = [
+  // Classe
+  { id: 'vo_tranchant', name: 'Tranchant', icon: '🗡', effect: 'nuke', mag: 2.4, cd: 3, scale: ['force', 'agilite'] },
+  // Assassin (venin)
+  { id: 'as_lame_enduite', name: 'Lame enduite', icon: '🧪', effect: 'poison', mag: 1.2, cd: 3, type: 'nature', scale: ['force', 'agilite'] },
+  { id: 'as_distillation', name: 'Distillation', icon: '💧', effect: 'detonate', mag: 0.55, cd: 8, type: 'nature', scale: ['force', 'agilite'] },
+  { id: 'as_peste_souveraine', name: 'Peste Souveraine', icon: '☠️', effect: 'detonate', mag: 1.1, cd: 18, type: 'nature', scale: ['force', 'agilite'] },
+  // Ombrelame (combo / ombre)
+  { id: 'om_frappe_sournoise', name: 'Frappe sournoise', icon: '🗡', effect: 'builder', mag: 1.5, cd: 2.5, scale: 'agilite' },
+  { id: 'om_eviscaration', name: 'Éviscération', icon: '🔪', effect: 'finisher', mag: 1.4, cd: 3.5, type: 'ombre', scale: 'agilite' },
+  { id: 'om_embuscade', name: 'Embuscade', icon: '💨', effect: 'nuke', mag: 7.5, cd: 12, type: 'ombre', scale: 'agilite' },
+  { id: 'om_linceul', name: 'Linceul', icon: '🌑', effect: 'finisher', mag: 2.6, cd: 22, type: 'ombre', scale: 'agilite' },
+]
+for (const s of VOLEUR_SPELLS) POWERS.push(specToPower(s))
 
 const BY_ID = new Map(POWERS.map((p) => [p.id, p]))
 
@@ -345,6 +361,11 @@ export const POWER_EFFECT_META: Record<PowerEffect, PowerEffectMeta> = {
   lifeNuke: { label: 'Frappe vampirique', icon: '🦇', targets: 'Mono-cible + vol de vie', family: 'offense' },
   rupture: { label: 'Anti-régén + DoT', icon: '🧨', targets: 'Mono-cible · brise la régén', family: 'offense' },
   mark: { label: 'Vulnérabilité', icon: '🔻', targets: 'Mono-cible · amplifie les dégâts', family: 'offense' },
+  // v0.29.2 — socle Voleur
+  poison: { label: 'Venin (cumulatif)', icon: '🧪', targets: 'Mono-cible · +1 stack', family: 'offense' },
+  detonate: { label: 'Détonation', icon: '💥', targets: 'Mono-cible · consomme les stacks', family: 'offense' },
+  builder: { label: 'Générateur', icon: '🗡️', targets: 'Mono-cible · +1 Point de Combo', family: 'offense' },
+  finisher: { label: 'Finisseur', icon: '🔪', targets: 'Mono-cible · × Points de Combo', family: 'offense' },
 }
 
 /** Stat de scaling d'un sort, en court (FOR / AGI / INT). */

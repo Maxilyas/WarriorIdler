@@ -2,7 +2,7 @@ import { useState, useRef, useLayoutEffect, useEffect, useMemo, useCallback } fr
 import { useGame } from '../game/store'
 import {
   CONSTELLATIONS, CONSTELLATION_LIST, TALENTS, talentsByConstellation, getTalent, canAllocate, isReachable,
-  gateInfo,
+  gateInfo, exclusiveBlocker,
   type ConstellationId, type TalentNode,
 } from '../game/talents'
 import { getPower, powerSummary, powerIcon, powerHasDamageType, powerDamageType } from '../game/powers'
@@ -52,7 +52,8 @@ function computeRadialLayout(): RadialLayout {
   }
   for (const t of TALENTS) {
     if (isCarrefour(t.id)) continue // les carrefours sont posés à part (pont entre voies)
-    for (const r of t.requires ?? []) if (byId.has(r) && !isCarrefour(r)) addEdge(r, t.id)
+    // v0.29.3 : requires (parent de layout) + requiresAll (convergence) construisent l'arbre couvrant.
+    for (const r of [...(t.requires ?? []), ...(t.requiresAll ?? [])]) if (byId.has(r) && !isCarrefour(r)) addEdge(r, t.id)
   }
 
   // 2) Arbre couvrant par BFS depuis le Cœur → profondeur + parent/enfants.
@@ -136,6 +137,10 @@ function computeRadialLayout(): RadialLayout {
   for (const t of TALENTS) {
     if (!isCarrefour(t.id)) continue
     for (const r of t.requires ?? []) if (pos.has(r)) links.push({ from: r, to: t.id, bridge: true })
+  }
+  // v0.29.3 : les `links` (anneau de navigation, routes croisées) sont tracés comme des ponts.
+  for (const t of TALENTS) {
+    for (const l of t.links ?? []) if (pos.has(l) && pos.has(t.id)) links.push({ from: l, to: t.id, bridge: true })
   }
   return { pos, links, radius }
 }
@@ -287,7 +292,8 @@ export function TalentTree() {
   const gateTarget = useMemo(() => {
     if (!selectedNode) return null
     const g = gateInfo(selectedNode, char.talents)
-    return g.need > 0 && g.spent < g.need ? { c: selectedNode.constellation, tier: g.gateTier } : null
+    // Budget non atteint → surligne TOUTE la voie (investir n'importe où compte).
+    return g.need > 0 && g.spent < g.need ? { c: selectedNode.constellation } : null
   }, [selectedNode, char.talents])
   const sx = (id: string) => view.panX + (layout.pos.get(id)?.x ?? 0) * view.scale
   const sy = (id: string) => view.panY + (layout.pos.get(id)?.y ?? 0) * view.scale
@@ -410,7 +416,7 @@ export function TalentTree() {
             talents={char.talents}
             selected={selected === node.id}
             dimmed={!!focus && node.constellation !== focus}
-            gateHighlight={!!gateTarget && node.constellation === gateTarget.c && node.tier <= gateTarget.tier}
+            gateHighlight={!!gateTarget && node.constellation === gateTarget.c}
             showLabel={showLabels}
             onSelect={() => { if (!drag.current?.moved) setSelected(node.id) }}
           />
@@ -489,6 +495,7 @@ function CanvasNode({
   const rank = talents[node.id] ?? 0
   const allocated = rank > 0
   const reachable = isReachable(node, talents)
+  const exclBlocked = !allocated && !!exclusiveBlocker(node, talents)
   const meta = CONSTELLATIONS[node.constellation]
   // La pastille SUIT (en partie) le zoom : dézoomer ne crée plus un mur de pastilles qui se
   // chevauchent, zoomer grossit la cible tactile (v0.24).
@@ -509,7 +516,7 @@ function CanvasNode({
       className="absolute flex flex-col items-center"
       style={{
         left: x, top: y, transform: 'translate(-50%, -50%)',
-        opacity: dimmed ? 0.2 : 1,
+        opacity: dimmed ? 0.2 : exclBlocked ? 0.4 : 1,
         zIndex: selected ? 30 : gateHighlight ? 25 : emphatic ? 20 : 10,
       }}
       title={`${node.name} — ${KIND_LABEL[node.kind]} · Tier ${node.tier}`}
@@ -529,7 +536,7 @@ function CanvasNode({
             : allocated && emphatic ? `0 0 10px ${meta.color}aa` : 'none',
         }}
       >
-        {!reachable && !allocated ? '🔒' : glyph}
+        {exclBlocked ? '⊘' : !reachable && !allocated ? '🔒' : glyph}
       </span>
       {/* Surlignage de palier : tier affiché sous les nœuds éligibles (même sans libellé). */}
       {gateHighlight && !labelShown && (
@@ -617,17 +624,16 @@ function NodeDetail({
   const can = canAllocate(node, char.talents, char.talentPoints)
   const meta = CONSTELLATIONS[node.constellation]
   const power = node.unlockPower ? getPower(node.unlockPower) : undefined
-  const reqNames = (node.requires ?? []).map((r) => getTalent(r)?.name).filter(Boolean).join(', ')
-  // v0.24 : verrous de palier (points dans la voie) et de compétence (prérequis maxés).
+  // v0.29.3 : verrou de BUDGET (pts dans la voie) + CHOIX EXCLUSIF (un frère déjà pris).
   const gate = gateInfo(node, char.talents)
-  const gateLocked = gate.spent < gate.need
-  const strictLocked = reachable && gate.missingMaxed.length > 0
+  const gateLocked = gate.need > 0 && gate.spent < gate.need
+  const exclLocked = !!gate.exclusiveBlocked
 
   let btnLabel: string
   if (maxed) btnLabel = `✓ Rang maximum (${rank}/${node.maxRank})`
-  else if (!reachable) btnLabel = '🔒 Prérequis manquant'
-  else if (strictLocked) btnLabel = '🔒 Prérequis à maxer'
-  else if (gateLocked) btnLabel = `🔒 Palier : ${gate.spent}/${gate.need} pts dans les tiers ≤ ${gate.gateTier}`
+  else if (exclLocked) btnLabel = `🔒 Choix verrouillé par « ${gate.exclusiveBlocked} »`
+  else if (!reachable) btnLabel = '🔒 Aucun nœud voisin alloué'
+  else if (gateLocked) btnLabel = `🔒 Investis ${gate.need} pts dans la voie (${gate.spent}/${gate.need})`
   else if (char.talentPoints <= 0) btnLabel = 'Aucun point disponible'
   else btnLabel = node.maxRank > 1 ? `Allouer 1 point  (${rank} → ${rank + 1}/${node.maxRank})` : 'Allouer 1 point'
 
@@ -682,18 +688,15 @@ function NodeDetail({
       )}
 
       {power && <SpellCard power={power} weaponType={weaponType} />}
-      {reqNames && !reachable && (
-        <p className="mb-1 text-[10px] text-rose-300">🔒 Requiert : {reqNames}</p>
+      {exclLocked && !maxed && (
+        <p className="mb-1 text-[10px] text-rose-300">🔒 Choix exclusif : « {gate.exclusiveBlocked} » est déjà pris — tu ne peux pas avoir les deux.</p>
       )}
-      {strictLocked && !maxed && (
-        <p className="mb-1 text-[10px] text-amber-300">
-          ✦ Nœud puissant : il faut d'abord MAXER {gate.missingMaxed.join(', ')}.
-        </p>
+      {!reachable && !exclLocked && (
+        <p className="mb-1 text-[10px] text-rose-300">🔒 Relie ce nœud : alloue d'abord un nœud voisin.</p>
       )}
-      {gateLocked && reachable && !maxed && (
+      {gateLocked && reachable && !exclLocked && !maxed && (
         <p className="mb-1 text-[10px] text-amber-300">
-          ⛩ Palier d'archétype : dépense {gate.need} pts CUMULÉS dans les tiers ≤ {gate.gateTier} de {meta.icon} {meta.name} ({gate.spent}/{gate.need}) — n'importe quelle branche.
-          <span className="text-amber-200/70"> Les nœuds éligibles sont surlignés sur l'arbre.</span>
+          ⛩ Investis {gate.need} pts dans {meta.icon} {meta.name} ({gate.spent}/{gate.need}) — n'importe où dans la voie.
         </p>
       )}
 

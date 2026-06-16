@@ -257,6 +257,11 @@ export type PowerEffect =
   | 'lifeNuke'     // grosse frappe qui rend une part des dégâts en vie au lanceur
   | 'rupture'      // brise la régénération ennemie + forte plaie (DoT)
   | 'mark'         // marque la cible : elle subit ×magnitude de dégâts pendant `duration`
+  // --- v0.29.1 : socle Voleur (mécaniques réutilisables) ---
+  | 'poison'       // ASSASSIN : ajoute un STACK de venin (DoT cumulatif, monte avec le combat)
+  | 'detonate'     // ASSASSIN : consomme tous les stacks de venin → pic = stacks × magnitude
+  | 'builder'      // OMBRELAME : génère un Point de Combo (+ petit coup)
+  | 'finisher'     // OMBRELAME : consomme les Points de Combo → dégâts × points
 
 /** Définition d'une capacité dans le registre (valeurs de base, montées par le rang plus tard). */
 export interface PowerDef {
@@ -350,6 +355,8 @@ export interface Character {
   charge?: { dealt: number; remaining: number; mult: number }
   /** Frénésie (« Furie sanguinaire ») : multiplicateur de dégâts temporaire. Transitoire. */
   frenzy?: { mult: number; remaining: number }
+  /** OMBRELAME (v0.29.1) : Points de Combo accumulés (builders +1, finishers consomment). Transitoire. */
+  combo?: number
 }
 
 // ---- Sorts ennemis (techniques télégraphiées, miroir du kit héros) ----
@@ -404,6 +411,8 @@ export interface Enemy {
   reqs?: Partial<Record<DamageType, number>>
   /** DoT actif posé par le héros (saignement/poison), résolu au tick. */
   dot?: { dps: number; remaining: number }
+  /** ASSASSIN (v0.29.1) : nombre de stacks de venin posés (le DoT `dot` monte avec). Transitoire. */
+  venomStacks?: number
   /** Trait déterministe (texture du combat classique) : nom court affiché. */
   trait?: string
   /** Ennemi d'élite (stats accrues + meilleur butin). */

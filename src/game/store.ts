@@ -13,7 +13,7 @@ import {
 import { getTalent, canAllocate } from './talents'
 import { getPower } from './powers'
 import { getUpgrade, upgradeCost as accountUpgradeCost, upgradePoussiere, upgradeEclats, isMaxed, computeGlobalMods, REMOVED_UPGRADES } from './upgrades'
-import { achievementBonuses, evaluateNewAchievements, getAchievement, type AchvCtx } from './achievements'
+import { achievementBonuses, evaluateNewAchievements, fullyEquippedMinIlvl, getAchievement, type AchvCtx } from './achievements'
 import { cosmeticCost } from './avatar'
 import {
   generateItem, rollBoxRarity, rollWindowRarity, rollFarmRarity, sellValue, recycleValue, recyclePoussiere, itemScore,
@@ -2412,6 +2412,39 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
     case 'frenzy':
       caster.frenzy = { mult: p.magnitude ?? 2, remaining: p.duration ?? 6 }
       return 0
+    // --- v0.29.2 : socle VOLEUR ---
+    case 'poison': {
+      // ASSASSIN : empile un STACK de venin ; le DoT (enemy.dot) monte avec les stacks.
+      const cm = charCombatMods(caster)
+      const stacks = Math.min(cm.poison.maxStacks, (enemy.venomStacks ?? 0) + 1)
+      enemy.venomStacks = stacks
+      const dps = stacks * cm.poison.perStack * magDmg * derived.alterationMult
+      enemy.dot = { dps: Math.max(dps, enemy.dot?.dps ?? 0), remaining: 8 }
+      return 0
+    }
+    case 'detonate': {
+      // ASSASSIN : consomme tous les stacks → pic = stacks × magnitude.
+      const stacks = enemy.venomStacks ?? 0
+      if (stacks <= 0) return hit(magDmg * vm)
+      const done = hit(magDmg * stacks * vm)
+      enemy.venomStacks = 0
+      enemy.dot = undefined
+      return done
+    }
+    case 'builder': {
+      // OMBRELAME : +1 Point de Combo (+ petit coup).
+      const cm = charCombatMods(caster)
+      caster.combo = Math.min(5 + cm.comboCap, (caster.combo ?? 0) + 1 + cm.comboGen)
+      return hit(magDmg * vm)
+    }
+    case 'finisher': {
+      // OMBRELAME : consomme les Points de Combo → dégâts × points.
+      const cm = charCombatMods(caster)
+      const pts = Math.max(1, caster.combo ?? 0)
+      const done = hit(magDmg * pts * 0.55 * (1 + cm.finisherMult) * vm)
+      caster.combo = 0
+      return done
+    }
   }
   return 0
 }
