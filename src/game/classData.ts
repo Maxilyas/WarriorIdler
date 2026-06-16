@@ -73,6 +73,11 @@ export interface KeystoneEffect {
   petDps?: number
   /** CONTRÔLE « shatter » : +`shatter` de dégâts (mult) aux ennemis CONTRÔLÉS (gelés/ralentis). */
   shatter?: number
+
+  /* ---- v0.30 : PYROMANCIEN (crits embrasent) ---- */
+  /** PYROMANCIEN : un coup CRITIQUE pose/rafraîchit un Embrasement (DoT feu = `frac` du coup/s, `duration` s).
+   *  Plusieurs nœuds cumulent leur `frac` (la durée prend le max). Amplifié par l'Altération. */
+  igniteOnCrit?: { frac: number; duration: number }
 }
 
 /** Vocabulaire des TAGS de comportement (12) — les 7 types de dégâts servent aussi de tags. */
@@ -94,6 +99,8 @@ export interface SpellSpec {
   duration?: number
   /** Tags de comportement (mono/zone/dot/finisseur…) — pour les modificateurs cross-classe. */
   tags?: string[]
+  /** Nom de la RESSOURCE build/spend (générateur/finisseur) — défaut « Combo » si absent. */
+  resource?: string
 }
 
 /** Spécification d'un nœud-keystone (effet + stats/résist éventuels). */

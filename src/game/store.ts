@@ -2794,6 +2794,10 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
             gemCounters.set(hk, 0)
           } else gemCounters.set(hk, n)
         }
+        // 🔥 PYROMANCIEN « Embrasement » : un coup CRITIQUE pose/rafraîchit un DoT feu.
+        if (hit.crit && d.cmods.igniteOnCrit) {
+          enemy.dot = { dps: Math.max(hit.damage * d.cmods.igniteOnCrit.frac * d.derived.alterationMult, enemy.dot?.dps ?? 0), remaining: d.cmods.igniteOnCrit.duration }
+        }
         const dmg = hit.damage * enemyVuln(enemy) * (s === 0 ? staticMult : 1) // Sceau de faiblesse + Décharge
         if (mods?.cond?.overkill && dmg > enemy.hp) overkill += dmg - enemy.hp
         enemy.hp = Math.max(0, enemy.hp - dmg)
@@ -3188,6 +3192,10 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
             t2.dot = { dps: Math.max((hit.damage * 0.6 / 6) * d.derived.alterationMult, t2.dot?.dps ?? 0), remaining: 6 }
             gemCounters.set(hk, 0)
           } else gemCounters.set(hk, n)
+        }
+        // 🔥 PYROMANCIEN « Embrasement » : un coup CRITIQUE pose/rafraîchit un DoT feu.
+        if (hit.crit && d.cmods.igniteOnCrit) {
+          t2.dot = { dps: Math.max(hit.damage * d.cmods.igniteOnCrit.frac * d.derived.alterationMult, t2.dot?.dps ?? 0), remaining: d.cmods.igniteOnCrit.duration }
         }
         const dmg = hit.damage * enemyVuln(t2) * (st === 0 ? staticMult : 1)
         // Étoile d'Overkill : l'excédent du coup fatal déborde sur les ennemis suivants du pack

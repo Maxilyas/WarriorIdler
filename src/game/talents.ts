@@ -16,10 +16,15 @@ import type { KeystoneEffect } from './classData'
  * → on navigue, on esquive ce qu'on ne veut pas, on trouve plein de chemins/builds. Multi-classe natif
  *   (catégories + entrées peu chères + keystones qui s'empilent entre classes, aucun cap).
  *
- * FAIT : Voleur (Cuir) → Assassin (afflictions, 4 grappes) + Ombrelame (combo/ombre, 4 grappes + convergence).
+ * FAIT : Voleur (Cuir) → Assassin (afflictions) + Ombrelame (combo/ombre).
+ *        Mage (Tissu) → Pyromancien (feu/ignite) + Cryomancien (givre/contrôle/shatter) + Arcaniste (charges/CDR).
+ *        Chasseur (Mailles) → Meneur de meute (familier/invocation) + Œil de faucon (Concentration/exécution).
  */
 
-export type ConstellationId = 'coeur' | 'voleur' | 'assassin' | 'ombrelame'
+export type ConstellationId =
+  | 'coeur' | 'voleur' | 'assassin' | 'ombrelame'
+  | 'mage' | 'pyromancien' | 'cryomancien' | 'arcaniste'
+  | 'chasseur' | 'meute' | 'faucon'
 
 export interface ConstellationMeta {
   id: ConstellationId
@@ -93,9 +98,9 @@ function ability(id: string, c: ConstellationId, tier: number, name: string, pow
 node('co_start', 'coeur', 'ability', 0, 1, 'Éveil', '+10 stats primaires, +20 Endurance, débloque Frappe. La racine de l\'arbre.',
   { statMods: { force: 10, agilite: 10, intelligence: 10, endurance: 20 }, unlockPower: 'frappe_simple' })
 node('cat_plaque', 'coeur', 'gateway', 1, 1, 'Plaque', 'Catégorie Plaque (Guerrier, Paladin, Chevalier de la mort). +40 Endurance, +15 Force. — classes à venir.', { requires: ['co_start'], statMods: { endurance: 40, force: 15 } })
-node('cat_mailles', 'coeur', 'gateway', 1, 1, 'Mailles', 'Catégorie Mailles (Chasseur, Chaman). +20 Agilité, +20 Intelligence. — classes à venir.', { requires: ['co_start'], statMods: { agilite: 20, intelligence: 20 } })
+node('cat_mailles', 'coeur', 'gateway', 1, 1, 'Mailles', 'Catégorie Mailles (Chasseur ✓, Chaman à venir). +20 Agilité, +20 Intelligence.', { requires: ['co_start'], statMods: { agilite: 20, intelligence: 20 } })
 node('cat_cuir', 'coeur', 'gateway', 1, 1, 'Cuir', 'Catégorie Cuir (Voleur, Druide). +30 Agilité, +15 Critique.', { requires: ['co_start'], statMods: { agilite: 30, critique: 15 } })
-node('cat_tissu', 'coeur', 'gateway', 1, 1, 'Tissu', 'Catégorie Tissu (Mage, Démoniste, Prêtre). +40 Intelligence. — classes à venir.', { requires: ['co_start'], statMods: { intelligence: 40 } })
+node('cat_tissu', 'coeur', 'gateway', 1, 1, 'Tissu', 'Catégorie Tissu (Mage ✓, Démoniste & Prêtre à venir). +40 Intelligence.', { requires: ['co_start'], statMods: { intelligence: 40 } })
 
 /* VOLEUR — nœud de classe (peu cher : multi-classe natif). */
 node('cl_voleur', 'voleur', 'ability', 0, 1, 'Voleur', 'Maître de la lame et du poison. Débloque Tranchant et ouvre ses deux archétypes. +25 Agilité, +15 Critique.',
@@ -169,6 +174,132 @@ ks('om_jum', 'ombrelame', 2, 'Lames jumelles', 'LAMES : +18% de chance de Multif
 ks('om_fren', 'ombrelame', 3, 'Frénésie', 'CHOIX : +26 Hâte.', { stat: { hate: 26 } }, { requires: ['om_jum'], exclusive: 'om_lames' })
 ks('om_precis', 'ombrelame', 3, 'Précision létale', 'CHOIX : +24 Critique, +24 Dégâts crit.', { stat: { critique: 24, degatsCrit: 24 } }, { requires: ['om_jum'], exclusive: 'om_lames' })
 
+/* ================================================================== */
+/* MAGE (Tissu) — Pyromancien · Cryomancien · Arcaniste.               */
+/* ================================================================== */
+node('cl_mage', 'mage', 'ability', 0, 1, 'Mage', 'Maître des éléments et de l\'arcane. Débloque Trait magique et ouvre ses trois archétypes. +30 Intelligence.',
+  { requires: ['cat_tissu'], statMods: { intelligence: 30 }, unlockPower: 'ma_eclair' })
+
+/* ---- PYROMANCIEN — les crits EMBRASENT (DoT feu) ; Combustion = pic de feu. ----
+ * 1 sort de départ. Pyroblast se mérite (derrière l'ignite). Ultime tout au fond. */
+ability('py_hub', 'pyromancien', 0, 'Pyromancien', 'py_boule', 'Entre dans la voie du Pyromancien : débloque Boule de feu. +18 Intelligence, +12 Critique.', { requires: ['cl_mage'], statMods: { intelligence: 18, critique: 12 } })
+// IGNITE : crits → Embrasement → Pyroblast (gaté) → Combustion → ultime.
+minor('py_chaleur', 'pyromancien', 1, 'Chaleur ardente', 3, { critique: 18 }, { requires: ['py_hub'] })
+ks('py_embrase', 'pyromancien', 2, 'Embrasement', 'Tes coups CRITIQUES posent un Embrasement (DoT feu = 30% du coup/s, 6 s). Amplifié par l\'Altération.', { stat: { alteration: 14 }, ks: { igniteOnCrit: { frac: 0.3, duration: 6 } } }, { requires: ['py_chaleur'] })
+ks('py_fournaise', 'pyromancien', 3, 'Fournaise', 'CHOIX : Embrasement plus intense (+0,25 de frac par crit).', { stat: { alteration: 12 }, ks: { igniteOnCrit: { frac: 0.25, duration: 0 } } }, { requires: ['py_embrase'], exclusive: 'py_ignite' })
+ks('py_etincelles', 'pyromancien', 3, 'Pluie d\'étincelles', 'CHOIX : tes sorts [dot] +12% (marche aussi pour les autres classes).', { stat: { alteration: 12 }, ks: { tagBonus: { tag: 'dot', damageMult: 1.12 } } }, { requires: ['py_embrase'], exclusive: 'py_ignite' })
+ability('py_pyroblast', 'pyromancien', 4, 'Pyroblast', 'py_pyroblast', 'Débloque Pyroblast : une frappe de feu colossale. Gatée : 6 pts dans la voie.', { requires: ['py_embrase'], minSpent: 6 })
+ks('py_combustion', 'pyromancien', 5, 'Combustion', 'PIC : tes sorts [feu] +18% et ton Embrasement encore plus fort (+0,3 de frac).', { stat: { degatsCrit: 18 }, ks: { tagBonus: { tag: 'feu', damageMult: 1.18 }, igniteOnCrit: { frac: 0.3, duration: 0 } } }, { requires: ['py_pyroblast'] })
+ability('py_meteore', 'pyromancien', 6, 'Météore', 'py_meteore', 'ULTIME — un météore pulvérise tout le pack. Tout au fond : 20 pts dans la voie.', { requires: ['py_combustion'], minSpent: 20 })
+// FEU DIRECT : crit + tags, choix de 2e sort.
+minor('py_braise', 'pyromancien', 1, 'Braises', 3, { degatsCrit: 18 }, { requires: ['py_hub'] })
+ks('py_pyromanie', 'pyromancien', 2, 'Pyromanie', 'Tes sorts [direct] +12% (marche aussi pour les autres classes).', { stat: { critique: 14 }, ks: { tagBonus: { tag: 'direct', damageMult: 1.12 } } }, { requires: ['py_braise'] })
+ks('py_surchauffe', 'pyromancien', 3, 'Surchauffe', '+24 Critique, +24 Dégâts crit.', { stat: { critique: 24, degatsCrit: 24 } }, { requires: ['py_pyromanie'] })
+ability('py_flammes', 'pyromancien', 3, 'Flammes incandescentes', 'py_flammes', 'CHOIX de SORT : un torrent de flammes sur tout le pack. Gaté : 8 pts dans la voie.', { requires: ['py_pyromanie'], exclusive: 'py_arme2', minSpent: 8 })
+ability('py_immolation', 'pyromancien', 3, 'Immolation', 'py_immolation', 'CHOIX de SORT : embrase la cible (gros DoT mono soutenu). Gaté : 8 pts dans la voie.', { requires: ['py_pyromanie'], exclusive: 'py_arme2', minSpent: 8 })
+// SURVIE : robe ignifugée.
+minor('py_robe', 'pyromancien', 1, 'Robe ignifugée', 3, { regen: 16 }, { requires: ['py_hub'] })
+ks('py_bouclierflam', 'pyromancien', 2, 'Bouclier de flammes', 'SURVIE : -8% de dégâts subis, +20 Régén, tes assaillants se brûlent (épines 10%).', { stat: { regen: 20 }, ks: { flatDr: 0.08, thorns: 0.1 } }, { requires: ['py_robe'] })
+ability('py_souffle', 'pyromancien', 2, 'Second souffle', 'second_souffle', 'SURVIE : débloque Second souffle (auto-soin) pour tenir en solo.', { requires: ['py_robe'] })
+
+/* ---- CRYOMANCIEN — gèle (contrôle) puis FRACASSE (shatter). ---- */
+ability('cr_hub', 'cryomancien', 0, 'Cryomancien', 'cr_eclat', 'Entre dans la voie du Cryomancien : débloque Éclat de givre. +18 Intelligence, +12 Critique.', { requires: ['cl_mage'], statMods: { intelligence: 18, critique: 12 } })
+// CONTRÔLE → SHATTER → Comète (gaté) → ultime.
+minor('cr_froidure', 'cryomancien', 1, 'Froidure', 3, { intelligence: 16 }, { requires: ['cr_hub'] })
+ability('cr_cone', 'cryomancien', 2, 'Cône de givre', 'cr_cone', 'Débloque Cône de givre : GÈLE tout le pack (contrôle) — la mise en place du fracas.', { requires: ['cr_froidure'] })
+ks('cr_fracas', 'cryomancien', 3, 'Fracas', 'SHATTER : tes sorts infligent +20% contre une cible GELÉE/contrôlée.', { stat: { degatsCrit: 16 }, ks: { shatter: 0.2 } }, { requires: ['cr_cone'] })
+ks('cr_glaciation', 'cryomancien', 4, 'Glaciation', 'SHATTER renforcé : +25% de plus contre les ennemis contrôlés.', { stat: { degatsCrit: 18 }, ks: { shatter: 0.25 } }, { requires: ['cr_fracas'] })
+ability('cr_comete', 'cryomancien', 4, 'Comète de glace', 'cr_comete', 'Débloque Comète de glace : frappe colossale, dévastatrice sur cible gelée. Gatée : 6 pts dans la voie.', { requires: ['cr_fracas'], minSpent: 6 })
+ability('cr_hiver', 'cryomancien', 6, 'Hiver éternel', 'cr_hiver', 'ULTIME — un blizzard gèle ET pulvérise tout le pack. Tout au fond : 20 pts dans la voie.', { requires: ['cr_glaciation'], minSpent: 20 })
+// GIVRE : tags froid/direct + choix de 2e contrôle.
+minor('cr_gelure', 'cryomancien', 1, 'Gelure', 3, { critique: 18 }, { requires: ['cr_hub'] })
+ks('cr_givre', 'cryomancien', 2, 'Maîtrise du givre', 'Tes sorts [froid] +12% (marche aussi pour les autres classes).', { stat: { intelligence: 12 }, ks: { tagBonus: { tag: 'froid', damageMult: 1.12 } } }, { requires: ['cr_gelure'] })
+ks('cr_perce', 'cryomancien', 3, 'Éclats perçants', 'Tes sorts [direct] +12% (marche aussi pour les autres classes).', { stat: { penetration: 16 }, ks: { tagBonus: { tag: 'direct', damageMult: 1.12 } } }, { requires: ['cr_givre'] })
+ability('cr_gangue', 'cryomancien', 3, 'Gangue de glace', 'cr_gangue', 'CHOIX de SORT : emprisonne une cible (contrôle mono long) pour la fracasser. Gaté : 8 pts dans la voie.', { requires: ['cr_givre'], exclusive: 'cr_arme2', minSpent: 8 })
+ability('cr_nova', 'cryomancien', 3, 'Nova de givre', 'cr_nova', 'CHOIX de SORT : une nova gèle tout le pack autour de toi. Gaté : 8 pts dans la voie.', { requires: ['cr_givre'], exclusive: 'cr_arme2', minSpent: 8 })
+// SURVIE : carapace de givre.
+minor('cr_carapace', 'cryomancien', 1, 'Carapace de givre', 3, { barriere: 18 }, { requires: ['cr_hub'] })
+ability('cr_barriere', 'cryomancien', 2, 'Barrière de glace', 'bouclier_runique', 'SURVIE : débloque Barrière de glace (bouclier d\'absorption).', { requires: ['cr_carapace'] })
+ks('cr_frimas', 'cryomancien', 2, 'Frimas protecteur', 'SURVIE : +30 Esquive, -8% de dégâts subis (le froid ralentit tes assaillants).', { stat: { esquive: 30 }, ks: { flatDr: 0.08 } }, { requires: ['cr_carapace'] })
+
+/* ---- ARCANISTE — « Charge des arcanes » : build/spend + surcharge (CDR/spam). ---- */
+ability('ar_hub', 'arcaniste', 0, 'Arcaniste', 'ar_trait', 'Entre dans la voie de l\'Arcaniste : débloque Trait des arcanes (générateur de Charges des arcanes). +18 Intelligence, +12 Hâte.', { requires: ['cl_mage'], statMods: { intelligence: 18, hate: 12 } })
+// GÉNÉRATION (charges).
+minor('ar_etude', 'arcaniste', 1, 'Étude arcanique', 3, { hate: 16 }, { requires: ['ar_hub'] })
+ks('ar_affinite', 'arcaniste', 1, 'Affinité arcanique', 'Tes sorts [arcane] +12% (marche aussi pour les autres classes).', { stat: { intelligence: 12 }, ks: { tagBonus: { tag: 'arcane', damageMult: 1.12 } } }, { requires: ['ar_etude'] })
+ks('ar_flux', 'arcaniste', 2, 'Flux de mana', 'GÉNÉRATION : tes générateurs donnent +1 Charge des arcanes.', { stat: { hate: 16 }, ks: { comboGen: 1 } }, { requires: ['ar_etude'] })
+ks('ar_resonance', 'arcaniste', 3, 'Résonance', 'CHOIX : +2 Charges max (surcharge plus haut).', { stat: { intelligence: 16 }, ks: { comboCap: 2 } }, { requires: ['ar_flux'], exclusive: 'ar_gen' })
+ks('ar_cadence', 'arcaniste', 3, 'Cadence arcanique', 'CHOIX : +24 Hâte (incantation rapide et régulière).', { stat: { hate: 24 } }, { requires: ['ar_flux'], exclusive: 'ar_gen' })
+// SURCHARGE (finisher) + spam/CDR.
+ability('ar_deflag', 'arcaniste', 1, 'Déflagration des arcanes', 'ar_deflag', 'SURCHARGE : débloque Déflagration (finisseur — dégâts × Charges). +16 Intelligence.', { requires: ['ar_hub'], statMods: { intelligence: 16 } })
+ks('ar_finamp', 'arcaniste', 2, 'Maîtrise des surcharges', 'Tes sorts [finisseur] +15% (marche aussi pour les autres classes).', { stat: { degatsCrit: 12 }, ks: { tagBonus: { tag: 'finisseur', damageMult: 1.15 } } }, { requires: ['ar_deflag'] })
+ks('ar_surcharge', 'arcaniste', 2, 'Surcharge', 'Tes finisseurs frappent +25% plus fort.', { stat: { degatsCrit: 20 }, ks: { finisherMult: 0.25 } }, { requires: ['ar_deflag'] })
+ks('ar_cascade', 'arcaniste', 3, 'Cascade temporelle', 'SPAM : chaque sort lancé rembourse 0,4 s de recharge à tes autres sorts.', { stat: { hate: 14 }, ks: { cdrOnCast: 0.4 } }, { requires: ['ar_surcharge'] })
+// CONVERGENCE : exige Génération ET Surcharge.
+ks('ar_apogee', 'arcaniste', 4, 'Apogée arcanique', 'IDENTITÉ (carrefour) : +2 Charges max et +15% de dégâts. Exige Flux de mana ET Surcharge.', { stat: { intelligence: 18 }, ks: { comboCap: 2, damageMult: 1.15 } }, { requiresAll: ['ar_flux', 'ar_surcharge'], minSpent: 8 })
+ability('ar_singularite', 'arcaniste', 5, 'Singularité', 'ar_singularite', 'ULTIME — une singularité consume toutes tes Charges en une détonation arcanique. Tout au fond : 20 pts dans la voie.', { requires: ['ar_apogee'], minSpent: 20 })
+// 2e SORT : choix exclusif (AoE vs anti-boss) + écho.
+minor('ar_savoir', 'arcaniste', 1, 'Savoir interdit', 3, { critique: 16 }, { requires: ['ar_hub'] })
+ks('ar_echo', 'arcaniste', 2, 'Écho des arcanes', 'COMBO : un finisseur te REND 2 Charges (spam de surcharges).', { stat: { hate: 14 }, ks: { comboRefund: 2 } }, { requires: ['ar_savoir'] })
+ability('ar_orbe', 'arcaniste', 3, 'Orbe des arcanes', 'ar_orbe', 'CHOIX de SORT : un orbe instable balaie le pack (zone). Gaté : 8 pts dans la voie.', { requires: ['ar_savoir'], exclusive: 'ar_arme2', minSpent: 8 })
+ability('ar_rupture', 'arcaniste', 3, 'Rupture des arcanes', 'ar_rupture', 'CHOIX de SORT : exécution arcane (amplifiée par les PV manquants). Gaté : 8 pts dans la voie.', { requires: ['ar_savoir'], exclusive: 'ar_arme2', minSpent: 8 })
+// SURVIE : voile arcanique.
+minor('ar_voile', 'arcaniste', 1, 'Voile arcanique', 3, { barriere: 18 }, { requires: ['ar_hub'] })
+ability('ar_barriere', 'arcaniste', 2, 'Bouclier des arcanes', 'bouclier_runique', 'SURVIE : débloque Bouclier des arcanes (absorption).', { requires: ['ar_voile'] })
+ks('ar_clignement', 'arcaniste', 2, 'Clignement', 'SURVIE : +30 Esquive, +18 Récupération (tu te téléportes hors de danger).', { stat: { esquive: 30, recuperation: 18 } }, { requires: ['ar_voile'] })
+
+/* ================================================================== */
+/* CHASSEUR (Mailles) — Meneur de meute · Œil de faucon.               */
+/* ================================================================== */
+node('cl_chasseur', 'chasseur', 'ability', 0, 1, 'Chasseur', 'Pisteur des terres sauvages, lié à ses bêtes. Débloque Tir de chasse et ouvre ses deux archétypes. +20 Agilité, +20 Intelligence.',
+  { requires: ['cat_mailles'], statMods: { agilite: 20, intelligence: 20 }, unlockPower: 'ch_tir' })
+
+/* ---- MENEUR DE MEUTE — FAMILIER (invocation, DPS passif idle) + frénésie. ---- */
+ability('me_hub', 'meute', 0, 'Meneur de meute', 'me_cmd', 'Entre dans la voie du Meneur de meute : débloque Commandement bestial. +18 Agilité, +12 Critique.', { requires: ['cl_chasseur'], statMods: { agilite: 18, critique: 12 } })
+// FAMILIER : le pet est le cœur de l'archétype (DPS continu en idle).
+minor('me_dressage', 'meute', 1, 'Dressage', 3, { agilite: 16 }, { requires: ['me_hub'] })
+ks('me_familier', 'meute', 2, 'Familier', 'INVOCATION : un fauve combat à tes côtés — +30% de ton DPS d\'auto-attaque, en continu (idéal en idle).', { stat: { agilite: 12 }, ks: { petDps: 0.3 } }, { requires: ['me_dressage'] })
+ks('me_meute', 'meute', 3, 'Meute', 'INVOCATION : un second fauve te rejoint (+30% de plus).', { stat: { agilite: 14 }, ks: { petDps: 0.3 } }, { requires: ['me_familier'] })
+ks('me_frenesie', 'meute', 4, 'Frénésie de meute', 'CHOIX : la meute enrage — +0,2 DPS de familier ET +12% de tes dégâts.', { stat: { hate: 16 }, ks: { petDps: 0.2, damageMult: 1.12 } }, { requires: ['me_meute'], exclusive: 'me_pet' })
+ks('me_alpha', 'meute', 4, 'Instinct alpha', 'CHOIX : +0,35 DPS de familier (meute massive).', { stat: { agilite: 16 }, ks: { petDps: 0.35 } }, { requires: ['me_meute'], exclusive: 'me_pet' })
+ability('me_curee', 'meute', 6, 'Curée sauvage', 'me_curee', 'ULTIME — toute la meute déferle sur le pack. Tout au fond : 20 pts dans la voie.', { requires: ['me_meute'], minSpent: 20 })
+// TRAQUE : frappes bestiales (tags) + choix de 2e sort.
+minor('me_griffes', 'meute', 1, 'Griffes acérées', 3, { critique: 18 }, { requires: ['me_hub'] })
+ks('me_nature', 'meute', 2, 'Appel de la nature', 'Tes sorts [nature] +12% (marche aussi pour les autres classes).', { stat: { alteration: 12 }, ks: { tagBonus: { tag: 'nature', damageMult: 1.12 } } }, { requires: ['me_griffes'] })
+ks('me_coordination', 'meute', 3, 'Coordination', 'Tes sorts [direct] +12% (marche aussi pour les autres classes).', { stat: { critique: 14 }, ks: { tagBonus: { tag: 'direct', damageMult: 1.12 } } }, { requires: ['me_nature'] })
+ability('me_morsure', 'meute', 3, 'Morsure du fauve', 'me_morsure', 'CHOIX de SORT : une morsure dévastatrice mono-cible. Gaté : 8 pts dans la voie.', { requires: ['me_nature'], exclusive: 'me_arme2', minSpent: 8 })
+ability('me_saignee', 'meute', 3, 'Saignée bestiale', 'me_saignee', 'CHOIX de SORT : des plaies de fauve qui saignent (DoT). Gaté : 8 pts dans la voie.', { requires: ['me_nature'], exclusive: 'me_arme2', minSpent: 8 })
+// SURVIE : lien au familier.
+minor('me_endurci', 'meute', 1, 'Cuir épais', 3, { regen: 16 }, { requires: ['me_hub'] })
+ks('me_symbiose', 'meute', 2, 'Symbiose', 'SURVIE : ton familier te protège — -10% de dégâts subis, +12 Vol de vie.', { stat: { volDeVie: 12 }, ks: { flatDr: 0.1 } }, { requires: ['me_endurci'] })
+ability('me_souffle', 'meute', 2, 'Second souffle', 'second_souffle', 'SURVIE : débloque Second souffle (auto-soin).', { requires: ['me_endurci'] })
+
+/* ---- ŒIL DE FAUCON — « Concentration » : visée (générateur) → tir énorme (finisseur) + exécution. ---- */
+ability('fa_hub', 'faucon', 0, 'Œil de faucon', 'fa_visee', 'Entre dans la voie de l\'Œil de faucon : débloque Tir assuré (générateur de Concentration). +18 Agilité, +12 Précision.', { requires: ['cl_chasseur'], statMods: { agilite: 18, precision: 12 } })
+// CONCENTRATION (générateur).
+minor('fa_calme', 'faucon', 1, 'Sang-froid', 3, { precision: 16 }, { requires: ['fa_hub'] })
+ks('fa_directamp', 'faucon', 1, 'Visée précise', 'Tes sorts [direct] +12% (marche aussi pour les autres classes).', { stat: { precision: 12 }, ks: { tagBonus: { tag: 'direct', damageMult: 1.12 } } }, { requires: ['fa_calme'] })
+ks('fa_respire', 'faucon', 2, 'Respiration', 'CONCENTRATION : tes générateurs donnent +1 Concentration.', { stat: { critique: 16 }, ks: { comboGen: 1 } }, { requires: ['fa_calme'] })
+ks('fa_lynx', 'faucon', 3, 'Œil de lynx', 'CHOIX : +24 Précision, +1 Concentration.', { stat: { precision: 24 }, ks: { comboGen: 1 } }, { requires: ['fa_respire'], exclusive: 'fa_gen' })
+ks('fa_rapide', 'faucon', 3, 'Tir rapide', 'CHOIX : +24 Hâte.', { stat: { hate: 24 } }, { requires: ['fa_respire'], exclusive: 'fa_gen' })
+// TIR VISÉ (finisher) + exécution.
+ability('fa_tir_vise', 'faucon', 1, 'Tir visé', 'fa_tir_vise', 'TIR : débloque Tir visé (finisseur — dégâts × Concentration). +16 Agilité.', { requires: ['fa_hub'], statMods: { agilite: 16 } })
+ks('fa_finamp', 'faucon', 2, 'Tir précis', 'Tes sorts [finisseur] +15% (marche aussi pour les autres classes).', { stat: { degatsCrit: 12 }, ks: { tagBonus: { tag: 'finisseur', damageMult: 1.15 } } }, { requires: ['fa_tir_vise'] })
+ks('fa_letalite', 'faucon', 2, 'Létalité', 'Tes finisseurs frappent +25% plus fort.', { stat: { degatsCrit: 20 }, ks: { finisherMult: 0.25 } }, { requires: ['fa_tir_vise'] })
+ks('fa_mise_a_mort', 'faucon', 3, 'Mise à mort', 'Tes finisseurs exécutent les ennemis sous 20% de PV (×2,2).', { stat: { degatsBoss: 14 }, ks: { executeBonus: { threshold: 0.2, mult: 2.2 } } }, { requires: ['fa_letalite'] })
+// CONVERGENCE + ULTIME.
+ks('fa_oeil', 'faucon', 4, 'Œil du faucon', 'IDENTITÉ (carrefour) : +2 Concentration max et +15% de dégâts. Exige Respiration ET Létalité.', { stat: { precision: 18 }, ks: { comboCap: 2, damageMult: 1.15 } }, { requiresAll: ['fa_respire', 'fa_letalite'], minSpent: 8 })
+ability('fa_aigle', 'faucon', 5, 'Tir de l\'aigle', 'fa_aigle', 'ULTIME — un tir parfait qui consume toute ta Concentration. Tout au fond : 20 pts dans la voie.', { requires: ['fa_oeil'], minSpent: 20 })
+// 2e SORT : choix exclusif (AoE vs exécution).
+minor('fa_pisteur', 'faucon', 1, 'Pisteur', 3, { critique: 18 }, { requires: ['fa_hub'] })
+ks('fa_precis', 'faucon', 2, 'Précision létale', '+24 Critique, +24 Dégâts crit.', { stat: { critique: 24, degatsCrit: 24 } }, { requires: ['fa_pisteur'] })
+ability('fa_salve', 'faucon', 3, 'Salve de flèches', 'fa_salve', 'CHOIX de SORT : une volée qui balaie le pack (zone). Gaté : 8 pts dans la voie.', { requires: ['fa_pisteur'], exclusive: 'fa_arme2', minSpent: 8 })
+ability('fa_mortel', 'faucon', 3, 'Tir mortel', 'fa_mortel', 'CHOIX de SORT : exécution mono (amplifiée par les PV manquants). Gaté : 8 pts dans la voie.', { requires: ['fa_pisteur'], exclusive: 'fa_arme2', minSpent: 8 })
+// SURVIE : camouflage.
+minor('fa_camo', 'faucon', 1, 'Camouflage', 3, { esquive: 18 }, { requires: ['fa_hub'] })
+ability('fa_posture', 'faucon', 2, 'Posture défensive', 'posture_defensive', 'SURVIE : débloque Posture défensive (-18% de dégâts subis).', { requires: ['fa_camo'] })
+ks('fa_retraite', 'faucon', 2, 'Retraite feinte', 'SURVIE : +30 Esquive, +12% de dégâts (tu frappes en reculant).', { stat: { esquive: 30 }, ks: { damageMult: 1.12 } }, { requires: ['fa_camo'] })
+
 /* ------------------------------------------------------------------ */
 /* Méta de constellation.                                             */
 /* ------------------------------------------------------------------ */
@@ -177,8 +308,19 @@ export const CONSTELLATIONS: Record<ConstellationId, ConstellationMeta> = {
   voleur: { id: 'voleur', name: 'Voleur', role: 'Cuir · classe', color: '#a18152', icon: '🗡' },
   assassin: { id: 'assassin', name: 'Assassin', role: 'Voleur · afflictions', color: '#51cf66', icon: '☠', archetype: true },
   ombrelame: { id: 'ombrelame', name: 'Ombrelame', role: 'Voleur · combo & ombre', color: '#b197fc', icon: '🌑', archetype: true },
+  mage: { id: 'mage', name: 'Mage', role: 'Tissu · classe', color: '#74c0fc', icon: '✨' },
+  pyromancien: { id: 'pyromancien', name: 'Pyromancien', role: 'Mage · feu & embrasement', color: '#ff6b6b', icon: '🔥', archetype: true },
+  cryomancien: { id: 'cryomancien', name: 'Cryomancien', role: 'Mage · givre & contrôle', color: '#3bc9db', icon: '❄️', archetype: true },
+  arcaniste: { id: 'arcaniste', name: 'Arcaniste', role: 'Mage · charges & surcharge', color: '#b197fc', icon: '🔮', archetype: true },
+  chasseur: { id: 'chasseur', name: 'Chasseur', role: 'Mailles · classe', color: '#94d82d', icon: '🏹' },
+  meute: { id: 'meute', name: 'Meneur de meute', role: 'Chasseur · familier', color: '#82c91e', icon: '🐺', archetype: true },
+  faucon: { id: 'faucon', name: 'Œil de faucon', role: 'Chasseur · concentration', color: '#fab005', icon: '🦅', archetype: true },
 }
-export const CONSTELLATION_LIST: ConstellationId[] = ['coeur', 'voleur', 'assassin', 'ombrelame']
+export const CONSTELLATION_LIST: ConstellationId[] = [
+  'coeur', 'voleur', 'assassin', 'ombrelame',
+  'mage', 'pyromancien', 'cryomancien', 'arcaniste',
+  'chasseur', 'meute', 'faucon',
+]
 
 /* ------------------------------------------------------------------ */
 /* Accès & agrégation (API consommée par character.ts / UI).           */

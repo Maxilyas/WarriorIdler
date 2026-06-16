@@ -4,7 +4,8 @@
 > sans rien réexpliquer. Ce doc est la **source de vérité** ; il SUPERSÈDE `DESIGN_v0.29_refonte_classes.md`
 > (l'ancien plan « 39 specs générées », abandonné car trop linéaire).
 >
-> **État au dernier commit (`73025fb`)** : socles + **Voleur complet** (Assassin + Ombrelame). 9 classes restantes.
+> **État** : socles + **Voleur** (Assassin + Ombrelame) + **Mage** (Pyromancien + Cryomancien + Arcaniste)
+> + **Chasseur** (Meneur de meute + Œil de faucon). **3 classes faites, 7 restantes.** Arbre = 135 nœuds.
 
 ---
 
@@ -98,8 +99,14 @@ Chaque sort porte des **tags** (`PowerDef.tags` / `SpellSpec.tags`). **12 tags d
 | **Tags / tagBonus** | `PowerDef.tags` ; keystone `tagBonus` | `fireActive`, `abilityDps`, `charCombatMods` | TOUTES (multi-classe) |
 | **Auto à seuil** | — | `autoSpenderReady` (store) : finisher≥3, detonate≥4, sinon attend | pont idle↔try-hard |
 | **Invocation (pet)** | keystone `petDps` (× DPS auto, continu) | les 2 pas de combat + `charDps`/`dpsBreakdown` (ligne 🐾) | Chasseur (meute), Démoniste (Légion), totems |
-| **Contrôle** | `enemy.controlled` (posé par sorts taggés `controle`) ; keystone `shatter` (+dégâts vs contrôlés) | `fireActive` (pose + bonus), décrément au tick | Mage Givre, DK Givre-mort |
+| **Contrôle** | `enemy.controlled` (posé par sorts taggés `controle`) ; keystone `shatter` (+dégâts vs contrôlés, SORTS only) | `fireActive` (pose + bonus), décrément au tick | Cryomancien ✓, DK Givre-mort |
+| **Embrasement sur crit** | keystone `igniteOnCrit:{frac,duration}` (frac somme, durée max) | les 2 pas de combat (sur `hit.crit`) + estim. fiche `igniteDps` (ligne 🔥) | Pyromancien ✓ |
 | **3 passifs / 5 actifs** | `char.powers` (5 actifs) + `char.passives` (3 passifs) | `charPassives` lit `passives` ; `setPassive` | toutes |
+
+> ⚠️ `enemy.dot` est **un seul slot** (Math.max garde le plus fort) : venin / saignement / Embrasement / Immolation
+> se le **partagent** (pas de cumul). Idem `char.combo` partagé (Ombrelame / Arcaniste / Œil de faucon).
+> Acceptable v1. — Les **finisseurs taggés `zone`** (Éventail, Orbe… si effect `finisher`) ne frappent QUE le focus
+> en multi : seuls `cleave`/`megaCleave` touchent le pack. Pour une vraie AoE → effet `cleave`.
 
 `KeystoneEffect` (dans `classData.ts`, re-exporté par `talents.ts`) liste TOUS les champs ; combat les
 résout dans `character.ts` (`charCombatMods`) + `store.ts` (`fireActive`, pas de combat).
@@ -169,9 +176,9 @@ Format : **Nom** (rôle) — *boucle unique* — `tags` clés. (Noms = identité
 - **Givre-mort** (DPS) — **brise** les cibles `controle` (exécution sur gelé/ralenti) + multifrappe runique. `mono, direct, finisseur, froid, controle`
 - **Sang** (TANK) — tank vampire : dégâts/DoT te **soignent** + bouclier d'os. `protection, soin, finisseur, ombre`
 
-### 🏹 CHASSEUR (Mailles)
-- **Meneur de meute** (DPS) — **familier** (`invocation`, DPS passif idle) + Frénésie de meute. `invocation, direct`
-- **Œil de faucon** (DPS) — **Concentration** : charge une visée → tir énorme + exécution + précision. `mono, direct, finisseur`
+### 🏹 CHASSEUR (Mailles) — ✅ FAIT
+- **Meneur de meute** (DPS) — **familier** (`petDps`, DPS passif idle ; Meute = 2e fauve, Alpha/Frénésie au choix). `invocation, direct, nature`
+- **Œil de faucon** (DPS) — **Concentration** (`char.combo`) : générateur→finisseur + **exécution** (`executeBonus`) + précision. `mono, direct, finisseur`
 
 ### ⚡ CHAMAN (Mailles)
 - **Élémentaire** (DPS) — **Maelström** + foudre en chaîne (zone) + procs de Surcharge. `zone, finisseur, foudre`
@@ -186,10 +193,10 @@ Format : **Nom** (rôle) — *boucle unique* — `tags` clés. (Noms = identité
 - **Pestilence** (DPS) — gère **plusieurs DoT** ; un drain qui les **étend/détone** tous. `dot, finisseur, zone, ombre`
 - **Légion** (DPS) — **invoque des démons** cumulés (`invocation`) + Tyran qui les survolte. `invocation, ombre`
 
-### ✨ MAGE (Tissu)
-- **Pyromancien** (DPS) — **crits embrasent** (DoT feu) + Combustion (trigger sur crit). `direct, dot, feu`
-- **Cryomancien** (DPS) — **gèle** (`controle`) puis **fracasse** (`shatter`, crit énorme sur gelé). `mono, direct, controle, froid`
-- **Arcaniste** (DPS) — **Charges des arcanes** : empile → surcharge (spam, CDR). `mono, finisseur, arcane`
+### ✨ MAGE (Tissu) — ✅ FAIT
+- **Pyromancien** (DPS) — **crits embrasent** (DoT feu via `igniteOnCrit`) + Combustion (cumule frac + [feu]). `direct, dot, feu`
+- **Cryomancien** (DPS) — **gèle** (`controle` : Cône/Nova/Gangue) puis **fracasse** (`shatter` +0,45 sur gelé, SORTS). `mono, direct, controle, froid`
+- **Arcaniste** (DPS) — **Charge des arcanes** (`char.combo`) → surcharge ; Cascade (`cdrOnCast`) = spam. `mono, finisseur, arcane`
 
 ### ✚ PRÊTRE (Tissu)
 - **Lumière** (HEAL) — **soigne en infligeant des dégâts** (atonement) + boucliers. `soin, protection, direct`
@@ -211,6 +218,8 @@ Format : **Nom** (rôle) — *boucle unique* — `tags` clés. (Noms = identité
 - `src/components/CharacterPanel.tsx` — équipement des capacités (5 actifs / 3 passifs).
 - `src/components/CombatPanel.tsx` — combat ; ressources affichées (Combo X/cap, ☠ Venin ×N).
 - `scripts/validate-talents.mjs` — `npm run validate` (intégrité de l'arbre, bundle esbuild).
+- `scripts/check-classes.mjs` — `npm run check-classes` (smoke-test runtime des classes : DPS de fiche +
+  keystones par archétype, sans NaN ; à étendre par classe).
 
 ## 11. NETTOYAGE / DETTE
 - `scripts/sim-classes.mjs` (simulateur DPS des 39 specs générées) est **périmé** (modèle abandonné) — à
@@ -220,6 +229,14 @@ Format : **Nom** (rôle) — *boucle unique* — `tags` clés. (Noms = identité
 - Équilibrage : valeurs (perStack, finisherMult, minSpent, petDps…) sont des **knobs** à éprouver en jeu.
 
 ## 12. PROCHAINES ÉTAPES suggérées
-1. Tester le Voleur en jeu (ressenti profondeur/gating/manuel). 2. Coder une classe « simple » d'abord
-   (**Mage** : 3 specs DPS très distinctes, teste tags + `controle` + `shatter`), ou **Chasseur** (teste les pets).
-   3. Puis les classes à ressource nommée (Guerrier=Rage, Paladin=Pouvoir sacré…). 4. Lot gemmes/runes de conversion.
+1. Tester Voleur/Mage/Chasseur en jeu (ressenti profondeur/gating/manuel ; éprouver les knobs : `igniteOnCrit`
+   frac, `shatter` total, `petDps` total ~0,95, `finisherMult`). 2. Classes à RESSOURCE NOMMÉE :
+   **Guerrier** (Rage : build/spend + exécution + saignements), **Paladin** (Pouvoir Sacré partagé 3 specs, dont
+   1 TANK + 1 HEAL — premiers rôles non-DPS), **Chevalier de la mort** (Puissance runique ; Givre-mort réutilise
+   `controle`/`shatter` déjà codés). 3. Puis Chaman/Druide/Démoniste/Prêtre (totems & Légion = `petDps`).
+   4. Lot gemmes/runes de conversion (type → type). 5. **TANK/HEAL** : aucun encore handcrafted — vérifier que
+   menace (`threatMult`), `shareResist`, `healToDamage` tiennent dans le nouveau modèle d'arbre.
+
+> ⚙️ Garde-fous : `npx tsc --noEmit` + `npm run validate` (intégrité arbre) + `npm run check-classes` (smoke-test
+> runtime : alloue des talents, équipe des sorts, vérifie DPS/keystones sans NaN). Étendre `check-classes.mjs`
+> à chaque nouvelle classe.

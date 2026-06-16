@@ -370,6 +370,11 @@ export function CombatPanel() {
                     ☠ Venin ×{enemy.venomStacks}
                   </span>
                 )}
+                {(enemy.controlled ?? 0) > 0 && (
+                  <span className="rounded bg-cyan-500/20 px-1.5 py-px text-[10px] font-semibold text-cyan-300" title="Gelé / contrôlé : tes sorts infligent un bonus de Fracas (shatter)">
+                    ❄ Gelé {(enemy.controlled ?? 0).toFixed(1)}s
+                  </span>
+                )}
               </div>
             </>
           )}

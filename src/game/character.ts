@@ -253,6 +253,20 @@ function abilityDps(p: PowerDef, derived: DerivedStats, profileMult: number, dmg
   }
 }
 
+/**
+ * PYROMANCIEN — estimation du DoT d'Embrasement (DoT feu posé par les coups CRITIQUES).
+ * Sustained ≈ (dégât d'UN crit) × frac × Altération × uptime, où l'uptime est la probabilité
+ * que le DoT reste rafraîchi (assez de crits dans sa durée). Approx de fiche (hors cible).
+ */
+function igniteDps(cm: CombatMods, derived: DerivedStats, auto: number): number {
+  if (!cm.igniteOnCrit || auto <= 0) return 0
+  const avgCrit = 1 + derived.critChance * (derived.critMult - 1)
+  const avgHit = auto / Math.max(0.1, derived.attacksPerSecond)
+  const critHit = avgHit * derived.critMult / Math.max(1, avgCrit) // dégât d'un coup critique précis
+  const uptime = Math.min(1, derived.critChance * derived.attacksPerSecond * cm.igniteOnCrit.duration)
+  return critHit * cm.igniteOnCrit.frac * derived.alterationMult * uptime
+}
+
 /** DPS total estimé d'un perso : auto-attaque + CAPACITÉS actives équipées (pour l'affichage). */
 export function charDps(char: Character): number {
   const derived = charDerived(char)
@@ -265,6 +279,7 @@ export function charDps(char: Character): number {
   const gen = comboGenPerSec(char, derived, cm.comboGen)
   const auto = theoreticalDps(derived, profile, dmgMult)
   let dps = auto + auto * cm.petDps // INVOCATION : le familier inflige une fraction de ton DPS d'auto.
+  dps += igniteDps(cm, derived, auto) // PYROMANCIEN : DoT d'Embrasement (crits).
   for (const pid of char.powers) {
     if (!pid) continue
     const p = getPower(pid)
@@ -307,6 +322,8 @@ export function dpsBreakdown(char: Character): DpsBreakdown {
     if (d > 0) spells.push({ name: p.name, dps: d })
   }
   if (cm.petDps > 0) spells.push({ name: '🐾 Familier', dps: auto * cm.petDps })
+  const ig = igniteDps(cm, derived, auto)
+  if (ig > 0) spells.push({ name: '🔥 Embrasement', dps: ig })
   const avgCrit = 1 + derived.critChance * (derived.critMult - 1)
   const factors = [
     { label: 'Puissance', value: Math.round(derived.power).toLocaleString('fr-FR') },
@@ -410,6 +427,8 @@ export interface CombatMods {
   petDps: number
   /** CONTRÔLE : bonus de dégâts (somme) contre les ennemis contrôlés. */
   shatter: number
+  /** PYROMANCIEN : Embrasement sur coup critique (frac somme, durée max). */
+  igniteOnCrit?: { frac: number; duration: number }
 }
 
 export function charCombatMods(char: Character): CombatMods {
@@ -479,6 +498,11 @@ export function charCombatMods(char: Character): CombatMods {
     if (k.comboRefund) out.comboRefund = Math.max(out.comboRefund, k.comboRefund)
     if (k.petDps) out.petDps += k.petDps
     if (k.shatter) out.shatter += k.shatter
+    if (k.igniteOnCrit) {
+      out.igniteOnCrit = out.igniteOnCrit
+        ? { frac: out.igniteOnCrit.frac + k.igniteOnCrit.frac, duration: Math.max(out.igniteOnCrit.duration, k.igniteOnCrit.duration) }
+        : { ...k.igniteOnCrit }
+    }
     if (k.multiTypeBonus) {
       multiType = multiType
         ? { per: multiType.per + k.multiTypeBonus.per, threshold: Math.min(multiType.threshold, k.multiTypeBonus.threshold) }

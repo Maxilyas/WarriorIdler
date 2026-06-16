@@ -277,6 +277,7 @@ function specToPower(s: SpellSpec): PowerDef {
     ...(s.duration ? { duration: s.duration } : {}),
     ...(s.icon ? { icon: s.icon } : {}),
     ...(s.tags ? { tags: s.tags } : {}),
+    ...(s.resource ? { resource: s.resource } : {}),
   }
 }
 /* Sorts du VOLEUR (handcrafted). Catégorie Cuir → Assassin (venin) + Ombrelame (combo/ombre). */
@@ -297,6 +298,52 @@ const VOLEUR_SPELLS: SpellSpec[] = [
   { id: 'om_linceul', name: 'Linceul', icon: '🌑', effect: 'finisher', mag: 2.6, cd: 22, type: 'ombre', scale: 'agilite', tags: ['mono', 'direct', 'finisseur', 'ultime'] },
 ]
 for (const s of VOLEUR_SPELLS) POWERS.push(specToPower(s))
+
+/* Sorts du MAGE (handcrafted). Tissu → Pyromancien (feu/ignite) + Cryomancien (givre/contrôle/shatter)
+ * + Arcaniste (Charge des arcanes : build/spend + CDR). 3 specs DPS très distinctes. */
+const MAGE_SPELLS: SpellSpec[] = [
+  // Classe
+  { id: 'ma_eclair', name: 'Trait magique', icon: '🔮', effect: 'nuke', mag: 2.6, cd: 2.8, type: 'arcane', scale: 'intelligence', tags: ['mono', 'direct', 'arcane'] },
+  // Pyromancien (feu — les crits embrasent)
+  { id: 'py_boule', name: 'Boule de feu', icon: '🔥', effect: 'nuke', mag: 3.0, cd: 2.8, type: 'feu', scale: 'intelligence', tags: ['mono', 'direct', 'feu'] },
+  { id: 'py_pyroblast', name: 'Pyroblast', icon: '☄️', effect: 'nuke', mag: 5.6, cd: 6, type: 'feu', scale: 'intelligence', tags: ['mono', 'direct', 'feu'] },
+  { id: 'py_flammes', name: 'Flammes incandescentes', icon: '🌋', effect: 'cleave', mag: 3.2, cd: 3, type: 'feu', scale: 'intelligence', tags: ['zone', 'direct', 'feu'] },
+  { id: 'py_immolation', name: 'Immolation', icon: '♨️', effect: 'dot', mag: 2.6, cd: 4.5, type: 'feu', scale: 'intelligence', tags: ['mono', 'dot', 'feu'] },
+  { id: 'py_meteore', name: 'Météore', icon: '💢', effect: 'megaCleave', mag: 7, cd: 20, type: 'feu', scale: 'intelligence', tags: ['zone', 'direct', 'feu', 'ultime'] },
+  // Cryomancien (givre — gèle puis fracasse)
+  { id: 'cr_eclat', name: 'Éclat de givre', icon: '🧊', effect: 'nuke', mag: 3.0, cd: 2.6, type: 'froid', scale: 'intelligence', tags: ['mono', 'direct', 'froid'] },
+  { id: 'cr_cone', name: 'Cône de givre', icon: '❄️', effect: 'cleave', mag: 2.6, cd: 5, duration: 4, type: 'froid', scale: 'intelligence', tags: ['zone', 'direct', 'froid', 'controle'] },
+  { id: 'cr_comete', name: 'Comète de glace', icon: '☄️', effect: 'nuke', mag: 5.6, cd: 6, type: 'froid', scale: 'intelligence', tags: ['mono', 'direct', 'froid'] },
+  { id: 'cr_gangue', name: 'Gangue de glace', icon: '🥶', effect: 'nuke', mag: 1.6, cd: 8, duration: 5, type: 'froid', scale: 'intelligence', tags: ['mono', 'direct', 'froid', 'controle'] },
+  { id: 'cr_nova', name: 'Nova de givre', icon: '💠', effect: 'cleave', mag: 3.0, cd: 6, duration: 3, type: 'froid', scale: 'intelligence', tags: ['zone', 'direct', 'froid', 'controle'] },
+  { id: 'cr_hiver', name: 'Hiver éternel', icon: '🌨️', effect: 'megaCleave', mag: 7, cd: 22, duration: 4, type: 'froid', scale: 'intelligence', tags: ['zone', 'direct', 'froid', 'controle', 'ultime'] },
+  // Arcaniste (Charge des arcanes — build/spend + surcharge/CDR)
+  { id: 'ar_trait', name: 'Trait des arcanes', icon: '🔹', effect: 'builder', mag: 1.6, cd: 2.5, type: 'arcane', scale: 'intelligence', tags: ['mono', 'direct', 'arcane', 'generateur'], resource: 'Charge des arcanes' },
+  { id: 'ar_deflag', name: 'Déflagration des arcanes', icon: '🔷', effect: 'finisher', mag: 1.5, cd: 3.5, type: 'arcane', scale: 'intelligence', tags: ['mono', 'direct', 'arcane', 'finisseur'], resource: 'Charge des arcanes' },
+  { id: 'ar_orbe', name: 'Orbe des arcanes', icon: '🟣', effect: 'cleave', mag: 3.4, cd: 3.2, type: 'arcane', scale: 'intelligence', tags: ['zone', 'direct', 'arcane'] },
+  { id: 'ar_rupture', name: 'Rupture des arcanes', icon: '🌀', effect: 'executeNuke', mag: 4.0, cd: 5, type: 'arcane', scale: 'intelligence', tags: ['mono', 'direct', 'arcane'] },
+  { id: 'ar_singularite', name: 'Singularité', icon: '🌌', effect: 'finisher', mag: 3.0, cd: 16, type: 'arcane', scale: 'intelligence', tags: ['mono', 'direct', 'arcane', 'finisseur', 'ultime'], resource: 'Charge des arcanes' },
+]
+for (const s of MAGE_SPELLS) POWERS.push(specToPower(s))
+
+/* Sorts du CHASSEUR (handcrafted). Mailles → Meneur de meute (familier = invocation/DPS passif idle)
+ * + Œil de faucon (Concentration : build/spend + visée → tir énorme, exécution, précision). */
+const CHASSEUR_SPELLS: SpellSpec[] = [
+  // Classe
+  { id: 'ch_tir', name: 'Tir de chasse', icon: '🏹', effect: 'nuke', mag: 2.6, cd: 2.8, scale: 'agilite', tags: ['mono', 'direct'] },
+  // Meneur de meute (familier + frappes bestiales)
+  { id: 'me_cmd', name: 'Commandement bestial', icon: '🐺', effect: 'cleave', mag: 2.8, cd: 3, type: 'nature', scale: 'agilite', tags: ['zone', 'direct', 'nature', 'invocation'] },
+  { id: 'me_morsure', name: 'Morsure du fauve', icon: '🐾', effect: 'nuke', mag: 4.4, cd: 3.5, type: 'nature', scale: 'agilite', tags: ['mono', 'direct', 'nature'] },
+  { id: 'me_saignee', name: 'Saignée bestiale', icon: '🩸', effect: 'dot', mag: 2.4, cd: 4, type: 'nature', scale: 'agilite', tags: ['mono', 'dot', 'nature'] },
+  { id: 'me_curee', name: 'Curée sauvage', icon: '🐗', effect: 'megaCleave', mag: 7, cd: 20, type: 'nature', scale: 'agilite', tags: ['zone', 'direct', 'nature', 'ultime', 'invocation'] },
+  // Œil de faucon (Concentration : générateur → finisseur + exécution)
+  { id: 'fa_visee', name: 'Tir assuré', icon: '🎯', effect: 'builder', mag: 1.6, cd: 2.5, scale: 'agilite', tags: ['mono', 'direct', 'generateur'], resource: 'Concentration' },
+  { id: 'fa_tir_vise', name: 'Tir visé', icon: '🏹', effect: 'finisher', mag: 1.6, cd: 3.5, scale: 'agilite', tags: ['mono', 'direct', 'finisseur'], resource: 'Concentration' },
+  { id: 'fa_mortel', name: 'Tir mortel', icon: '💀', effect: 'executeNuke', mag: 4.0, cd: 5, scale: 'agilite', tags: ['mono', 'direct'] },
+  { id: 'fa_salve', name: 'Salve de flèches', icon: '🎇', effect: 'cleave', mag: 3.2, cd: 3, scale: 'agilite', tags: ['zone', 'direct'] },
+  { id: 'fa_aigle', name: 'Tir de l\'aigle', icon: '🦅', effect: 'finisher', mag: 3.0, cd: 16, scale: 'agilite', tags: ['mono', 'direct', 'finisseur', 'ultime'], resource: 'Concentration' },
+]
+for (const s of CHASSEUR_SPELLS) POWERS.push(specToPower(s))
 
 const BY_ID = new Map(POWERS.map((p) => [p.id, p]))
 
