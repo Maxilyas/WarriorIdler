@@ -22,10 +22,12 @@ const TICK_MS = 200
 type Tab = 'combat' | 'stuff' | 'atelier' | 'heros' | 'exped' | 'marche'
 type DeskTab = 'stuff' | 'atelier' | 'heros' | 'exped' | 'marche' | 'grimoire'
 
-/** Paliers de déblocage (révélation progressive de l'UI). */
-const MARCHE_STAGE = 10
-const ATELIER_STAGE = 12
-const DONJON_STAGE = 20
+/** Paliers de déblocage (révélation progressive de l'UI). v0.31 — avancés pour l'onboarding : on
+ *  découvre les systèmes TÔT (pendant que le combat est encore lent), guidé par la chaîne « Premiers
+ *  Pas ». Marché 3 · Atelier/Forge 6 · Donjons 12 · Raids 50 (endgame, inchangé). */
+const MARCHE_STAGE = 3
+const ATELIER_STAGE = 6
+const DONJON_STAGE = 12
 const RAID_STAGE = 50
 
 /** Barre du bas : 6 emplacements maximum — les features futures vivent DANS les hubs. */

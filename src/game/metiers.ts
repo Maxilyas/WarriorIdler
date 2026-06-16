@@ -44,7 +44,7 @@ export function smeltLingots(rarityTier: number): number {
 }
 
 export const METIERS: Record<MetierId, MetierDef> = {
-  forgeron: { id: 'forgeron', name: 'Forgeron', icon: '🔨', color: '#f59e0b', verb: 'Façonner la matière', unlockStage: 12 },
+  forgeron: { id: 'forgeron', name: 'Forgeron', icon: '🔨', color: '#f59e0b', verb: 'Façonner la matière', unlockStage: 6 },
   joaillier: { id: 'joaillier', name: 'Joaillier', icon: '💎', color: '#38bdf8', verb: 'Programmer le combat', unlockStage: 25 },
   runiste: { id: 'runiste', name: 'Runiste', icon: '🪄', color: '#c084fc', verb: 'Tordre le temps et les règles', unlockStage: 35 },
   alchimiste: { id: 'alchimiste', name: 'Alchimiste', icon: '⚗️', color: '#34d399', verb: 'Distiller l\'essence', unlockStage: 40 },

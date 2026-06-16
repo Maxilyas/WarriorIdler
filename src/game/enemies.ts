@@ -110,11 +110,14 @@ export function stageResistRamp(stage: number): number {
  *     un meilleur stuff) ne passent PAS par ici → restent à pleine échelle (boss 35-40 s).
  * Le « mur de farm » (au-delà du cap de loot ilvl 200) subsiste : les PV montent toujours en b^ilvl.
  */
-export const ONBOARD_STAGES = 20
+export const ONBOARD_STAGES = 22
 export const FARM_PLATEAU = 0.55
 export function onboardingMult(stage: number): number {
   if (stage >= ONBOARD_STAGES) return FARM_PLATEAU
-  return Math.max(0.005, FARM_PLATEAU * Math.pow(stage / ONBOARD_STAGES, 1.7))
+  // Courbe TRÈS douce sur les premiers paliers (exposant 2,6) : le joueur early n'a ni keystones
+  // (talents au niv 11) ni stuff complet → bien plus faible que les builds optimisés des sims. On lui
+  // laisse de l'air pour gear/level/découvrir, puis on rejoint le plateau de farm au palier 22.
+  return Math.max(0.004, FARM_PLATEAU * Math.pow(stage / ONBOARD_STAGES, 2.6))
 }
 
 /** Crée l'ennemi correspondant à un palier (stage) dans un biome donné. Boss tous les 10 paliers.

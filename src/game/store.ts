@@ -1247,6 +1247,33 @@ function shiftProfile(p: DamageProfile, to: DamageType, frac: number): DamagePro
   return { ...p, profile }
 }
 
+/** v0.31 — AUTO-ÉQUIP des slots VIDES (onboarding) : remplit chaque emplacement vide du perso avec le
+ *  meilleur objet compatible de l'inventaire. NON destructif — les slots déjà remplis ne bougent pas
+ *  (les UPGRADES restent un choix manuel). Un perso nu se gear ainsi tout seul depuis ses drops. */
+function autoEquipEmpties(char: Character, inventory: Item[]): { char: Character; inventory: Item[]; equipped: number } {
+  const equipment = { ...char.equipment }
+  let inv = inventory
+  let equipped = 0
+  for (const sl of EQUIP_SLOTS) {
+    if (equipment[sl.id]) continue
+    let bestIdx = -1
+    let bestScore = -1
+    for (let i = 0; i < inv.length; i++) {
+      const it = inv[i]
+      if (!it.locked && slotAccepts(sl.id, it.type) && itemScore(it) > bestScore) { bestScore = itemScore(it); bestIdx = i }
+    }
+    if (bestIdx >= 0) {
+      equipment[sl.id] = inv[bestIdx]
+      inv = inv.filter((_, i) => i !== bestIdx)
+      equipped++
+    }
+  }
+  if (equipped === 0) return { char, inventory, equipped: 0 }
+  const nc: Character = { ...char, equipment }
+  nc.hp = Math.min(nc.hp || charMaxHp(nc), charMaxHp(nc))
+  return { char: nc, inventory: inv, equipped }
+}
+
 function freshSave(): SaveData {
   // v0.30.1 — on part NU (zéro stuff) : la rampe d'onboarding (enemies.ts) rend les premiers paliers
   // faibles pour qu'on loote et s'équipe de zéro, en découvrant les concepts/donjons/métiers.
@@ -4119,9 +4146,13 @@ export const useGame = create<GameState>((set, get) => {
         // Rune de Transmutation brute : les monstres NORMAUX ne droppent plus d'objets.
         const transmut = rules.has('transmutation')
         // Moins d'objets en combat classique (le farm de stuff se fait en donjon/raid).
+        // v0.31 — ONBOARDING : en tout début (palier < 15), CHAQUE kill normal droppe (au lieu de 30%)
+        // → un perso nu se gear vite (couplé à l'auto-équip) et survit, au lieu d'enchaîner des kills
+        // à vide et de mourir nu.
+        const onboardDrop = s.bestStage < 15
         let drops = transmut && !boss && !elite
           ? 0
-          : (boss ? 2 : Math.random() < 0.30 + eco.lootChance ? 1 : 0) + (elite ? 1 : 0) + (champion ? 1 : 0)
+          : (boss ? 2 : (onboardDrop || Math.random() < 0.30 + eco.lootChance) ? 1 : 0) + (elite ? 1 : 0) + (champion ? 1 : 0)
         // 🔍 Monomanie : 2× moins d'objets… mais de meilleure facture (shift plus bas).
         if (rules.has('monomanie') && drops > 0) drops = Math.random() < 0.5 ? drops : 0
         // 🦷 Loi du talion : les élites/boss lâchent parfois leur butin DEUX fois.
@@ -4159,6 +4190,19 @@ export const useGame = create<GameState>((set, get) => {
           log = pushLog(log, `Butin : ${it.name}`, 'loot')
         }
         if (autoRec) log = pushLog(log, `♻️ ${autoRec} butin recyclé automatiquement.`, 'craft')
+        // v0.31 — auto-équip des slots VIDES (onboarding) sur le perso ACTIF : un perso nu se gear
+        // tout seul depuis ses drops (les emplacements déjà remplis ne bougent pas).
+        {
+          const ai = s.activeChar ?? 0
+          if (chars[ai]) {
+            const ae = autoEquipEmpties(chars[ai], inventory)
+            if (ae.equipped > 0) {
+              chars = chars.map((c, i) => (i === ai ? ae.char : c))
+              inventory = ae.inventory
+              log = pushLog(log, `🎒 ${ae.equipped} objet${ae.equipped > 1 ? 's' : ''} équipé${ae.equipped > 1 ? 's' : ''} (emplacement vide).`, 'loot')
+            }
+          }
+        }
 
         // Bonus de métier sur les drops (Condensation de l'Alchimiste, Prospection du Joaillier).
         const cmods = cmodsTick
