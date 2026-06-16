@@ -303,6 +303,12 @@ export interface PowerDef {
    * talent modifient des TAGS (pas un sort nommé) → synergies CROSS-CLASSE sans point gâché.
    */
   tags?: string[]
+  /**
+   * Nom de la RESSOURCE build/spend utilisée par ce générateur/finisseur (v0.29.5). Le moteur
+   * (char.combo) est générique ; ce libellé n'est qu'un affichage. Défaut « Combo ». Les futures
+   * classes mettent 'Rage', 'Pouvoir sacré', 'Maelström'… → même mécanique, nom propre.
+   */
+  resource?: string
 }
 
 // ---- Personnage ----
@@ -423,6 +429,9 @@ export interface Enemy {
   dot?: { dps: number; remaining: number }
   /** ASSASSIN (v0.29.1) : nombre de stacks de venin posés (le DoT `dot` monte avec). Transitoire. */
   venomStacks?: number
+  /** CONTRÔLE (v0.29.6) : durée restante de gel/ralenti (s) — posée par les sorts [controle].
+   *  Les keystones `shatter` infligent un bonus de dégâts aux ennemis contrôlés. Transitoire. */
+  controlled?: number
   /** Trait déterministe (texture du combat classique) : nom court affiché. */
   trait?: string
   /** Ennemi d'élite (stats accrues + meilleur butin). */

@@ -680,11 +680,13 @@ function statusChips(c: Character): { icon: string; label: string; cls: string; 
   if (c.frenzy) out.push({ icon: '🔥', label: 'frénésie', cls: 'bg-orange-500/20 text-orange-300', title: `Frénésie : dégâts ×${c.frenzy.mult.toFixed(2)}` })
   if (c.charge) out.push({ icon: '⚡', label: 'vengeance', cls: 'bg-amber-500/20 text-amber-300', title: 'Vengeance différée : la riposte frappe à expiration' })
   // RESSOURCE DE CLASSE — Points de Combo (Ombrelame) : visible dès qu'un générateur/finisseur est équipé.
-  const hasCombo = c.powers.some((p) => { const pw = p ? getPower(p) : null; return pw?.effect === 'builder' || pw?.effect === 'finisher' })
-  if (hasCombo) {
+  // v0.29.5 : ressource build/spend générique — nom propre à la classe (Combo / Rage / Pouvoir sacré…).
+  const resPid = c.powers.find((p) => { const pw = p ? getPower(p) : null; return pw?.effect === 'builder' || pw?.effect === 'finisher' })
+  if (resPid) {
     const combo = c.combo ?? 0
     const cap = 5 + charCombatMods(c).comboCap
-    out.push({ icon: '🗡', label: `Combo ${combo}/${cap}`, cls: 'bg-violet-500/25 text-violet-200 font-semibold', title: 'Points de Combo : générés par tes générateurs, consommés par tes finisseurs (dégâts × points)' })
+    const resName = (getPower(resPid)?.resource) ?? 'Combo'
+    out.push({ icon: '🗡', label: `${resName} ${combo}/${cap}`, cls: 'bg-violet-500/25 text-violet-200 font-semibold', title: 'Ressource : générée par tes générateurs, consommée par tes finisseurs (dégâts × points)' })
   }
   return out
 }

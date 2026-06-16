@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import type {
   Equipment, Item, Affix, PrimaryStat, OffensiveStat, SecondaryStat, EquipSlotId, ItemType, Enemy, DamageType, RarityId, Character, PowerDef, EnemyAbility,
 } from './types'
-import { rollHit, incomingDps, genericMitigation } from './combat'
+import { rollHit, incomingDps, genericMitigation, theoreticalDps } from './combat'
 import { resistMult, enemyReq, resistSurplus, RESIST_DSCALE } from './resist'
 import type { DerivedStats } from './stats'
 import {
@@ -2370,7 +2370,10 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
   const cm = charCombatMods(caster)
   let tagMult = 1
   if (p.tags) for (const t of p.tags) tagMult *= (cm.tagBonus[t] ?? 1)
-  const magDmg = base * profileDamageMult(profile) * dmgMult * tagMult // profil + keystones (Carnage…) + tags
+  // CONTRÔLE (v0.29.6) : un sort [controle] gèle/ralentit ; SHATTER : +dégâts aux ennemis contrôlés.
+  if (p.tags?.includes('controle')) enemy.controlled = Math.max(enemy.controlled ?? 0, p.duration ?? 4)
+  const shatterMult = (enemy.controlled ?? 0) > 0 ? 1 + cm.shatter : 1
+  const magDmg = base * profileDamageMult(profile) * dmgMult * tagMult * shatterMult // profil + keystones + tags + shatter
   // Boucliers : scalent sur la MEILLEURE de (stat principale, Endurance) → un tank qui empile
   // l'Endurance obtient un énorme bouclier (levier de survie qui suit l'Endurance).
   const shieldBase = (p.magnitude ?? 1) * Math.max(abilityPower(derived, powerScale(p)), derived.endurancePower)
@@ -2802,9 +2805,17 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
         if (d.cmods.dot) enemy.dot = { dps: Math.max(hit.damage * d.cmods.dot.frac * d.derived.alterationMult, enemy.dot?.dps ?? 0), remaining: d.cmods.dot.duration }
       }
     }
+    // 🐾 INVOCATION : le familier inflige en continu une fraction de ton DPS d'auto-attaque.
+    if (d.cmods.petDps > 0 && enemy.hp > 0) {
+      const pet = theoreticalDps(d.derived, d.profile, d.cmods.damageMult) * d.cmods.petDps * dt
+      enemy.hp = Math.max(0, enemy.hp - pet); dealtThis += pet
+    }
     if (c.charge) c.charge.dealt += dealtThis
     if (healed && !mods?.pact?.noHeal) gemLeechHeal(c, healed, mods?.cond) // 💧 l'excès est conservé
   })
+
+  // ❄ CONTRÔLE : le gel/ralenti s'estompe.
+  if ((enemy.controlled ?? 0) > 0) { enemy.controlled = Math.max(0, (enemy.controlled ?? 0) - dt) || undefined }
 
   // 2) Dégâts du DoT sur l'ennemi + décompte de ses statuts (vulnérabilité, anti-régén).
   // ⏩ Avance rapide (rune) : TES altérations tickent plus vite (mêmes dégâts totaux, compressés).
@@ -3227,6 +3238,11 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
         }
       }
     }
+    // 🐾 INVOCATION : le familier frappe la cible focus, en continu.
+    if (d.cmods.petDps > 0) {
+      const f = focus()
+      if (f && f.hp > 0) { const pet = theoreticalDps(d.derived, d.profile, d.cmods.damageMult) * d.cmods.petDps * dt; f.hp = Math.max(0, f.hp - pet); dealtThis += pet }
+    }
     if (c.charge) c.charge.dealt += dealtThis
     if (healed && !mods?.pact?.noHeal) gemLeechHeal(c, healed, mods?.cond) // 💧 l'excès est conservé
   })
@@ -3235,6 +3251,7 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
   // ⏩ Avance rapide (rune) : TES altérations tickent plus vite (compressées, mêmes dégâts totaux).
   const dotHaste = 1 + (mods?.runes?.avanceRapide ?? 0)
   for (const enemy of enemies) {
+    if ((enemy.controlled ?? 0) > 0) enemy.controlled = Math.max(0, (enemy.controlled ?? 0) - dt) || undefined // ❄ contrôle s'estompe
     if (enemy.dot && enemy.hp > 0) {
       const dmg = enemy.dot.dps * dt * dotHaste
       enemy.hp = Math.max(0, enemy.hp - dmg)

@@ -67,6 +67,12 @@ export interface KeystoneEffect {
   detonateDouble?: boolean
   /** OMBRELAME : un finisseur REND `comboRefund` Points de Combo (spam de finisseurs). */
   comboRefund?: number
+
+  /* ---- v0.29.6 : INVOCATION (pets) + CONTRÔLE (réutilisables) ---- */
+  /** INVOCATION : un familier/totem/démon inflige en continu `petDps` × ton DPS d'auto-attaque. */
+  petDps?: number
+  /** CONTRÔLE « shatter » : +`shatter` de dégâts (mult) aux ennemis CONTRÔLÉS (gelés/ralentis). */
+  shatter?: number
 }
 
 /** Vocabulaire des TAGS de comportement (12) — les 7 types de dégâts servent aussi de tags. */

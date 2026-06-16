@@ -263,7 +263,8 @@ export function charDps(char: Character): number {
   const cm = charCombatMods(char)
   const dmgMult = cm.damageMult
   const gen = comboGenPerSec(char, derived, cm.comboGen)
-  let dps = theoreticalDps(derived, profile, dmgMult)
+  const auto = theoreticalDps(derived, profile, dmgMult)
+  let dps = auto + auto * cm.petDps // INVOCATION : le familier inflige une fraction de ton DPS d'auto.
   for (const pid of char.powers) {
     if (!pid) continue
     const p = getPower(pid)
@@ -305,6 +306,7 @@ export function dpsBreakdown(char: Character): DpsBreakdown {
     const d = abilityDps(p, derived, pm, dmgMult, cm, gen)
     if (d > 0) spells.push({ name: p.name, dps: d })
   }
+  if (cm.petDps > 0) spells.push({ name: '🐾 Familier', dps: auto * cm.petDps })
   const avgCrit = 1 + derived.critChance * (derived.critMult - 1)
   const factors = [
     { label: 'Puissance', value: Math.round(derived.power).toLocaleString('fr-FR') },
@@ -404,6 +406,10 @@ export interface CombatMods {
   detonateDouble: boolean
   /** OMBRELAME : Points de Combo rendus par un finisseur (max des keystones). */
   comboRefund: number
+  /** INVOCATION : DPS continu du familier, en fraction de ton DPS d'auto-attaque (somme). */
+  petDps: number
+  /** CONTRÔLE : bonus de dégâts (somme) contre les ennemis contrôlés. */
+  shatter: number
 }
 
 export function charCombatMods(char: Character): CombatMods {
@@ -412,7 +418,7 @@ export function charCombatMods(char: Character): CombatMods {
     healToDamage: 0, cleaveAuto: 0, perEnemyBonus: 0, dotLeech: 0, dotAoe: 0,
     spellMult: 1, cdrOnCast: 0, reqReduction: 0, surplusToDamage: 0, shareResist: 0, surplusRegen: 0,
     poison: { perStack: 0.08, maxStacks: 4 }, comboCap: 0, comboGen: 0, finisherMult: 0,
-    tagBonus: {}, detonateDouble: false, comboRefund: 0,
+    tagBonus: {}, detonateDouble: false, comboRefund: 0, petDps: 0, shatter: 0,
   }
   // Multiplicateur de dégâts des bonus de SET (s'applique aux auto-attaques ET aux sorts,
   // et donc au DPS affiché via charDps — même chemin que les keystones).
@@ -471,6 +477,8 @@ export function charCombatMods(char: Character): CombatMods {
     if (k.tagBonus) out.tagBonus[k.tagBonus.tag] = (out.tagBonus[k.tagBonus.tag] ?? 1) * k.tagBonus.damageMult
     if (k.detonateDouble) out.detonateDouble = true
     if (k.comboRefund) out.comboRefund = Math.max(out.comboRefund, k.comboRefund)
+    if (k.petDps) out.petDps += k.petDps
+    if (k.shatter) out.shatter += k.shatter
     if (k.multiTypeBonus) {
       multiType = multiType
         ? { per: multiType.per + k.multiTypeBonus.per, threshold: Math.min(multiType.threshold, k.multiTypeBonus.threshold) }
