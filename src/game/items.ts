@@ -1,18 +1,22 @@
 import type { Affix, Item, PrimaryStat, OffensiveStat, ItemOrientation, ItemType, SecondaryStat, RarityId, DamageType } from './types'
 import { RARITIES, RARITY_LIST, rollRarity } from './rarities'
-import { RARE_STATS } from './stats'
+import { RARE_STATS, softCap } from './stats'
 import { ITEM_TYPES } from './slots'
 import { rollUnique, instanceMods } from './uniques'
 import { rollSockets } from './gems'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from './damage'
 import { itemBudget, effItemIlvl, clampIlvl, powerAt, RARITY_ILVL_PER_TIER } from './progression'
 
-/** v0.30 — échelle des lignes de stat secondaire (≠ budget exponentiel du primaire).
- *  Les secondaires MONTENT jusqu'à `SECONDARY_SATURATE` (ilvl-équiv) puis PLAFONNENT → l'endgame
- *  est du `b^ilvl` PUR (le primaire porte tout), pas de dérive du TTK/survie en fin de course. En
- *  deçà, elles s'allument progressivement (« le build vient en ligne »). % bornés en aval (soft caps). */
-export const SECONDARY_SCALE = 2.0
-export const SECONDARY_SATURATE = 300
+/** v0.30.1 — lignes de stat secondaire : PROPORTIONNELLES au budget exponentiel (poids SECONDARY_FRAC)
+ *  → même échelle que le primaire à bas ilvl (fini « primaire 2 vs crit 66 »), MAIS plafonnées à
+ *  SECONDARY_CAP (rating) une fois le mid-game atteint. Le plafond garde le % borné (compatible avec
+ *  le /PER_PCT fixe dont dépendent talents/sets) et le TTL plat en endgame, tout en restant toujours
+ *  < primaire (≈0,43× : SECONDARY_FRAC/offFrac). */
+export const SECONDARY_FRAC = 0.35
+/** Soft cap du RATING d'une ligne secondaire : transition DOUCE vers SECONDARY_HARD (pas de saut net
+ *  quand le budget dépasse le seuil, contrairement à un min() — évite le « kink » de DPS au mid-game). */
+export const SECONDARY_SOFT = 400
+export const SECONDARY_HARD = 700
 
 const ITEM_TYPE_LIST: ItemType[] = Object.keys(ITEM_TYPES) as ItemType[]
 
@@ -92,10 +96,10 @@ export const DMG_LINE_TIER_GROWTH = 0.07
 function rollLineValue(spec: LineSpec, ilvl: number, qMult: number, tier: number): number {
   if (spec.kind === 'stat') {
     const soft = RARE_STATS.includes(spec.stat) ? 0.5 : 1 // stats rares modérées (rares mais fortes)
-    // v0.30 : échelle linéaire en ilvl effectif (rareté +3/cran), SATURÉE à SECONDARY_SATURATE →
-    // l'endgame est du b^ilvl pur. La qualité (qMult) les rehausse un peu ; % bornés en aval.
-    const eff = Math.min(effItemIlvl(ilvl, tier), SECONDARY_SATURATE)
-    const base = SECONDARY_SCALE * eff * soft * qMult
+    // v0.30.1 : PROPORTIONNEL au budget (poids SECONDARY_FRAC) puis SOFT-CAPÉ → à bas ilvl ça suit le
+    // primaire (×0,43, lisible & proportionnel) ; au mid-game ça plafonne EN DOUCEUR (rating borné →
+    // % borné → TTK plat, et toujours < primaire qui, lui, continue en b^ilvl).
+    const base = softCap(itemBudget(ilvl, tier, SECONDARY_FRAC, qMult), SECONDARY_SOFT * qMult, SECONDARY_HARD * qMult) * soft
     return Math.max(1, Math.round(base * (0.7 + Math.random() * 0.6)))
   }
   if (spec.kind === 'dmgType') return Math.round((DMG_LINE_BASE + Math.random() * DMG_LINE_RANGE) * (1 + tier * DMG_LINE_TIER_GROWTH))

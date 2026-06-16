@@ -11,15 +11,16 @@ const M = await load(`
   export { RARITIES } from './src/game/rarities.ts'
   export { ITEM_TYPES, EQUIP_SLOTS } from './src/game/slots.ts'
   export { profileDamageMult } from './src/game/damage.ts'
-  export { DMG_LINE_BASE, DMG_LINE_RANGE, DMG_LINE_TIER_GROWTH, SECONDARY_SCALE, SECONDARY_SATURATE } from './src/game/items.ts'
+  export { DMG_LINE_BASE, DMG_LINE_RANGE, DMG_LINE_TIER_GROWTH, SECONDARY_FRAC, SECONDARY_SOFT, SECONDARY_HARD } from './src/game/items.ts'
+  export { softCap } from './src/game/stats.ts'
   export { itemBudget, effItemIlvl } from './src/game/progression.ts'
 `)
 const { makeCharacter, charDerived, charDamageProfile, charDps, charMaxHp, charCombatMods, charResist, setGlobalCombatMods, RARITIES, ITEM_TYPES, EQUIP_SLOTS, itemBudget, effItemIlvl } = M
 setGlobalCombatMods({ power: 1, attackSpeed: 1, vitality: 1 }) // pas d'upgrades marchand (comparaison pure)
 
-// Affixe stat à la valeur MAX (gear optimisé) : v0.30 — secondaire = échelle SECONDARY_SCALE sur
-// l'ilvl effectif SATURÉ (≠ budget exponentiel), même formule que rollLineValue (max roll 1.3).
-const statAffix = (stat, ilvl, tier, rare = false) => ({ kind: 'stat', stat, value: Math.max(1, Math.round(M.SECONDARY_SCALE * Math.min(effItemIlvl(ilvl, tier), M.SECONDARY_SATURATE) * (rare ? 0.5 : 1) * 1.3)) })
+// Affixe stat à la valeur MAX (gear optimisé) : v0.30.1 — secondaire PROPORTIONNEL au budget
+// (poids SECONDARY_FRAC), même formule que rollLineValue (max roll 1.3).
+const statAffix = (stat, ilvl, tier, rare = false) => ({ kind: 'stat', stat, value: Math.max(1, Math.round(M.softCap(itemBudget(ilvl, tier, M.SECONDARY_FRAC, 1), M.SECONDARY_SOFT, M.SECONDARY_HARD) * (rare ? 0.5 : 1) * 1.3)) })
 // Ligne de type au roll max — mêmes constantes que rollLineValue (plus de copie qui dérive).
 const dmgAffix = (type, tier) => ({ kind: 'dmgType', type, value: Math.round((M.DMG_LINE_BASE + M.DMG_LINE_RANGE) * (1 + tier * M.DMG_LINE_TIER_GROWTH)) })
 

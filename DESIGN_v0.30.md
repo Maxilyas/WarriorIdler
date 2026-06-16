@@ -240,12 +240,37 @@ pas l'ilvl, ne cassent pas la base `b`) :
 
 ---
 
-## Statut
+## Statut — ✅ REFONTE COMPLÈTE (LOT 0-8)
 
-- **LOT 0 — ✅ FAIT** : `src/game/progression.ts` (source de vérité) + harnais `scripts/ttk-sim.mjs`
-  (`npm run ttk`). Modèle **validé** : TTK plat 50→700 (trash 3 s / boss 35 s, écart < 0,5 %), sur-stuff
-  borné (+20 ilvl = ×1,81), rareté ×3,78 max, survie plate ~8 s, aucun ilvl > 700.
-- **LOTS 1-8 — à venir** (cf. §10). Prochain : LOT 1/2 (câbler `progression.ts` dans `items.ts`,
-  budget exponentiel) puis re-vérifier via `npm run ttk` branché sur le vrai code character.
+Tous les lots implémentés, commités, build prod vert, smoke-test navigateur OK.
 
-*Constantes solvées par le harnais : `K_DPS=1.141`, `K_HP=24.96` (ENEMY_HP0=40, ENEMY_DMG0=6).*
+- **LOT 0** : `progression.ts` (source de vérité) + harnais `npm run ttk` branché sur le **vrai code**.
+- **LOT 1-3** (moteur) : budget d'objet **exponentiel** (`b^ilvl`), rareté = +3 ilvl-équiv/cran,
+  compression des secondaires (Hâte/Maîtrise/Crit soft-capés + saturation à ilvl-équiv 300),
+  wipe via `SAVE_KEY` v030.
+- **LOT 4-6** (contenu) : farm/donjons/raids sur la courbe unifiée. `raidIlvl` = bande **linéaire**
+  +15/tier (fini le ×1,22). Fenêtres de rareté aplaties. Enrage recalé au-dessus du TTK.
+- **LOT 7-8** : caps 700 verrouillés, Constellation = axes post-700, build-sim à jour.
+
+**Validation finale (`npm run ttk`)** :
+- ENDGAME plat : DPS ∝ b^ilvl sur ci≥300 (ratio **1,08**) → **snowball neutralisé**.
+- TTK trash 2,4–3,4 s · boss de raid **~35-37 s à TOUS les tiers** (était faceroll au T10).
+- Survie endgame ~8 s · rareté en fenêtre de contenu **×1,16** · step raid +15/tier · aucun ilvl > 700.
+- Équilibre archétypes FOR/AGI/INT **×1,04-1,09** (`npm run sim`) — la compression a *resserré* la balance.
+
+### v0.30.1 — correctif PROPORTION des stats (retour joueur)
+
+Bug : à bas ilvl, le primaire (budget exponentiel, ~1-2) était écrasé par les secondaires (échelle
+LINÉAIRE, ~66) → « Intelligence 1 vs Crit 66 », deltas DPS/Survie à +0, arbitrage faussé. Le harnais
+TTK ne l'avait pas vu (il comparait à ilvl égal, les proportions s'annulaient).
+
+Fix : lignes secondaires **proportionnelles au budget** (poids `SECONDARY_FRAC=0,35`) puis **soft-capées**
+(`SECONDARY_SOFT/HARD = 400/700`) → même échelle que le primaire à bas ilvl (×0,43), plafonnées au
+mid-game (% borné → TTK plat, compatible `/PER_PCT` des talents/sets). Le primaire reste toujours le
+plus gros nombre de l'objet (vérifié, section 7 du harnais). `ITEM_BUDGET0` relevé 1→8 (stats
+LISIBLES, ex. ilvl 26 : primaire ~24, secondaire ~13). **Équipement de départ** semé (`seedStarterEquipment`,
+ilvl 40 rare) car un perso nu ne peut plus entamer les ennemis (PV calés sur du stuff). `SAVE_KEY`→v030b.
+
+*Constantes calibrées : `ITEM_BUDGET0=8`, `ENEMY_HP0=9000`, `ENEMY_DMG0=320`, `SECONDARY_FRAC=0,35`,
+`SECONDARY_SOFT/HARD=400/700` (par `npm run ttk`). Note : rampe early→endgame (build qui s'allume)
+acceptée ; l'endgame — zone anti-snowball — est plat (ratio 1,08).*

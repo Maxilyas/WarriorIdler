@@ -63,7 +63,7 @@ function repDps(ci, rarity) {
 }
 function repEhp(ci) {
   let sum = 0, n = 0
-  for (const b of Object.values(BUILDS)) for (let i = 0; i < 6; i++) { const c = gearedChar(b, ci); sum += charEhp(c); n++ }
+  for (const b of Object.values(BUILDS)) for (let i = 0; i < 12; i++) { const c = gearedChar(b, ci); sum += charEhp(c); n++ }
   return sum / n
 }
 
@@ -157,5 +157,19 @@ console.log(`  ${ok(raidBossTtkOk)} TTK boss de raid dans une bande saine (~30-5
 const enrageOk = M.RAID_LIST.every((def) => [1, 5, 10].every((t) => M.raidBerserkTime(def, t) > P.enemyHp(M.raidIlvl(def, t), 'raidboss') / repDps(M.raidIlvl(def, t), 'legendaire')))
 console.log(`  ${ok(enrageOk)} enrage > TTK boss à stuff calé (marge de clear)`)
 
-const pass = egDpsFlat < 1.2 && survFlat < 1.25 && allUnder && windowSpread <= 1.8 && raidOk && maxStep <= 20 && raidBossTtkOk && enrageOk
+// ---- (7) PROPORTION des stats sur un objet (le bug v0.30.1 : primaire 2 vs secondaire 66) ----
+console.log('\n=== (7) Proportion primaire vs secondaire sur un objet (légendaire) ===')
+console.log('  ilvl | primaire | endurance | max secondaire | ratio sec/prim')
+let propOk = true
+for (const il of [10, 26, 100, 300, 700]) {
+  const it = generateItem({ ilvl: il, rarity: 'legendaire', type: 'torse', primary: 'force', stars: 3 })
+  const sec = it.affixes.filter((a) => a.kind === 'stat').map((a) => a.value)
+  const maxSec = sec.length ? Math.max(...sec) : 0
+  const ratio = maxSec / Math.max(1, it.primaryValue)
+  if (ratio > 1.0) propOk = false // le primaire doit RESTER le plus gros nombre de l'objet
+  console.log(`  ${String(il).padStart(4)} | ${String(it.primaryValue).padStart(8)} | ${String(it.endurance).padStart(9)} | ${String(maxSec).padStart(14)} | ×${ratio.toFixed(2)}`)
+}
+console.log(`  ${ok(propOk)} le primaire reste le plus gros nombre de l'objet (sec/prim ≤ 1)`)
+
+const pass = egDpsFlat < 1.2 && survFlat < 1.25 && allUnder && windowSpread <= 1.8 && raidOk && maxStep <= 20 && raidBossTtkOk && enrageOk && propOk
 console.log(`\n=== VERDICT : ${pass ? '✅ MODÈLE VALIDE — snowball neutralisé sur toute la progression' : '❌ à recaler'} ===`)

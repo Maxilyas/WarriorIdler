@@ -41,10 +41,11 @@ export function effItemIlvl(ilvl: number, rarityTier: number): number {
 // ---- Budget d'objet (EXPONENTIEL — cœur de la refonte, ex-linéaire) ----
 
 /**
- * Échelle de base du budget de stats. Calibrée (LOT 2) pour que le DPS du joueur à stuff calé tue
- * le trash dans `TTK.trash`. PROVISOIRE tant que le harnais TTK n'a pas figé la valeur définitive.
+ * Échelle de base du budget de stats. v0.30.1 : relevée (1→8) pour que les objets de bas ilvl aient
+ * des stats LISIBLES (primaire ~15-30 dès ilvl 26, pas ~2) et que le gear domine les stats de niveau.
+ * Le ratio `ENEMY_HP0/ITEM_BUDGET0` est préservé → le TTK ne bouge pas (juste l'échelle absolue ×8).
  */
-export const ITEM_BUDGET0 = 1.0
+export const ITEM_BUDGET0 = 8.0
 
 /** Budget de stats d'un objet : EXPONENTIEL en ilvl effectif (la stat primaire le porte → DPS ∝ b^ilvl). */
 export function itemBudget(ilvl: number, rarityTier: number, weight: number, qMult = 1): number {
@@ -65,10 +66,10 @@ export const ENEMY_DMG_CLASS: Record<EnemyClass, number> = {
 }
 
 /** Échelle de PV de base (ennemi trash, ilvl 0). Calibrée par `npm run ttk` (médian implicite) pour
- *  que le trash meure en ~`TTK.trash` à stuff calé sur tout l'axe. */
-export const ENEMY_HP0 = 1000
+ *  que le trash meure en ~`TTK.trash` à stuff calé. v0.30.1 : ×8 (suit ITEM_BUDGET0, ratio préservé). */
+export const ENEMY_HP0 = 9000
 /** Échelle de dégâts de base. Calibrée par `npm run ttk` pour viser `SURVIVE_SECONDS` à stuff calé. */
-export const ENEMY_DMG0 = 82
+export const ENEMY_DMG0 = 320
 
 /** PV d'un ennemi à un ilvl de contenu donné. */
 export function enemyHp(ilvl: number, cls: EnemyClass = 'trash'): number {
