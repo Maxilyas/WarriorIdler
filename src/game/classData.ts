@@ -78,6 +78,11 @@ export interface KeystoneEffect {
   /** PYROMANCIEN : un coup CRITIQUE pose/rafraîchit un Embrasement (DoT feu = `frac` du coup/s, `duration` s).
    *  Plusieurs nœuds cumulent leur `frac` (la durée prend le max). Amplifié par l'Altération. */
   igniteOnCrit?: { frac: number; duration: number }
+
+  /* ---- v0.30 : REMPART (tank Rage → bouclier) ---- */
+  /** REMPART : un FINISSEUR accorde au lanceur un bouclier d'absorption = `finisherShield` × ses dégâts.
+   *  Convertit la dépense de Rage en survie (Bloc/Ignore Pain). Somme entre keystones. */
+  finisherShield?: number
 }
 
 /** Vocabulaire des TAGS de comportement (12) — les 7 types de dégâts servent aussi de tags. */

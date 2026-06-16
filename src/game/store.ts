@@ -2471,6 +2471,8 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
       const pts = Math.max(1, caster.combo ?? 0)
       const done = hit(magDmg * pts * 0.55 * (1 + cm.finisherMult) * vm)
       caster.combo = cm.comboRefund
+      // REMPART : convertit la dépense de Rage en bouclier d'absorption (Bloc/Ignore Pain).
+      if (cm.finisherShield > 0) caster.absorb = (caster.absorb ?? 0) + done * cm.finisherShield
       return done
     }
   }

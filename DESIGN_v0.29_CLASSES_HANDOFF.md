@@ -5,7 +5,8 @@
 > (l'ancien plan « 39 specs générées », abandonné car trop linéaire).
 >
 > **État** : socles + **Voleur** (Assassin + Ombrelame) + **Mage** (Pyromancien + Cryomancien + Arcaniste)
-> + **Chasseur** (Meneur de meute + Œil de faucon). **3 classes faites, 7 restantes.** Arbre = 135 nœuds.
+> + **Chasseur** (Meneur de meute + Œil de faucon) + **Guerrier** (Sentence + **Rempart = 1er TANK**)
+> + **Prêtre** (**Lumière = 1er HEAL** + Vide). **5 classes faites, 5 restantes.** Arbre = 198 nœuds.
 
 ---
 
@@ -101,6 +102,8 @@ Chaque sort porte des **tags** (`PowerDef.tags` / `SpellSpec.tags`). **12 tags d
 | **Invocation (pet)** | keystone `petDps` (× DPS auto, continu) | les 2 pas de combat + `charDps`/`dpsBreakdown` (ligne 🐾) | Chasseur (meute), Démoniste (Légion), totems |
 | **Contrôle** | `enemy.controlled` (posé par sorts taggés `controle`) ; keystone `shatter` (+dégâts vs contrôlés, SORTS only) | `fireActive` (pose + bonus), décrément au tick | Cryomancien ✓, DK Givre-mort |
 | **Embrasement sur crit** | keystone `igniteOnCrit:{frac,duration}` (frac somme, durée max) | les 2 pas de combat (sur `hit.crit`) + estim. fiche `igniteDps` (ligne 🔥) | Pyromancien ✓ |
+| **Finisseur → bouclier** | keystone `finisherShield` (somme) | `fireActive` cas `finisher` (absorb += done × frac) | Rempart ✓ (tank Rage→bouclier) |
+| **Atonement (soin↔dégâts)** | keystone `healToDamage` (somme) | `fireActive` `bleedHeal` (une part du soin frappe l'ennemi) | Lumière ✓ (heal qui peut solo) |
 | **3 passifs / 5 actifs** | `char.powers` (5 actifs) + `char.passives` (3 passifs) | `charPassives` lit `passives` ; `setPassive` | toutes |
 
 > ⚠️ `enemy.dot` est **un seul slot** (Math.max garde le plus fort) : venin / saignement / Embrasement / Immolation
@@ -168,9 +171,9 @@ Format : **Nom** (rôle) — *boucle unique* — `tags` clés. (Noms = identité
 - **Templier** (TANK) — blocage + **aura** partageant ta résistance à l'équipe + zone consacrée. `protection, zone`
 - **Aube** (HEAL) — soigne en frappant (Pouvoir Sacré → soins), scale FORCE (heal non-INT). `soin, generateur, finisseur`
 
-### ⚔ GUERRIER (Plaque) — *ressource « Rage »*
-- **Sentence** (DPS) — Rage → gros coups + **exécution** + saignements. `mono, direct, finisseur, dot`
-- **Rempart** (TANK) — Rage → **bouclier d'absorption** + **épines** + provocation. `protection, finisseur`
+### ⚔ GUERRIER (Plaque) — ✅ FAIT (*ressource « Rage »* = `char.combo`)
+- **Sentence** (DPS) — Rage (build/spend) → finisseur + **exécution** (`executeBonus`) + saignements (`dot`). `mono, direct, finisseur, dot`
+- **Rempart** (TANK ✓ 1er) — Rage → **bouclier** (`finisherShield`) + **épines** (`thorns`) + provocation (réutilise `provocation`) ; ultime = Égide. `protection, finisseur`
 
 ### ☠ CHEVALIER DE LA MORT (Plaque) — *ressource « Puissance runique »*
 - **Givre-mort** (DPS) — **brise** les cibles `controle` (exécution sur gelé/ralenti) + multifrappe runique. `mono, direct, finisseur, froid, controle`
@@ -198,9 +201,10 @@ Format : **Nom** (rôle) — *boucle unique* — `tags` clés. (Noms = identité
 - **Cryomancien** (DPS) — **gèle** (`controle` : Cône/Nova/Gangue) puis **fracasse** (`shatter` +0,45 sur gelé, SORTS). `mono, direct, controle, froid`
 - **Arcaniste** (DPS) — **Charge des arcanes** (`char.combo`) → surcharge ; Cascade (`cdrOnCast`) = spam. `mono, finisseur, arcane`
 
-### ✚ PRÊTRE (Tissu)
-- **Lumière** (HEAL) — **soigne en infligeant des dégâts** (atonement) + boucliers. `soin, protection, direct`
-- **Vide** (DPS) — **Folie** : plus tu restes en Forme du Vide, plus tes DoT d'ombre **rampent**. `dot, ombre, finisseur`
+### ✚ PRÊTRE (Tissu) — ✅ FAIT
+- **Lumière** (HEAL ✓ 1er) — soigne + **châtie** (`healToDamage` : une part du soin frappe l'ennemi → solo viable) + boucliers ; ultime = Aube. `soin, protection, direct`
+- **Vide** (DPS) — DoT d'ombre + **Forme du Vide** (`frenzy` = fenêtre de Folie) + drain (`dotLeech`). `dot, ombre`
+  - ⚠️ Le « DoT qui rampe avec le temps en Forme du Vide » est rendu par un `frenzy` (fenêtre de burst), PAS un vrai ramp ; un keystone `voidRamp` (×dégâts selon `enemy.age`) reste possible si le ressenti déçoit.
 
 ---
 
@@ -229,14 +233,22 @@ Format : **Nom** (rôle) — *boucle unique* — `tags` clés. (Noms = identité
 - Équilibrage : valeurs (perStack, finisherMult, minSpent, petDps…) sont des **knobs** à éprouver en jeu.
 
 ## 12. PROCHAINES ÉTAPES suggérées
-1. Tester Voleur/Mage/Chasseur en jeu (ressenti profondeur/gating/manuel ; éprouver les knobs : `igniteOnCrit`
-   frac, `shatter` total, `petDps` total ~0,95, `finisherMult`). 2. Classes à RESSOURCE NOMMÉE :
-   **Guerrier** (Rage : build/spend + exécution + saignements), **Paladin** (Pouvoir Sacré partagé 3 specs, dont
-   1 TANK + 1 HEAL — premiers rôles non-DPS), **Chevalier de la mort** (Puissance runique ; Givre-mort réutilise
-   `controle`/`shatter` déjà codés). 3. Puis Chaman/Druide/Démoniste/Prêtre (totems & Légion = `petDps`).
-   4. Lot gemmes/runes de conversion (type → type). 5. **TANK/HEAL** : aucun encore handcrafted — vérifier que
-   menace (`threatMult`), `shareResist`, `healToDamage` tiennent dans le nouveau modèle d'arbre.
+**5 classes faites** (Voleur, Mage, Chasseur, Guerrier, Prêtre) — TANK (Rempart) & HEAL (Lumière) **validés** dans
+le modèle d'arbre. **5 restantes (≈12 archétypes)** :
+1. **Paladin** (Plaque, Pouvoir Sacré partagé) — Croisé (DPS) + Templier (TANK aura : réutilise `shareResist`/`thorns`)
+   + Aube (HEAL FORCE : les soins scalent déjà sur la stat dominante → soin Force gratuit).
+2. **Chevalier de la mort** (Plaque, Puissance runique) — Givre-mort (DPS : réutilise `controle`/`shatter`) + Sang
+   (TANK vampire : `lifeNuke`/`dotLeech` + `finisherShield`).
+3. **Chaman** (Mailles, Maelström) — Élémentaire (DPS : réutilise `chainArc` foudre) + Vague (HEAL : soins de groupe
+   + totems = `petDps`… mais petDps fait des DÉGÂTS, pas du soin → totem-soin = mécanique à ajouter si voulu).
+4. **Druide** (Cuir) — Lunaire (DPS Éclipse = stance-swap, NEUF) + Ronce (TANK `highHpBonus`/`thorns`) + Floraison (HEAL `hot`).
+5. **Démoniste** (Tissu) — Pestilence (multi-DoT + drain qui détone) + Légion (`petDps` démons cumulés).
+6. Puis : lot gemmes/runes de conversion (type→type) ; **revoir le simulateur DPS** (le joueur teste TOUT après les
+   classes : ajuster courbe progression / paliers / donjons / raids — les knobs `igniteOnCrit`/`shatter`/`petDps`
+   ~0,95/`finisherMult`/`finisherShield`/`healToDamage`/`dotLeech` sont à éprouver alors).
 
 > ⚙️ Garde-fous : `npx tsc --noEmit` + `npm run validate` (intégrité arbre) + `npm run check-classes` (smoke-test
 > runtime : alloue des talents, équipe des sorts, vérifie DPS/keystones sans NaN). Étendre `check-classes.mjs`
-> à chaque nouvelle classe.
+> à chaque nouvelle classe (un cas par archétype).
+> 💡 Affichage : `char.combo` est une **réserve unique partagée** entre tous les générateurs/finisseurs (même
+> multi-classe) — le CombatPanel montre les libellés distincts joints (« Combo / Concentration »).

@@ -429,6 +429,8 @@ export interface CombatMods {
   shatter: number
   /** PYROMANCIEN : Embrasement sur coup critique (frac somme, durée max). */
   igniteOnCrit?: { frac: number; duration: number }
+  /** REMPART : un finisseur accorde un bouclier = finisherShield × ses dégâts (somme). */
+  finisherShield: number
 }
 
 export function charCombatMods(char: Character): CombatMods {
@@ -437,7 +439,7 @@ export function charCombatMods(char: Character): CombatMods {
     healToDamage: 0, cleaveAuto: 0, perEnemyBonus: 0, dotLeech: 0, dotAoe: 0,
     spellMult: 1, cdrOnCast: 0, reqReduction: 0, surplusToDamage: 0, shareResist: 0, surplusRegen: 0,
     poison: { perStack: 0.08, maxStacks: 4 }, comboCap: 0, comboGen: 0, finisherMult: 0,
-    tagBonus: {}, detonateDouble: false, comboRefund: 0, petDps: 0, shatter: 0,
+    tagBonus: {}, detonateDouble: false, comboRefund: 0, petDps: 0, shatter: 0, finisherShield: 0,
   }
   // Multiplicateur de dégâts des bonus de SET (s'applique aux auto-attaques ET aux sorts,
   // et donc au DPS affiché via charDps — même chemin que les keystones).
@@ -503,6 +505,7 @@ export function charCombatMods(char: Character): CombatMods {
         ? { frac: out.igniteOnCrit.frac + k.igniteOnCrit.frac, duration: Math.max(out.igniteOnCrit.duration, k.igniteOnCrit.duration) }
         : { ...k.igniteOnCrit }
     }
+    if (k.finisherShield) out.finisherShield += k.finisherShield
     if (k.multiTypeBonus) {
       multiType = multiType
         ? { per: multiType.per + k.multiTypeBonus.per, threshold: Math.min(multiType.threshold, k.multiTypeBonus.threshold) }

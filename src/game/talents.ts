@@ -19,12 +19,16 @@ import type { KeystoneEffect } from './classData'
  * FAIT : Voleur (Cuir) → Assassin (afflictions) + Ombrelame (combo/ombre).
  *        Mage (Tissu) → Pyromancien (feu/ignite) + Cryomancien (givre/contrôle/shatter) + Arcaniste (charges/CDR).
  *        Chasseur (Mailles) → Meneur de meute (familier/invocation) + Œil de faucon (Concentration/exécution).
+ *        Guerrier (Plaque) → Sentence (Rage/exécution/saignements) + Rempart (TANK : Rage→bouclier/épines).
+ *        Prêtre (Tissu) → Lumière (HEAL : soin+châtiment) + Vide (DPS : DoT ombre/Folie).
  */
 
 export type ConstellationId =
   | 'coeur' | 'voleur' | 'assassin' | 'ombrelame'
   | 'mage' | 'pyromancien' | 'cryomancien' | 'arcaniste'
   | 'chasseur' | 'meute' | 'faucon'
+  | 'guerrier' | 'sentence' | 'rempart'
+  | 'pretre' | 'lumiere' | 'vide'
 
 export interface ConstellationMeta {
   id: ConstellationId
@@ -97,7 +101,7 @@ function ability(id: string, c: ConstellationId, tier: number, name: string, pow
 /* ------------------------------------------------------------------ */
 node('co_start', 'coeur', 'ability', 0, 1, 'Éveil', '+10 stats primaires, +20 Endurance, débloque Frappe. La racine de l\'arbre.',
   { statMods: { force: 10, agilite: 10, intelligence: 10, endurance: 20 }, unlockPower: 'frappe_simple' })
-node('cat_plaque', 'coeur', 'gateway', 1, 1, 'Plaque', 'Catégorie Plaque (Guerrier, Paladin, Chevalier de la mort). +40 Endurance, +15 Force. — classes à venir.', { requires: ['co_start'], statMods: { endurance: 40, force: 15 } })
+node('cat_plaque', 'coeur', 'gateway', 1, 1, 'Plaque', 'Catégorie Plaque (Guerrier ✓, Paladin & Chevalier de la mort à venir). +40 Endurance, +15 Force.', { requires: ['co_start'], statMods: { endurance: 40, force: 15 } })
 node('cat_mailles', 'coeur', 'gateway', 1, 1, 'Mailles', 'Catégorie Mailles (Chasseur ✓, Chaman à venir). +20 Agilité, +20 Intelligence.', { requires: ['co_start'], statMods: { agilite: 20, intelligence: 20 } })
 node('cat_cuir', 'coeur', 'gateway', 1, 1, 'Cuir', 'Catégorie Cuir (Voleur, Druide). +30 Agilité, +15 Critique.', { requires: ['co_start'], statMods: { agilite: 30, critique: 15 } })
 node('cat_tissu', 'coeur', 'gateway', 1, 1, 'Tissu', 'Catégorie Tissu (Mage ✓, Démoniste & Prêtre à venir). +40 Intelligence.', { requires: ['co_start'], statMods: { intelligence: 40 } })
@@ -300,6 +304,101 @@ minor('fa_camo', 'faucon', 1, 'Camouflage', 3, { esquive: 18 }, { requires: ['fa
 ability('fa_posture', 'faucon', 2, 'Posture défensive', 'posture_defensive', 'SURVIE : débloque Posture défensive (-18% de dégâts subis).', { requires: ['fa_camo'] })
 ks('fa_retraite', 'faucon', 2, 'Retraite feinte', 'SURVIE : +30 Esquive, +12% de dégâts (tu frappes en reculant).', { stat: { esquive: 30 }, ks: { damageMult: 1.12 } }, { requires: ['fa_camo'] })
 
+/* ================================================================== */
+/* GUERRIER (Plaque) — Sentence (DPS) · Rempart (TANK, ressource Rage). */
+/* ================================================================== */
+node('cl_guerrier', 'guerrier', 'ability', 0, 1, 'Guerrier', 'Maître d\'armes nourri par la Rage du combat. Débloque Frappe d\'arme et ouvre ses deux archétypes. +25 Force.',
+  { requires: ['cat_plaque'], statMods: { force: 25 }, unlockPower: 'gu_frappe' })
+
+/* ---- SENTENCE — Rage (build/spend) → exécution + saignements. ---- */
+ability('se_hub', 'sentence', 0, 'Sentence', 'se_mutile', 'Entre dans la voie de la Sentence : débloque Coup mutilant (générateur de Rage). +18 Force, +12 Critique.', { requires: ['cl_guerrier'], statMods: { force: 18, critique: 12 } })
+// GÉNÉRATION (Rage).
+minor('se_furie', 'sentence', 1, 'Furie', 3, { force: 16 }, { requires: ['se_hub'] })
+ks('se_directamp', 'sentence', 1, 'Brutalité', 'Tes sorts [direct] +12% (marche aussi pour les autres classes).', { stat: { critique: 14 }, ks: { tagBonus: { tag: 'direct', damageMult: 1.12 } } }, { requires: ['se_furie'] })
+ks('se_colere', 'sentence', 2, 'Colère bouillonnante', 'GÉNÉRATION : tes générateurs donnent +1 Rage.', { stat: { hate: 16 }, ks: { comboGen: 1 } }, { requires: ['se_furie'] })
+ks('se_brutal', 'sentence', 3, 'Sang versé', 'CHOIX : +2 Rage max (frappes plus lourdes).', { stat: { force: 16 }, ks: { comboCap: 2 } }, { requires: ['se_colere'], exclusive: 'se_gen' })
+ks('se_rapide', 'sentence', 3, 'Empressement', 'CHOIX : +24 Hâte (Rage qui monte vite).', { stat: { hate: 24 } }, { requires: ['se_colere'], exclusive: 'se_gen' })
+// FINITION (Rage spend) + exécution.
+ability('se_fin', 'sentence', 1, 'Sentence', 'se_sentence', 'FINITION : débloque Sentence (finisseur — dégâts × Rage). +16 Force.', { requires: ['se_hub'], statMods: { force: 16 } })
+ks('se_finamp', 'sentence', 2, 'Mise à mort', 'Tes sorts [finisseur] +15% (marche aussi pour les autres classes).', { stat: { degatsCrit: 12 }, ks: { tagBonus: { tag: 'finisseur', damageMult: 1.15 } } }, { requires: ['se_fin'] })
+ks('se_mortel', 'sentence', 2, 'Coups mortels', 'Tes finisseurs frappent +25% plus fort.', { stat: { degatsCrit: 20 }, ks: { finisherMult: 0.25 } }, { requires: ['se_fin'] })
+ks('se_execute', 'sentence', 3, 'Exécution', 'Tes finisseurs exécutent les ennemis sous 20% de PV (×2,2).', { stat: { degatsBoss: 14 }, ks: { executeBonus: { threshold: 0.2, mult: 2.2 } } }, { requires: ['se_mortel'] })
+// CONVERGENCE + ULTIME.
+ks('se_rage', 'sentence', 4, 'Soif de sang', 'IDENTITÉ (carrefour) : +2 Rage max et +15% de dégâts. Exige Colère bouillonnante ET Coups mortels.', { stat: { force: 18 }, ks: { comboCap: 2, damageMult: 1.15 } }, { requiresAll: ['se_colere', 'se_mortel'], minSpent: 8 })
+ability('se_carnage', 'sentence', 5, 'Carnage', 'se_carnage', 'ULTIME — un finisseur dévastateur qui décime. Tout au fond : 20 pts dans la voie.', { requires: ['se_rage'], minSpent: 20 })
+// SAIGNEMENT : DoT + choix de 2e sort.
+minor('se_lame', 'sentence', 1, 'Lames affûtées', 3, { alteration: 16 }, { requires: ['se_hub'] })
+ks('se_hemo', 'sentence', 2, 'Hémorragie', 'Tes coups ouvrent une plaie (DoT physique, 20% du coup/s, 5 s).', { stat: { alteration: 12 }, ks: { dot: { frac: 0.2, duration: 5 } } }, { requires: ['se_lame'] })
+ability('se_saignement', 'sentence', 3, 'Saignement profond', 'se_saignement', 'CHOIX de SORT : ouvre une plaie béante (gros DoT mono). Gaté : 8 pts dans la voie.', { requires: ['se_hemo'], exclusive: 'se_arme2', minSpent: 8 })
+ability('se_tourmente', 'sentence', 3, 'Tourmente', 'se_tourmente', 'CHOIX de SORT : balaie tout le pack (zone). Gaté : 8 pts dans la voie.', { requires: ['se_hemo'], exclusive: 'se_arme2', minSpent: 8 })
+// SURVIE : garde du combattant.
+minor('se_garde', 'sentence', 1, 'Garde haute', 3, { reductionDegats: 16 }, { requires: ['se_hub'] })
+ks('se_resilience', 'sentence', 2, 'Résilience', 'SURVIE : -10% de dégâts subis, +12 Vol de vie.', { stat: { volDeVie: 12 }, ks: { flatDr: 0.1 } }, { requires: ['se_garde'] })
+ability('se_souffle', 'sentence', 2, 'Second souffle', 'second_souffle', 'SURVIE : débloque Second souffle (auto-soin).', { requires: ['se_garde'] })
+
+/* ---- REMPART (TANK) — Rage → BOUCLIER (finisherShield) + épines + provocation. ---- */
+ability('re_hub', 'rempart', 0, 'Rempart', 're_bouclier_coup', 'Entre dans la voie du Rempart : débloque Coup de bouclier (générateur de Rage). +18 Force, +40 Endurance.', { requires: ['cl_guerrier'], statMods: { force: 18, endurance: 40 } })
+// BOUCLIER : la Rage devient de l'absorption.
+minor('re_garde', 'rempart', 1, 'Bloc', 3, { endurance: 20 }, { requires: ['re_hub'] })
+ability('re_revanche', 'rempart', 1, 'Revanche', 're_revanche', 'FINITION : débloque Revanche (finisseur — dégâts × Rage). +16 Force.', { requires: ['re_hub'], statMods: { force: 16 } })
+ks('re_bloc', 'rempart', 2, 'Mur de boucliers', 'TANK : un finisseur t\'accorde un bouclier d\'absorption = 50% de ses dégâts.', { stat: { endurance: 30 }, ks: { finisherShield: 0.5 } }, { requires: ['re_revanche'] })
+ks('re_mur', 'rempart', 3, 'Inébranlable', 'TANK : +0,5 au bouclier de finisseur ET tes finisseurs +20%.', { stat: { barriere: 20 }, ks: { finisherShield: 0.5, finisherMult: 0.2 } }, { requires: ['re_bloc'] })
+ability('re_egide', 'rempart', 4, 'Égide titanesque', 'egide_titanesque', 'ULTIME — un ÉNORME bouclier d\'absorption (40% à l\'équipe). Tout au fond : 20 pts dans la voie.', { requires: ['re_mur'], minSpent: 20 })
+// ÉPINES + PROVOCATION : menace & représailles.
+minor('re_acier', 'rempart', 1, 'Peau d\'acier', 3, { reductionDegats: 16 }, { requires: ['re_hub'] })
+ability('re_provoc', 'rempart', 2, 'Provocation', 'provocation', 'MENACE : débloque Provocation (attire les attaques — le rôle de tank).', { requires: ['re_acier'] })
+ks('re_epines', 'rempart', 2, 'Épines', 'Tes assaillants encaissent 30% de tes dégâts d\'auto en retour.', { stat: { endurance: 20 }, ks: { thorns: 0.3 } }, { requires: ['re_acier'] })
+ks('re_represailles', 'rempart', 3, 'Représailles', '+30% d\'épines de plus ET -8% de dégâts subis.', { stat: { reductionDegats: 14 }, ks: { thorns: 0.3, flatDr: 0.08 } }, { requires: ['re_epines'] })
+// RÉSISTANCE : colosse.
+minor('re_endurci', 'rempart', 1, 'Endurci', 3, { endurance: 22 }, { requires: ['re_hub'] })
+ks('re_inebranlable', 'rempart', 2, 'Forteresse', 'SURVIE : -12% de dégâts subis.', { stat: { endurance: 20 }, ks: { flatDr: 0.12 } }, { requires: ['re_endurci'] })
+ability('re_bouclier', 'rempart', 2, 'Bouclier runique', 'bouclier_runique', 'SURVIE : débloque Bouclier runique (absorption à la demande).', { requires: ['re_endurci'] })
+ks('re_colosse', 'rempart', 3, 'Colosse', 'À plus de 60% de PV, +20% de dégâts (un mur qui frappe).', { stat: { force: 16 }, ks: { highHpBonus: { threshold: 0.6, mult: 1.2 } } }, { requires: ['re_inebranlable'] })
+
+/* ================================================================== */
+/* PRÊTRE (Tissu) — Lumière (HEAL) · Vide (DPS).                        */
+/* ================================================================== */
+node('cl_pretre', 'pretre', 'ability', 0, 1, 'Prêtre', 'Canal du sacré et de l\'ombre. Débloque Châtiment et ouvre ses deux archétypes. +30 Intelligence.',
+  { requires: ['cat_tissu'], statMods: { intelligence: 30 }, unlockPower: 'pr_chatiment' })
+
+/* ---- LUMIÈRE (HEAL) — soin + châtiment (healToDamage : soigne en frappant) + boucliers. ---- */
+ability('lu_hub', 'lumiere', 0, 'Lumière', 'lu_soin', 'Entre dans la voie de la Lumière : débloque Mot de lumière (soin). +18 Intelligence.', { requires: ['cl_pretre'], statMods: { intelligence: 18 } })
+// SOIN : kit de soin pur.
+minor('lu_foi', 'lumiere', 1, 'Foi', 3, { regen: 16 }, { requires: ['lu_hub'] })
+ability('lu_renouveau', 'lumiere', 2, 'Renouveau', 'lu_renouveau', 'SOIN : débloque Renouveau (soin sur la durée).', { requires: ['lu_foi'] })
+ks('lu_hot', 'lumiere', 2, 'Grâce persistante', 'SOIN : un soin sur la durée constant sur l\'allié blessé (+régén d\'équipe).', { stat: { regen: 20 }, ks: { hot: 0.5 } }, { requires: ['lu_foi'] })
+ability('lu_benediction', 'lumiere', 3, 'Bénédiction', 'lu_benediction', 'Débloque Bénédiction (soin de tout le groupe). Gatée : 6 pts dans la voie.', { requires: ['lu_foi'], minSpent: 6 })
+// ATONEMENT : healToDamage (tes soins frappent aussi).
+minor('lu_zele', 'lumiere', 1, 'Zèle', 3, { critique: 16 }, { requires: ['lu_hub'] })
+ks('lu_chatiment', 'lumiere', 2, 'Châtiment', 'ATONEMENT : 40% de tes soins frappent AUSSI l\'ennemi (tu soignes en châtiant — solo viable).', { stat: { intelligence: 12 }, ks: { healToDamage: 0.4 } }, { requires: ['lu_zele'] })
+ks('lu_devotion', 'lumiere', 3, 'Dévotion', 'CHOIX : soins renforcés (+régén, +soin sur la durée).', { stat: { regen: 24 }, ks: { hot: 0.5 } }, { requires: ['lu_chatiment'], exclusive: 'lu_voie' })
+ks('lu_inquisition', 'lumiere', 3, 'Inquisition', 'CHOIX : +40% de châtiment (tes soins frappent bien plus fort).', { stat: { intelligence: 14 }, ks: { healToDamage: 0.4 } }, { requires: ['lu_chatiment'], exclusive: 'lu_voie' })
+ks('lu_ferveur', 'lumiere', 4, 'Ferveur', 'Tes sorts [soin] +15% et +12% de dégâts.', { stat: { intelligence: 16 }, ks: { tagBonus: { tag: 'soin', damageMult: 1.15 }, damageMult: 1.12 } }, { requires: ['lu_chatiment'] })
+ability('lu_aube', 'lumiere', 5, 'Aube salvatrice', 'lu_aube', 'ULTIME — une vague de lumière qui restaure ÉNORMÉMENT tout le groupe. Tout au fond : 20 pts dans la voie.', { requires: ['lu_ferveur'], minSpent: 20 })
+// SURVIE : grâce protectrice.
+minor('lu_grace', 'lumiere', 1, 'Grâce', 3, { barriere: 18 }, { requires: ['lu_hub'] })
+ability('lu_bouclier', 'lumiere', 2, 'Bouclier sacré', 'bouclier_runique', 'SURVIE : débloque Bouclier sacré (absorption).', { requires: ['lu_grace'] })
+ks('lu_protection', 'lumiere', 2, 'Protection divine', 'SURVIE : -10% de dégâts subis, +20 Régén.', { stat: { regen: 20 }, ks: { flatDr: 0.1 } }, { requires: ['lu_grace'] })
+
+/* ---- VIDE (DPS) — DoT d'ombre + Forme du Vide (frenzy = Folie) + drain. ---- */
+ability('vi_hub', 'vide', 0, 'Vide', 'vi_mot_ombre', 'Entre dans la voie du Vide : débloque Mot de l\'ombre (DoT d\'ombre). +18 Intelligence, +12 Altération.', { requires: ['cl_pretre'], statMods: { intelligence: 18, alteration: 12 } })
+// AFFLICTION : DoT ombre (tags).
+minor('vi_tenebres', 'vide', 1, 'Ténèbres', 3, { alteration: 18 }, { requires: ['vi_hub'] })
+ks('vi_dotamp', 'vide', 1, 'Affliction', 'Tes sorts [dot] +12% (marche aussi pour les autres classes).', { stat: { alteration: 12 }, ks: { tagBonus: { tag: 'dot', damageMult: 1.12 } } }, { requires: ['vi_tenebres'] })
+ks('vi_ombre', 'vide', 2, 'Maîtrise de l\'ombre', 'Tes sorts [ombre] +12% (marche aussi pour les autres classes).', { stat: { intelligence: 12 }, ks: { tagBonus: { tag: 'ombre', damageMult: 1.12 } } }, { requires: ['vi_dotamp'] })
+ability('vi_douleur', 'vide', 2, 'Douleur', 'vi_douleur', 'Débloque Douleur (frappe d\'ombre directe).', { requires: ['vi_hub'] })
+// FOLIE : Forme du Vide (frenzy) + choix de 2e sort.
+minor('vi_demence', 'vide', 1, 'Démence', 3, { degatsCrit: 18 }, { requires: ['vi_hub'] })
+ability('vi_forme', 'vide', 2, 'Forme du Vide', 'vi_forme', 'FOLIE : débloque Forme du Vide (+60% de dégâts, 8 s — la fenêtre de Folie). Gatée : 6 pts dans la voie.', { requires: ['vi_demence'], minSpent: 6 })
+ks('vi_insanite', 'vide', 3, 'Insanité', 'PIC : +15% de dégâts permanent.', { stat: { degatsCrit: 18 }, ks: { damageMult: 1.15 } }, { requires: ['vi_forme'] })
+ability('vi_devorer', 'vide', 3, 'Dévorer l\'esprit', 'vi_devorer', 'CHOIX de SORT : exécution d\'ombre (amplifiée par les PV manquants). Gaté : 8 pts dans la voie.', { requires: ['vi_forme'], exclusive: 'vi_arme2', minSpent: 8 })
+ability('vi_tourment', 'vide', 3, 'Tourment', 'vi_tourment', 'CHOIX de SORT : un tourment d\'ombre balaie le pack (zone). Gaté : 8 pts dans la voie.', { requires: ['vi_forme'], exclusive: 'vi_arme2', minSpent: 8 })
+ability('vi_folie', 'vide', 5, 'Folie dévorante', 'vi_folie', 'ULTIME — un cataclysme d\'ombre engloutit tout le pack. Tout au fond : 20 pts dans la voie.', { requires: ['vi_insanite'], minSpent: 20 })
+// DRAIN : survie via les DoT.
+minor('vi_soif', 'vide', 1, 'Soif d\'âmes', 3, { volDeVie: 10 }, { requires: ['vi_hub'] })
+ks('vi_drain', 'vide', 2, 'Drain d\'ombre', 'SURVIE : tes DoT te soignent (25% du tick), +20 Régén.', { stat: { regen: 20 }, ks: { dotLeech: 0.25 } }, { requires: ['vi_soif'] })
+ks('vi_meta', 'vide', 3, 'Communion morbide', 'SURVIE : -8% de dégâts subis, +12 Vol de vie.', { stat: { volDeVie: 12 }, ks: { flatDr: 0.08 } }, { requires: ['vi_drain'] })
+
 /* ------------------------------------------------------------------ */
 /* Méta de constellation.                                             */
 /* ------------------------------------------------------------------ */
@@ -315,11 +414,19 @@ export const CONSTELLATIONS: Record<ConstellationId, ConstellationMeta> = {
   chasseur: { id: 'chasseur', name: 'Chasseur', role: 'Mailles · classe', color: '#94d82d', icon: '🏹' },
   meute: { id: 'meute', name: 'Meneur de meute', role: 'Chasseur · familier', color: '#82c91e', icon: '🐺', archetype: true },
   faucon: { id: 'faucon', name: 'Œil de faucon', role: 'Chasseur · concentration', color: '#fab005', icon: '🦅', archetype: true },
+  guerrier: { id: 'guerrier', name: 'Guerrier', role: 'Plaque · classe', color: '#e8590c', icon: '⚔' },
+  sentence: { id: 'sentence', name: 'Sentence', role: 'Guerrier · Rage & exécution', color: '#fa5252', icon: '⚖', archetype: true },
+  rempart: { id: 'rempart', name: 'Rempart', role: 'Guerrier · TANK', color: '#f08c00', icon: '🛡', archetype: true },
+  pretre: { id: 'pretre', name: 'Prêtre', role: 'Tissu · classe', color: '#f1f3f5', icon: '✚' },
+  lumiere: { id: 'lumiere', name: 'Lumière', role: 'Prêtre · HEAL', color: '#ffd43b', icon: '🌟', archetype: true },
+  vide: { id: 'vide', name: 'Vide', role: 'Prêtre · DoT ombre', color: '#9775fa', icon: '🌑', archetype: true },
 }
 export const CONSTELLATION_LIST: ConstellationId[] = [
   'coeur', 'voleur', 'assassin', 'ombrelame',
   'mage', 'pyromancien', 'cryomancien', 'arcaniste',
   'chasseur', 'meute', 'faucon',
+  'guerrier', 'sentence', 'rempart',
+  'pretre', 'lumiere', 'vide',
 ]
 
 /* ------------------------------------------------------------------ */

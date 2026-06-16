@@ -684,14 +684,19 @@ function statusChips(c: Character): { icon: string; label: string; cls: string; 
   if ((c.invuln ?? 0) > 0) out.push({ icon: '💎', label: 'immunisé', cls: 'bg-cyan-500/20 text-cyan-200', title: 'Immunité aux dégâts directs' })
   if (c.frenzy) out.push({ icon: '🔥', label: 'frénésie', cls: 'bg-orange-500/20 text-orange-300', title: `Frénésie : dégâts ×${c.frenzy.mult.toFixed(2)}` })
   if (c.charge) out.push({ icon: '⚡', label: 'vengeance', cls: 'bg-amber-500/20 text-amber-300', title: 'Vengeance différée : la riposte frappe à expiration' })
-  // RESSOURCE DE CLASSE — Points de Combo (Ombrelame) : visible dès qu'un générateur/finisseur est équipé.
-  // v0.29.5 : ressource build/spend générique — nom propre à la classe (Combo / Rage / Pouvoir sacré…).
-  const resPid = c.powers.find((p) => { const pw = p ? getPower(p) : null; return pw?.effect === 'builder' || pw?.effect === 'finisher' })
-  if (resPid) {
+  // RESSOURCE DE CLASSE (build/spend) — RÉSERVE UNIQUE partagée (char.combo) : TOUS les générateurs la
+  // remplissent, TOUS les finisseurs la dépensent, MÊME entre classes (Combo Ombrelame + Concentration
+  // Œil de faucon = la même réserve → combo multi-classe). On affiche les libellés distincts équipés.
+  const resNames = [...new Set(
+    c.powers
+      .map((p) => (p ? getPower(p) : null))
+      .filter((pw) => pw?.effect === 'builder' || pw?.effect === 'finisher')
+      .map((pw) => pw?.resource ?? 'Combo'),
+  )]
+  if (resNames.length) {
     const combo = c.combo ?? 0
     const cap = 5 + charCombatMods(c).comboCap
-    const resName = (getPower(resPid)?.resource) ?? 'Combo'
-    out.push({ icon: '🗡', label: `${resName} ${combo}/${cap}`, cls: 'bg-violet-500/25 text-violet-200 font-semibold', title: 'Ressource : générée par tes générateurs, consommée par tes finisseurs (dégâts × points)' })
+    out.push({ icon: '🗡', label: `${resNames.join(' / ')} ${combo}/${cap}`, cls: 'bg-violet-500/25 text-violet-200 font-semibold', title: 'Réserve UNIQUE partagée : tous tes générateurs la remplissent, tous tes finisseurs la dépensent — même entre classes (Éviscération et Tir visé puisent dans la même réserve).' })
   }
   return out
 }

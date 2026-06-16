@@ -345,6 +345,44 @@ const CHASSEUR_SPELLS: SpellSpec[] = [
 ]
 for (const s of CHASSEUR_SPELLS) POWERS.push(specToPower(s))
 
+/* Sorts du GUERRIER (handcrafted). Plaque → Sentence (DPS : Rage build/spend + exécution + saignements)
+ * + Rempart (TANK : Rage → bouclier d'absorption via finisherShield + épines + provocation). */
+const GUERRIER_SPELLS: SpellSpec[] = [
+  // Classe
+  { id: 'gu_frappe', name: 'Frappe d\'arme', icon: '⚔️', effect: 'nuke', mag: 2.6, cd: 2.8, scale: 'force', tags: ['mono', 'direct'] },
+  // Sentence (DPS — Rage → exécution + saignements)
+  { id: 'se_mutile', name: 'Coup mutilant', icon: '🪓', effect: 'builder', mag: 1.6, cd: 2.5, scale: 'force', tags: ['mono', 'direct', 'generateur'], resource: 'Rage' },
+  { id: 'se_sentence', name: 'Sentence', icon: '⚖️', effect: 'finisher', mag: 1.6, cd: 3.5, scale: 'force', tags: ['mono', 'direct', 'finisseur'], resource: 'Rage' },
+  { id: 'se_saignement', name: 'Saignement profond', icon: '🩸', effect: 'dot', mag: 2.4, cd: 4, scale: 'force', tags: ['mono', 'dot'] },
+  { id: 'se_decapite', name: 'Décapitation', icon: '🗡️', effect: 'executeNuke', mag: 4.0, cd: 5, scale: 'force', tags: ['mono', 'direct'] },
+  { id: 'se_tourmente', name: 'Tourmente', icon: '🌀', effect: 'cleave', mag: 3.0, cd: 3, scale: 'force', tags: ['zone', 'direct'] },
+  { id: 'se_carnage', name: 'Carnage', icon: '💥', effect: 'finisher', mag: 3.0, cd: 16, scale: 'force', tags: ['mono', 'direct', 'finisseur', 'ultime'], resource: 'Rage' },
+  // Rempart (TANK — Rage → bouclier + provocation + épines)
+  { id: 're_bouclier_coup', name: 'Coup de bouclier', icon: '🛡️', effect: 'builder', mag: 1.4, cd: 2.5, scale: 'force', tags: ['mono', 'direct', 'generateur', 'protection'], resource: 'Rage' },
+  { id: 're_revanche', name: 'Revanche', icon: '🤺', effect: 'finisher', mag: 1.4, cd: 3.5, scale: 'force', tags: ['mono', 'direct', 'finisseur', 'protection'], resource: 'Rage' },
+]
+for (const s of GUERRIER_SPELLS) POWERS.push(specToPower(s))
+
+/* Sorts du PRÊTRE (handcrafted). Tissu → Lumière (HEAL : soin + châtiment via healToDamage + boucliers)
+ * + Vide (DPS : DoT d'ombre + Forme du Vide [frenzy] + drain). */
+const PRETRE_SPELLS: SpellSpec[] = [
+  // Classe
+  { id: 'pr_chatiment', name: 'Châtiment', icon: '⚜️', effect: 'nuke', mag: 2.8, cd: 2.8, type: 'arcane', scale: 'intelligence', tags: ['mono', 'direct', 'arcane'] },
+  // Lumière (HEAL — soin + smite)
+  { id: 'lu_soin', name: 'Mot de lumière', icon: '💗', effect: 'heal', mag: 2.4, cd: 3, scale: 'intelligence', tags: ['soin'] },
+  { id: 'lu_renouveau', name: 'Renouveau', icon: '💞', effect: 'hot', mag: 1.8, cd: 4, scale: 'intelligence', tags: ['soin'] },
+  { id: 'lu_benediction', name: 'Bénédiction', icon: '✳️', effect: 'buffParty', mag: 1.8, cd: 5, scale: 'intelligence', tags: ['soin'] },
+  { id: 'lu_aube', name: 'Aube salvatrice', icon: '🌅', effect: 'bigHeal', mag: 12, cd: 24, scale: 'intelligence', tags: ['soin', 'ultime'] },
+  // Vide (DPS — DoT ombre + Folie)
+  { id: 'vi_mot_ombre', name: 'Mot de l\'ombre', icon: '🗯️', effect: 'dot', mag: 2.6, cd: 4, type: 'ombre', scale: 'intelligence', tags: ['mono', 'dot', 'ombre'] },
+  { id: 'vi_douleur', name: 'Douleur', icon: '🌑', effect: 'nuke', mag: 3.0, cd: 2.8, type: 'ombre', scale: 'intelligence', tags: ['mono', 'direct', 'ombre'] },
+  { id: 'vi_forme', name: 'Forme du Vide', icon: '👁️', effect: 'frenzy', mag: 1.6, cd: 18, duration: 8, scale: 'intelligence', tags: ['ombre'] },
+  { id: 'vi_tourment', name: 'Tourment', icon: '☄️', effect: 'cleave', mag: 3.0, cd: 3.2, type: 'ombre', scale: 'intelligence', tags: ['zone', 'direct', 'ombre'] },
+  { id: 'vi_devorer', name: 'Dévorer l\'esprit', icon: '💀', effect: 'executeNuke', mag: 4.0, cd: 5, type: 'ombre', scale: 'intelligence', tags: ['mono', 'direct', 'ombre'] },
+  { id: 'vi_folie', name: 'Folie dévorante', icon: '🌌', effect: 'megaCleave', mag: 7, cd: 20, type: 'ombre', scale: 'intelligence', tags: ['zone', 'direct', 'ombre', 'ultime'] },
+]
+for (const s of PRETRE_SPELLS) POWERS.push(specToPower(s))
+
 const BY_ID = new Map(POWERS.map((p) => [p.id, p]))
 
 export function getPower(id: string): PowerDef | undefined {
