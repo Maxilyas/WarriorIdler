@@ -69,6 +69,7 @@ import { RARITIES, RARITY_LIST } from './rarities'
 import { SECONDARY_STATS } from './stats'
 import { DAMAGE_TYPE_LIST, DAMAGE_TYPES, profileDamageMult, type DamageProfile } from './damage'
 import { equipSlotsForType, slotAccepts, EQUIP_SLOTS } from './slots'
+import { TUT_QUESTS, TUT_QUEST_IDS, type TutCtx } from './tutorial'
 import { essenceGain, upgradeCost, insertCost, getUnique, UNIQUE_MAX_RANK, randomUniqueInstance, undiscoveredUnique } from './uniques'
 import {
   generateDungeon, makeDungeonPack, dungeonIlvl, dungeonRegen, getDungeonDef, dungeonLuckTier,
@@ -424,6 +425,8 @@ interface SaveData {
   recycleThreshold: number
   /** Recyclage automatique : tout butin sous le seuil est recyclé directement au drop. */
   autoRecycle: boolean
+  /** v0.31 — tutoriel « Premiers Pas » : quêtes dont la récompense a été réclamée + flag d'achat marché. */
+  tut: { claimed: string[]; bought: boolean }
   /** Rune du Karma (pity) : kills depuis le dernier drop Épique+ (compté en permanence). */
   killsSinceEpic: number
   /** Horodatage de la dernière sauvegarde (progression hors-ligne). */
@@ -450,6 +453,8 @@ interface GameState extends SaveData {
   toggleAutoRecycle: () => void
   insertEffect: (itemId: string, effectId: string) => void
   claimOffline: () => void
+  /** v0.31 — réclame la récompense d'une quête du tutoriel « Premiers Pas » (si terminée et non réclamée). */
+  claimTutorialReward: (id: string) => void
   /** v0.27 (F3) — cycle de vie mobile : l'appli passe en arrière-plan (horodate la mise en veille). */
   markAway: () => void
   /** v0.27 (F3) — retour au premier plan : crédite les gains hors-ligne accumulés en arrière-plan. */
@@ -1350,6 +1355,7 @@ function freshSave(): SaveData {
     inventory: [],
     recycleThreshold: 4,
     autoRecycle: false,
+    tut: { claimed: [], bought: false },
     killsSinceEpic: 0,
     lastSeen: Date.now(),
     lastShopRefresh: 0,
@@ -1425,6 +1431,11 @@ function sanitize(save: SaveData): SaveData {
   // Ressources / champs ajoutés.
   if (typeof save.poussiere !== 'number') save.poussiere = 0
   if (typeof save.cosmic !== 'number') save.cosmic = 0
+  // v0.31 — tutoriel (vieilles saves : si déjà avancé, on considère le tuto déjà fait pour ne pas
+  // re-proposer les quêtes de base à un joueur établi).
+  if (!save.tut || !Array.isArray(save.tut.claimed)) {
+    save.tut = { claimed: (save.bestStage ?? 1) >= 15 ? [...TUT_QUEST_IDS] : [], bought: (save.bestStage ?? 1) >= 15 }
+  }
   {
     const q = emptyQuint()
     const src = (save.quint ?? {}) as Record<string, number>
@@ -1965,6 +1976,7 @@ function persist(s: GameState) {
     shopStock: s.shopStock,
     inventory: s.inventory,
     recycleThreshold: s.recycleThreshold,
+    tut: s.tut,
     autoRecycle: s.autoRecycle,
     killsSinceEpic: s.killsSinceEpic,
     lastSeen: Date.now(),
@@ -2177,6 +2189,24 @@ export function bestRaidTier(raidProgress: Record<string, number>): number {
  * (iLvl du meilleur tier clear, par raid). Sert de plafond RELATIF au surillvl (v0.25.x) :
  * l'atelier suit la progression du joueur, il ne la double pas.
  */
+/** v0.31 — contexte de complétion des quêtes du tutoriel, dérivé de l'état (pas de tracking lourd). */
+export function tutContext(s: {
+  characters: Character[]; activeChar: number; bestStage: number
+  inventory: Item[]; dungeonProgress: Record<string, number>; tut: { bought: boolean }
+}): TutCtx {
+  const ac = s.characters[s.activeChar] ?? s.characters[0]
+  const equippedCount = ac ? Object.values(ac.equipment).filter(Boolean).length : 0
+  const maxLevel = s.characters.reduce((m, c) => Math.max(m, c.level), 1)
+  const allItems: Item[] = [
+    ...s.inventory,
+    ...s.characters.flatMap((c) => Object.values(c.equipment).filter((i): i is Item => !!i)),
+  ]
+  const crafted = allItems.some((it) => (it.surCount ?? 0) > 0 || (it.reforgeCount ?? 0) > 0 || (it.trempeCount ?? 0) > 0)
+  const talentAllocated = s.characters.some((c) => Object.entries(c.talents ?? {}).some(([k, v]) => k !== 'co_start' && (v ?? 0) > 0))
+  const anyDungeon = Object.values(s.dungeonProgress ?? {}).some((v) => (v ?? 0) >= 1)
+  return { bestStage: s.bestStage, maxLevel, equippedCount, bought: s.tut?.bought ?? false, crafted, talentAllocated, anyDungeon }
+}
+
 export function maxContentIlvl(bestStage: number, raidProgress: Record<string, number>): number {
   let best = Math.round(stageIlvl(Math.max(1, bestStage)) * 1.25)
   for (const def of RAID_LIST) {
@@ -6194,7 +6224,34 @@ export const useGame = create<GameState>((set, get) => {
         shopStock: s.shopStock.filter((i) => i.id !== itemId),
         inventory: [item, ...s.inventory].slice(0, invMax),
         codex: discoverFromItems(s.codex, [item]),
+        tut: { ...s.tut, bought: true }, // v0.31 — quête tuto « Marché »
         log: pushLog(s.log, `Acheté : ${item.name} (-${price} or).`, 'gold'),
+      }
+      persist(next)
+      set(next)
+    },
+
+    claimTutorialReward: (id) => {
+      const s = get()
+      const q = TUT_QUESTS.find((x) => x.id === id)
+      if (!q || s.tut.claimed.includes(id) || !q.done(tutContext(s))) return
+      const r = q.reward
+      let inventory = s.inventory
+      let log = s.log
+      if (r.item) {
+        const it = generateItem({ ilvl: Math.max(8, stageIlvl(s.bestStage)), rarity: 'rare', primaryBias: pickBias(s.characters), minStars: 3 })
+        inventory = [it, ...inventory].slice(0, invMax)
+        log = pushLog(log, `🎁 Récompense : ${it.name}`, 'loot')
+      }
+      const next = {
+        ...s,
+        gold: s.gold + (r.gold ?? 0),
+        essence: s.essence + (r.eclats ?? 0),
+        noyau: s.noyau + (r.noyau ?? 0),
+        sceaux: s.sceaux + (r.sceaux ?? 0),
+        inventory,
+        tut: { ...s.tut, claimed: [...s.tut.claimed, id] },
+        log: pushLog(log, `🎯 Premiers Pas — « ${q.title} » accomplie : ${q.rewardText} !`, 'level'),
       }
       persist(next)
       set(next)
@@ -6365,6 +6422,7 @@ export const useGame = create<GameState>((set, get) => {
         cosmic: s.cosmic - cosmicCost,
         boxPity,
         lastFreeBox: box.free ? Date.now() : s.lastFreeBox,
+        tut: { ...s.tut, bought: true }, // v0.31 — quête tuto « Marché »
         log: pushLog(s.log, logLine, 'gold'),
       }
       // Coffre du Destin 🎭 : les objets partent dans le modal de CHOIX (un seul sera gardé).

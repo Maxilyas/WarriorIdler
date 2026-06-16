@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { useGame, powerCooldowns } from '../game/store'
+import { useGame, powerCooldowns, tutContext } from '../game/store'
 import type { LogKind } from '../game/store'
+import { TUT_QUESTS, tutDone, tutAllClaimed, type TutCtx } from '../game/tutorial'
 import { Sheet } from './ui'
 import { LevelBadge } from './LevelBadge'
 import { charMaxHp, charDps, charResist, TALENT_START_LEVEL } from '../game/character'
@@ -56,6 +57,11 @@ export function CombatPanel() {
   const setStage = useGame((s) => s.setStage)
   const toggleFarmLock = useGame((s) => s.toggleFarmLock)
   const log = useGame((s) => s.log)
+  // v0.31 — tutoriel « Premiers Pas »
+  const inventory = useGame((s) => s.inventory)
+  const dungeonProgress = useGame((s) => s.dungeonProgress)
+  const tut = useGame((s) => s.tut)
+  const claimTutorialReward = useGame((s) => s.claimTutorialReward)
 
   // Biome + palier + verrou fusionnés en une ligne « zone » : le détail s'ouvre en feuille
   // (libère un tiers d'écran pour le journal sur mobile).
@@ -86,6 +92,9 @@ export function CombatPanel() {
   // Objectif courant (tutoriel léger + signalisation des déblocages progressifs).
   const maxLevel = characters.reduce((m, c) => Math.max(m, c.level), 1)
   const objective = nextObjective(bestStage, maxLevel, physiqueBest)
+  // v0.31 — Journal « Premiers Pas » : actif tant que toutes les quêtes ne sont pas réclamées.
+  const tutCtx = tutContext({ characters, activeChar, bestStage, inventory, dungeonProgress, tut })
+  const tutActive = !tutAllClaimed(tut.claimed)
   const partyDps = characters
     .filter((c) => c.hp > 0)
     .reduce((sum, c) => sum + charDps(c), 0)
@@ -107,8 +116,12 @@ export function CombatPanel() {
 
   return (
     <div className="flex h-full flex-col gap-3">
+      {/* v0.31 — Journal « Premiers Pas » tant que le tuto est actif, sinon objectif classique. */}
+      {!dungeon && !raid && tutActive && (
+        <QuestJournal ctx={tutCtx} claimed={tut.claimed} onClaim={claimTutorialReward} />
+      )}
       {/* Objectif / tutoriel (disparaît une fois tout débloqué) */}
-      {objective && !dungeon && !raid && (
+      {objective && !dungeon && !raid && !tutActive && (
         <div className="rounded-xl border border-orange-700/40 bg-orange-950/20 px-3 py-2 text-[11px] leading-snug text-orange-100">
           <span className="font-semibold text-orange-300">🎯 Objectif&nbsp;:</span> {objective}
         </div>
@@ -692,6 +705,44 @@ function nextObjective(bestStage: number, maxLevel: number, physiqueBest: number
   if (bestStage < 50) return 'Atteins le palier 50 (n\'importe quel biome) pour débloquer les ☠️ Raids (hub Expéditions) et les biomes Arcane & Ombre.'
   if (maxLevel < 100) return `Vise le niveau 100 — le soft cap (3-5 h de jeu) qui débloque des builds complets. Farme le 📚 Sanctuaire du Savoir pour l'XP. (Niv. actuel max : ${maxLevel})`
   return null
+}
+
+/** v0.31 — Journal de quêtes « Premiers Pas » : chaîne d'onboarding avec récompenses à réclamer. */
+function QuestJournal({ ctx, claimed, onClaim }: { ctx: TutCtx; claimed: string[]; onClaim: (id: string) => void }) {
+  const [open, setOpen] = useState(true)
+  return (
+    <div className="rounded-xl border border-orange-700/40 bg-orange-950/20 px-3 py-2">
+      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center justify-between text-[11px] font-semibold text-orange-300">
+        <span>🎯 Premiers Pas&nbsp;— {claimed.length}/{TUT_QUESTS.length}</span>
+        <span className="text-orange-400/70">{open ? '▾' : '▸'}</span>
+      </button>
+      {open && (
+        <ul className="mt-1.5 space-y-1">
+          {TUT_QUESTS.map((q) => {
+            const isClaimed = claimed.includes(q.id)
+            const isDone = tutDone(q, ctx)
+            const claimable = isDone && !isClaimed
+            return (
+              <li key={q.id} className={'rounded-lg px-2 py-1.5 ' + (isClaimed ? 'opacity-45' : claimable ? 'bg-orange-900/30 ring-1 ring-orange-500/40' : 'bg-slate-900/40')}>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-medium text-orange-100">
+                    {isClaimed ? '✅' : isDone ? '🟡' : '⬜'} {q.icon} {q.title}
+                  </span>
+                  {claimable && (
+                    <button onClick={() => onClaim(q.id)} className="shrink-0 rounded bg-orange-600 px-2 py-0.5 text-[10px] font-semibold text-white hover:bg-orange-500 active:scale-95">
+                      Réclamer 🎁
+                    </button>
+                  )}
+                </div>
+                {!isClaimed && <div className="mt-0.5 text-[10px] leading-snug text-orange-200/70">{q.desc}</div>}
+                {!isClaimed && <div className="mt-0.5 text-[10px] font-medium text-amber-300/80">🎁 {q.rewardText}</div>}
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </div>
+  )
 }
 
 function Metric({ label, value, accent }: { label: string; value: string; accent?: string }) {
