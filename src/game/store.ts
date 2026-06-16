@@ -70,7 +70,7 @@ import { SECONDARY_STATS } from './stats'
 import { DAMAGE_TYPE_LIST, DAMAGE_TYPES, profileDamageMult, type DamageProfile } from './damage'
 import { equipSlotsForType, slotAccepts, EQUIP_SLOTS } from './slots'
 import { TUT_QUESTS, TUT_QUEST_IDS, type TutCtx } from './tutorial'
-import { welcomeMessage, hasReward as inboxHasReward, INBOX_CAP, type InboxMessage } from './inbox'
+import { welcomeMessage, offlineMessage, hasReward as inboxHasReward, INBOX_CAP, type InboxMessage } from './inbox'
 import { essenceGain, upgradeCost, insertCost, getUnique, UNIQUE_MAX_RANK, randomUniqueInstance, undiscoveredUnique } from './uniques'
 import {
   generateDungeon, makeDungeonPack, dungeonIlvl, dungeonRegen, getDungeonDef, dungeonLuckTier,
@@ -466,6 +466,8 @@ interface GameState extends SaveData {
   claimAllInbox: () => void
   /** ✉ Dépose un message dans la boîte (cadeaux, gains hors-ligne, events). */
   pushInbox: (msg: InboxMessage) => void
+  /** ✉ Marque tous les messages comme lus (appelé à l'ouverture de la boîte) → éteint les red-dots « non lu ». */
+  markInboxSeen: () => void
   /** v0.27 (F3) — cycle de vie mobile : l'appli passe en arrière-plan (horodate la mise en veille). */
   markAway: () => void
   /** v0.27 (F3) — retour au premier plan : crédite les gains hors-ligne accumulés en arrière-plan. */
@@ -4163,8 +4165,8 @@ export const useGame = create<GameState>((set, get) => {
   const save = loadSave()
   refreshGlobals(save.upgrades, save.maitrise, save.constellation, save.achievements)
 
-  // Progression hors-ligne : applique les gains accumulés depuis la dernière sauvegarde.
-  let pendingOffline: OfflineReport | null = null
+  // Progression hors-ligne : applique les gains accumulés depuis la dernière sauvegarde. v0.31.3 — le
+  // récap part dans la ✉ boîte de réception (message « non lu ») au lieu d'un modal plein écran intrusif.
   const elapsed = Date.now() - (save.lastSeen ?? Date.now())
   if (elapsed > 0) {
     const report = simulateOffline(save.characters, save.stage, save.upgrades, elapsed, save.activeBiome, save.maitrise, achievementBonuses(save.achievements))
@@ -4172,13 +4174,13 @@ export const useGame = create<GameState>((set, get) => {
       // ✨ Offrande au gouffre (Constellation) : booste les gains hors-ligne.
       const offMult = constellationMods(save.constellation).offlineMult
       if (offMult !== 1) { report.gold = Math.round(report.gold * offMult); report.noyau = Math.round(report.noyau * offMult); report.xp = Math.round(report.xp * offMult) }
-      pendingOffline = report
       save.gold += report.gold
       save.noyau += report.noyau
       save.sceaux += report.sceaux
       if (report.quint) save.quint = addQuint(save.quint, { [report.quint.type]: report.quint.amount })
       save.characters = save.characters.map((c) => (c.hp > 0 ? grantXp(c, report.xp) : c))
       for (const it of report.items) save.inventory = [it, ...save.inventory].slice(0, invMax)
+      save.inbox = [offlineMessage(report, Date.now()), ...save.inbox].slice(0, INBOX_CAP)
     }
   }
 
@@ -4209,7 +4211,9 @@ export const useGame = create<GameState>((set, get) => {
       { id: logId++, text: 'Bienvenue, guerrier. Le combat commence.', kind: 'info' as LogKind },
     ],
     killCount: 0,
-    pendingOffline,
+    // v0.31.3 — `pendingOffline` n'est plus alimenté (le modal de retour est remplacé par la ✉ inbox) ;
+    // le champ et `claimOffline` restent dormants pour ne pas toucher au plan de sauvegarde.
+    pendingOffline: null,
 
     tick: (dt) => {
       let s = get()
@@ -4630,7 +4634,7 @@ export const useGame = create<GameState>((set, get) => {
       if (!awaySince) return
       const elapsed = Date.now() - awaySince
       awaySince = 0
-      if (elapsed < 60_000 || s.pendingOffline) return // sous 1 min ou récap déjà en attente : rien
+      if (elapsed < 60_000) return // sous 1 min : pas de récap (awaySince déjà consommé → pas de double-crédit)
       const report = simulateOffline(s.characters, s.stage, s.upgrades, elapsed, s.activeBiome, s.maitrise, achievementBonuses(s.achievements))
       if (!report) return
       const offMult = constellationMods(s.constellation).offlineMult
@@ -4642,7 +4646,8 @@ export const useGame = create<GameState>((set, get) => {
       if (report.quint) next.quint = addQuint(next.quint, { [report.quint.type]: report.quint.amount })
       next.characters = next.characters.map((c) => (c.hp > 0 ? grantXp(c, report.xp) : c))
       for (const it of report.items) next.inventory = [it, ...next.inventory].slice(0, invMax)
-      next.pendingOffline = report
+      // v0.31.3 — récap dans la ✉ inbox (message « non lu ») au lieu du modal plein écran.
+      next.inbox = [offlineMessage(report, Date.now()), ...next.inbox].slice(0, INBOX_CAP)
       persist(next)
       set(next)
     },
@@ -6497,6 +6502,14 @@ export const useGame = create<GameState>((set, get) => {
     pushInbox: (msg) => {
       const s = get()
       const next = { ...s, inbox: [msg, ...s.inbox].slice(0, INBOX_CAP) }
+      persist(next)
+      set(next)
+    },
+
+    markInboxSeen: () => {
+      const s = get()
+      if (s.inbox.every((m) => m.seen)) return
+      const next = { ...s, inbox: s.inbox.map((m) => (m.seen ? m : { ...m, seen: true })) }
       persist(next)
       set(next)
     },

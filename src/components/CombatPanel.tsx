@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useGame, powerCooldowns, tutContext } from '../game/store'
 import type { LogKind } from '../game/store'
 import { TUT_QUESTS, tutDone, tutAllClaimed, tutClaimableCount, type TutCtx } from '../game/tutorial'
-import { hasReward, formatInboxReward, inboxUnclaimedCount, type InboxMessage } from '../game/inbox'
+import { hasReward, formatInboxReward, inboxAttentionCount, type InboxMessage } from '../game/inbox'
 import { Sheet } from './ui'
 import { LevelBadge } from './LevelBadge'
 import { charMaxHp, charDps, charResist, charCombatMods, TALENT_START_LEVEL } from '../game/character'
@@ -67,6 +67,7 @@ export function CombatPanel() {
   const inbox = useGame((s) => s.inbox)
   const claimInbox = useGame((s) => s.claimInbox)
   const claimAllInbox = useGame((s) => s.claimAllInbox)
+  const markInboxSeen = useGame((s) => s.markInboxSeen)
 
   // Biome + palier + verrou fusionnés en une ligne « zone » : le détail s'ouvre en feuille
   // (libère un tiers d'écran pour le journal sur mobile).
@@ -103,8 +104,9 @@ export function CombatPanel() {
   const tutActive = !tutAllClaimed(tut.claimed)
   // Récompenses de tuto prêtes à réclamer → red-dot de l'icône 🎯 flottante (cf. cluster live-ops).
   const tutClaimable = tutClaimableCount(tutCtx, tut.claimed)
-  // ✉ Inbox : gains en attente → red-dot de l'icône ✉. Le cluster s'affiche dès qu'il a une icône à montrer.
-  const inboxUnclaimed = inboxUnclaimedCount(inbox)
+  // ✉ Inbox : récompenses à réclamer + messages non lus → red-dot de l'icône ✉. Le cluster s'affiche
+  // dès qu'il a une icône à montrer.
+  const inboxAttention = inboxAttentionCount(inbox)
   const clusterVisible = !dungeon && !raid && (tutActive || inbox.length > 0)
   const partyDps = characters
     .filter((c) => c.hp > 0)
@@ -156,14 +158,14 @@ export function CombatPanel() {
               )}
               {inbox.length > 0 && (
                 <button
-                  onClick={() => setInboxOpen(true)}
-                  aria-label={`Boîte de réception — ${inboxUnclaimed} récompense${inboxUnclaimed > 1 ? 's' : ''} à réclamer`}
+                  onClick={() => { setInboxOpen(true); markInboxSeen() }}
+                  aria-label={`Boîte de réception — ${inboxAttention} à consulter`}
                   className="relative flex h-10 w-10 items-center justify-center rounded-full border border-sky-700/50 bg-[#101a26] text-xl active:scale-95"
                 >
                   ✉
-                  {inboxUnclaimed > 0 && (
+                  {inboxAttention > 0 && (
                     <span className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] animate-pulse items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white ring-2 ring-[#0d111a]">
-                      {inboxUnclaimed}
+                      {inboxAttention}
                     </span>
                   )}
                 </button>
