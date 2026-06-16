@@ -319,6 +319,8 @@ export interface BuildPreset {
   talents: Record<string, number>
   powers: (string | null)[]
   passives?: (string | null)[]
+  /** Générateurs équipés (sorts builder, auto-cast) — séparés des actifs (v0.30). */
+  generators?: (string | null)[]
   primaryBias: PrimaryStat
 }
 
@@ -329,10 +331,13 @@ export interface Character {
   xp: number
   base: StatBlock
   equipment: Equipment
-  /** 5 emplacements de capacité ACTIVE (id ou null). */
+  /** 5 emplacements de capacité ACTIVE NON-générateur (id ou null) — auto/manuel, à timer. */
   powers: (string | null)[]
   /** 3 emplacements de capacité PASSIVE (id ou null) — séparés des actifs (v0.29.5). */
   passives?: (string | null)[]
+  /** 3 emplacements de GÉNÉRATEUR (id ou null, sorts `builder`) — auto-cast pur, fabriquent la
+   *  ressource (Combo/Rage/Concentration…) ; hors des 5 actifs pour libérer la barre (v0.30). */
+  generators?: (string | null)[]
   /** Mode de lancement par emplacement actif : true/absent = AUTO, false = MANUEL (bouton). */
   powerAuto?: boolean[]
   /** Capacités débloquées (par niveau + par talents). */

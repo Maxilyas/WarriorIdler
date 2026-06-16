@@ -12,13 +12,18 @@ const load = async (rel) => {
   return import('data:text/javascript;base64,' + Buffer.from(res.outputFiles[0].text).toString('base64'))
 }
 const char = await load('../src/game/character.ts')
+const { getPower } = await load('../src/game/powers.ts')
 const { makeCharacter, charDps, dpsBreakdown, charCombatMods, computeUnlockedPowers } = char
 
 function build1(name, bias, talents, powers) {
   const c = makeCharacter(name, 80, bias)
   c.talents = { co_start: 1, ...talents }
   c.unlockedPowers = computeUnlockedPowers(c.talents)
-  c.powers = [...powers, null, null, null, null, null].slice(0, 5)
+  // v0.30 : les générateurs (builder) vont dans leur section dédiée, hors des 5 actifs.
+  const act = [], gen = []
+  for (const id of powers) (getPower(id)?.effect === 'builder' ? gen : act).push(id)
+  c.powers = [...act, null, null, null, null, null].slice(0, 5)
+  c.generators = [...gen, null, null, null].slice(0, 3)
   return c
 }
 

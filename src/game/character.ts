@@ -21,6 +21,15 @@ export const TALENT_START_LEVEL = 10
 /** v0.29.5 : 3 emplacements RÉSERVÉS aux capacités PASSIVES (distincts des 5 slots actifs). */
 export const PASSIVE_SLOTS = 3
 
+/** v0.30 : 3 emplacements RÉSERVÉS aux GÉNÉRATEURS (sorts `builder`, auto-cast pur). Hors des 5
+ *  actifs → on ne « gâche » pas un slot à timer pour un sort qui ne fait que fabriquer la ressource. */
+export const GENERATOR_SLOTS = 3
+
+/** Un sort est-il un GÉNÉRATEUR (builder) → va dans la section dédiée, pas dans les actifs. */
+export function isGenerator(p: PowerDef | undefined): boolean {
+  return p?.kind === 'active' && p.effect === 'builder'
+}
+
 /** Points de talent accumulés à un niveau donné (1 par niveau au-delà de TALENT_START_LEVEL). */
 export function talentPointsForLevel(level: number): number {
   return Math.max(0, level - TALENT_START_LEVEL)
@@ -39,14 +48,16 @@ export function makeCharacter(name: string, level: number, bias: PrimaryStat): C
   // Le nœud racine « Éveil » est alloué d'office (débloque Frappe + stats de départ).
   const talents: Record<string, number> = { co_start: 1 }
   const unlocked = computeUnlockedPowers(talents)
-  // v0.29.5 : on répartit les capacités débloquées entre slots ACTIFS (5) et PASSIFS (3).
+  // v0.30 : on répartit les capacités débloquées entre ACTIFS (5), GÉNÉRATEURS (3) et PASSIFS (3).
   const powers: (string | null)[] = Array(POWER_SLOTS).fill(null)
   const passives: (string | null)[] = Array(PASSIVE_SLOTS).fill(null)
-  let ai = 0, pi = 0
+  const generators: (string | null)[] = Array(GENERATOR_SLOTS).fill(null)
+  let ai = 0, pi = 0, gi = 0
   for (const id of unlocked) {
     const p = getPower(id)
     if (!p) continue
     if (p.kind === 'passive') { if (pi < PASSIVE_SLOTS) passives[pi++] = id }
+    else if (isGenerator(p)) { if (gi < GENERATOR_SLOTS) generators[gi++] = id }
     else if (ai < POWER_SLOTS) powers[ai++] = id
   }
 
@@ -59,6 +70,7 @@ export function makeCharacter(name: string, level: number, bias: PrimaryStat): C
     equipment: {},
     powers,
     passives,
+    generators,
     powerAuto: Array(POWER_SLOTS).fill(true),
     unlockedPowers: unlocked,
     talentPoints: talentPointsForLevel(level),
@@ -210,10 +222,15 @@ export function charDamageProfile(char: Character): DamageProfile {
   return computeDamageProfile(char.equipment, charKeystones(char))
 }
 
+/** IDs des capacités ACTIVES (actifs + générateurs) — pour le DPS de fiche et le combat. */
+export function charDeck(char: Character): (string | null)[] {
+  return [...char.powers, ...(char.generators ?? [])]
+}
+
 /** Génération de ressource (Points de Combo)/s des GÉNÉRATEURS équipés — pour estimer les finisseurs. */
 function comboGenPerSec(char: Character, derived: DerivedStats, comboGen: number): number {
   let g = 0
-  for (const pid of char.powers) {
+  for (const pid of char.generators ?? []) {
     if (!pid) continue
     const p = getPower(pid)
     if (p?.kind === 'active' && p.effect === 'builder') g += (1 + comboGen) / Math.max(0.5, (p.cooldown ?? 3) * (1 - derived.cdr))
@@ -280,7 +297,7 @@ export function charDps(char: Character): number {
   const auto = theoreticalDps(derived, profile, dmgMult)
   let dps = auto + auto * cm.petDps // INVOCATION : le familier inflige une fraction de ton DPS d'auto.
   dps += igniteDps(cm, derived, auto) // PYROMANCIEN : DoT d'Embrasement (crits).
-  for (const pid of char.powers) {
+  for (const pid of charDeck(char)) { // actifs + générateurs (les builders frappent aussi un peu)
     if (!pid) continue
     const p = getPower(pid)
     if (p) dps += abilityDps(p, derived, pm, dmgMult, cm, gen)
@@ -314,7 +331,7 @@ export function dpsBreakdown(char: Character): DpsBreakdown {
   const gen = comboGenPerSec(char, derived, cm.comboGen)
   const auto = theoreticalDps(derived, profile, dmgMult)
   const spells: { name: string; dps: number }[] = []
-  for (const pid of char.powers) {
+  for (const pid of charDeck(char)) { // actifs + générateurs
     if (!pid) continue
     const p = getPower(pid)
     if (!p || p.kind !== 'active') continue

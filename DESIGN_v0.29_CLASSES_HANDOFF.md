@@ -25,7 +25,9 @@
 - **Profondeur = débloquer/combotter les SORTS**, pas empiler des stats. 1 sort de départ ; les sorts forts
   sont **gatés** (chaînes + `minSpent`) ; **choix exclusifs de SORTS** ; ultimes **tout au fond** (`minSpent 20`).
   Les nœuds intermédiaires sont des **modificateurs de sorts / combos**, pas des « +3 crit ».
-- **5 sorts actifs + 3 passifs** équipables (deck). Sur mobile : pas de surcharge (auto-cast). La diversité
+- **5 actifs + 3 générateurs + 3 passifs** équipables (deck, v0.30). Les GÉNÉRATEURS (sorts `builder`) ont
+  leur propre section (auto-cast pur, on ne les time pas) → les 5 slots actifs sont libres pour les vrais
+  sorts à timer. Sur mobile : pas de surcharge (auto-cast). La diversité
   vient des **passifs/triggers** + **mutations via tags**, pas de boutons en plus.
 - **Survie par archétype**, cohérente au profil (jamais au niveau d'un vrai tank) — chaque arbre a son lot
   de nœuds de soin/résist/esquive pour tenir en solo tôt.
@@ -104,7 +106,7 @@ Chaque sort porte des **tags** (`PowerDef.tags` / `SpellSpec.tags`). **12 tags d
 | **Embrasement sur crit** | keystone `igniteOnCrit:{frac,duration}` (frac somme, durée max) | les 2 pas de combat (sur `hit.crit`) + estim. fiche `igniteDps` (ligne 🔥) | Pyromancien ✓ |
 | **Finisseur → bouclier** | keystone `finisherShield` (somme) | `fireActive` cas `finisher` (absorb += done × frac) | Rempart ✓ (tank Rage→bouclier) |
 | **Atonement (soin↔dégâts)** | keystone `healToDamage` (somme) | `fireActive` `bleedHeal` (une part du soin frappe l'ennemi) | Lumière ✓ (heal qui peut solo) |
-| **3 passifs / 5 actifs** | `char.powers` (5 actifs) + `char.passives` (3 passifs) | `charPassives` lit `passives` ; `setPassive` | toutes |
+| **Deck 5+3+3** | `char.powers` (5 actifs) + `char.generators` (3 builders, v0.30) + `char.passives` (3) | combat fire un « deck » (actifs auto/manuel + générateurs auto pur) ; `charDeck()` ; `setPower`/`setGenerator`/`setPassive` | toutes |
 
 > ⚠️ `enemy.dot` est **un seul slot** (Math.max garde le plus fort) : venin / saignement / Embrasement / Immolation
 > se le **partagent** (pas de cumul). Idem `char.combo` partagé (Ombrelame / Arcaniste / Œil de faucon).
@@ -219,7 +221,7 @@ Format : **Nom** (rôle) — *boucle unique* — `tags` clés. (Noms = identité
   (`partyCombatStep` / `partyCombatStepMulti`), `autoSpenderReady`, `setPower`/`setPassive`, chargement/migration.
 - `src/game/combat.ts` — `rollHit`, `theoreticalDps`, atténuation.
 - `src/game/types.ts` — `PowerEffect`, `Character` (`powers`, `passives`, `combo`), `Enemy` (`venomStacks`, `controlled`).
-- `src/components/CharacterPanel.tsx` — équipement des capacités (5 actifs / 3 passifs).
+- `src/components/CharacterPanel.tsx` — équipement des capacités (`PowersSection` : 3 sections = 5 actifs / 3 générateurs / 3 passifs).
 - `src/components/CombatPanel.tsx` — combat ; ressources affichées (Combo X/cap, ☠ Venin ×N).
 - `scripts/validate-talents.mjs` — `npm run validate` (intégrité de l'arbre, bundle esbuild).
 - `scripts/check-classes.mjs` — `npm run check-classes` (smoke-test runtime des classes : DPS de fiche +

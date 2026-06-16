@@ -8,7 +8,7 @@ import type { DerivedStats } from './stats'
 import {
   makeCharacter, charDerived, charMaxHp, charDamageProfile, charPassives,
   charResist, charCombatMods, abilityPower, powerScale, computeUnlockedPowers, setGlobalCombatMods, setGlobalPrestigeResist,
-  setPactDerivedMods, talentPointsForLevel, type CombatMods as CharCombatMods,
+  setPactDerivedMods, talentPointsForLevel, charDeck, isGenerator, GENERATOR_SLOTS, type CombatMods as CharCombatMods,
 } from './character'
 import { getTalent, canAllocate } from './talents'
 import { getPower } from './powers'
@@ -567,6 +567,8 @@ interface GameState extends SaveData {
   setBias: (p: PrimaryStat) => void
   setPower: (slot: number, powerId: string | null) => void
   setPassive: (slot: number, powerId: string | null) => void
+  /** Équipe un GÉNÉRATEUR (sort builder) dans l'un des 3 slots dédiés (auto-cast). */
+  setGenerator: (slot: number, powerId: string | null) => void
   /** Bascule un emplacement de capacité entre AUTO et MANUEL (perso actif). */
   togglePowerAuto: (slot: number) => void
   /** Lance MANUELLEMENT la capacité d'un emplacement (perso actif) — strict : ne part qu'au prochain tick si prête. */
@@ -700,7 +702,7 @@ const manualFire = new Set<string>()
 /** Recharges courantes des capacités d'un perso (pour l'UI : 0 = prête). */
 export function powerCooldowns(char: Character): Record<string, number> {
   const out: Record<string, number> = {}
-  for (const pid of char.powers) if (pid) out[pid] = Math.max(0, cooldowns.get(`${char.id}:${pid}`) ?? 0)
+  for (const pid of charDeck(char)) if (pid) out[pid] = Math.max(0, cooldowns.get(`${char.id}:${pid}`) ?? 0)
   return out
 }
 
@@ -709,7 +711,7 @@ function resetLongestCooldown(chars: Character[]) {
   for (const c of chars) {
     let bestKey = ''
     let best = 0
-    for (const pid of c.powers) {
+    for (const pid of charDeck(c)) {
       if (!pid) continue
       const k = `${c.id}:${pid}`
       const cd = cooldowns.get(k) ?? 0
@@ -815,7 +817,7 @@ function enrichResists(
 
 /** 🔁 Boucle temporelle : remet à zéro TOUTES les recharges des héros donnés. */
 function resetAllCooldowns(chars: Character[]) {
-  for (const c of chars) for (const pid of c.powers) if (pid) cooldowns.set(`${c.id}:${pid}`, 0)
+  for (const c of chars) for (const pid of charDeck(c)) if (pid) cooldowns.set(`${c.id}:${pid}`, 0)
 }
 
 /** 🕊️ Sursis : si un héros vient de tomber et que sa rune est prête, il survit à 25% PV. */
@@ -980,7 +982,7 @@ function runeFightStart(chars: Character[], runes?: TimeRuneMods) {
     if (runes.ouverture) {
       let bestKey = ''
       let bestCd = 0
-      for (const pid of c.powers) {
+      for (const pid of charDeck(c)) {
         if (!pid) continue
         const p = getPower(pid)
         if (!p || p.kind !== 'active') continue
@@ -989,7 +991,7 @@ function runeFightStart(chars: Character[], runes?: TimeRuneMods) {
       if (bestKey) cooldowns.set(bestKey, 0)
     }
     if (runes.preparationSec) {
-      for (const pid of c.powers) {
+      for (const pid of charDeck(c)) {
         if (!pid) continue
         const k = `${c.id}:${pid}`
         cooldowns.set(k, Math.max(0, (cooldowns.get(k) ?? 0) - runes.preparationSec))
@@ -1005,7 +1007,7 @@ function runeRembobinage(chars: Character[], runes?: TimeRuneMods) {
     if (c.hp <= 0 || rembUsed.has(c.id)) continue
     if (c.hp / charMaxHp(c) >= 0.25) continue
     rembUsed.add(c.id)
-    for (const pid of c.powers) {
+    for (const pid of charDeck(c)) {
       if (!pid) continue
       const k = `${c.id}:${pid}`
       cooldowns.set(k, Math.max(0, (cooldowns.get(k) ?? 0) - runes.rembobinageSec))
@@ -1119,7 +1121,7 @@ function gemDamageHero(
       const steps = Math.floor(acc / 0.1)
       echangeurAcc.set(c.id, acc - steps * 0.1)
       if (steps > 0) {
-        for (const pid of c.powers) {
+        for (const pid of charDeck(c)) {
           if (!pid) continue
           const k = `${c.id}:${pid}`
           cooldowns.set(k, Math.max(0, (cooldowns.get(k) ?? 0) - steps * cond.echangeurSec))
@@ -1169,7 +1171,7 @@ function gemOffenseMult(
   if (cond.tensionPct) {
     let all = true
     let any = false
-    for (const pid of c.powers) {
+    for (const pid of charDeck(c)) {
       if (!pid) continue
       const p = getPower(pid)
       if (!p || p.kind !== 'active') continue
@@ -1819,19 +1821,27 @@ function sanitize(save: SaveData): SaveData {
     // Points restants = gagnés (au-delà du niveau de départ des talents) − dépensés (hors racine gratuite).
     c.talentPoints = Math.max(0, talentPointsForLevel(c.level) - spent)
     c.unlockedPowers = computeUnlockedPowers(talents)
-    // v0.29.5 : RÉPARTITION actifs (5) / passifs (3). Migration : on relit les anciens `powers`
-    // (qui mélangeaient les deux) + les `passives` existants, on valide, on range par genre.
-    const equipped = [...(Array.isArray(c.powers) ? c.powers : []), ...(Array.isArray(c.passives) ? c.passives : [])]
+    // v0.30 : RÉPARTITION actifs (5) / GÉNÉRATEURS (3) / passifs (3). Migration : on relit les anciens
+    // `powers` (qui mélangeaient builders & actifs) + `generators` + `passives`, on valide, on range par
+    // genre — les builders QUITTENT la barre des actifs et atterrissent dans leurs slots dédiés.
+    const equipped = [
+      ...(Array.isArray(c.powers) ? c.powers : []),
+      ...(Array.isArray(c.generators) ? c.generators : []),
+      ...(Array.isArray(c.passives) ? c.passives : []),
+    ]
     const act: string[] = []
+    const gen: string[] = []
     const pas: string[] = []
     for (const pid of equipped) {
       if (!pid || !c.unlockedPowers.includes(pid)) continue
       const pw = getPower(pid)
       if (!pw) continue
       if (pw.kind === 'passive') { if (pas.length < 3 && !pas.includes(pid)) pas.push(pid) }
+      else if (isGenerator(pw)) { if (gen.length < GENERATOR_SLOTS && !gen.includes(pid)) gen.push(pid) }
       else if (act.length < 5 && !act.includes(pid)) act.push(pid)
     }
     c.powers = [0, 1, 2, 3, 4].map((i) => act[i] ?? null)
+    c.generators = [0, 1, 2].map((i) => gen[i] ?? null)
     c.passives = [0, 1, 2].map((i) => pas[i] ?? null)
     // Mode auto/manuel par emplacement ACTIF (défaut AUTO).
     c.powerAuto = [0, 1, 2, 3, 4].map((i) => (Array.isArray(c.powerAuto) ? c.powerAuto[i] !== false : true))
@@ -1839,7 +1849,7 @@ function sanitize(save: SaveData): SaveData {
     if (Array.isArray(c.buildPresets)) {
       c.buildPresets = c.buildPresets.slice(0, 3).map((p) =>
         p && typeof p === 'object' && p.talents && Array.isArray(p.powers)
-          ? { name: String(p.name ?? 'Build').slice(0, 14), talents: p.talents, powers: p.powers.slice(0, 5), passives: Array.isArray(p.passives) ? p.passives.slice(0, 3) : undefined, primaryBias: p.primaryBias ?? 'force' }
+          ? { name: String(p.name ?? 'Build').slice(0, 14), talents: p.talents, powers: p.powers.slice(0, 5), passives: Array.isArray(p.passives) ? p.passives.slice(0, 3) : undefined, generators: Array.isArray(p.generators) ? p.generators.slice(0, 3) : undefined, primaryBias: p.primaryBias ?? 'force' }
           : null,
       )
     } else {
@@ -1874,6 +1884,7 @@ function migrateOldSave(p: any): SaveData {
     equipment: p.equipment ?? {},
     powers: [null, null, null, null, null],
     passives: [null, null, null],
+    generators: [null, null, null],
     unlockedPowers: [],
     talentPoints: talentPointsForLevel(p.level ?? 1),
     talents: {},
@@ -2849,15 +2860,17 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
     const d = info[i]
     if (!d) return
     const stunned = (c.stun ?? 0) > 0
-    c.powers.forEach((pid, slot) => {
-      if (!pid) return
+    // v0.30 : le « deck » de combat = 5 actifs (auto/manuel) + 3 générateurs (auto pur, fabriquent la ressource).
+    const deck: { pid: string; auto: boolean }[] = []
+    c.powers.forEach((pid, slot) => { if (pid) deck.push({ pid, auto: c.powerAuto?.[slot] !== false }) })
+    for (const gid of c.generators ?? []) if (gid) deck.push({ pid: gid, auto: true })
+    deck.forEach(({ pid, auto }) => {
       const p = getPower(pid)
       if (!p || p.kind !== 'active') return
       const key = `${c.id}:${pid}`
       // ⌛ Sabliers liés (v0.26) : les recharges défilent plus vite pendant une incantation ennemie.
       const cdTick = dt * (1 + (enemyCasting && mods?.runes?.sabliers ? mods.runes.sabliers : 0))
       const cd = (cooldowns.get(key) ?? 0) - cdTick
-      const auto = c.powerAuto?.[slot] !== false
       if (cd <= 0 && !stunned && (auto || manualFire.has(key)) && autoSpenderReady(p, c, enemy, manualFire.has(key))) {
         // 🩸 Pacte sanglant : recharges raccourcies, mais chaque lancement coûte 2% des PV max.
         const pacte = mods?.cond?.pacteCdr ?? 0
@@ -2867,7 +2880,7 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
         manualFire.delete(key)
         // ⏳ CHRONOMANCIEN « Cascade temporelle » : chaque sort lancé rembourse les autres recharges.
         if (d.cmods.cdrOnCast > 0) {
-          for (const pid2 of c.powers) {
+          for (const pid2 of charDeck(c)) {
             if (!pid2 || pid2 === pid) continue
             const k2 = `${c.id}:${pid2}`
             cooldowns.set(k2, Math.max(0, (cooldowns.get(k2) ?? 0) - d.cmods.cdrOnCast))
@@ -3285,15 +3298,17 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
     const d = info[i]
     if (!d) return
     const stunned = (c.stun ?? 0) > 0
-    c.powers.forEach((pid, slot) => {
-      if (!pid) return
+    // v0.30 : deck = 5 actifs (auto/manuel) + 3 générateurs (auto pur).
+    const deck: { pid: string; auto: boolean }[] = []
+    c.powers.forEach((pid, slot) => { if (pid) deck.push({ pid, auto: c.powerAuto?.[slot] !== false }) })
+    for (const gid of c.generators ?? []) if (gid) deck.push({ pid: gid, auto: true })
+    deck.forEach(({ pid, auto }) => {
       const p = getPower(pid)
       if (!p || p.kind !== 'active') return
       const key = `${c.id}:${pid}`
       // ⌛ Sabliers liés (v0.26) : les recharges défilent plus vite pendant une incantation ennemie.
       const cdTick = dt * (1 + (anyCasting && mods?.runes?.sabliers ? mods.runes.sabliers : 0))
       const cd = (cooldowns.get(key) ?? 0) - cdTick
-      const auto = c.powerAuto?.[slot] !== false
       if (cd <= 0 && !stunned && (auto || manualFire.has(key)) && autoSpenderReady(p, c, focus(), manualFire.has(key))) {
         // 🩸 Pacte sanglant : recharges raccourcies contre 2% des PV max par lancement.
         const pacte = mods?.cond?.pacteCdr ?? 0
@@ -3303,7 +3318,7 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
         manualFire.delete(key)
         // ⏳ CHRONOMANCIEN « Cascade temporelle » : chaque sort lancé rembourse les autres recharges.
         if (d.cmods.cdrOnCast > 0) {
-          for (const pid2 of c.powers) {
+          for (const pid2 of charDeck(c)) {
             if (!pid2 || pid2 === pid) continue
             const k2 = `${c.id}:${pid2}`
             cooldowns.set(k2, Math.max(0, (cooldowns.get(k2) ?? 0) - d.cmods.cdrOnCast))
@@ -6126,6 +6141,7 @@ export const useGame = create<GameState>((set, get) => {
       const char = s.characters[s.activeChar]
       if (!char || slot < 0 || slot >= char.powers.length) return
       if (powerId && !char.unlockedPowers.includes(powerId)) return
+      if (powerId && isGenerator(getPower(powerId))) return // un générateur va dans sa section dédiée
       const powers = char.powers.map((x) => (x === powerId ? null : x)) // unicité
       powers[slot] = powerId
       const nc = { ...char, powers }
@@ -6146,6 +6162,24 @@ export const useGame = create<GameState>((set, get) => {
       const passives = cur.map((x) => (x === powerId ? null : x)) // unicité
       passives[slot] = powerId
       const nc = { ...char, passives }
+      nc.hp = Math.min(nc.hp, charMaxHp(nc))
+      const characters = s.characters.map((c, i) => (i === s.activeChar ? nc : c))
+      const next = { ...s, characters }
+      persist(next)
+      set(next)
+    },
+
+    // v0.30 : équipe un GÉNÉRATEUR (sort builder) dans l'un des 3 slots dédiés (auto-cast pur).
+    setGenerator: (slot, powerId) => {
+      const s = get()
+      const char = s.characters[s.activeChar]
+      const cur = char?.generators ?? [null, null, null]
+      if (!char || slot < 0 || slot >= GENERATOR_SLOTS) return
+      if (powerId && !char.unlockedPowers.includes(powerId)) return
+      if (powerId && !isGenerator(getPower(powerId))) return // seuls les builders vont ici
+      const generators = cur.map((x) => (x === powerId ? null : x)) // unicité
+      generators[slot] = powerId
+      const nc = { ...char, generators }
       nc.hp = Math.min(nc.hp, charMaxHp(nc))
       const characters = s.characters.map((c, i) => (i === s.activeChar ? nc : c))
       const next = { ...s, characters }
@@ -6207,7 +6241,8 @@ export const useGame = create<GameState>((set, get) => {
       const unlockedPowers = computeUnlockedPowers(talents)
       const powers = char.powers.map((p) => (p && unlockedPowers.includes(p) ? p : null))
       const passives = (char.passives ?? []).map((p) => (p && unlockedPowers.includes(p) ? p : null))
-      const nc = { ...char, talents, talentPoints: char.talentPoints + refundable, unlockedPowers, powers, passives }
+      const generators = (char.generators ?? []).map((p) => (p && unlockedPowers.includes(p) ? p : null))
+      const nc = { ...char, talents, talentPoints: char.talentPoints + refundable, unlockedPowers, powers, passives, generators }
       nc.hp = Math.min(nc.hp, charMaxHp(nc))
       const characters = s.characters.map((c, i) => (i === s.activeChar ? nc : c))
       const next = { ...s, gold: s.gold - cost, characters, log: pushLog(s.log, `Talents réinitialisés (-${cost} or).`, 'craft') }
@@ -6225,6 +6260,7 @@ export const useGame = create<GameState>((set, get) => {
         talents: { ...char.talents },
         powers: [...char.powers],
         passives: [...(char.passives ?? [])],
+        generators: [...(char.generators ?? [])],
         primaryBias: char.primaryBias,
       }
       const characters = s.characters.map((c, i) => (i === s.activeChar ? { ...c, buildPresets: presets } : c))
@@ -6265,7 +6301,8 @@ export const useGame = create<GameState>((set, get) => {
       const unlockedPowers = computeUnlockedPowers(talents)
       const powers = preset.powers.map((p) => (p && unlockedPowers.includes(p) ? p : null))
       const passives = (preset.passives ?? [null, null, null]).map((p) => (p && unlockedPowers.includes(p) ? p : null))
-      const nc = { ...char, talents, talentPoints: points, unlockedPowers, powers, passives, primaryBias: preset.primaryBias }
+      const generators = (preset.generators ?? [null, null, null]).map((p) => (p && unlockedPowers.includes(p) ? p : null))
+      const nc = { ...char, talents, talentPoints: points, unlockedPowers, powers, passives, generators, primaryBias: preset.primaryBias }
       nc.hp = Math.min(nc.hp, charMaxHp(nc))
       const characters = s.characters.map((c, i) => (i === s.activeChar ? nc : c))
       const next = {

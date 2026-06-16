@@ -5,7 +5,7 @@ import type { StatEffect } from '../game/stats'
 import type { PrimaryStat, DamageType, Character, PowerDef } from '../game/types'
 import type { DerivedStats } from '../game/stats'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST, profileDamageMult } from '../game/damage'
-import { charTotalStats, charDerived, charMaxHp, charDamageProfile, charResist, abilityPower, powerScale, dpsBreakdown } from '../game/character'
+import { charTotalStats, charDerived, charMaxHp, charDamageProfile, charResist, abilityPower, powerScale, dpsBreakdown, isGenerator } from '../game/character'
 import { setBonuses, getSet } from '../game/sets'
 import { getPower, POWER_EFFECT_META, scaleLabel, powerDamageType } from '../game/powers'
 import { RAID_LIST, getRaidDef, raidUnlocked, raidReqs, type RaidId } from '../game/raids'
@@ -427,13 +427,17 @@ function ResistSection({ char, allChars }: { char: Character; allChars: Characte
 function PowersSection({ char }: { char: Character }) {
   const setPower = useGame((s) => s.setPower)
   const setPassive = useGame((s) => s.setPassive)
+  const setGenerator = useGame((s) => s.setGenerator)
   const togglePowerAuto = useGame((s) => s.togglePowerAuto)
   const derived = charDerived(char)
   const weaponType = charDamageProfile(char).mainType
   const passives = char.passives ?? [null, null, null]
-  const equipped = new Set([...char.powers, ...passives].filter(Boolean) as string[])
+  const generators = char.generators ?? [null, null, null]
+  const equipped = new Set([...char.powers, ...passives, ...generators].filter(Boolean) as string[])
   const available = char.unlockedPowers.filter((id) => !equipped.has(id))
-  const availActive = available.filter((id) => getPower(id)?.kind === 'active')
+  // Les GÉNÉRATEURS (builder) ont leur propre section → on les sort des actifs.
+  const availActive = available.filter((id) => { const p = getPower(id); return p?.kind === 'active' && !isGenerator(p) })
+  const availGen = available.filter((id) => isGenerator(getPower(id)))
   const availPassive = available.filter((id) => getPower(id)?.kind === 'passive')
 
   return (
@@ -480,6 +484,47 @@ function PowersSection({ char }: { char: Character }) {
                 if (!p) return null
                 const emptySlot = char.powers.indexOf(null)
                 return <button key={id} disabled={emptySlot < 0} onClick={() => setPower(emptySlot, id)} title={p.description} className="rounded border border-violet-700/50 bg-violet-900/30 px-2 py-1 text-[10px] text-violet-200 hover:bg-violet-800/40 disabled:opacity-40">⚡ {p.name}</button>
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* --- GÉNÉRATEURS (3 slots dédiés, auto-cast pur) --- */}
+      <div>
+        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-amber-300">🔄 Générateurs (3 slots) · auto-cast — fabriquent ta ressource</div>
+        <div className="grid grid-cols-1 gap-1.5">
+          {generators.map((pid, slot) => {
+            const p = pid ? getPower(pid) : null
+            if (!p) return <div key={slot} className="rounded-lg border border-slate-800 bg-black/20 px-2 py-1.5 text-[11px] italic text-slate-600">— générateur {slot + 1} libre —</div>
+            const det = powerDetail(p, derived, weaponType)
+            return (
+              <div key={slot} className="rounded-lg border border-slate-700 bg-black/20 px-2 py-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[12px] font-medium text-slate-100">{p.name}</span>
+                    <span className="text-[9px] uppercase tracking-wide text-amber-400/80">🔄 Générateur · {p.resource ?? 'Combo'}</span>
+                  </span>
+                  <button onClick={() => setGenerator(slot, null)} className="rounded px-2 py-1 text-sm text-slate-500 hover:text-red-400" title="Retirer">✕</button>
+                </div>
+                <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-slate-400">
+                  {det.scale && <span className="text-amber-300/80">📈 {det.scale}</span>}
+                  <span>CD {det.cd.toFixed(1)}s</span>
+                </div>
+                <p className="mt-0.5 text-[10px] leading-snug text-slate-500">{p.description}</p>
+              </div>
+            )
+          })}
+        </div>
+        {availGen.length > 0 && (
+          <div className="mt-2">
+            <div className="mb-1 text-[10px] text-slate-500">Générateurs débloqués :</div>
+            <div className="flex flex-wrap gap-1">
+              {availGen.map((id) => {
+                const p = getPower(id)
+                if (!p) return null
+                const emptySlot = generators.indexOf(null)
+                return <button key={id} disabled={emptySlot < 0} onClick={() => setGenerator(emptySlot, id)} title={p.description} className="rounded border border-amber-700/50 bg-amber-900/30 px-2 py-1 text-[10px] text-amber-200 hover:bg-amber-800/40 disabled:opacity-40">🔄 {p.name}</button>
               })}
             </div>
           </div>
