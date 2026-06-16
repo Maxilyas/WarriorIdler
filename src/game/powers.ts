@@ -1,4 +1,5 @@
-import type { PowerDef, PowerEffect, DamageType } from './types'
+import type { PowerDef, PowerEffect, DamageType, OffensiveStat } from './types'
+import { ALL_SPELLS, type SpellSpec } from './classData'
 
 /**
  * Registre des capacités équipables (powers).
@@ -246,6 +247,36 @@ export const POWERS: PowerDef[] = [
   { id: 'lumiere_sacree', name: 'Lumière sacrée', kind: 'active', description: 'Un soin puissant nourri par tes attaques. Scale sur ta stat principale (soin FORCE possible).', unlockLevel: 1, cooldown: 3.5, effect: 'heal', magnitude: 2.8 },
   { id: 'brume_revigorante', name: 'Brume revigorante', kind: 'active', description: 'Frapper diffuse une brume qui soigne (fistweaving). Scale sur ta stat principale (soin AGI possible).', unlockLevel: 1, cooldown: 3, effect: 'heal', magnitude: 1.8 },
 ]
+
+/* ================= v0.29.1 : sorts GÉNÉRÉS depuis classData (39 specs × 3) ================= */
+const EFFECT_FR: Record<PowerEffect, string> = {
+  nuke: 'frappe directe', cleave: 'frappe de zone', dot: 'altération sur la durée',
+  heal: 'soin', hot: 'soin sur la durée', shield: 'bouclier', buffParty: 'soin de groupe',
+  bigShield: 'bouclier massif', invuln: 'immunité brève', charge: 'charge puis frappe ×3',
+  frenzy: 'transe (+dégâts)', executeNuke: 'exécution (PV manquants)', megaCleave: 'cataclysme de zone',
+  bigHeal: 'soin massif de groupe', lifeNuke: 'frappe vampirique', rupture: 'brise-régén + DoT',
+  mark: 'vulnérabilité',
+}
+const SCALE_FR: Record<OffensiveStat, string> = { force: 'FOR', agilite: 'AGI', intelligence: 'INT' }
+function spellDescription(s: SpellSpec): string {
+  const scale = Array.isArray(s.scale) ? s.scale.map((x) => SCALE_FR[x]).join('/') : s.scale ? SCALE_FR[s.scale] : 'stat principale'
+  const t = s.type ? ` ${s.type}` : ''
+  return `${EFFECT_FR[s.effect]}${t}. Scale ${scale}.`
+}
+function specToPower(s: SpellSpec): PowerDef {
+  const scaleStats = Array.isArray(s.scale) ? s.scale : undefined
+  const scaleStat = !Array.isArray(s.scale) ? s.scale : undefined
+  return {
+    id: s.id, name: s.name, kind: 'active', description: spellDescription(s),
+    unlockLevel: 1, cooldown: s.cd, effect: s.effect, magnitude: s.mag,
+    ...(s.type ? { damageType: s.type } : {}),
+    ...(scaleStats ? { scaleStats } : {}),
+    ...(scaleStat ? { scaleStat } : {}),
+    ...(s.duration ? { duration: s.duration } : {}),
+    ...(s.icon ? { icon: s.icon } : {}),
+  }
+}
+for (const s of ALL_SPELLS) POWERS.push(specToPower(s))
 
 const BY_ID = new Map(POWERS.map((p) => [p.id, p]))
 

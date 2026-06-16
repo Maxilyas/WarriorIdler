@@ -1,10 +1,14 @@
-import { readFileSync } from 'node:fs'
-import { transformSync } from 'esbuild'
+import { fileURLToPath } from 'node:url'
+import { build } from 'esbuild'
 
-// Transpile talents.ts (import type ./types est effacé par esbuild) puis import dynamique.
+// BUNDLE (résout ./classData & efface les import type ./types) puis import dynamique.
+// v0.29.1 : talents.ts & powers.ts importent classData.ts → il faut bundler, pas juste transpiler.
 const load = async (rel) => {
-  const src = readFileSync(new URL(rel, import.meta.url), 'utf8')
-  const js = transformSync(src, { loader: 'ts', format: 'esm' }).code
+  const res = await build({
+    entryPoints: [fileURLToPath(new URL(rel, import.meta.url))],
+    bundle: true, write: false, format: 'esm', platform: 'node', logLevel: 'silent',
+  })
+  const js = res.outputFiles[0].text
   return import('data:text/javascript;base64,' + Buffer.from(js).toString('base64'))
 }
 const mod = await load('../src/game/talents.ts')

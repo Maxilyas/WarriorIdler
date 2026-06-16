@@ -357,7 +357,7 @@ export function TalentTree() {
               <VoieButton key={id} id={id} focus={focus} talents={char.talents} onPick={(v) => { setFocus(v); setVoiesOpen(false) }} />
             ))}
           </div>
-          <div className="mb-1.5 mt-3 text-[10px] font-semibold uppercase tracking-wide text-amber-300">★ Archétypes — changent le gameplay</div>
+          <div className="mb-1.5 mt-3 text-[10px] font-semibold uppercase tracking-wide text-amber-300">⚔ Classes — chacune a ses archétypes</div>
           <div className="grid grid-cols-2 gap-1.5">
             {CONSTELLATION_LIST.filter((id) => CONSTELLATIONS[id].archetype).map((id) => (
               <VoieButton key={id} id={id} focus={focus} talents={char.talents} onPick={(v) => { setFocus(v); setVoiesOpen(false) }} />
