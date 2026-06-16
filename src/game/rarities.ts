@@ -5,8 +5,11 @@ import type { Rarity, RarityId } from './types'
  * Plus la rareté monte, plus l'objet a d'affixes, de budget de stats,
  * et plus il est rare au drop (weight décroissant).
  */
-// statMult : courbe géométrique ~×1,22 par cran (ancrée sur Rare) — chaque saut de rareté
-// doit se SENTIR ; un Transcendant vaut ~22× un Médiocre là où l'ancienne courbe plafonnait à ~7×.
+// statMult : ⚠️ NE PILOTE PLUS le budget de stats depuis la v0.30 (ne sert QU'aux effets uniques, cf.
+// uniques.ts). Le budget primaire/endurance/lignes d'une rareté = +RARITY_ILVL_PER_TIER (3) ilvl-équiv
+// PAR CRAN (progression.ts) → un Transcendant à ilvl ÉGAL vaut ~×3,8 un Médiocre (et NON ×22 : la
+// puissance vient de l'ilvl, pas de la rareté). La rareté apporte surtout des LIGNES en plus (affixCount)
+// + la chance/force d'unique. Garder ce champ ~géométrique reste cohérent pour le scaling des uniques.
 export const RARITIES: Record<RarityId, Rarity> = {
   mediocre: { id: 'mediocre', name: 'Médiocre', tier: 1, color: '#9d9d9d', affixCount: 1, statMult: 0.55, weight: 1000 },
   commun: { id: 'commun', name: 'Commun', tier: 2, color: '#ffffff', affixCount: 2, statMult: 0.70, weight: 700 },
