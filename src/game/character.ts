@@ -18,6 +18,9 @@ export const STARTING_BASE: StatBlock = { force: 5, agilite: 5, intelligence: 5,
  */
 export const TALENT_START_LEVEL = 10
 
+/** v0.29.5 : 3 emplacements RÉSERVÉS aux capacités PASSIVES (distincts des 5 slots actifs). */
+export const PASSIVE_SLOTS = 3
+
 /** Points de talent accumulés à un niveau donné (1 par niveau au-delà de TALENT_START_LEVEL). */
 export function talentPointsForLevel(level: number): number {
   return Math.max(0, level - TALENT_START_LEVEL)
@@ -36,8 +39,16 @@ export function makeCharacter(name: string, level: number, bias: PrimaryStat): C
   // Le nœud racine « Éveil » est alloué d'office (débloque Frappe + stats de départ).
   const talents: Record<string, number> = { co_start: 1 }
   const unlocked = computeUnlockedPowers(talents)
+  // v0.29.5 : on répartit les capacités débloquées entre slots ACTIFS (5) et PASSIFS (3).
   const powers: (string | null)[] = Array(POWER_SLOTS).fill(null)
-  unlocked.slice(0, POWER_SLOTS).forEach((id, i) => (powers[i] = id))
+  const passives: (string | null)[] = Array(PASSIVE_SLOTS).fill(null)
+  let ai = 0, pi = 0
+  for (const id of unlocked) {
+    const p = getPower(id)
+    if (!p) continue
+    if (p.kind === 'passive') { if (pi < PASSIVE_SLOTS) passives[pi++] = id }
+    else if (ai < POWER_SLOTS) powers[ai++] = id
+  }
 
   const c: Character = {
     id: `char-${charSeq++}`,
@@ -47,6 +58,7 @@ export function makeCharacter(name: string, level: number, bias: PrimaryStat): C
     base,
     equipment: {},
     powers,
+    passives,
     powerAuto: Array(POWER_SLOTS).fill(true),
     unlockedPowers: unlocked,
     talentPoints: talentPointsForLevel(level),
@@ -68,7 +80,7 @@ export function charPassives(char: Character): { threatMult: number; damageReduc
   let threatMult = 1
   let damageReduction = 0
   const mods: StatBlock = {}
-  for (const pid of char.powers) {
+  for (const pid of char.passives ?? []) {
     if (!pid) continue
     const p = getPower(pid)
     if (!p || p.kind !== 'passive') continue
@@ -198,16 +210,45 @@ export function charDamageProfile(char: Character): DamageProfile {
   return computeDamageProfile(char.equipment, charKeystones(char))
 }
 
-/** DPS d'un sort actif (mêmes règles qu'en combat : dégâts directs/DoT, scalent sur le profil + keystones). */
-function abilityDps(p: PowerDef, derived: DerivedStats, profileMult: number, dmgMult: number): number {
+/** Génération de ressource (Points de Combo)/s des GÉNÉRATEURS équipés — pour estimer les finisseurs. */
+function comboGenPerSec(char: Character, derived: DerivedStats, comboGen: number): number {
+  let g = 0
+  for (const pid of char.powers) {
+    if (!pid) continue
+    const p = getPower(pid)
+    if (p?.kind === 'active' && p.effect === 'builder') g += (1 + comboGen) / Math.max(0.5, (p.cooldown ?? 3) * (1 - derived.cdr))
+  }
+  return g
+}
+
+/**
+ * DPS d'un sort actif — MÊMES maths qu'en combat (fireActive), y compris les mécaniques de ressource :
+ * - `builder` : petit coup direct ;
+ * - `finisher` : dépense les Points de Combo → on estime le combo moyen au lancer via l'économie
+ *   générateur→finisseur (génération/s × recharge, capée, + remboursement) ;
+ * - `poison` : venin cumulatif SOUTENU (monte au cap puis se maintient) = stacks × intensité × Altération ;
+ * - `detonate` : consomme le venin (×2 si Catalyse) à chaque recharge.
+ * Plus le bonus par TAG (cross-classe). Sans ça la fiche sous-estimait les builds Voleur.
+ */
+function abilityDps(p: PowerDef, derived: DerivedStats, profileMult: number, dmgMult: number, cm: CombatMods, genPerSec: number): number {
   if (p.kind !== 'active' || !p.effect) return 0
-  const value = (p.magnitude ?? 0) * abilityPower(derived, powerScale(p)) * profileMult * dmgMult
+  let tagMult = 1
+  if (p.tags) for (const t of p.tags) tagMult *= (cm.tagBonus[t] ?? 1)
+  const value = (p.magnitude ?? 0) * abilityPower(derived, powerScale(p)) * profileMult * dmgMult * tagMult
   const cd = Math.max(0.5, (p.cooldown ?? 3) * (1 - derived.cdr))
   switch (p.effect) {
     case 'nuke': case 'cleave': case 'megaCleave': case 'lifeNuke': return value / cd
+    case 'builder': return value / cd
     case 'executeNuke': return (value * 1.8) / cd // bonus moyen selon les PV manquants de la cible
     case 'dot': return value * 0.4 * derived.alterationMult // DoT soutenu
     case 'rupture': return (value * 0.5 + value * 0.5 * derived.alterationMult * (p.duration ?? 8)) / cd
+    case 'poison': return cm.poison.maxStacks * cm.poison.perStack * value * derived.alterationMult
+    case 'detonate': return (value * cm.poison.maxStacks * (cm.detonateDouble ? 2 : 1)) / cd
+    case 'finisher': {
+      const cap = 5 + cm.comboCap
+      const avgCombo = Math.max(1, Math.min(cap, genPerSec * cd + cm.comboRefund))
+      return (value * avgCombo * 0.55 * (1 + cm.finisherMult)) / cd
+    }
     default: return 0 // soins / boucliers / buffs / charge / marque : pas un DPS direct
   }
 }
@@ -219,12 +260,14 @@ export function charDps(char: Character): number {
   const pm = profileDamageMult(profile)
   // Multiplicateur de dégâts PERSISTANT issu des keystones (Carnage, Titan…) + bonus de SET :
   // appliqué en combat aux auto-attaques ET aux sorts → il doit l'être ici aussi.
-  const dmgMult = charCombatMods(char).damageMult
+  const cm = charCombatMods(char)
+  const dmgMult = cm.damageMult
+  const gen = comboGenPerSec(char, derived, cm.comboGen)
   let dps = theoreticalDps(derived, profile, dmgMult)
   for (const pid of char.powers) {
     if (!pid) continue
     const p = getPower(pid)
-    if (p) dps += abilityDps(p, derived, pm, dmgMult)
+    if (p) dps += abilityDps(p, derived, pm, dmgMult, cm, gen)
   }
   return dps
 }
@@ -250,14 +293,16 @@ export function dpsBreakdown(char: Character): DpsBreakdown {
   const derived = charDerived(char)
   const profile = charDamageProfile(char)
   const pm = profileDamageMult(profile)
-  const dmgMult = charCombatMods(char).damageMult
+  const cm = charCombatMods(char)
+  const dmgMult = cm.damageMult
+  const gen = comboGenPerSec(char, derived, cm.comboGen)
   const auto = theoreticalDps(derived, profile, dmgMult)
   const spells: { name: string; dps: number }[] = []
   for (const pid of char.powers) {
     if (!pid) continue
     const p = getPower(pid)
     if (!p || p.kind !== 'active') continue
-    const d = abilityDps(p, derived, pm, dmgMult)
+    const d = abilityDps(p, derived, pm, dmgMult, cm, gen)
     if (d > 0) spells.push({ name: p.name, dps: d })
   }
   const avgCrit = 1 + derived.critChance * (derived.critMult - 1)

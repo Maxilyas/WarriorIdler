@@ -566,6 +566,7 @@ interface GameState extends SaveData {
   renameCharacter: (index: number, name: string) => void
   setBias: (p: PrimaryStat) => void
   setPower: (slot: number, powerId: string | null) => void
+  setPassive: (slot: number, powerId: string | null) => void
   /** Bascule un emplacement de capacité entre AUTO et MANUEL (perso actif). */
   togglePowerAuto: (slot: number) => void
   /** Lance MANUELLEMENT la capacité d'un emplacement (perso actif) — strict : ne part qu'au prochain tick si prête. */
@@ -1818,19 +1819,27 @@ function sanitize(save: SaveData): SaveData {
     // Points restants = gagnés (au-delà du niveau de départ des talents) − dépensés (hors racine gratuite).
     c.talentPoints = Math.max(0, talentPointsForLevel(c.level) - spent)
     c.unlockedPowers = computeUnlockedPowers(talents)
-    // On garde les capacités équipées encore débloquées (sinon créneau vidé).
-    const equipped = Array.isArray(c.powers) ? c.powers : []
-    c.powers = [0, 1, 2, 3, 4].map((i) => {
-      const p = equipped[i]
-      return p && c.unlockedPowers.includes(p) ? p : null
-    })
-    // Mode auto/manuel par emplacement (défaut AUTO).
+    // v0.29.5 : RÉPARTITION actifs (5) / passifs (3). Migration : on relit les anciens `powers`
+    // (qui mélangeaient les deux) + les `passives` existants, on valide, on range par genre.
+    const equipped = [...(Array.isArray(c.powers) ? c.powers : []), ...(Array.isArray(c.passives) ? c.passives : [])]
+    const act: string[] = []
+    const pas: string[] = []
+    for (const pid of equipped) {
+      if (!pid || !c.unlockedPowers.includes(pid)) continue
+      const pw = getPower(pid)
+      if (!pw) continue
+      if (pw.kind === 'passive') { if (pas.length < 3 && !pas.includes(pid)) pas.push(pid) }
+      else if (act.length < 5 && !act.includes(pid)) act.push(pid)
+    }
+    c.powers = [0, 1, 2, 3, 4].map((i) => act[i] ?? null)
+    c.passives = [0, 1, 2].map((i) => pas[i] ?? null)
+    // Mode auto/manuel par emplacement ACTIF (défaut AUTO).
     c.powerAuto = [0, 1, 2, 3, 4].map((i) => (Array.isArray(c.powerAuto) ? c.powerAuto[i] !== false : true))
     // Présets de build : structure validée (3 emplacements max, entrées bien formées).
     if (Array.isArray(c.buildPresets)) {
       c.buildPresets = c.buildPresets.slice(0, 3).map((p) =>
         p && typeof p === 'object' && p.talents && Array.isArray(p.powers)
-          ? { name: String(p.name ?? 'Build').slice(0, 14), talents: p.talents, powers: p.powers.slice(0, 5), primaryBias: p.primaryBias ?? 'force' }
+          ? { name: String(p.name ?? 'Build').slice(0, 14), talents: p.talents, powers: p.powers.slice(0, 5), passives: Array.isArray(p.passives) ? p.passives.slice(0, 3) : undefined, primaryBias: p.primaryBias ?? 'force' }
           : null,
       )
     } else {
@@ -1864,6 +1873,7 @@ function migrateOldSave(p: any): SaveData {
     base: p.base ?? { force: 5, agilite: 5, intelligence: 5, endurance: 10 },
     equipment: p.equipment ?? {},
     powers: [null, null, null, null, null],
+    passives: [null, null, null],
     unlockedPowers: [],
     talentPoints: talentPointsForLevel(p.level ?? 1),
     talents: {},
@@ -6099,6 +6109,23 @@ export const useGame = create<GameState>((set, get) => {
       set(next)
     },
 
+    // v0.29.5 : équipe une capacité PASSIVE dans l'un des 3 slots dédiés.
+    setPassive: (slot, powerId) => {
+      const s = get()
+      const char = s.characters[s.activeChar]
+      const cur = char?.passives ?? [null, null, null]
+      if (!char || slot < 0 || slot >= 3) return
+      if (powerId && !char.unlockedPowers.includes(powerId)) return
+      const passives = cur.map((x) => (x === powerId ? null : x)) // unicité
+      passives[slot] = powerId
+      const nc = { ...char, passives }
+      nc.hp = Math.min(nc.hp, charMaxHp(nc))
+      const characters = s.characters.map((c, i) => (i === s.activeChar ? nc : c))
+      const next = { ...s, characters }
+      persist(next)
+      set(next)
+    },
+
     togglePowerAuto: (slot) => {
       const s = get()
       const char = s.characters[s.activeChar]
@@ -6152,7 +6179,8 @@ export const useGame = create<GameState>((set, get) => {
       const talents = { co_start: 1 }
       const unlockedPowers = computeUnlockedPowers(talents)
       const powers = char.powers.map((p) => (p && unlockedPowers.includes(p) ? p : null))
-      const nc = { ...char, talents, talentPoints: char.talentPoints + refundable, unlockedPowers, powers }
+      const passives = (char.passives ?? []).map((p) => (p && unlockedPowers.includes(p) ? p : null))
+      const nc = { ...char, talents, talentPoints: char.talentPoints + refundable, unlockedPowers, powers, passives }
       nc.hp = Math.min(nc.hp, charMaxHp(nc))
       const characters = s.characters.map((c, i) => (i === s.activeChar ? nc : c))
       const next = { ...s, gold: s.gold - cost, characters, log: pushLog(s.log, `Talents réinitialisés (-${cost} or).`, 'craft') }
@@ -6169,6 +6197,7 @@ export const useGame = create<GameState>((set, get) => {
         name: (name ?? presets[slot]?.name ?? `Build ${slot + 1}`).trim().slice(0, 14) || `Build ${slot + 1}`,
         talents: { ...char.talents },
         powers: [...char.powers],
+        passives: [...(char.passives ?? [])],
         primaryBias: char.primaryBias,
       }
       const characters = s.characters.map((c, i) => (i === s.activeChar ? { ...c, buildPresets: presets } : c))
@@ -6208,7 +6237,8 @@ export const useGame = create<GameState>((set, get) => {
       }
       const unlockedPowers = computeUnlockedPowers(talents)
       const powers = preset.powers.map((p) => (p && unlockedPowers.includes(p) ? p : null))
-      const nc = { ...char, talents, talentPoints: points, unlockedPowers, powers, primaryBias: preset.primaryBias }
+      const passives = (preset.passives ?? [null, null, null]).map((p) => (p && unlockedPowers.includes(p) ? p : null))
+      const nc = { ...char, talents, talentPoints: points, unlockedPowers, powers, passives, primaryBias: preset.primaryBias }
       nc.hp = Math.min(nc.hp, charMaxHp(nc))
       const characters = s.characters.map((c, i) => (i === s.activeChar ? nc : c))
       const next = {

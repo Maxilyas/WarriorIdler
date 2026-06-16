@@ -312,6 +312,7 @@ export interface BuildPreset {
   name: string
   talents: Record<string, number>
   powers: (string | null)[]
+  passives?: (string | null)[]
   primaryBias: PrimaryStat
 }
 
@@ -322,9 +323,11 @@ export interface Character {
   xp: number
   base: StatBlock
   equipment: Equipment
-  /** 5 emplacements de capacité (id ou null). */
+  /** 5 emplacements de capacité ACTIVE (id ou null). */
   powers: (string | null)[]
-  /** Mode de lancement par emplacement : true/absent = AUTO, false = MANUEL (bouton). */
+  /** 3 emplacements de capacité PASSIVE (id ou null) — séparés des actifs (v0.29.5). */
+  passives?: (string | null)[]
+  /** Mode de lancement par emplacement actif : true/absent = AUTO, false = MANUEL (bouton). */
   powerAuto?: boolean[]
   /** Capacités débloquées (par niveau + par talents). */
   unlockedPowers: string[]

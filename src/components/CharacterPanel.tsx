@@ -426,80 +426,101 @@ function ResistSection({ char, allChars }: { char: Character; allChars: Characte
 
 function PowersSection({ char }: { char: Character }) {
   const setPower = useGame((s) => s.setPower)
+  const setPassive = useGame((s) => s.setPassive)
   const togglePowerAuto = useGame((s) => s.togglePowerAuto)
   const derived = charDerived(char)
   const weaponType = charDamageProfile(char).mainType
-  const equipped = new Set(char.powers.filter(Boolean) as string[])
+  const passives = char.passives ?? [null, null, null]
+  const equipped = new Set([...char.powers, ...passives].filter(Boolean) as string[])
   const available = char.unlockedPowers.filter((id) => !equipped.has(id))
+  const availActive = available.filter((id) => getPower(id)?.kind === 'active')
+  const availPassive = available.filter((id) => getPower(id)?.kind === 'passive')
 
   return (
-    <div className="rounded-xl border border-violet-800/40 bg-violet-950/10 p-4">
-      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-violet-300">Capacités (5 slots) · auto / manuel</div>
-      <div className="grid grid-cols-1 gap-1.5">
-        {char.powers.map((pid, slot) => {
-          const p = pid ? getPower(pid) : null
-          if (!p) {
-            return <div key={slot} className="rounded-lg border border-slate-800 bg-black/20 px-2 py-1.5 text-[11px] italic text-slate-600">— emplacement {slot + 1} libre —</div>
-          }
-          const active = p.kind === 'active'
-          const auto = char.powerAuto?.[slot] !== false
-          const det = active ? powerDetail(p, derived, weaponType) : null
-          return (
-            <div key={slot} className="rounded-lg border border-slate-700 bg-black/20 px-2 py-1.5">
-              <div className="flex items-center gap-2">
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[12px] font-medium text-slate-100">{p.name}</span>
-                  <span className="text-[9px] uppercase tracking-wide text-slate-500">{active ? '⚡ Active' : '🛡 Passive'}</span>
-                </span>
-                {active && (
-                  <button
-                    onClick={() => togglePowerAuto(slot)}
-                    title="Basculer entre lancement automatique et manuel (bouton en combat)"
-                    className={'rounded px-2 py-1 text-[10px] font-semibold ' + (auto ? 'bg-cyan-600/30 text-cyan-200' : 'bg-amber-600/30 text-amber-200')}
-                  >
-                    {auto ? 'AUTO' : 'MANUEL'}
-                  </button>
-                )}
-                <button onClick={() => setPower(slot, null)} className="rounded px-2 py-1 text-sm text-slate-500 hover:text-red-400" title="Retirer">✕</button>
-              </div>
-              {det && (
-                <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-slate-400">
-                  {det.type && <span style={{ color: DAMAGE_TYPES[det.type].color }}>{DAMAGE_TYPES[det.type].icon} {DAMAGE_TYPES[det.type].name}</span>}
-                  <span>{POWER_EFFECT_META[p.effect ?? 'nuke'].label}</span>
-                  {det.scale && <span className="text-amber-300/80">📈 {det.scale}</span>}
-                  <span>CD {det.cd.toFixed(1)}s</span>
-                  {det.showValue && <span className="text-slate-200">≈ {det.value.toLocaleString('fr-FR')} {det.dmg ? 'dég.' : 'PV'}</span>}
+    <div className="space-y-3 rounded-xl border border-violet-800/40 bg-violet-950/10 p-4">
+      {/* --- ACTIVES (5 slots) --- */}
+      <div>
+        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-violet-300">⚡ Capacités actives (5 slots) · auto / manuel</div>
+        <div className="grid grid-cols-1 gap-1.5">
+          {char.powers.map((pid, slot) => {
+            const p = pid ? getPower(pid) : null
+            if (!p) return <div key={slot} className="rounded-lg border border-slate-800 bg-black/20 px-2 py-1.5 text-[11px] italic text-slate-600">— actif {slot + 1} libre —</div>
+            const auto = char.powerAuto?.[slot] !== false
+            const det = powerDetail(p, derived, weaponType)
+            return (
+              <div key={slot} className="rounded-lg border border-slate-700 bg-black/20 px-2 py-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[12px] font-medium text-slate-100">{p.name}</span>
+                    <span className="text-[9px] uppercase tracking-wide text-slate-500">⚡ Active</span>
+                  </span>
+                  <button onClick={() => togglePowerAuto(slot)} title="Basculer auto / manuel (bouton en combat)" className={'rounded px-2 py-1 text-[10px] font-semibold ' + (auto ? 'bg-cyan-600/30 text-cyan-200' : 'bg-amber-600/30 text-amber-200')}>{auto ? 'AUTO' : 'MANUEL'}</button>
+                  <button onClick={() => setPower(slot, null)} className="rounded px-2 py-1 text-sm text-slate-500 hover:text-red-400" title="Retirer">✕</button>
                 </div>
-              )}
-              <p className="mt-0.5 text-[10px] leading-snug text-slate-500">{p.description}</p>
+                {det && (
+                  <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-slate-400">
+                    {det.type && <span style={{ color: DAMAGE_TYPES[det.type].color }}>{DAMAGE_TYPES[det.type].icon} {DAMAGE_TYPES[det.type].name}</span>}
+                    <span>{POWER_EFFECT_META[p.effect ?? 'nuke'].label}</span>
+                    {det.scale && <span className="text-amber-300/80">📈 {det.scale}</span>}
+                    <span>CD {det.cd.toFixed(1)}s</span>
+                    {det.showValue && <span className="text-slate-200">≈ {det.value.toLocaleString('fr-FR')}/s {det.dmg ? 'dég.' : 'PV'}</span>}
+                  </div>
+                )}
+                <p className="mt-0.5 text-[10px] leading-snug text-slate-500">{p.description}</p>
+              </div>
+            )
+          })}
+        </div>
+        {availActive.length > 0 && (
+          <div className="mt-2">
+            <div className="mb-1 text-[10px] text-slate-500">Actives débloquées :</div>
+            <div className="flex flex-wrap gap-1">
+              {availActive.map((id) => {
+                const p = getPower(id)
+                if (!p) return null
+                const emptySlot = char.powers.indexOf(null)
+                return <button key={id} disabled={emptySlot < 0} onClick={() => setPower(emptySlot, id)} title={p.description} className="rounded border border-violet-700/50 bg-violet-900/30 px-2 py-1 text-[10px] text-violet-200 hover:bg-violet-800/40 disabled:opacity-40">⚡ {p.name}</button>
+              })}
             </div>
-          )
-        })}
+          </div>
+        )}
       </div>
 
-      {available.length > 0 && (
-        <div className="mt-2">
-          <div className="mb-1 text-[10px] text-slate-500">Capacités débloquées à équiper :</div>
-          <div className="flex flex-wrap gap-1">
-            {available.map((id) => {
-              const p = getPower(id)
-              if (!p) return null
-              const emptySlot = char.powers.indexOf(null)
-              return (
-                <button
-                  key={id}
-                  disabled={emptySlot < 0}
-                  onClick={() => setPower(emptySlot, id)}
-                  title={p.description}
-                  className="rounded border border-violet-700/50 bg-violet-900/30 px-2 py-1 text-[10px] text-violet-200 hover:bg-violet-800/40 disabled:opacity-40"
-                >
-                  {p.kind === 'active' ? '⚡' : '🛡'} {p.name}
-                </button>
-              )
-            })}
-          </div>
+      {/* --- PASSIVES (3 slots dédiés) --- */}
+      <div>
+        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-sky-300">🛡 Capacités passives (3 slots)</div>
+        <div className="grid grid-cols-1 gap-1.5">
+          {passives.map((pid, slot) => {
+            const p = pid ? getPower(pid) : null
+            if (!p) return <div key={slot} className="rounded-lg border border-slate-800 bg-black/20 px-2 py-1.5 text-[11px] italic text-slate-600">— passif {slot + 1} libre —</div>
+            return (
+              <div key={slot} className="rounded-lg border border-slate-700 bg-black/20 px-2 py-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[12px] font-medium text-slate-100">{p.name}</span>
+                    <span className="text-[9px] uppercase tracking-wide text-slate-500">🛡 Passive</span>
+                  </span>
+                  <button onClick={() => setPassive(slot, null)} className="rounded px-2 py-1 text-sm text-slate-500 hover:text-red-400" title="Retirer">✕</button>
+                </div>
+                <p className="mt-0.5 text-[10px] leading-snug text-slate-500">{p.description}</p>
+              </div>
+            )
+          })}
         </div>
-      )}
+        {availPassive.length > 0 && (
+          <div className="mt-2">
+            <div className="mb-1 text-[10px] text-slate-500">Passives débloquées :</div>
+            <div className="flex flex-wrap gap-1">
+              {availPassive.map((id) => {
+                const p = getPower(id)
+                if (!p) return null
+                const emptySlot = passives.indexOf(null)
+                return <button key={id} disabled={emptySlot < 0} onClick={() => setPassive(emptySlot, id)} title={p.description} className="rounded border border-sky-700/50 bg-sky-900/30 px-2 py-1 text-[10px] text-sky-200 hover:bg-sky-800/40 disabled:opacity-40">🛡 {p.name}</button>
+              })}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
