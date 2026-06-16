@@ -105,25 +105,25 @@ node('cl_voleur', 'voleur', 'ability', 0, 1, 'Voleur', 'Maître de la lame et du
 ability('as_hub', 'assassin', 0, 'Assassin', 'as_lame_enduite', 'Entre dans la voie de l\'Assassin : débloque Lame enduite (venin cumulatif). +18 Agilité, +15 Altération.', { requires: ['cl_voleur'], statMods: { agilite: 18, alteration: 15 } })
 
 // Grappe VENIN (cumulatif)
-minor('as_tox', 'assassin', 1, 'Toxicologie', 3, { alteration: 18 }, { requires: ['as_hub'], links: ['as_lame', 'as_sang'] })
+minor('as_tox', 'assassin', 1, 'Toxicologie', 3, { alteration: 18 }, { requires: ['as_hub'] })
 ks('as_inoc', 'assassin', 2, 'Inoculation', 'VENIN : ton venin s\'empile plus haut et frappe plus fort.', { stat: { alteration: 16 }, ks: { poison: { perStack: 0.05, maxStacks: 2 } } }, { requires: ['as_tox'] })
 ks('as_letal', 'assassin', 3, 'Venin létal', 'CHOIX : +grosse intensité par stack (venin lent et brutal).', { stat: { alteration: 14 }, ks: { poison: { perStack: 0.06, maxStacks: 0 } } }, { requires: ['as_inoc'], exclusive: 'as_venin' })
 ks('as_viru', 'assassin', 3, 'Venin virulent', 'CHOIX : +2 stacks max (venin qui sature plus haut).', { stat: { alteration: 14 }, ks: { poison: { perStack: 0, maxStacks: 2 } } }, { requires: ['as_inoc'], exclusive: 'as_venin' })
 
 // Grappe SAIGNEMENT
-minor('as_lame', 'assassin', 1, 'Lames affûtées', 3, { critique: 18 }, { requires: ['as_hub'], links: ['as_tox', 'as_conc'] })
+minor('as_lame', 'assassin', 1, 'Lames affûtées', 3, { critique: 18 }, { requires: ['as_hub'] })
 ks('as_hemo', 'assassin', 2, 'Hémorragie vive', 'SAIGNEMENT : tes coups ouvrent une plaie (DoT physique, 20% du coup/s, 5 s).', { stat: { alteration: 12 }, ks: { dot: { frac: 0.2, duration: 5 } } }, { requires: ['as_lame'] })
 ks('as_beante', 'assassin', 3, 'Plaie béante', 'CHOIX : +12% de dégâts (saignements brutaux).', { ks: { damageMult: 1.12 } }, { requires: ['as_hemo'], exclusive: 'as_saign' })
 ks('as_infect', 'assassin', 3, 'Plaie infectée', 'CHOIX : le saignement nourrit le venin (+intensité de stack).', { stat: { alteration: 10 }, ks: { poison: { perStack: 0.04, maxStacks: 0 } } }, { requires: ['as_hemo'], exclusive: 'as_saign' })
 
 // Grappe DÉTONATION (atteignable depuis Venin OU Saignement)
-minor('as_conc', 'assassin', 1, 'Concentration', 3, { penetration: 18 }, { requires: ['as_hub'], links: ['as_lame', 'as_sang'] })
+minor('as_conc', 'assassin', 1, 'Concentration', 3, { penetration: 18 }, { requires: ['as_hub'] })
 ability('as_dist', 'assassin', 2, 'Distillation explosive', 'as_distillation', 'Débloque Distillation : DÉTONE tous les stacks de venin (pic = stacks × dégâts).', { requires: ['as_conc'] })
 ks('as_chain', 'assassin', 3, 'Réaction en chaîne', 'La détonation et tes DoT se propagent au pack (50%).', { stat: { penetration: 16 }, ks: { dotAoe: 0.5 } }, { requires: ['as_dist'] })
 ability('as_peste', 'assassin', 4, 'Peste Souveraine', 'as_peste_souveraine', 'ULTIME — détonation cataclysmique de tout le venin.', { requires: ['as_chain'], minSpent: 14 })
 
 // Grappe DRAIN (SURVIE — profil poison/drain) (atteignable depuis Venin OU Saignement)
-minor('as_sang', 'assassin', 1, 'Sangsue', 3, { volDeVie: 10 }, { requires: ['as_hub'], links: ['as_conc', 'as_tox'] })
+minor('as_sang', 'assassin', 1, 'Sangsue', 3, { volDeVie: 10 }, { requires: ['as_hub'] })
 ks('as_vamp', 'assassin', 2, 'Vampirisme toxique', 'SURVIE : tes DoT te soignent (25% du tick). +20 Régén.', { stat: { regen: 20 }, ks: { dotLeech: 0.25 } }, { requires: ['as_sang'] })
 ability('as_reprise', 'assassin', 2, 'Reprise', 'second_souffle', 'SURVIE : débloque Reprise (auto-soin) — pour tenir en solo dès le début.', { requires: ['as_sang'] })
 ks('as_meta', 'assassin', 3, 'Métabolisme morbide', 'SURVIE : +30 Régén, +12 Vol de vie, -8% de dégâts subis.', { stat: { regen: 30, volDeVie: 12 }, ks: { flatDr: 0.08 } }, { requires: ['as_vamp'] })
@@ -132,25 +132,25 @@ ks('as_meta', 'assassin', 3, 'Métabolisme morbide', 'SURVIE : +30 Régén, +12 
 ability('om_hub', 'ombrelame', 0, 'Ombrelame', 'om_frappe_sournoise', 'Entre dans la voie de l\'Ombrelame : débloque Frappe sournoise (générateur de Points de Combo). +18 Agilité, +12 Critique.', { requires: ['cl_voleur'], statMods: { agilite: 18, critique: 12 } })
 
 // Grappe GÉNÉRATION
-minor('om_aff', 'ombrelame', 1, 'Affûtage', 3, { critique: 18 }, { requires: ['om_hub'], links: ['om_cele', 'om_lame'] })
+minor('om_aff', 'ombrelame', 1, 'Affûtage', 3, { critique: 18 }, { requires: ['om_hub'] })
 ks('om_saig', 'ombrelame', 2, 'Saignée preste', 'GÉNÉRATION : tes générateurs donnent +1 Point de Combo.', { stat: { hate: 16 }, ks: { comboGen: 1 } }, { requires: ['om_aff'] })
 ks('om_oeil', 'ombrelame', 3, 'Œil pour œil', 'CHOIX : +20 Critique, +1 PC (génération sur burst de crit).', { stat: { critique: 20 }, ks: { comboGen: 1 } }, { requires: ['om_saig'], exclusive: 'om_gen' })
 ks('om_cad', 'ombrelame', 3, 'Cadence', 'CHOIX : +24 Hâte (génération rapide et régulière).', { stat: { hate: 24 } }, { requires: ['om_saig'], exclusive: 'om_gen' })
 
 // Grappe FINITION
-ability('om_evis', 'ombrelame', 1, 'Éviscération', 'om_eviscaration', 'FINITION : débloque Éviscération (finisseur — dégâts × Points de Combo). +16 Agilité.', { requires: ['om_hub'], statMods: { agilite: 16 }, links: ['om_cele', 'om_lame'] })
+ability('om_evis', 'ombrelame', 1, 'Éviscération', 'om_eviscaration', 'FINITION : débloque Éviscération (finisseur — dégâts × Points de Combo). +16 Agilité.', { requires: ['om_hub'], statMods: { agilite: 16 } })
 ks('om_surin', 'ombrelame', 2, 'Surin mortel', 'FINITION : tes finisseurs frappent +25% plus fort.', { stat: { degatsCrit: 20 }, ks: { finisherMult: 0.25 } }, { requires: ['om_evis'] })
 ks('om_brutal', 'ombrelame', 3, 'Éviscération brutale', 'CHOIX : finisseurs +30% (gros pics à PC plein).', { ks: { finisherMult: 0.3 } }, { requires: ['om_surin'], exclusive: 'om_fin' })
 ks('om_taillade', 'ombrelame', 3, 'Cadence mortelle', 'CHOIX : +1 PC généré, +18 Hâte (finisseurs à répétition).', { stat: { hate: 18 }, ks: { comboGen: 1 } }, { requires: ['om_surin'], exclusive: 'om_fin' })
 
 // Grappe FURTIVITÉ (SURVIE = esquive ; atteignable depuis Génération OU Finition)
-minor('om_cele', 'ombrelame', 1, 'Célérité', 3, { esquive: 18, hate: 8 }, { requires: ['om_hub'], links: ['om_aff', 'om_evis'] })
+minor('om_cele', 'ombrelame', 1, 'Célérité', 3, { esquive: 18, hate: 8 }, { requires: ['om_hub'] })
 ability('om_voile', 'ombrelame', 2, 'Voile d\'ombre', 'posture_defensive', 'SURVIE : débloque Voile d\'ombre (passif : -18% de dégâts subis) — pour tenir en solo.', { requires: ['om_cele'] })
 ks('om_derob', 'ombrelame', 2, 'Dérobade', 'Tu frappes depuis l\'ombre : +12% de dégâts, +30 Esquive.', { stat: { esquive: 30 }, ks: { damageMult: 1.12 } }, { requires: ['om_cele'] })
 ability('om_embus', 'ombrelame', 3, 'Embuscade', 'om_embuscade', 'Débloque Embuscade : énorme nuke d\'ouverture depuis l\'ombre.', { requires: ['om_derob'] })
 
 // Grappe LAMES (multifrappe ; atteignable depuis Génération OU Finition)
-minor('om_lame', 'ombrelame', 1, 'Fil du rasoir', 3, { critique: 16 }, { requires: ['om_hub'], links: ['om_aff', 'om_evis'] })
+minor('om_lame', 'ombrelame', 1, 'Fil du rasoir', 3, { critique: 16 }, { requires: ['om_hub'] })
 ks('om_jum', 'ombrelame', 2, 'Lames jumelles', 'LAMES : +18% de chance de Multifrappe.', { ks: { multistrike: 0.18 } }, { requires: ['om_lame'] })
 ks('om_fren', 'ombrelame', 3, 'Frénésie', 'CHOIX : +26 Hâte.', { stat: { hate: 26 } }, { requires: ['om_jum'], exclusive: 'om_lames' })
 ks('om_precis', 'ombrelame', 3, 'Précision', 'CHOIX : +24 Critique, +24 Dégâts crit.', { stat: { critique: 24, degatsCrit: 24 } }, { requires: ['om_jum'], exclusive: 'om_lames' })

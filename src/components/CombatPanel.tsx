@@ -4,7 +4,7 @@ import type { LogKind } from '../game/store'
 import { TUT_QUESTS, tutDone, tutAllClaimed, type TutCtx } from '../game/tutorial'
 import { Sheet } from './ui'
 import { LevelBadge } from './LevelBadge'
-import { charMaxHp, charDps, charResist, TALENT_START_LEVEL } from '../game/character'
+import { charMaxHp, charDps, charResist, charCombatMods, TALENT_START_LEVEL } from '../game/character'
 import { getAchievement } from '../game/achievements'
 import { isBossStage } from '../game/enemies'
 import { getPower, powerIcon } from '../game/powers'
@@ -363,8 +363,13 @@ export function CombatPanel() {
                   style={{ width: `${enemyPct}%` }}
                 />
               </div>
-              <div className="mt-1 text-xs text-slate-400">
-                {Math.ceil(enemy.hp).toLocaleString('fr-FR')} / {enemy.maxHp.toLocaleString('fr-FR')} PV
+              <div className="mt-1 flex items-center justify-center gap-2 text-xs text-slate-400">
+                <span>{Math.ceil(enemy.hp).toLocaleString('fr-FR')} / {enemy.maxHp.toLocaleString('fr-FR')} PV</span>
+                {(enemy.venomStacks ?? 0) > 0 && (
+                  <span className="rounded bg-lime-500/20 px-1.5 py-px text-[10px] font-semibold text-lime-300" title="Stacks de venin : la Distillation les détone (dégâts × stacks)">
+                    ☠ Venin ×{enemy.venomStacks}
+                  </span>
+                )}
               </div>
             </>
           )}
@@ -674,6 +679,13 @@ function statusChips(c: Character): { icon: string; label: string; cls: string; 
   if ((c.invuln ?? 0) > 0) out.push({ icon: '💎', label: 'immunisé', cls: 'bg-cyan-500/20 text-cyan-200', title: 'Immunité aux dégâts directs' })
   if (c.frenzy) out.push({ icon: '🔥', label: 'frénésie', cls: 'bg-orange-500/20 text-orange-300', title: `Frénésie : dégâts ×${c.frenzy.mult.toFixed(2)}` })
   if (c.charge) out.push({ icon: '⚡', label: 'vengeance', cls: 'bg-amber-500/20 text-amber-300', title: 'Vengeance différée : la riposte frappe à expiration' })
+  // RESSOURCE DE CLASSE — Points de Combo (Ombrelame) : visible dès qu'un générateur/finisseur est équipé.
+  const hasCombo = c.powers.some((p) => { const pw = p ? getPower(p) : null; return pw?.effect === 'builder' || pw?.effect === 'finisher' })
+  if (hasCombo) {
+    const combo = c.combo ?? 0
+    const cap = 5 + charCombatMods(c).comboCap
+    out.push({ icon: '🗡', label: `Combo ${combo}/${cap}`, cls: 'bg-violet-500/25 text-violet-200 font-semibold', title: 'Points de Combo : générés par tes générateurs, consommés par tes finisseurs (dégâts × points)' })
+  }
   return out
 }
 
