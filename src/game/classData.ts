@@ -59,7 +59,21 @@ export interface KeystoneEffect {
   comboGen?: number
   /** OMBRELAME : amplifie les dégâts des FINISSEURS (+finisherMult). */
   finisherMult?: number
+
+  /* ---- v0.29.4 : socle TAGS + combos (réutilisable par TOUTES les classes) ---- */
+  /** Bonus de dégâts à TOUS les sorts portant ce tag (multi-classe : marche pour les sorts des autres classes). */
+  tagBonus?: { tag: string; damageMult: number }
+  /** ASSASSIN « Catalyse » : la Distillation DOUBLE le venin avant de détoner. */
+  detonateDouble?: boolean
+  /** OMBRELAME : un finisseur REND `comboRefund` Points de Combo (spam de finisseurs). */
+  comboRefund?: number
 }
+
+/** Vocabulaire des TAGS de comportement (12) — les 7 types de dégâts servent aussi de tags. */
+export const BEHAVIOR_TAGS = [
+  'mono', 'zone', 'dot', 'direct', 'generateur', 'finisseur',
+  'furtif', 'soin', 'protection', 'ultime', 'invocation', 'controle',
+] as const
 
 /** Spécification compacte d'un sort (→ PowerDef dans powers.ts). */
 export interface SpellSpec {
@@ -72,6 +86,8 @@ export interface SpellSpec {
   type?: DamageType
   scale?: OffensiveStat | OffensiveStat[]
   duration?: number
+  /** Tags de comportement (mono/zone/dot/finisseur…) — pour les modificateurs cross-classe. */
+  tags?: string[]
 }
 
 /** Spécification d'un nœud-keystone (effet + stats/résist éventuels). */

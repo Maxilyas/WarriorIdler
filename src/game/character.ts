@@ -353,6 +353,12 @@ export interface CombatMods {
   comboGen: number
   /** OMBRELAME : amplification des finisseurs (somme). */
   finisherMult: number
+  /** v0.29.4 : bonus de dégâts par TAG (produit des keystones du même tag). */
+  tagBonus: Record<string, number>
+  /** ASSASSIN « Catalyse » : la détonation double le venin. */
+  detonateDouble: boolean
+  /** OMBRELAME : Points de Combo rendus par un finisseur (max des keystones). */
+  comboRefund: number
 }
 
 export function charCombatMods(char: Character): CombatMods {
@@ -361,6 +367,7 @@ export function charCombatMods(char: Character): CombatMods {
     healToDamage: 0, cleaveAuto: 0, perEnemyBonus: 0, dotLeech: 0, dotAoe: 0,
     spellMult: 1, cdrOnCast: 0, reqReduction: 0, surplusToDamage: 0, shareResist: 0, surplusRegen: 0,
     poison: { perStack: 0.08, maxStacks: 4 }, comboCap: 0, comboGen: 0, finisherMult: 0,
+    tagBonus: {}, detonateDouble: false, comboRefund: 0,
   }
   // Multiplicateur de dégâts des bonus de SET (s'applique aux auto-attaques ET aux sorts,
   // et donc au DPS affiché via charDps — même chemin que les keystones).
@@ -416,6 +423,9 @@ export function charCombatMods(char: Character): CombatMods {
     if (k.comboCap) out.comboCap += k.comboCap
     if (k.comboGen) out.comboGen += k.comboGen
     if (k.finisherMult) out.finisherMult += k.finisherMult
+    if (k.tagBonus) out.tagBonus[k.tagBonus.tag] = (out.tagBonus[k.tagBonus.tag] ?? 1) * k.tagBonus.damageMult
+    if (k.detonateDouble) out.detonateDouble = true
+    if (k.comboRefund) out.comboRefund = Math.max(out.comboRefund, k.comboRefund)
     if (k.multiTypeBonus) {
       multiType = multiType
         ? { per: multiType.per + k.multiTypeBonus.per, threshold: Math.min(multiType.threshold, k.multiTypeBonus.threshold) }

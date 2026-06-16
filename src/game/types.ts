@@ -297,6 +297,12 @@ export interface PowerDef {
   scaleStats?: OffensiveStat[]
   /** Type de dégât EXPLICITE (sorts élémentaires). À défaut, le sort prend le type de l'arme équipée. */
   damageType?: DamageType
+  /**
+   * TAGS de comportement (v0.29.4) : mots-clés qui catégorisent le sort (mono, zone, dot, direct,
+   * generateur, finisseur, furtif, soin, protection, ultime, invocation, controle). Les nœuds de
+   * talent modifient des TAGS (pas un sort nommé) → synergies CROSS-CLASSE sans point gâché.
+   */
+  tags?: string[]
 }
 
 // ---- Personnage ----

@@ -2338,13 +2338,29 @@ function enemyVuln(enemy: Enemy): number {
 }
 
 /**
+ * AUTO « intelligent » (v0.29.4) : un SPENDER (finisseur / détonation) ne s'auto-lance qu'au-dessus
+ * d'un seuil de ressource → l'idle reste correct. En MANUEL, le joueur décide (try-hard : timer le pic
+ * à ressource pleine, dans une fenêtre de burst). C'est ça l'écart de skill idle ↔ try-hard.
+ */
+function autoSpenderReady(p: PowerDef, c: Character, enemy: Enemy | undefined, isManual: boolean): boolean {
+  if (isManual) return true
+  if (p.effect === 'finisher') return (c.combo ?? 0) >= 3
+  if (p.effect === 'detonate') return (enemy?.venomStacks ?? 0) >= 4
+  return true
+}
+
+/**
  * Lance une capacité active. Renvoie les DÉGÂTS infligés à l'ennemi (pour la « Vengeance différée »).
  * Les dégâts des sorts scalent sur le PROFIL DE DÉGÂTS de l'arme/du stuff (profileDamageMult) — comme
  * les auto-attaques — pour qu'un build qui empile un type booste aussi ses sorts.
  */
 function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profile: DamageProfile, chars: Character[], enemy: Enemy, hotBonus: number, dmgMult = 1, healToDamage = 0, cond?: CondMods, pact?: PactMods): number {
   const base = (p.magnitude ?? 1) * abilityPower(derived, powerScale(p)) // soins (sans profil ni keystones)
-  const magDmg = base * profileDamageMult(profile) * dmgMult // dégâts : scalent sur le profil de l'arme + keystones (Carnage…)
+  // v0.29.4 : bonus par TAG (cross-classe) — un nœud « tes [dot] +12% » booste TOUT sort taggé dot.
+  const cm = charCombatMods(caster)
+  let tagMult = 1
+  if (p.tags) for (const t of p.tags) tagMult *= (cm.tagBonus[t] ?? 1)
+  const magDmg = base * profileDamageMult(profile) * dmgMult * tagMult // profil + keystones (Carnage…) + tags
   // Boucliers : scalent sur la MEILLEURE de (stat principale, Endurance) → un tank qui empile
   // l'Endurance obtient un énorme bouclier (levier de survie qui suit l'Endurance).
   const shieldBase = (p.magnitude ?? 1) * Math.max(abilityPower(derived, powerScale(p)), derived.endurancePower)
@@ -2417,7 +2433,6 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
     // --- v0.29.2 : socle VOLEUR ---
     case 'poison': {
       // ASSASSIN : empile un STACK de venin ; le DoT (enemy.dot) monte avec les stacks.
-      const cm = charCombatMods(caster)
       const stacks = Math.min(cm.poison.maxStacks, (enemy.venomStacks ?? 0) + 1)
       enemy.venomStacks = stacks
       const dps = stacks * cm.poison.perStack * magDmg * derived.alterationMult
@@ -2425,8 +2440,8 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
       return 0
     }
     case 'detonate': {
-      // ASSASSIN : consomme tous les stacks → pic = stacks × magnitude.
-      const stacks = enemy.venomStacks ?? 0
+      // ASSASSIN : consomme tous les stacks → pic = stacks × magnitude. Catalyse double avant détonation.
+      const stacks = (enemy.venomStacks ?? 0) * (cm.detonateDouble ? 2 : 1)
       if (stacks <= 0) return hit(magDmg * vm)
       const done = hit(magDmg * stacks * vm)
       enemy.venomStacks = 0
@@ -2435,16 +2450,14 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
     }
     case 'builder': {
       // OMBRELAME : +1 Point de Combo (+ petit coup).
-      const cm = charCombatMods(caster)
       caster.combo = Math.min(5 + cm.comboCap, (caster.combo ?? 0) + 1 + cm.comboGen)
       return hit(magDmg * vm)
     }
     case 'finisher': {
-      // OMBRELAME : consomme les Points de Combo → dégâts × points.
-      const cm = charCombatMods(caster)
+      // OMBRELAME : consomme les Points de Combo → dégâts × points. comboRefund en rend une partie (spam).
       const pts = Math.max(1, caster.combo ?? 0)
       const done = hit(magDmg * pts * 0.55 * (1 + cm.finisherMult) * vm)
-      caster.combo = 0
+      caster.combo = cm.comboRefund
       return done
     }
   }
@@ -2818,7 +2831,7 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
       const cdTick = dt * (1 + (enemyCasting && mods?.runes?.sabliers ? mods.runes.sabliers : 0))
       const cd = (cooldowns.get(key) ?? 0) - cdTick
       const auto = c.powerAuto?.[slot] !== false
-      if (cd <= 0 && !stunned && (auto || manualFire.has(key))) {
+      if (cd <= 0 && !stunned && (auto || manualFire.has(key)) && autoSpenderReady(p, c, enemy, manualFire.has(key))) {
         // 🩸 Pacte sanglant : recharges raccourcies, mais chaque lancement coûte 2% des PV max.
         const pacte = mods?.cond?.pacteCdr ?? 0
         // 🛎️ Carillon (v0.26) : tous les N lancements, la recharge suivante est à moitié prix.
@@ -3244,7 +3257,7 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
       const cdTick = dt * (1 + (anyCasting && mods?.runes?.sabliers ? mods.runes.sabliers : 0))
       const cd = (cooldowns.get(key) ?? 0) - cdTick
       const auto = c.powerAuto?.[slot] !== false
-      if (cd <= 0 && !stunned && (auto || manualFire.has(key))) {
+      if (cd <= 0 && !stunned && (auto || manualFire.has(key)) && autoSpenderReady(p, c, focus(), manualFire.has(key))) {
         // 🩸 Pacte sanglant : recharges raccourcies contre 2% des PV max par lancement.
         const pacte = mods?.cond?.pacteCdr ?? 0
         // 🛎️ Carillon (v0.26) : tous les N lancements, la recharge suivante est à moitié prix.
