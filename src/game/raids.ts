@@ -1,6 +1,6 @@
 import type { DamageType, Enemy, EnemyAbility, ItemType } from './types'
 import { DAMAGE_TYPE_LIST } from './damage'
-import { enemyHp, enemyDmg, enemyArmor, clampIlvl } from './progression'
+import { enemyHp, enemyDmg, enemyArmor, clampIlvl, lootFarmIlvl } from './progression'
 
 /**
  * RAIDS — refonte v0.23 « un boss, dix tiers ».
@@ -96,19 +96,19 @@ export const RAIDS: Record<RaidId, RaidDef> = {
     id: 'reliquaire', name: 'Le Reliquaire Englouti', icon: '💍', color: '#4dd0e1',
     lore: 'Une crypte noyée où dorment les joyaux des rois morts. Leurs gardiens se ressoudent sans cesse — frappe vite et fort.',
     lootTypes: ['anneau', 'bijou', 'cou'], lootLabel: 'Anneaux, Bijoux & Colliers',
-    unlockStage: 50, baseDifficulty: 1.3, signature: ['leech', 'swarm'], element: 'froid', orbeCost: 1,
+    unlockStage: 50, baseDifficulty: 1.0, signature: ['leech', 'swarm'], element: 'froid', orbeCost: 1,
   },
   citadelle: {
     id: 'citadelle', name: 'La Citadelle Éternelle', icon: '🏰', color: '#ffd43b',
     lore: 'Une forteresse battue par des orages sans fin. Ses sentinelles déchaînent des novas — seule une muraille de PV tient debout.',
     lootTypes: ['tete', 'epaules', 'torse', 'jambes', 'mains', 'taille', 'pieds', 'poignets', 'cape'], lootLabel: 'Pièces d\'armure',
-    unlockStage: 50, baseDifficulty: 1.6, signature: ['nova', 'execute'], element: 'foudre', orbeCost: 1,
+    unlockStage: 50, baseDifficulty: 1.0, signature: ['nova', 'execute'], element: 'foudre', orbeCost: 1,
   },
   nexus: {
     id: 'nexus', name: 'Le Nexus Prismatique', icon: '🌈', color: '#c084fc',
     lore: 'Un cœur de magie pure où la réalité se fracture en sept couleurs. Le boss change d\'élément sans prévenir : résiste à tout, ou meurs.',
     lootTypes: ['cou', 'cape', 'bijou', 'anneau'], lootLabel: 'Accessoires de résistance',
-    unlockStage: 50, baseDifficulty: 1.9, signature: ['rotate', 'nova'], element: 'rotating', orbeCost: 2,
+    unlockStage: 50, baseDifficulty: 1.0, signature: ['rotate', 'nova'], element: 'rotating', orbeCost: 2,
   },
   abysse: {
     id: 'abysse', name: 'L\'Abîme Primordial', icon: '🕳️', color: '#8a2be2',
@@ -159,16 +159,10 @@ export function raidUnlocked(def: RaidDef, bestStage: number, progress: Record<R
  * de +15 ilvl/tier → un rung ne saute jamais > +20 (jamais de trivialisation du tier précédent).
  * Les 4 raids de base se chevauchent (loot par type, faits en parallèle) en montant vers 700.
  */
-const RAID_BASE_FLOOR = 230   // ilvl du Tier 1 du raid le plus facile (Forge)
-const RAID_DIFF_SPREAD = 300  // écart d'ilvl entre raids selon baseDifficulty (1.0→1.9 ⇒ 230→500)
-const RAID_TIER_STEP = 15     // +ilvl par tier
-const ABYSS_FLOOR = 560       // l'Abîme démarre au sommet (≈ Nexus T5) et finit à 700
-
-/** ilvl de difficulté ET de loot d'un raid/tier (la même valeur — contenu calé sur le stuff qu'il rend). */
-function raidTierFloor(def: RaidDef): number {
-  if (def.id === 'abysse') return ABYSS_FLOOR
-  return RAID_BASE_FLOOR + (def.baseDifficulty - 1) * RAID_DIFF_SPREAD
-}
+// v0.35 — le raid n'est PLUS un escalier d'ilvl : raidIlvl = TA tranche + un PUSH léger par tier. Les
+// 4 raids de base sont à la MÊME difficulté (elle vient de la MÉCANIQUE du boss + de l'exigence de
+// résist, pas de l'ilvl). Le tier monte surtout la RARETÉ et la RÉSIST exigée.
+const RAID_TIER_PUSH = 5  // +ilvl de difficulté/loot par tier (push léger)
 const FORTRESS_ARMOR_MULT = 3.2   // 'fortress' : armure colossale
 const FORTRESS_RESIST_BONUS = 0.2 // 'fortress' : +résistance au thème
 
@@ -187,6 +181,8 @@ const VULN: Record<DamageType, DamageType> = {
 export interface ActiveRaid {
   raidId: RaidId
   tier: number
+  /** Record de farm au lancement (v0.35) : cale l'ilvl/difficulté du raid sur TA tranche. */
+  bestStage: number
   name: string
   /** Index du boss en cours (toujours 0 depuis la v0.23 — un seul affrontement). */
   current: number
@@ -237,8 +233,8 @@ export function raidBerserkTime(def: RaidDef, tier: number): number {
  * le snowball). Avec le budget d'objet exponentiel (b^ilvl), +15 ilvl = ×1,55 de puissance par tier,
  * et le boss monte de la MÊME base b → un tier de plus paie toujours, mais sans jamais s'emballer.
  */
-export function raidIlvl(def: RaidDef, tier: number): number {
-  return clampIlvl(raidTierFloor(def) + (tier - 1) * RAID_TIER_STEP)
+export function raidIlvl(_def: RaidDef, tier: number, bestStage: number): number {
+  return clampIlvl(lootFarmIlvl(bestStage) + (tier - 1) * RAID_TIER_PUSH)
 }
 
 /**
@@ -643,14 +639,14 @@ export function raidMechanics(def: RaidDef, tier: number): RaidMechanicKind[] {
 
 /** DPS recommandé (contre le timer d'enrage). L'Abîme = duo (+10% de PV totaux).
  *  `partySize` : les PV du boss scalent avec l'équipe → le DPS demandé aussi. */
-export function recommendedDps(def: RaidDef, tier: number, partySize = 1): number {
-  const hp = bossHp(def, tier, partySize) * (def.id === 'abysse' ? PAIR_HP_TOTAL : 1)
+export function recommendedDps(def: RaidDef, tier: number, bestStage: number, partySize = 1): number {
+  const hp = bossHp(def, tier, bestStage, partySize) * (def.id === 'abysse' ? PAIR_HP_TOTAL : 1)
   return Math.round(hp / raidBerserkTime(def, tier))
 }
 
 /** PV effectifs recommandés (encaisser ~8 s du boss + une nova). */
-export function recommendedEhp(def: RaidDef, tier: number): number {
-  const dmg = bossDamage(def, tier)
+export function recommendedEhp(def: RaidDef, tier: number, bestStage: number): number {
+  const dmg = bossDamage(def, tier, bestStage)
   const novaSpike = raidMechanics(def, tier).includes('nova') ? dmg * NOVA_MULT : 0
   return Math.round(dmg * 8 + novaSpike)
 }
@@ -688,24 +684,22 @@ export function raidReqs(def: RaidDef, tier: number): Partial<Record<DamageType,
   return out
 }
 
-function bossHp(def: RaidDef, tier: number, partySize = 1): number {
-  // v0.30 — base UNIFIÉE b^ilvl à l'ilvl du raid ; classe 'raidboss' (×13,3) = pool d'un vrai boss
-  // (~40 s à stuff calé). v.hpMult = tweak du visage du tier ; partyMult = scaling multi-perso.
+function bossHp(def: RaidDef, tier: number, bestStage: number, partySize = 1): number {
+  // v0.35 — ilvl du raid = TA tranche (raidIlvl) ; classe 'raidboss' (×13,3) = pool d'un vrai boss.
   const v = raidBossVariant(def, tier)
-  return Math.round(enemyHp(raidIlvl(def, tier), 'raidboss') * v.hpMult * raidPartyHpMult(partySize))
+  return Math.round(enemyHp(raidIlvl(def, tier, bestStage), 'raidboss') * v.hpMult * raidPartyHpMult(partySize))
 }
 
-function bossDamage(def: RaidDef, tier: number): number {
-  // v0.30 — MÊME base b que les PV (la pression suit l'ilvl) ; classe 'raidboss' (×2 trash).
+function bossDamage(def: RaidDef, tier: number, bestStage: number): number {
   const v = raidBossVariant(def, tier)
-  return Math.round(enemyDmg(raidIlvl(def, tier), 'raidboss') * v.dmgMult)
+  return Math.round(enemyDmg(raidIlvl(def, tier, bestStage), 'raidboss') * v.dmgMult)
 }
 
 /** Construit le boss du tier. `element` = type d'attaque courant (pour les raids 'rotating'). */
-export function makeRaidBoss(def: RaidDef, tier: number, element: DamageType, partySize = 1): Enemy {
+export function makeRaidBoss(def: RaidDef, tier: number, element: DamageType, bestStage: number, partySize = 1): Enemy {
   const eff = effStage(def, tier)
   const v = raidBossVariant(def, tier)
-  const maxHp = bossHp(def, tier, partySize)
+  const maxHp = bossHp(def, tier, bestStage, partySize)
 
   // Le boss RÉSISTE à son thème (élément maison), avec une vulnérabilité = porte de sortie.
   const home: DamageType = def.element === 'rotating' ? 'arcane' : def.element
@@ -720,8 +714,8 @@ export function makeRaidBoss(def: RaidDef, tier: number, element: DamageType, pa
     maxHp,
     hp: maxHp,
     // v0.30 — armure unifiée (scale b^ilvl → Pénétration pertinente ; fortress ×3,2).
-    armor: Math.round(enemyArmor(raidIlvl(def, tier), armorMult)),
-    damage: bossDamage(def, tier),
+    armor: Math.round(enemyArmor(raidIlvl(def, tier, bestStage), armorMult)),
+    damage: bossDamage(def, tier, bestStage),
     xp: Math.round(8 * Math.pow(1.12, eff - 1) * 6),
     resist,
     damageType: element,
@@ -753,8 +747,8 @@ export const PAIR_ENRAGE_MULT = 1.5
  * simultanés aux pouvoirs distincts (burst télégraphié d'un côté, contrôle/drain de l'autre).
  * Quand l'un tombe, l'autre entre en FURIE (+50% dégâts) → l'ordre de kill et les contres comptent.
  */
-export function makeRaidEncounter(def: RaidDef, tier: number, element: DamageType, partySize = 1): Enemy[] {
-  const main = makeRaidBoss(def, tier, element, partySize)
+export function makeRaidEncounter(def: RaidDef, tier: number, element: DamageType, bestStage: number, partySize = 1): Enemy[] {
+  const main = makeRaidBoss(def, tier, element, bestStage, partySize)
   const v = raidBossVariant(def, tier)
   if (def.id !== 'abysse' || !v.partnerName) return [main]
   const partner: Enemy = {
@@ -783,8 +777,8 @@ export function raidMaxAdds(tier: number): number {
  * Crée un RENFORT de raid (mécanique Déferlante) : un add PERSISTANT (v0.25.x — il reste jusqu'à
  * sa mort, plus d'expiration) qui frappe l'équipe. Le nombre simultané est plafonné (raidMaxAdds).
  */
-export function makeRaidAdd(def: RaidDef, tier: number, element: DamageType, partySize = 1): Enemy {
-  const ilvl = raidIlvl(def, tier)
+export function makeRaidAdd(def: RaidDef, tier: number, element: DamageType, bestStage: number, partySize = 1): Enemy {
+  const ilvl = raidIlvl(def, tier, bestStage)
   // v0.30 — renfort = ennemi de classe 'elite' à l'ilvl du raid (× scaling multi-perso) ; il frappe
   // ~45 % d'un boss (pression de groupe, pas un second mur).
   const hp = Math.round(enemyHp(ilvl, 'elite') * raidPartyHpMult(partySize))
@@ -797,7 +791,7 @@ export function makeRaidAdd(def: RaidDef, tier: number, element: DamageType, par
     maxHp: hp,
     hp,
     armor: Math.round(enemyArmor(ilvl)),
-    damage: Math.round(bossDamage(def, tier) * 0.45),
+    damage: Math.round(bossDamage(def, tier, bestStage) * 0.45),
     xp: 0,
     resist: {},
     damageType: element,
@@ -817,7 +811,7 @@ function rotateListFor(def: RaidDef, tier: number): DamageType[] {
 
 /** Génère un raid prêt à jouer : UN affrontement contre le boss du tier.
  *  `partySize` : nombre de héros — les PV du boss scalent (raidPartyHpMult). */
-export function generateRaid(raidId: RaidId, tier: number, partySize = 1): ActiveRaid {
+export function generateRaid(raidId: RaidId, tier: number, bestStage: number, partySize = 1): ActiveRaid {
   const def = RAIDS[raidId]
   const v = raidBossVariant(def, tier)
   const rotateList = rotateListFor(def, tier)
@@ -825,10 +819,11 @@ export function generateRaid(raidId: RaidId, tier: number, partySize = 1): Activ
   return {
     raidId,
     tier,
+    bestStage,
     name: `${def.name} · Tier ${tier}`,
     current: 0,
     totalBosses: 1,
-    enemies: makeRaidEncounter(def, tier, startEl, partySize),
+    enemies: makeRaidEncounter(def, tier, startEl, bestStage, partySize),
     mechanics: v.mechanics,
     element: startEl,
     rotateList,

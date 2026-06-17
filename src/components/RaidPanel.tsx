@@ -74,7 +74,7 @@ export function RaidPanel() {
           {RAID_LIST.filter((d) => raidUnlocked(d, bestStage, progress)).map((d) => {
             const max = tierUnlocked[d.id] ?? 1
             let ready = 0
-            for (let t = 1; t <= max; t++) { if (partyDps >= recommendedDps(d, t, characters.length) && partyHp >= recommendedEhp(d, t)) ready = t; else break }
+            for (let t = 1; t <= max; t++) { if (partyDps >= recommendedDps(d, t, bestStage, characters.length) && partyHp >= recommendedEhp(d, t, bestStage)) ready = t; else break }
             const cls = ready >= max ? 'text-emerald-300' : ready > 0 ? 'text-amber-300' : 'text-red-400'
             return (
               <span key={d.id} style={{ color: d.color }} title={`${d.name} : prêt jusqu'au Tier ${ready} (frontière débloquée T${max})`}>
@@ -231,8 +231,8 @@ function RaidCard({ def, unlocked, progress, cleared, maxTier, trophies, bestSta
   }
 
   // v0.25.x : les PV des boss scalent avec la TAILLE de l'équipe → le DPS conseillé aussi.
-  const recDps = recommendedDps(def, t, characters.length)
-  const recEhp = recommendedEhp(def, t)
+  const recDps = recommendedDps(def, t, bestStage, characters.length)
+  const recEhp = recommendedEhp(def, t, bestStage)
   const dpsOk = partyDps >= recDps
   const ehpOk = partyHp >= recEhp
   const canEnter = !busy && orbes >= def.orbeCost
@@ -290,7 +290,7 @@ function RaidCard({ def, unlocked, progress, cleared, maxTier, trophies, bestSta
         <div className={'rounded px-1.5 py-1 ' + (ehpOk ? 'bg-emerald-900/20' : 'bg-rose-900/20')}>
           <span className="text-slate-500">PV conseillés </span>
           <span className={ehpOk ? 'text-emerald-300' : 'text-rose-300'}>{fmt(recEhp)} {ehpOk ? '✓' : '✗'}</span>
-          <span className="block text-[8.5px] text-slate-600">butin iLvl ~{raidIlvl(def, t)}</span>
+          <span className="block text-[8.5px] text-slate-600">butin iLvl ~{raidIlvl(def, t, bestStage)}</span>
         </div>
       </div>
 

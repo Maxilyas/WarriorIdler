@@ -2342,7 +2342,7 @@ export function maxContentIlvl(bestStage: number, raidProgress: Record<string, n
   let best = Math.round(stageIlvl(Math.max(1, bestStage)) * 1.25)
   for (const def of RAID_LIST) {
     const t = raidProgress[def.id] ?? 0
-    if (t >= 1) best = Math.max(best, raidIlvl(def, t))
+    if (t >= 1) best = Math.max(best, raidIlvl(def, t, bestStage))
   }
   return best
 }
@@ -2366,7 +2366,7 @@ export function referenceIlvl(
   }
   for (const def of RAID_LIST) {
     const t = raidProgress[def.id] ?? 0
-    if (t >= 1) best = Math.max(best, raidIlvl(def, t))
+    if (t >= 1) best = Math.max(best, raidIlvl(def, t, bestStage))
   }
   return best
 }
@@ -4278,7 +4278,7 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
     const ADD_TAGS = ['α', 'β', 'γ', 'δ', 'ε', 'ζ']
     let uid = enemies.reduce((m, e) => Math.max(m, e.uid ?? 0), 1000)
     for (let k = 0; k < toSpawn; k++) {
-      const add = makeRaidAdd(def, r.tier, element, s.characters.length)
+      const add = makeRaidAdd(def, r.tier, element, r.bestStage ?? s.bestStage, s.characters.length)
       add.uid = ++uid
       add.name = `${add.name} ${ADD_TAGS[(uid - 1001) % ADD_TAGS.length]}`
       enemies.push(add)
@@ -4318,7 +4318,7 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
     // v0.23 : un raid = UN affrontement → le boss (ou duo) vaincu, le trésor tombe directement.
     {
       const tier = r.tier
-      const ilvl = raidIlvl(def, tier)
+      const ilvl = raidIlvl(def, tier, r.bestStage ?? s.bestStage)
       // v0.24 : fenêtre à pic par tier (DESIGN §4.3) — pic « banal », traîne très rare vers le haut.
       const w = raidRarityWindow(def, tier)
       const count = rollRaidLootCount(def, tier)
@@ -4400,7 +4400,7 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
       if (repeatLeft > 0) {
         const credited = applyChestRewards(s, chest)
         if (credited.orbes >= def.orbeCost) {
-          const nr = generateRaid(r.raidId, tier, s.characters.length)
+          const nr = generateRaid(r.raidId, tier, r.bestStage ?? s.bestStage, s.characters.length)
           nr.repeatLeft = repeatLeft - 1
           const log3 = pushLog(log, `🔁 Auto-raid : trésor encaissé${cosmic ? ` (💫 ×${cosmic})` : ''} · ${repeatLeft} relance${repeatLeft > 1 ? 's' : ''} restante${repeatLeft > 1 ? 's' : ''}.`, 'kill')
           const next = { ...s, ...credited, gems, gemsSeen, runesOwned, metiers: pm.metiers, conseil: cp.conseil, maitrisePoints: cp.maitrisePoints, characters: healed, raidProgress, raidTrophies, orbes: credited.orbes - def.orbeCost, raid: nr, log: log3 }
@@ -6282,7 +6282,7 @@ export const useGame = create<GameState>((set, get) => {
       const maxTier = s.raidTierUnlocked[raidId] ?? 1
       if (tier < 1 || tier > maxTier) return
       if (s.orbes < def.orbeCost) return
-      const raid = generateRaid(raidId, tier, s.characters.length)
+      const raid = generateRaid(raidId, tier, s.bestStage, s.characters.length)
       raid.repeatLeft = Math.max(0, Math.round(repeat) - 1)
       // Rune de l'Économe : 15% de chance de préserver l'Orbe.
       const saved = equippedRules(s.characters).has('econome') && Math.random() < (craftMods(s.metiers).loiAmplifiee ? 0.25 : 0.15)
