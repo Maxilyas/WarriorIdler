@@ -103,7 +103,7 @@ export const DUNGEONS: Record<DungeonId, DungeonDef> = {
     id: 'poussiere', name: 'Observatoire Stellaire', icon: '🌌', color: '#748ffc', reward: 'poussiere',
     lore: 'Au sommet du monde, un colosse stellaire unique condense la Poussière d\'étoile. Un mur de PV à lui seul.',
     trait: 'colosse', traitLabel: 'Un colosse unique : DPS mono-cible massif (et Dégâts vs Boss).',
-    element: 'foudre', unlockStage: 50, anchorStage: 45, sceauCost: 1,
+    element: 'foudre', unlockStage: 22, anchorStage: 45, sceauCost: 1,
   },
 }
 
@@ -295,8 +295,10 @@ const TRAIT_CFG: Record<DungeonTrait, TraitCfg> = {
   pack: { hp: 0.55, dmg: 0.9, armor: 1, pack: 4 },
   colosse: { hp: 2.6, dmg: 1.25, armor: 1.3, pack: 1 },
   armure: { hp: 1.0, dmg: 1.0, armor: 3.4, pack: 2 },
-  // v0.22 : les lieutenants de la Cache étaient trop mous pour la qualité du butin → durcis.
-  elite: { hp: 2.1, dmg: 1.3, armor: 1.2, pack: 2, elite: true },
+  // v0.22 : durcis pour la qualité du butin. v0.35 : hp 2,1→1,5 — couplé au boss ×5 ça faisait
+  // ~×10,5 PV (≈ le mur lui-même) → niveau 1 infranchissable. Reste le donjon le plus exigeant, mais
+  // son entrée redevient un OUTIL (la difficulté vient du PUSH, pas de l'entrée).
+  elite: { hp: 1.5, dmg: 1.3, armor: 1.2, pack: 2, elite: true },
   regen: { hp: 1.1, dmg: 1.0, armor: 1, pack: 2, regen: 0.03 },
 }
 
