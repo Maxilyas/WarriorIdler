@@ -3876,7 +3876,7 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
   const runTime = (d.runTime ?? 0) + dt // horloge du run (défi « Pressé »)
   let enrage = 0
   let reflect = 0
-  let regen = dungeonRegen(d.trait) // identité 'regen' : les ennemis se régénèrent (→ il faut du burst)
+  let regen = dungeonRegen(d.trait, d.level) // identité 'regen' : rampe avec le niveau (nulle au niv 1)
   for (const m of d.modifiers) {
     if (m.enrageRampPerSec) enrage += m.enrageRampPerSec
     if (m.reflectPct) reflect += m.reflectPct // vestige « Réfléchissant » (runs antérieurs à v0.25.x)

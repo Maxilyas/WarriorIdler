@@ -2,7 +2,7 @@ import type { DamageType, Enemy } from './types'
 import { DAMAGE_TYPES } from './damage'
 import type { GemFamily } from './condGems'
 import { dungeonReq } from './resist'
-import { enemyHp, enemyDmg, enemyArmor, lootFarmIlvl, frontierIlvl } from './progression'
+import { enemyHp, enemyDmg, enemyArmor, lootFarmIlvl } from './progression'
 
 /**
  * DONJONS « par RESSOURCE » (refonte v0.17).
@@ -366,17 +366,20 @@ const DUNGEON_FIGHT_RAMP_ILVL = 2 // +ilvl de difficulté par combat DANS un run
 const DUNGEON_BOSS_HP_MULT = 5    // boss (dernier combat) : pic de PV (~15 s, pacing donjon court)
 const DUNGEON_ELITE_HP_MULT = 2.7 // élites coriaces (Cache)
 
-// v0.35 — DIFFICULTÉ RELATIVE AU JOUEUR : le donjon est calé sur TA frontière (bestStage), pas sur un
-// ilvl absolu (fini « donjon 1 = ilvl 54 »). Niveau 1 = ta frontière (toujours pertinent) ; chaque
-// niveau au-dessus = un PUSH (+DUNGEON_PUSH_STEP ilvl) pour plus de difficulté ET de rareté/rendement.
+// v0.35 — DIFFICULTÉ RELATIVE AU JOUEUR : fini l'ilvl absolu (« donjon 1 = ilvl 54 »). Niveau 1 = ton
+// LOOT ilvl (gear-matched) : un donjon est un OUTIL de farm, PAS un 2e mur — le mur, lui, est calé sur
+// la frontière, AU-DESSUS de ton gear. Chaque niveau au-dessus = un PUSH (+ rareté/rendement).
 const DUNGEON_PUSH_STEP = 5
 export function dungeonContentIlvl(level: number, bestStage: number): number {
-  return Math.max(1, frontierIlvl(bestStage) + Math.max(0, level - 1) * DUNGEON_PUSH_STEP)
+  return Math.max(1, lootFarmIlvl(bestStage) + Math.max(0, level - 1) * DUNGEON_PUSH_STEP)
 }
 
-/** Régénération des ennemis (fraction des PV max/s) imposée par l'identité du donjon. */
-export function dungeonRegen(trait: DungeonTrait): number {
-  return TRAIT_CFG[trait].regen ?? 0
+/** Régénération des ennemis (fraction des PV max/s) imposée par l'identité du donjon.
+ *  v0.35 — RAMPE avec le niveau : NULLE au niveau 1 (la passerelle Antre des Failles doit être
+ *  franchissable d'emblée pour ouvrir la boucle des donjons), pleine au niveau 5+ (le check de burst
+ *  revient pour le défi et les clés). Évite que le donjon-passerelle soit un mur de burst infranchissable. */
+export function dungeonRegen(trait: DungeonTrait, level = 1): number {
+  return (TRAIT_CFG[trait].regen ?? 0) * Math.max(0, Math.min(1, (level - 1) / 4))
 }
 
 /** Taille du pack d'un combat (le boss final est seul). */
