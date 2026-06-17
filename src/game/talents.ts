@@ -28,7 +28,7 @@ export type ConstellationId =
   | 'mage' | 'pyromancien' | 'cryomancien' | 'arcaniste'
   | 'chasseur' | 'meute' | 'faucon'
   | 'guerrier' | 'sentence' | 'rempart'
-  | 'pretre' | 'lumiere' | 'vide'
+  | 'pretre' | 'lumiere' | 'vide' | 'crepuscule'
   | 'dk' | 'givremort' | 'sang'
   | 'demoniste' | 'pestilence' | 'legion'
   | 'chaman' | 'elementaire' | 'vague'
@@ -483,6 +483,46 @@ ks('vi_drain', 'vide', 2, 'Drain d\'ombre', 'SURVIE : tes DoT te soignent (25% d
 ks('vi_meta', 'vide', 3, 'Communion morbide', 'SURVIE : -8% de dégâts subis, +12 Vol de vie. Profond : 8 pts dans la voie.', { stat: { volDeVie: 12 }, ks: { flatDr: 0.08 } }, { requires: ['vi_drain'], minSpent: 8 })
 
 /* ================================================================== */
+/* CRÉPUSCULE (v0.34) — SECTION SYNERGIE Lumière × Vide (Prêtre).
+ * Boucle Light↔Void : soigner-en-châtiant (atonement) ↔ frapper-en-soignant. Calibré par
+ * scripts/sim-pretre-hybride.mjs (≈ ×1,48 PLAT en endgame ; hybride ≤ ×1,33 vs build pur).
+ * Identité : DoT d'ombre + châtiment qui se nourrissent ; force INT ET Altération ensemble.
+ * 2 sorts signature : Verbe crépusculaire (frappe qui soigne) + Éclipse (ULTIME zone + soin de groupe). */
+/* ================================================================== */
+// ENTRÉE — convergence : exige Châtiment (Lumière) ET Affliction (Vide).
+ks('cr_pivot', 'crepuscule', 0, 'Dissonance sacrée', 'PIVOT : tes SOINS posent un Mot de l\'ombre (DoT) sur la cible, ET ton châtiment compte comme [ombre] (gagne tes bonus d\'ombre). Exige Châtiment ET Affliction.',
+  { stat: { alteration: 12 }, ks: { healAppliesDot: 0.6, atonementIsShadow: true } }, { requiresAll: ['lu_chatiment', 'vi_dotamp'] })
+
+// SORT SIGNATURE — la dualité en un bouton.
+ability('cr_verbe', 'crepuscule', 1, 'Verbe crépusculaire', 'cr_verbe', 'Débloque Verbe crépusculaire : une frappe d\'ombre qui SOIGNE l\'allié le plus blessé (50% des dégâts). +14 Intelligence.', { requires: ['cr_pivot'], statMods: { intelligence: 14 } })
+
+// VOID → LIGHT : le sustain de groupe (inverse de l'atonement).
+ks('cr_communion', 'crepuscule', 1, 'Communion d\'ombre', 'SUSTAIN : tes DoT soignent l\'allié le plus blessé (20% du tick) — pas seulement toi.', { stat: { regen: 20 }, ks: { dotHealsParty: 0.2 } }, { requires: ['cr_pivot'] })
+ks('cr_recipro', 'crepuscule', 2, 'Réciprocité', 'HARMONIE : +12% à tes sorts [ombre] (la Lumière et le Vide s\'entretiennent).', { stat: { intelligence: 12 }, ks: { tagBonus: { tag: 'ombre', damageMult: 1.12 } } }, { requires: ['cr_verbe'] })
+ks('cr_penombre', 'crepuscule', 3, 'Pénombre', 'FOLIE : pendant Forme du Vide, ton châtiment +35% ET tes DoT +20%. Gaté : 6 pts.', { stat: { degatsCrit: 14 }, ks: { folieEmpowersAtonement: 0.35, folieDot: 0.2 } }, { requires: ['cr_recipro'], minSpent: 6 })
+
+// ATONEMENT — amplification conditionnelle.
+ks('cr_confession', 'crepuscule', 1, 'Confession', 'CHÂTIMENT : +30% de châtiment SI la cible porte un DoT (force à affliger avant de soigner).', { stat: { intelligence: 12 }, ks: { atonementVsDot: 0.3 } }, { requires: ['cr_pivot'] })
+ks('cr_murmure', 'crepuscule', 2, 'Murmure intime', 'CHOIX : châtiment ×1,30 (concentré, profil mono/boss).', { stat: { intelligence: 14 }, ks: { atonementMult: 1.3 } }, { requires: ['cr_confession'], exclusive: 'cr_chant' })
+ks('cr_diffuse', 'crepuscule', 2, 'Lumière diffuse', 'CHOIX : tes soins posent un DoT plus fort (+0,4) et soignent l\'équipe (+0,15 du tick) — profil sustain/AoE.', { stat: { regen: 16 }, ks: { healAppliesDot: 0.4, dotHealsParty: 0.15 } }, { requires: ['cr_confession'], exclusive: 'cr_chant' })
+
+// HYBRIDE — double-stat INT × Altération.
+minor('cr_cantique', 'crepuscule', 2, 'Cantique funèbre', 5, { alteration: 8 }, { requires: ['cr_communion'] }) // ⛓ tampon Altération
+ks('cr_equilibre', 'crepuscule', 3, 'Équilibre du crépuscule', 'CROSS-SCALING : châtiment +30% × (multiplicateur d\'Altération − 1) — BORNÉ. Exige Cantique funèbre au max (5) + 10 pts.', { stat: { intelligence: 14 }, ks: { atonementFromAlteration: 0.3 } }, { requires: ['cr_cantique'], requiresRank: { id: 'cr_cantique', rank: 5 }, minSpent: 10 })
+
+// ÉTAT — choix exclusif (profil de survie).
+ks('cr_martyre', 'crepuscule', 3, 'Martyre', 'CHOIX : sous 50% de PV, +40% de TOUS tes dégâts (la lumière brûle quand tu souffres).', { stat: { degatsCrit: 12 }, ks: { lowHpBonus: { threshold: 0.5, mult: 1.4 } } }, { requires: ['cr_penombre'], exclusive: 'cr_etat' })
+ks('cr_extase', 'crepuscule', 3, 'Extase', 'CHOIX : au-dessus de 80% de PV, +30% de TOUS tes dégâts (profil safe).', { stat: { intelligence: 12 }, ks: { highHpBonus: { threshold: 0.8, mult: 1.3 } } }, { requires: ['cr_penombre'], exclusive: 'cr_etat' })
+
+// EXÉCUTION / CONTREPARTIE / CAPSTONE.
+ks('cr_jugement', 'crepuscule', 4, 'Jugement des âmes', 'EXÉCUTION : tes sorts exécutent les ennemis sous 25% de PV (×2,4). Profond : 8 pts.', { stat: { degatsBoss: 16 }, ks: { executeBonus: { threshold: 0.25, mult: 2.4 } } }, { requires: ['cr_equilibre'], minSpent: 8 })
+ks('cr_heresie', 'crepuscule', 3, 'Hérésie', 'CONTREPARTIE : tes sorts ne soignent PLUS (0 PV rendu) ; en échange ton châtiment frappe ×2.', { stat: { degatsBoss: 14 }, ks: { noSelfHeal: true, atonementMult: 2 } }, { requires: ['cr_confession'] })
+ks('cr_symbiose', 'crepuscule', 5, 'Symbiose des sphères', 'CAPSTONE : tes dégâts d\'ombre soignent le groupe (15%) — la boucle Lumière↔Vide complète. Tout au fond : 14 pts.', { stat: { intelligence: 18 }, ks: { damageToHeal: 0.15 } }, { requiresAll: ['cr_equilibre', 'cr_communion'], minSpent: 14 })
+
+// SORT CAPSTONE.
+ability('cr_eclipse', 'crepuscule', 6, 'Éclipse', 'cr_eclipse', 'ULTIME — un cataclysme d\'ombre engloutit le pack ET restaure tout le groupe. Gaté : Jugement des âmes pris + 14 pts.', { requires: ['cr_jugement'], minSpent: 14 })
+
+/* ================================================================== */
 /* CHEVALIER DE LA MORT (Plaque) — Givre-mort (DPS) · Sang (TANK).     */
 /* ================================================================== */
 node('cl_dk', 'dk', 'ability', 0, 1, 'Chevalier de la mort', 'Champion mort-vivant nourri par la Puissance runique. Débloque Frappe runique. +25 Force, +40 Endurance. Débloqué au 4e Éveil.', { requires: ['pa_start'], requiresPrestige: 4, statMods: { force: 25, endurance: 40 }, unlockPower: 'dk_frappe' })
@@ -679,6 +719,7 @@ export const CONSTELLATIONS: Record<ConstellationId, ConstellationMeta> = {
   pretre: { id: 'pretre', name: 'Prêtre', role: 'Tissu · classe', color: '#f1f3f5', icon: '✚' },
   lumiere: { id: 'lumiere', name: 'Lumière', role: 'Prêtre · HEAL', color: '#ffd43b', icon: '🌟', archetype: true },
   vide: { id: 'vide', name: 'Vide', role: 'Prêtre · DoT ombre', color: '#9775fa', icon: '🌑', archetype: true },
+  crepuscule: { id: 'crepuscule', name: 'Crépuscule', role: 'Prêtre · Lumière × Vide (synergie)', color: '#c4b5fd', icon: '🌗', archetype: true },
   dk: { id: 'dk', name: 'Chevalier de la mort', role: 'Panthéon · classe', color: '#5c7cfa', icon: '☠', tree: 'pantheon' },
   givremort: { id: 'givremort', name: 'Givre-mort', role: 'DK · givre & exécution', color: '#74c0fc', icon: '❄', archetype: true, tree: 'pantheon' },
   sang: { id: 'sang', name: 'Sang', role: 'DK · TANK vampire', color: '#e03131', icon: '🩸', archetype: true, tree: 'pantheon' },
@@ -702,7 +743,7 @@ export const CONSTELLATION_LIST: ConstellationId[] = [
   'mage', 'pyromancien', 'cryomancien', 'arcaniste',
   'chasseur', 'meute', 'faucon',
   'guerrier', 'sentence', 'rempart',
-  'pretre', 'lumiere', 'vide',
+  'pretre', 'lumiere', 'vide', 'crepuscule',
   'dk', 'givremort', 'sang',
   'demoniste', 'pestilence', 'legion',
   'chaman', 'elementaire', 'vague',

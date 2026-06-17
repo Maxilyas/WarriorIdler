@@ -513,6 +513,16 @@ export interface CombatMods {
   critToAlteration: number
   builderPoison: boolean
   venomFinisherGen: boolean
+  // --- v0.34 : PRÊTRE « Crépuscule » ---
+  healAppliesDot: number
+  atonementIsShadow: boolean
+  atonementVsDot: number
+  atonementFromAlteration: number
+  atonementMult: number
+  folieEmpowersAtonement: number
+  folieDot: number
+  noSelfHeal: boolean
+  dotHealsParty: number
 }
 
 export function charCombatMods(char: Character): CombatMods {
@@ -526,6 +536,9 @@ export function charCombatMods(char: Character): CombatMods {
     finisherToPoison: 0, finisherIsDot: false, finisherRefreshPoison: false, finisherVsVenom: 0,
     finisherFromAlteration: 0, finisherVenomBonus: 0, noDotLeech: false, poisonCanCrit: 0, finisherDetonate: 0,
     detonateReapply: 0, critToAlteration: 0, builderPoison: false, venomFinisherGen: false,
+    // v0.34 : Crépuscule
+    healAppliesDot: 0, atonementIsShadow: false, atonementVsDot: 0, atonementFromAlteration: 0, atonementMult: 1,
+    folieEmpowersAtonement: 0, folieDot: 0, noSelfHeal: false, dotHealsParty: 0,
   }
   // Multiplicateur de dégâts des bonus de SET (s'applique aux auto-attaques ET aux sorts,
   // et donc au DPS affiché via charDps — même chemin que les keystones).
@@ -608,6 +621,16 @@ export function charCombatMods(char: Character): CombatMods {
     if (k.critToAlteration) out.critToAlteration += k.critToAlteration
     if (k.builderPoison) out.builderPoison = true
     if (k.venomFinisherGen) out.venomFinisherGen = true
+    // --- v0.34 : PRÊTRE « Crépuscule » ---
+    if (k.healAppliesDot) out.healAppliesDot += k.healAppliesDot
+    if (k.atonementIsShadow) out.atonementIsShadow = true
+    if (k.atonementVsDot) out.atonementVsDot += k.atonementVsDot
+    if (k.atonementFromAlteration) out.atonementFromAlteration += k.atonementFromAlteration
+    if (k.atonementMult) out.atonementMult *= k.atonementMult
+    if (k.folieEmpowersAtonement) out.folieEmpowersAtonement += k.folieEmpowersAtonement
+    if (k.folieDot) out.folieDot += k.folieDot
+    if (k.noSelfHeal) out.noSelfHeal = true
+    if (k.dotHealsParty) out.dotHealsParty += k.dotHealsParty
     if (k.hotStreak) out.hotStreak = out.hotStreak ? { cap: Math.min(out.hotStreak.cap, k.hotStreak.cap), mult: Math.max(out.hotStreak.mult, k.hotStreak.mult) } : { ...k.hotStreak }
     if (k.overload) out.overload = out.overload ? { window: Math.max(out.overload.window, k.overload.window), mult: Math.max(out.overload.mult, k.overload.mult) } : { ...k.overload }
     if (k.multiTypeBonus) {

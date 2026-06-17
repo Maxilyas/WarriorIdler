@@ -1282,6 +1282,19 @@ function gemAbilityHeal(t: Character, amount: number, cond: CondMods | undefined
   }
 }
 
+/** 🌗 COMMUNION D'OMBRE (v0.34) : les DoT du Prêtre soignent l'allié le plus blessé (somme des frac
+ *  `dotHealsParty` de l'équipe × le tick de DoT). Sustain de groupe né de l'affliction (rôle Lumière). */
+function healDotParty(chars: Character[], info: ({ cmods: CharCombatMods } | null | undefined)[], dmg: number) {
+  let pool = 0
+  for (let i = 0; i < chars.length; i++) { const d = info[i]; if (d && d.cmods.dotHealsParty > 0) pool += dmg * d.cmods.dotHealsParty }
+  if (pool <= 0) return
+  const alive = chars.filter((c) => c.hp > 0)
+  if (!alive.length) return
+  let low = alive[0]
+  for (const a of alive) if (a.hp / charMaxHp(a) < low.hp / charMaxHp(low)) low = a
+  low.hp = Math.min(charMaxHp(low), low.hp + pool)
+}
+
 /** 🛎️ Carillon : à appeler au moment de POSER une recharge — renvoie 0,5 quand le bonus est mûr. */
 function carillonMult(cond?: CondMods): number {
   if (!cond?.carillonN) return 1
@@ -2504,8 +2517,23 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
     }
     return done
   }
-  // ORACLE SANGLANT : une fraction du SOIN est aussi infligée en dégâts à l'ennemi focus.
-  const bleedHeal = (healed: number): number => (healToDamage > 0 && enemy.hp > 0 ? hit(healed * healToDamage * vm) : 0)
+  // v0.34 « Crépuscule » : amplis du CHÂTIMENT (atonement) — tous BORNÉS ou conditionnels.
+  const folieActive = (caster.frenzy?.remaining ?? 0) > 0
+  const folieDotMult = folieActive && cm.folieDot > 0 ? 1 + cm.folieDot : 1
+  const atoneAmp = (cm.atonementIsShadow ? (cm.tagBonus['ombre'] ?? 1) : 1)
+    * (1 + (cm.atonementVsDot > 0 && enemy.dot ? cm.atonementVsDot : 0))
+    * (1 + cm.atonementFromAlteration * (derived.alterationMult - 1))
+    * cm.atonementMult
+    * (folieActive ? 1 + cm.folieEmpowersAtonement : 1)
+  // DISSONANCE : un soin pose aussi un DoT d'ombre sur l'ennemi (scale comme un sort d'ombre).
+  const applyHealDot = (healed: number) => {
+    if (cm.healAppliesDot <= 0 || enemy.hp <= 0) return
+    const dps = healed * profileDamageMult(profile) * 0.4 * derived.alterationMult * (cm.tagBonus['ombre'] ?? 1) * dmgMult * cm.healAppliesDot * folieDotMult
+    enemy.dot = { dps: Math.max(dps, enemy.dot?.dps ?? 0), remaining: 6 }
+  }
+  // ORACLE SANGLANT / CHÂTIMENT : une fraction du SOIN est aussi infligée en dégâts à l'ennemi focus.
+  const bleedHeal = (healed: number): number => (healToDamage > 0 && enemy.hp > 0 ? hit(healed * healToDamage * atoneAmp * vm) : 0)
+  const canHeal = !pact?.noHeal && !cm.noSelfHeal // HÉRÉSIE : plus aucun soin
   switch (p.effect) {
     case 'nuke':
     case 'cleave':
@@ -2522,8 +2550,8 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
       return done
     }
     case 'dot':
-      // L'Altération amplifie les dégâts sur la durée.
-      enemy.dot = { dps: Math.max(magDmg * 0.4 * derived.alterationMult, enemy.dot?.dps ?? 0), remaining: 5 }
+      // L'Altération amplifie les dégâts sur la durée. PÉNOMBRE : la Folie (frenzy) booste tes DoT.
+      enemy.dot = { dps: Math.max(magDmg * 0.4 * derived.alterationMult * folieDotMult, enemy.dot?.dps ?? 0), remaining: 5 }
       return 0
     case 'rupture':
       // Brise la régén ennemie + grosse plaie (dégât immédiat + DoT puissant).
@@ -2535,20 +2563,43 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
       return 0
     case 'heal':
     case 'hot': {
+      const healed = base * (1 + hotBonus)
       const allies = chars.filter((c) => c.hp > 0)
-      if (allies.length && !pact?.noHeal) {
+      if (allies.length && canHeal) {
         let low = allies[0]
         for (const a of allies) if (a.hp / charMaxHp(a) < low.hp / charMaxHp(low)) low = a
-        gemAbilityHeal(low, base * (1 + hotBonus), cond, chars) // 🏆 Calice + ⚱️ Vases (v0.26)
+        gemAbilityHeal(low, healed, cond, chars) // 🏆 Calice + ⚱️ Vases (v0.26)
       }
-      return bleedHeal(base * (1 + hotBonus))
+      applyHealDot(healed) // DISSONANCE
+      return bleedHeal(healed)
     }
     case 'bigHeal':
-      if (!pact?.noHeal) for (const a of chars) if (a.hp > 0) gemAbilityHeal(a, base * (1 + hotBonus), cond, chars, false)
+      if (canHeal) for (const a of chars) if (a.hp > 0) gemAbilityHeal(a, base * (1 + hotBonus), cond, chars, false)
+      applyHealDot(base * (1 + hotBonus))
       return bleedHeal(base * (1 + hotBonus))
     case 'buffParty':
-      if (!pact?.noHeal) for (const a of chars) if (a.hp > 0) gemAbilityHeal(a, base * 0.5 * (1 + hotBonus), cond, chars, false)
+      if (canHeal) for (const a of chars) if (a.hp > 0) gemAbilityHeal(a, base * 0.5 * (1 + hotBonus), cond, chars, false)
+      applyHealDot(base * 0.5 * (1 + hotBonus))
       return bleedHeal(base * 0.5 * (1 + hotBonus))
+    // v0.34 « Crépuscule » — sorts hybrides : frappe d'ombre QUI SOIGNE.
+    case 'smiteHeal': {
+      const done = hit(magDmg * vm)
+      if (canHeal && done > 0) {
+        const allies = chars.filter((c) => c.hp > 0)
+        if (allies.length) {
+          let low = allies[0]
+          for (const a of allies) if (a.hp / charMaxHp(a) < low.hp / charMaxHp(low)) low = a
+          gemAbilityHeal(low, done * 0.5, cond, chars) // soigne l'allié blessé = 50% des dégâts
+        }
+      }
+      return done
+    }
+    case 'eclipse': {
+      // ULTIME : cataclysme d'ombre (zone) + restaure TOUT le groupe (40% des dégâts chacun).
+      const done = hit(magDmg * vm)
+      if (canHeal && done > 0) for (const a of chars) if (a.hp > 0) gemAbilityHeal(a, done * 0.4, cond, chars, false)
+      return done
+    }
     case 'shield':
       // Bouclier runique : absorption sur le porteur (scale stat principale OU Endurance).
       caster.absorb = (caster.absorb ?? 0) + shieldBase
@@ -3016,6 +3067,7 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
       const d = info[i]
       if (d && c.hp > 0 && d.cmods.dotLeech > 0) c.hp = Math.min(charMaxHp(c), c.hp + dmg * d.cmods.dotLeech)
     })
+    healDotParty(chars, info, dmg) // 🌗 COMMUNION D'OMBRE : les DoT soignent l'allié le plus blessé
   }
   if ((enemy.noRegen ?? 0) > 0) enemy.noRegen = Math.max(0, enemy.noRegen! - dt)
   if (enemy.vuln) { enemy.vuln.remaining -= dt; if (enemy.vuln.remaining <= 0) enemy.vuln = undefined }
@@ -3457,6 +3509,7 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
         const d = info[i]
         if (d && c.hp > 0 && d.cmods.dotLeech > 0) c.hp = Math.min(charMaxHp(c), c.hp + dmg * d.cmods.dotLeech)
       })
+      healDotParty(chars, info, dmg) // 🌗 COMMUNION D'OMBRE
     }
     if ((enemy.noRegen ?? 0) > 0) enemy.noRegen = Math.max(0, enemy.noRegen! - dt)
     if (enemy.vuln) { enemy.vuln.remaining -= dt; if (enemy.vuln.remaining <= 0) enemy.vuln = undefined }

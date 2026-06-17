@@ -262,6 +262,9 @@ export type PowerEffect =
   | 'detonate'     // ASSASSIN : consomme tous les stacks de venin → pic = stacks × magnitude
   | 'builder'      // OMBRELAME : génère un Point de Combo (+ petit coup)
   | 'finisher'     // OMBRELAME : consomme les Points de Combo → dégâts × points
+  // --- v0.34 : socle Prêtre « Crépuscule » (Lumière × Vide) ---
+  | 'smiteHeal'    // CRÉPUSCULE : frappe d'ombre QUI SOIGNE l'allié le plus blessé (la dualité en un sort)
+  | 'eclipse'      // CRÉPUSCULE : ULTIME — cataclysme d'ombre de zone qui restaure TOUT le groupe
 
 /** Définition d'une capacité dans le registre (valeurs de base, montées par le rang plus tard). */
 export interface PowerDef {

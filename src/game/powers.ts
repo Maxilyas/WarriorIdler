@@ -258,6 +258,7 @@ const EFFECT_FR: Record<PowerEffect, string> = {
   mark: 'vulnérabilité',
   poison: 'venin cumulatif (+1 stack)', detonate: 'détonation des stacks de venin',
   builder: 'générateur (+1 Point de Combo)', finisher: 'finisseur (× Points de Combo)',
+  smiteHeal: 'frappe d\'ombre qui soigne', eclipse: 'cataclysme d\'ombre + soin de groupe',
 }
 const SCALE_FR: Record<OffensiveStat, string> = { force: 'FOR', agilite: 'AGI', intelligence: 'INT' }
 function spellDescription(s: SpellSpec): string {
@@ -381,6 +382,9 @@ const PRETRE_SPELLS: SpellSpec[] = [
   { id: 'vi_tourment', name: 'Tourment', icon: '☄️', effect: 'cleave', mag: 3.0, cd: 3.2, type: 'ombre', scale: 'intelligence', tags: ['zone', 'direct', 'ombre'] },
   { id: 'vi_devorer', name: 'Dévorer l\'esprit', icon: '💀', effect: 'executeNuke', mag: 4.0, cd: 5, type: 'ombre', scale: 'intelligence', tags: ['mono', 'direct', 'ombre'] },
   { id: 'vi_folie', name: 'Folie dévorante', icon: '🌌', effect: 'megaCleave', mag: 7, cd: 20, type: 'ombre', scale: 'intelligence', tags: ['zone', 'direct', 'ombre', 'ultime'] },
+  // Crépuscule (synergie Lumière × Vide) — sorts hybrides soin↔ombre.
+  { id: 'cr_verbe', name: 'Verbe crépusculaire', icon: '🌗', effect: 'smiteHeal', mag: 3.2, cd: 4, type: 'ombre', scale: 'intelligence', tags: ['mono', 'direct', 'ombre', 'soin'] },
+  { id: 'cr_eclipse', name: 'Éclipse', icon: '🌘', effect: 'eclipse', mag: 6, cd: 22, type: 'ombre', scale: 'intelligence', tags: ['zone', 'direct', 'ombre', 'soin', 'ultime'] },
 ]
 for (const s of PRETRE_SPELLS) POWERS.push(specToPower(s))
 
@@ -545,6 +549,9 @@ export const POWER_EFFECT_META: Record<PowerEffect, PowerEffectMeta> = {
   detonate: { label: 'Détonation', icon: '💥', targets: 'Mono-cible · consomme les stacks', family: 'offense' },
   builder: { label: 'Générateur', icon: '🗡️', targets: 'Mono-cible · +1 Point de Combo', family: 'offense' },
   finisher: { label: 'Finisseur', icon: '🔪', targets: 'Mono-cible · × Points de Combo', family: 'offense' },
+  // v0.34 — socle Prêtre « Crépuscule »
+  smiteHeal: { label: 'Châtiment soignant', icon: '🌗', targets: 'Mono-cible + soin de l\'allié blessé', family: 'offense' },
+  eclipse: { label: 'Éclipse (zone)', icon: '🌘', targets: 'Tout le pack + soin de groupe', family: 'offense' },
 }
 
 /** Stat de scaling d'un sort, en court (FOR / AGI / INT). */

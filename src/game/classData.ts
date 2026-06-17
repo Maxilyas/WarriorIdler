@@ -126,6 +126,26 @@ export interface KeystoneEffect {
   builderPoison?: boolean
   /** DANSE VÉNÉNEUSE : le finisseur génère +1 PC si la cible est au venin MAX. */
   venomFinisherGen?: boolean
+
+  /* ---- v0.34 : PRÊTRE « Crépuscule » (synergie Lumière × Vide, calibré par sim) ---- */
+  /** DISSONANCE : tes SOINS posent un DoT d'ombre sur la cible châtiée (= frac du DoT de base). Somme. */
+  healAppliesDot?: number
+  /** DISSONANCE : ton châtiment (atonement) compte comme [ombre] → ×tagBonus['ombre']. */
+  atonementIsShadow?: boolean
+  /** CONFESSION : +frac de châtiment SI la cible porte un DoT (somme). */
+  atonementVsDot?: number
+  /** ÉQUILIBRE : châtiment ×(1 + frac×(alterationMult−1)) — cross-scaling BORNÉ. Somme. */
+  atonementFromAlteration?: number
+  /** MURMURE / HÉRÉSIE : multiplicateur brut du châtiment (PRODUIT entre keystones). */
+  atonementMult?: number
+  /** PÉNOMBRE : pendant Forme du Vide (frenzy), châtiment +frac (somme). */
+  folieEmpowersAtonement?: number
+  /** PÉNOMBRE : pendant Forme du Vide (frenzy), tes DoT +frac (somme). */
+  folieDot?: number
+  /** HÉRÉSIE : tes sorts ne soignent PLUS (0 PV rendu) — contrepartie. */
+  noSelfHeal?: boolean
+  /** COMMUNION D'OMBRE : tes DoT soignent l'allié le plus blessé (frac du tick). Somme. */
+  dotHealsParty?: number
 }
 
 /** Vocabulaire des TAGS de comportement (12) — les 7 types de dégâts servent aussi de tags. */
