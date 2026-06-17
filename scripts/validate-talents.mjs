@@ -32,9 +32,10 @@ for (const t of TALENTS) {
   if (t.requiresRank && !byId.has(t.requiresRank.id)) broken.push({ node: t.id, name: t.name, missing: t.requiresRank.id })
 }
 
-// 2) accessibilité depuis le Cœur (mêmes arêtes que le moteur : requires)
-const ROOT = 'co_start'
-const seen = new Set([ROOT])
+// 2) accessibilité depuis les RACINES (mêmes arêtes que le moteur : requires).
+//    v0.33 : deux arbres → deux racines (Cœur = base, Panthéon = classes débloquées par l'Éveil).
+const ROOTS = ['co_start', 'pa_start']
+const seen = new Set(ROOTS)
 let changed = true
 while (changed) {
   changed = false

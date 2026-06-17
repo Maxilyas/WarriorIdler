@@ -140,7 +140,7 @@ export function StuffScreen() {
     for (const it of filtered) m.set(it.id, equipDelta(active, it, targetSlotFor(equipment, it.type, selectedSlot)))
     return m
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtered, equipment, active?.talents, active?.powers, active?.level, selectedSlot])
+  }, [filtered, equipment, active?.talents, active?.pantheon, active?.powers, active?.level, selectedSlot])
 
   // 3) TRI (réutilise les deltas pour « +DPS » / « +Survie »).
   const visible = useMemo(() => {

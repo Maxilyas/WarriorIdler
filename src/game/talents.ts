@@ -24,7 +24,7 @@ import type { KeystoneEffect } from './classData'
  */
 
 export type ConstellationId =
-  | 'coeur' | 'voleur' | 'assassin' | 'ombrelame'
+  | 'coeur' | 'pantheon' | 'voleur' | 'assassin' | 'ombrelame'
   | 'mage' | 'pyromancien' | 'cryomancien' | 'arcaniste'
   | 'chasseur' | 'meute' | 'faucon'
   | 'guerrier' | 'sentence' | 'rempart'
@@ -42,7 +42,13 @@ export interface ConstellationMeta {
   color: string
   icon: string
   archetype?: boolean
+  /** v0.33 : arbre d'appartenance. 'pantheon' = classes débloquées par l'Éveil (2e arbre). Défaut 'base'. */
+  tree?: TalentTreeId
 }
+
+/** v0.33 : deux arbres. 'base' = 6 classes de départ (points de niveau). 'pantheon' = 4 classes
+ *  débloquées par l'Éveil Primordial, dépensées avec le budget de Points d'Éveil. */
+export type TalentTreeId = 'base' | 'pantheon'
 
 export type TalentKind = 'minor' | 'notable' | 'keystone' | 'ability' | 'gateway'
 
@@ -68,6 +74,9 @@ export interface TalentNode {
    *  d'allouer celui-ci. Sert à GATER la puissance brute (DR/épines/+%dégâts) derrière un vrai
    *  investissement dans la node d'avant — « monte d'abord ce mineur au max ». */
   requiresRank?: { id: string; rank: number }
+  /** v0.33 : nœud d'ENTRÉE d'une classe du Panthéon — exige `prestigeRank` ≥ cette valeur (déblocage
+   *  progressif, 1 classe par Éveil). Gate posée sur le nœud `cl_*`, héritée par tous ses descendants. */
+  requiresPrestige?: number
   statMods?: StatBlock
   resistMods?: Partial<Record<DamageType, number>>
   unlockPower?: string
@@ -89,7 +98,7 @@ const STAT_FR: Record<string, string> = {
 function sd(mods: StatBlock): string {
   return Object.entries(mods).map(([k, v]) => `+${v} ${STAT_FR[k] ?? k}`).join(', ')
 }
-type Opt = Partial<Pick<TalentNode, 'requires' | 'links' | 'requiresAll' | 'exclusive' | 'minSpent' | 'requiresRank' | 'statMods' | 'resistMods' | 'unlockPower' | 'keystone'>>
+type Opt = Partial<Pick<TalentNode, 'requires' | 'links' | 'requiresAll' | 'exclusive' | 'minSpent' | 'requiresRank' | 'requiresPrestige' | 'statMods' | 'resistMods' | 'unlockPower' | 'keystone'>>
 function node(id: string, c: ConstellationId, kind: TalentKind, tier: number, maxRank: number, name: string, description: string, opt: Opt = {}) {
   TALENTS.push({ id, name, constellation: c, kind, tier, maxRank, description, ...opt })
 }
@@ -113,7 +122,15 @@ node('co_start', 'coeur', 'ability', 0, 1, 'Éveil', '+10 stats primaires, +20 E
 node('cat_plaque', 'coeur', 'gateway', 1, 1, 'Plaque', 'Catégorie Plaque (Guerrier, Paladin, Chevalier de la mort). +40 Endurance, +15 Force.', { requires: ['co_start'], statMods: { endurance: 40, force: 15 } })
 node('cat_mailles', 'coeur', 'gateway', 1, 1, 'Mailles', 'Catégorie Mailles (Chasseur, Chaman). +20 Agilité, +20 Intelligence.', { requires: ['co_start'], statMods: { agilite: 20, intelligence: 20 } })
 node('cat_cuir', 'coeur', 'gateway', 1, 1, 'Cuir', 'Catégorie Cuir (Voleur, Druide). +30 Agilité, +15 Critique.', { requires: ['co_start'], statMods: { agilite: 30, critique: 15 } })
-node('cat_tissu', 'coeur', 'gateway', 1, 1, 'Tissu', 'Catégorie Tissu (Mage, Démoniste, Prêtre). +40 Intelligence.', { requires: ['co_start'], statMods: { intelligence: 40 } })
+node('cat_tissu', 'coeur', 'gateway', 1, 1, 'Tissu', 'Catégorie Tissu (Mage, Prêtre). +40 Intelligence.', { requires: ['co_start'], statMods: { intelligence: 40 } })
+
+/* ------------------------------------------------------------------ */
+/* PANTHÉON (v0.33) — 2e arbre, racine. Les 4 classes avancées (Chaman, Paladin, Démoniste,
+/* Chevalier de la mort) s'y branchent au lieu des catégories de base. Débloqué par l'Éveil
+/* Primordial (prestige) et dépensé avec le budget de Points d'Éveil. La racine est un simple
+/* ancrage (0 stat) : tant qu'aucune classe n'est débloquée, le Panthéon n'apporte rien. */
+/* ------------------------------------------------------------------ */
+node('pa_start', 'pantheon', 'ability', 0, 1, 'Panthéon', 'La racine du second arbre. Les classes avancées s\'éveillent ici, une par Éveil Primordial. Ancrage neutre — la puissance vient des classes elles-mêmes.')
 
 /* VOLEUR — nœud de classe (peu cher : multi-classe natif). */
 node('cl_voleur', 'voleur', 'ability', 0, 1, 'Voleur', 'Maître de la lame et du poison. Débloque Tranchant et ouvre ses deux archétypes. +25 Agilité, +15 Critique.',
@@ -431,7 +448,7 @@ ks('vi_meta', 'vide', 3, 'Communion morbide', 'SURVIE : -8% de dégâts subis, +
 /* ================================================================== */
 /* CHEVALIER DE LA MORT (Plaque) — Givre-mort (DPS) · Sang (TANK).     */
 /* ================================================================== */
-node('cl_dk', 'dk', 'ability', 0, 1, 'Chevalier de la mort', 'Champion mort-vivant nourri par la Puissance runique. Débloque Frappe runique. +25 Force.', { requires: ['cat_plaque'], statMods: { force: 25 }, unlockPower: 'dk_frappe' })
+node('cl_dk', 'dk', 'ability', 0, 1, 'Chevalier de la mort', 'Champion mort-vivant nourri par la Puissance runique. Débloque Frappe runique. +25 Force, +40 Endurance. Débloqué au 4e Éveil.', { requires: ['pa_start'], requiresPrestige: 4, statMods: { force: 25, endurance: 40 }, unlockPower: 'dk_frappe' })
 /* ---- GIVRE-MORT — contrôle de mêlée → FRACAS runique + exécution. ---- */
 ability('gm_hub', 'givremort', 0, 'Givre-mort', 'gm_givre', 'Débloque Lame de givre (générateur de Puissance runique). +18 Force, +12 Critique.', { requires: ['cl_dk'], statMods: { force: 18, critique: 12 } })
 ability('gm_obli', 'givremort', 1, 'Oblitération', 'gm_obliteration', 'FINITION : débloque Oblitération (finisseur froid × Puissance runique). +16 Force.', { requires: ['gm_hub'], statMods: { force: 16 } })
@@ -463,7 +480,7 @@ ability('sg_egide', 'sang', 5, 'Égide titanesque', 'egide_titanesque', 'ULTIME 
 /* ================================================================== */
 /* DÉMONISTE (Tissu) — Pestilence (multi-DoT) · Légion (démons).       */
 /* ================================================================== */
-node('cl_demoniste', 'demoniste', 'ability', 0, 1, 'Démoniste', 'Maître des afflictions et des démons. Débloque Trait de l\'ombre. +30 Intelligence.', { requires: ['cat_tissu'], statMods: { intelligence: 30 }, unlockPower: 'de_trait' })
+node('cl_demoniste', 'demoniste', 'ability', 0, 1, 'Démoniste', 'Maître des afflictions et des démons. Débloque Trait de l\'ombre. +60 Intelligence. Débloqué au 3e Éveil.', { requires: ['pa_start'], requiresPrestige: 3, statMods: { intelligence: 60 }, unlockPower: 'de_trait' })
 /* ---- PESTILENCE — empile des fléaux (poison ombre) → détone tout (drain). ---- */
 ability('pe_hub', 'pestilence', 0, 'Pestilence', 'pe_fleau', 'Débloque Fléau (affliction d\'ombre cumulative). +18 Intelligence, +15 Altération.', { requires: ['cl_demoniste'], statMods: { intelligence: 18, alteration: 15 } })
 minor('pe_tox', 'pestilence', 1, 'Virulence', 3, { alteration: 18 }, { requires: ['pe_hub'] })
@@ -498,7 +515,7 @@ ks('lg_protection', 'legion', 2, 'Armure démoniaque', 'SURVIE : -10% de dégât
 /* ================================================================== */
 /* CHAMAN (Mailles) — Élémentaire (DPS) · Vague (HEAL).                */
 /* ================================================================== */
-node('cl_chaman', 'chaman', 'ability', 0, 1, 'Chaman', 'Voix des éléments. Débloque Éclair. +20 Agilité, +20 Intelligence.', { requires: ['cat_mailles'], statMods: { agilite: 20, intelligence: 20 }, unlockPower: 'sh_eclair' })
+node('cl_chaman', 'chaman', 'ability', 0, 1, 'Chaman', 'Voix des éléments. Débloque Éclair. +40 Agilité, +40 Intelligence. Débloqué au 1er Éveil.', { requires: ['pa_start'], requiresPrestige: 1, statMods: { agilite: 40, intelligence: 40 }, unlockPower: 'sh_eclair' })
 /* ---- ÉLÉMENTAIRE — foudre en chaîne + Surcharge (procs) + Maelström. ---- */
 ability('el_hub', 'elementaire', 0, 'Élémentaire', 'el_foudre', 'Débloque Foudre en chaîne (rebondit sur le pack). +18 Intelligence, +12 Critique.', { requires: ['cl_chaman'], statMods: { intelligence: 18, critique: 12 } })
 minor('el_orage', 'elementaire', 1, 'Orage', 3, { critique: 18 }, { requires: ['el_hub'] })
@@ -567,7 +584,7 @@ ability('fo_bouclier', 'floraison', 2, 'Bouclier d\'écorce', 'bouclier_runique'
 /* ================================================================== */
 /* PALADIN (Plaque) — Croisé (DPS) · Templier (TANK) · Aube (HEAL).    */
 /* ================================================================== */
-node('cl_paladin', 'paladin', 'ability', 0, 1, 'Paladin', 'Champion sacré porté par le Pouvoir Sacré. Débloque Châtiment du croisé. +25 Force.', { requires: ['cat_plaque'], statMods: { force: 25 }, unlockPower: 'pa_chatiment' })
+node('cl_paladin', 'paladin', 'ability', 0, 1, 'Paladin', 'Champion sacré porté par le Pouvoir Sacré. Débloque Châtiment du croisé. +40 Force, +40 Endurance. Débloqué au 2e Éveil.', { requires: ['pa_start'], requiresPrestige: 2, statMods: { force: 40, endurance: 40 }, unlockPower: 'pa_chatiment' })
 /* ---- CROISÉ (DPS) — Pouvoir Sacré → Jugement + fenêtre de Croisade. ---- */
 ability('cs_hub', 'croise', 0, 'Croisé', 'cs_marteau', 'Débloque Marteau du juste (générateur de Pouvoir Sacré). +18 Force, +12 Critique.', { requires: ['cl_paladin'], statMods: { force: 18, critique: 12 } })
 ability('cs_jugement', 'croise', 1, 'Jugement', 'cs_jugement', 'FINITION : débloque Jugement (finisseur sacré × Pouvoir Sacré). +16 Force.', { requires: ['cs_hub'], statMods: { force: 16 } })
@@ -607,6 +624,7 @@ ks('au_resist', 'aube', 2, 'Grâce protectrice', 'SURVIE : -10% de dégâts subi
 /* ------------------------------------------------------------------ */
 export const CONSTELLATIONS: Record<ConstellationId, ConstellationMeta> = {
   coeur: { id: 'coeur', name: 'Cœur & catégories', role: 'Racine', color: '#e2e8f0', icon: '✶' },
+  pantheon: { id: 'pantheon', name: 'Panthéon', role: 'Racine de l\'Éveil', color: '#f0abfc', icon: '🌌', tree: 'pantheon' },
   voleur: { id: 'voleur', name: 'Voleur', role: 'Cuir · classe', color: '#a18152', icon: '🗡' },
   assassin: { id: 'assassin', name: 'Assassin', role: 'Voleur · afflictions', color: '#51cf66', icon: '☠', archetype: true },
   ombrelame: { id: 'ombrelame', name: 'Ombrelame', role: 'Voleur · combo & ombre', color: '#b197fc', icon: '🌑', archetype: true },
@@ -623,26 +641,26 @@ export const CONSTELLATIONS: Record<ConstellationId, ConstellationMeta> = {
   pretre: { id: 'pretre', name: 'Prêtre', role: 'Tissu · classe', color: '#f1f3f5', icon: '✚' },
   lumiere: { id: 'lumiere', name: 'Lumière', role: 'Prêtre · HEAL', color: '#ffd43b', icon: '🌟', archetype: true },
   vide: { id: 'vide', name: 'Vide', role: 'Prêtre · DoT ombre', color: '#9775fa', icon: '🌑', archetype: true },
-  dk: { id: 'dk', name: 'Chevalier de la mort', role: 'Plaque · classe', color: '#5c7cfa', icon: '☠' },
-  givremort: { id: 'givremort', name: 'Givre-mort', role: 'DK · givre & exécution', color: '#74c0fc', icon: '❄', archetype: true },
-  sang: { id: 'sang', name: 'Sang', role: 'DK · TANK vampire', color: '#e03131', icon: '🩸', archetype: true },
-  demoniste: { id: 'demoniste', name: 'Démoniste', role: 'Tissu · classe', color: '#9c36b5', icon: '💀' },
-  pestilence: { id: 'pestilence', name: 'Pestilence', role: 'Démoniste · multi-DoT', color: '#82c91e', icon: '☣', archetype: true },
-  legion: { id: 'legion', name: 'Légion', role: 'Démoniste · démons', color: '#7048e8', icon: '👹', archetype: true },
-  chaman: { id: 'chaman', name: 'Chaman', role: 'Mailles · classe', color: '#3bc9db', icon: '⚡' },
-  elementaire: { id: 'elementaire', name: 'Élémentaire', role: 'Chaman · foudre & Maelström', color: '#fcc419', icon: '🌩', archetype: true },
-  vague: { id: 'vague', name: 'Vague', role: 'Chaman · HEAL totems', color: '#22b8cf', icon: '💧', archetype: true },
+  dk: { id: 'dk', name: 'Chevalier de la mort', role: 'Panthéon · classe', color: '#5c7cfa', icon: '☠', tree: 'pantheon' },
+  givremort: { id: 'givremort', name: 'Givre-mort', role: 'DK · givre & exécution', color: '#74c0fc', icon: '❄', archetype: true, tree: 'pantheon' },
+  sang: { id: 'sang', name: 'Sang', role: 'DK · TANK vampire', color: '#e03131', icon: '🩸', archetype: true, tree: 'pantheon' },
+  demoniste: { id: 'demoniste', name: 'Démoniste', role: 'Panthéon · classe', color: '#9c36b5', icon: '💀', tree: 'pantheon' },
+  pestilence: { id: 'pestilence', name: 'Pestilence', role: 'Démoniste · multi-DoT', color: '#82c91e', icon: '☣', archetype: true, tree: 'pantheon' },
+  legion: { id: 'legion', name: 'Légion', role: 'Démoniste · démons', color: '#7048e8', icon: '👹', archetype: true, tree: 'pantheon' },
+  chaman: { id: 'chaman', name: 'Chaman', role: 'Panthéon · classe', color: '#3bc9db', icon: '⚡', tree: 'pantheon' },
+  elementaire: { id: 'elementaire', name: 'Élémentaire', role: 'Chaman · foudre & Maelström', color: '#fcc419', icon: '🌩', archetype: true, tree: 'pantheon' },
+  vague: { id: 'vague', name: 'Vague', role: 'Chaman · HEAL totems', color: '#22b8cf', icon: '💧', archetype: true, tree: 'pantheon' },
   druide: { id: 'druide', name: 'Druide', role: 'Cuir · classe', color: '#94d82d', icon: '🐾' },
   lunaire: { id: 'lunaire', name: 'Lunaire', role: 'Druide · astral', color: '#748ffc', icon: '🌙', archetype: true },
   ronce: { id: 'ronce', name: 'Ronce', role: 'Druide · TANK', color: '#2f9e44', icon: '🌳', archetype: true },
   floraison: { id: 'floraison', name: 'Floraison', role: 'Druide · HEAL HoT', color: '#69db7c', icon: '🌸', archetype: true },
-  paladin: { id: 'paladin', name: 'Paladin', role: 'Plaque · classe', color: '#ffd43b', icon: '⚜' },
-  croise: { id: 'croise', name: 'Croisé', role: 'Paladin · sacré DPS', color: '#ffe066', icon: '⚔', archetype: true },
-  templier: { id: 'templier', name: 'Templier', role: 'Paladin · TANK aura', color: '#f59f00', icon: '🛡', archetype: true },
-  aube: { id: 'aube', name: 'Aube', role: 'Paladin · HEAL (frappe)', color: '#ffec99', icon: '🌅', archetype: true },
+  paladin: { id: 'paladin', name: 'Paladin', role: 'Panthéon · classe', color: '#ffd43b', icon: '⚜', tree: 'pantheon' },
+  croise: { id: 'croise', name: 'Croisé', role: 'Paladin · sacré DPS', color: '#ffe066', icon: '⚔', archetype: true, tree: 'pantheon' },
+  templier: { id: 'templier', name: 'Templier', role: 'Paladin · TANK aura', color: '#f59f00', icon: '🛡', archetype: true, tree: 'pantheon' },
+  aube: { id: 'aube', name: 'Aube', role: 'Paladin · HEAL (frappe)', color: '#ffec99', icon: '🌅', archetype: true, tree: 'pantheon' },
 }
 export const CONSTELLATION_LIST: ConstellationId[] = [
-  'coeur', 'voleur', 'assassin', 'ombrelame',
+  'coeur', 'pantheon', 'voleur', 'assassin', 'ombrelame',
   'mage', 'pyromancien', 'cryomancien', 'arcaniste',
   'chasseur', 'meute', 'faucon',
   'guerrier', 'sentence', 'rempart',
@@ -725,8 +743,10 @@ export interface GateInfo {
   exclusiveBlocked?: string
   /** RANG PRÉREQUIS non atteint : nom du nœud + rang requis + rang actuel (pour l'UI). */
   rankReq?: { name: string; need: number; have: number }
+  /** v0.33 : nœud de classe du Panthéon verrouillé tant que `prestigeRank` < cette valeur. */
+  prestigeLocked?: number
 }
-export function gateInfo(node: TalentNode, talents: Record<string, number>): GateInfo {
+export function gateInfo(node: TalentNode, talents: Record<string, number>, prestigeRank?: number): GateInfo {
   const blk = exclusiveBlocker(node, talents)
   let rankReq: GateInfo['rankReq']
   if (node.requiresRank) {
@@ -735,11 +755,13 @@ export function gateInfo(node: TalentNode, talents: Record<string, number>): Gat
       rankReq = { name: BY_ID.get(node.requiresRank.id)?.name ?? node.requiresRank.id, need: node.requiresRank.rank, have }
     }
   }
+  const prestigeLocked = node.requiresPrestige && (prestigeRank ?? Infinity) < node.requiresPrestige ? node.requiresPrestige : undefined
   return {
     need: node.minSpent ?? 0,
     spent: node.minSpent ? spentInConstellation(talents, node.constellation) : 0,
     ...(blk ? { exclusiveBlocked: blk.name } : {}),
     ...(rankReq ? { rankReq } : {}),
+    ...(prestigeLocked ? { prestigeLocked } : {}),
   }
 }
 
@@ -750,5 +772,52 @@ export function canAllocate(node: TalentNode, talents: Record<string, number>, p
   if (exclusiveBlocker(node, talents)) return false
   if (node.minSpent && spentInConstellation(talents, node.constellation) < node.minSpent) return false
   if (node.requiresRank && (talents[node.requiresRank.id] ?? 0) < node.requiresRank.rank) return false
+  return true
+}
+
+/* ------------------------------------------------------------------ */
+/* PANTHÉON (v0.33) — 2e arbre : budget de Points d'Éveil + déblocage progressif des classes.  */
+/* ------------------------------------------------------------------ */
+
+/** Arbre d'appartenance d'un nœud (dérivé de sa constellation). 'base' par défaut. */
+export function nodeTree(node: TalentNode): TalentTreeId {
+  return CONSTELLATIONS[node.constellation].tree ?? 'base'
+}
+
+/** Points d'Éveil par rang de prestige — budget du Panthéon, IDENTIQUE pour chaque personnage. */
+export const EVEIL_POINTS_PER_RANK = 10
+export function eveilBudget(prestigeRank: number): number {
+  return Math.max(0, prestigeRank) * EVEIL_POINTS_PER_RANK
+}
+
+/** Déblocage PROGRESSIF : 1 classe par Éveil Primordial, dans cet ordre. */
+export const PANTHEON_CLASS_ORDER: { node: string; constellation: ConstellationId; prestige: number }[] = [
+  { node: 'cl_chaman', constellation: 'chaman', prestige: 1 },
+  { node: 'cl_paladin', constellation: 'paladin', prestige: 2 },
+  { node: 'cl_demoniste', constellation: 'demoniste', prestige: 3 },
+  { node: 'cl_dk', constellation: 'dk', prestige: 4 },
+]
+/** Nombre de classes du Panthéon débloquées à un rang de prestige donné. */
+export function pantheonClassesUnlocked(prestigeRank: number): number {
+  return PANTHEON_CLASS_ORDER.filter((c) => prestigeRank >= c.prestige).length
+}
+
+/** Points d'Éveil dépensés (toute allocation du Panthéon, hors racine gratuite `pa_start`). */
+export function spentInPantheon(pantheon: Record<string, number>): number {
+  let s = 0
+  for (const id in pantheon) { if (id !== 'pa_start') s += pantheon[id] }
+  return s
+}
+
+/** Peut-on allouer un nœud du Panthéon ? Même logique d'adjacence/exclusif/budget que la base,
+ *  mais le pool = Points d'Éveil restants + une gate de prestige sur les nœuds de classe. */
+export function canAllocatePantheon(node: TalentNode, pantheon: Record<string, number>, budget: number, prestigeRank: number): boolean {
+  if ((pantheon[node.id] ?? 0) >= node.maxRank) return false
+  if (budget - spentInPantheon(pantheon) <= 0) return false
+  if (node.requiresPrestige && prestigeRank < node.requiresPrestige) return false
+  if (!isReachable(node, pantheon)) return false
+  if (exclusiveBlocker(node, pantheon)) return false
+  if (node.minSpent && spentInConstellation(pantheon, node.constellation) < node.minSpent) return false
+  if (node.requiresRank && (pantheon[node.requiresRank.id] ?? 0) < node.requiresRank.rank) return false
   return true
 }

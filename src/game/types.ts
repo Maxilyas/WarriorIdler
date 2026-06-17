@@ -349,6 +349,10 @@ export interface Character {
   talentPoints: number
   /** Talents alloués : id de nœud → rang. */
   talents: Record<string, number>
+  /** v0.33 — PANTHÉON (2e arbre) : nœuds alloués des classes débloquées par l'Éveil. Pool de points
+   *  séparé (budget de Points d'Éveil = prestigeRank × K). Remis à zéro à chaque Éveil comme `talents`,
+   *  mais le budget et les déblocages persistent (dérivés de prestigeRank). Racine `pa_start` gratuite. */
+  pantheon?: Record<string, number>
   primaryBias: PrimaryStat
   /** 🏆 Titre affiché (v0.28) : id d'un haut fait débloqué (résolu en libellé via achievements.ts). */
   title?: string

@@ -47,7 +47,10 @@ export function makeCharacter(name: string, level: number, bias: PrimaryStat): C
 
   // Le nœud racine « Éveil » est alloué d'office (débloque Frappe + stats de départ).
   const talents: Record<string, number> = { co_start: 1 }
-  const unlocked = computeUnlockedPowers(talents)
+  // v0.33 : racine du Panthéon (2e arbre) seedée d'office — ancrage gratuit (0 stat), rend les
+  // classes avancées atteignables une fois débloquées par l'Éveil.
+  const pantheon: Record<string, number> = { pa_start: 1 }
+  const unlocked = computeUnlockedPowers({ ...talents, ...pantheon })
   // v0.30 : on répartit les capacités débloquées entre ACTIFS (5), GÉNÉRATEURS (3) et PASSIFS (3).
   const powers: (string | null)[] = Array(POWER_SLOTS).fill(null)
   const passives: (string | null)[] = Array(PASSIVE_SLOTS).fill(null)
@@ -75,6 +78,7 @@ export function makeCharacter(name: string, level: number, bias: PrimaryStat): C
     unlockedPowers: unlocked,
     talentPoints: talentPointsForLevel(level),
     talents,
+    pantheon,
     primaryBias: bias,
     hp: 0,
   }
@@ -85,6 +89,14 @@ export function makeCharacter(name: string, level: number, bias: PrimaryStat): C
 /** Capacités débloquées = celles des nœuds `ability` alloués dans l'arbre. */
 export function computeUnlockedPowers(talents: Record<string, number>): string[] {
   return [...new Set(talentUnlockedPowers(talents))]
+}
+
+/** v0.33 : allocations TOTALES d'un perso = arbre de base (`talents`) + Panthéon (`pantheon`).
+ *  Les deux maps n'ont aucune clé en commun (racines/voies distinctes) → simple fusion. Tous les
+ *  agrégateurs de talents (stats, résist, keystones, capacités) lisent cette vue unifiée. */
+export function charAllocations(char: Character): Record<string, number> {
+  const p = char.pantheon
+  return p && Object.keys(p).length > 0 ? { ...char.talents, ...p } : (char.talents ?? {})
 }
 
 /** Agrège les effets des capacités PASSIVES équipées. */
@@ -103,9 +115,9 @@ export function charPassives(char: Character): { threatMult: number; damageReduc
   return { threatMult, damageReduction, mods }
 }
 
-/** Keystones alloués dans l'arbre de ce perso. */
+/** Keystones alloués dans l'arbre de ce perso (base + Panthéon). */
 export function charKeystones(char: Character): KeystoneEffect[] {
-  return talentKeystones(char.talents ?? {})
+  return talentKeystones(charAllocations(char))
 }
 
 /** Applique les conversions de stat (« la Force compte comme Agi », « Endurance comme Force »…). */
@@ -127,7 +139,7 @@ function applyStatConversions(total: StatBlock, keystones: KeystoneEffect[]): St
 /** Stats totales : base + talents + mods de capacités passives + équipement, puis conversions. */
 export function charTotalStats(char: Character): StatBlock {
   const { mods } = charPassives(char)
-  const talentMods = talentStatMods(char.talents ?? {})
+  const talentMods = talentStatMods(charAllocations(char))
   const base: StatBlock = { ...char.base }
   for (const k in mods) base[k as StatKey] = (base[k as StatKey] ?? 0) + (mods[k as StatKey] ?? 0)
   for (const k in talentMods) base[k as StatKey] = (base[k as StatKey] ?? 0) + (talentMods[k as StatKey] ?? 0)
@@ -381,7 +393,7 @@ export function dpsBreakdown(char: Character): DpsBreakdown {
 
 /** Résistances du héros en POINTS (équipement + talents + sets) — non plafonnées (v0.24). */
 export function charResist(char: Character): Partial<Record<DamageType, number>> {
-  const r = computeResistProfile(char.equipment, talentResistMods(char.talents ?? {}))
+  const r = computeResistProfile(char.equipment, talentResistMods(charAllocations(char)))
   const sb = setBonuses(char.equipment)
   if (sb.resistAll > 0) {
     for (const t of DAMAGE_TYPE_LIST) r[t] = (r[t] ?? 0) + sb.resistAll * 100

@@ -2,8 +2,9 @@ import { useState, useRef, useLayoutEffect, useEffect, useMemo, useCallback } fr
 import { useGame } from '../game/store'
 import {
   CONSTELLATIONS, CONSTELLATION_LIST, TALENTS, talentsByConstellation, getTalent, canAllocate, isReachable,
-  gateInfo, exclusiveBlocker,
-  type ConstellationId, type TalentNode,
+  gateInfo, exclusiveBlocker, nodeTree, canAllocatePantheon, eveilBudget, spentInPantheon,
+  pantheonClassesUnlocked, PANTHEON_CLASS_ORDER,
+  type ConstellationId, type TalentNode, type TalentTreeId,
 } from '../game/talents'
 import { getPower, powerSummary, powerIcon, powerHasDamageType, powerDamageType } from '../game/powers'
 import { Sheet, ConfirmButton } from './ui'
@@ -39,9 +40,11 @@ interface RadialLayout {
   radius: number
 }
 
-/** Construit la disposition radiale globale (mémoïsée : ne dépend que des données statiques). */
-function computeRadialLayout(): RadialLayout {
-  const byId = new Map(TALENTS.map((t) => [t.id, t]))
+/** Construit la disposition radiale d'UN arbre (v0.33 : 'base' = 6 classes de départ, 'pantheon' =
+ *  4 classes de l'Éveil). Mémoïsée par arbre — ne dépend que des données statiques. */
+function computeRadialLayout(tree: TalentTreeId): RadialLayout {
+  const nodes = TALENTS.filter((t) => nodeTree(t) === tree)
+  const byId = new Map(nodes.map((t) => [t.id, t]))
   // 1) Adjacence non-orientée à partir des prérequis (carrefours exclus de l'arbre couvrant).
   const adj = new Map<string, Set<string>>()
   const addEdge = (a: string, b: string) => {
@@ -50,14 +53,14 @@ function computeRadialLayout(): RadialLayout {
     adj.get(a)!.add(b)
     adj.get(b)!.add(a)
   }
-  for (const t of TALENTS) {
+  for (const t of nodes) {
     if (isCarrefour(t.id)) continue // les carrefours sont posés à part (pont entre voies)
     // v0.29.3 : requires (parent de layout) + requiresAll (convergence) construisent l'arbre couvrant.
     for (const r of [...(t.requires ?? []), ...(t.requiresAll ?? [])]) if (byId.has(r) && !isCarrefour(r)) addEdge(r, t.id)
   }
 
-  // 2) Arbre couvrant par BFS depuis le Cœur → profondeur + parent/enfants.
-  const ROOT = 'co_start'
+  // 2) Arbre couvrant par BFS depuis la racine → profondeur + parent/enfants.
+  const ROOT = tree === 'pantheon' ? 'pa_start' : 'co_start'
   const depth = new Map<string, number>([[ROOT, 0]])
   const children = new Map<string, string[]>()
   const queue = [ROOT]
@@ -76,7 +79,7 @@ function computeRadialLayout(): RadialLayout {
     }
   }
   // Sécurité : rattache au Cœur tout nœud non atteint (hors carrefours).
-  for (const t of TALENTS) {
+  for (const t of nodes) {
     if (depth.has(t.id) || isCarrefour(t.id)) continue
     depth.set(t.id, 1)
     const arr = children.get(ROOT) ?? []
@@ -114,7 +117,7 @@ function computeRadialLayout(): RadialLayout {
   }
 
   // 4b) Carrefours : posés au milieu de leurs deux voies (lien court, sans croisement).
-  for (const t of TALENTS) {
+  for (const t of nodes) {
     if (!isCarrefour(t.id)) continue
     const reqs = (t.requires ?? []).filter((r) => pos.has(r))
     if (reqs.length >= 2) {
@@ -134,12 +137,12 @@ function computeRadialLayout(): RadialLayout {
   // 5) Liens : arêtes de l'arbre (propres) + ponts de carrefours.
   const links: Link[] = []
   for (const [p, ch] of children) for (const c of ch) links.push({ from: p, to: c })
-  for (const t of TALENTS) {
+  for (const t of nodes) {
     if (!isCarrefour(t.id)) continue
     for (const r of t.requires ?? []) if (pos.has(r)) links.push({ from: r, to: t.id, bridge: true })
   }
   // v0.29.3 : les `links` (anneau de navigation, routes croisées) sont tracés comme des ponts.
-  for (const t of TALENTS) {
+  for (const t of nodes) {
     for (const l of t.links ?? []) if (pos.has(l) && pos.has(t.id)) links.push({ from: l, to: t.id, bridge: true })
   }
   return { pos, links, radius }
@@ -179,13 +182,18 @@ export function TalentTree() {
   const characters = useGame((s) => s.characters)
   const activeChar = useGame((s) => s.activeChar)
   const setActiveChar = useGame((s) => s.setActiveChar)
+  const prestigeRank = useGame((s) => s.prestigeRank)
   const char = characters[activeChar] ?? characters[0]
   const weaponType = charDamageProfile(char).mainType
+  const [tree, setTree] = useState<TalentTreeId>('base')
   const [selected, setSelected] = useState<string | null>(null)
   const [focus, setFocus] = useState<ConstellationId | null>(null)
   const [voiesOpen, setVoiesOpen] = useState(false)
 
-  const layout = useMemo(() => computeRadialLayout(), [])
+  // v0.33 : deux arbres mémoïsés. On bascule entre eux ; tout le pan/zoom est réutilisé tel quel.
+  const baseLayout = useMemo(() => computeRadialLayout('base'), [])
+  const pantheonLayout = useMemo(() => computeRadialLayout('pantheon'), [])
+  const layout = tree === 'pantheon' ? pantheonLayout : baseLayout
 
   // --- Pan / zoom : positions écran calculées en JS (panX/panY = position de `co_start`). ---
   const viewportRef = useRef<HTMLDivElement>(null)
@@ -212,6 +220,12 @@ export function TalentTree() {
     const scale = Math.max(MIN_SCALE, Math.min(1, Math.min(size.w, size.h) / (layout.radius * 2.1)))
     setView({ scale, panX: size.w / 2, panY: size.h / 2 })
   }, [size.w, size.h, layout.radius])
+
+  // Bascule d'arbre : on recentre (reset userMoved → l'effet de recentrage se redéclenche) et on
+  // ferme le détail/la surbrillance pour repartir propre.
+  const switchTree = useCallback((t: TalentTreeId) => {
+    setTree(t); setSelected(null); setFocus(null); userMoved.current = false
+  }, [])
 
   // Recentre TANT QUE l'utilisateur n'a pas déplacé la vue (re-déclenché quand la taille réelle
   // arrive après le 1er rendu) → `co_start` reste bien au centre du viewport.
@@ -286,34 +300,66 @@ export function TalentTree() {
   }, [zoomBy])
 
   if (!char) return null
+  // v0.33 : arbre actif. Base → points de niveau / `char.talents`. Panthéon → budget de Points
+  // d'Éveil (= prestigeRank × K, identique par perso) / `char.pantheon`.
+  const isPantheon = tree === 'pantheon'
+  const alloc = isPantheon ? (char.pantheon ?? { pa_start: 1 }) : char.talents
+  const budget = eveilBudget(prestigeRank)
+  const points = isPantheon ? Math.max(0, budget - spentInPantheon(alloc)) : char.talentPoints
+  const classesUnlocked = pantheonClassesUnlocked(prestigeRank)
+  const pantheonLocked = isPantheon && classesUnlocked === 0
   const selectedNode = selected ? TALENTS.find((n) => n.id === selected) ?? null : null
   // v0.25 : si le nœud sélectionné est verrouillé par un PALIER, surligner sur l'arbre les nœuds
   // où les points comptent (même constellation, tiers ≤ tier-plafond) — fini le « où investir ? ».
   const gateTarget = useMemo(() => {
     if (!selectedNode) return null
-    const g = gateInfo(selectedNode, char.talents)
+    const g = gateInfo(selectedNode, alloc, prestigeRank)
     // Budget non atteint → surligne TOUTE la voie (investir n'importe où compte).
     return g.need > 0 && g.spent < g.need ? { c: selectedNode.constellation } : null
-  }, [selectedNode, char.talents])
+  }, [selectedNode, alloc, prestigeRank])
   const sx = (id: string) => view.panX + (layout.pos.get(id)?.x ?? 0) * view.scale
   const sy = (id: string) => view.panY + (layout.pos.get(id)?.y ?? 0) * view.scale
   const showLabels = view.scale >= 0.55
 
   return (
     <div className="flex h-full flex-col">
-      {/* En-tête : roster + points */}
+      {/* En-tête : sélecteur d'arbre (Départ / Panthéon) + points de l'arbre actif */}
       <div className="mb-2 flex items-center justify-between gap-2">
-        <div className="text-sm font-semibold text-slate-200">🌌 Arbre de talents</div>
-        <span
-          className={
-            'rounded-full px-2 py-0.5 text-xs font-semibold ' +
-            (char.talentPoints > 0
-              ? 'bg-amber-500/20 text-amber-300 ring-1 ring-amber-400/40'
-              : 'bg-slate-800 text-slate-500')
-          }
-        >
-          {char.talentPoints} point{char.talentPoints > 1 ? 's' : ''}
-        </span>
+        <div className="flex items-center gap-1 rounded-lg bg-slate-800/80 p-0.5">
+          <button
+            onClick={() => switchTree('base')}
+            className={'rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors ' +
+              (!isPantheon ? 'bg-orange-500/25 text-orange-200' : 'text-slate-400 hover:text-slate-200')}
+          >
+            🌳 Départ
+          </button>
+          <button
+            onClick={() => switchTree('pantheon')}
+            className={'flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors ' +
+              (isPantheon ? 'bg-fuchsia-500/25 text-fuchsia-200' : 'text-slate-400 hover:text-slate-200')}
+          >
+            {classesUnlocked === 0 ? '🔒' : '🌌'} Panthéon
+            {classesUnlocked > 0 && classesUnlocked < PANTHEON_CLASS_ORDER.length && (
+              <span className="rounded-full bg-fuchsia-500/20 px-1 text-[8.5px] text-fuchsia-200">{classesUnlocked}/{PANTHEON_CLASS_ORDER.length}</span>
+            )}
+          </button>
+        </div>
+        {isPantheon ? (
+          <span
+            className={'rounded-full px-2 py-0.5 text-xs font-semibold ' +
+              (points > 0 ? 'bg-fuchsia-500/20 text-fuchsia-200 ring-1 ring-fuchsia-400/40' : 'bg-slate-800 text-slate-500')}
+            title="Points d'Éveil — gagnés à chaque Éveil Primordial, identiques pour chaque perso"
+          >
+            ✨ {points}/{budget} Éveil
+          </span>
+        ) : (
+          <span
+            className={'rounded-full px-2 py-0.5 text-xs font-semibold ' +
+              (char.talentPoints > 0 ? 'bg-amber-500/20 text-amber-300 ring-1 ring-amber-400/40' : 'bg-slate-800 text-slate-500')}
+          >
+            {char.talentPoints} point{char.talentPoints > 1 ? 's' : ''}
+          </span>
+        )}
       </div>
 
       {characters.length > 1 && (
@@ -359,14 +405,14 @@ export function TalentTree() {
             Tape une voie pour la mettre en surbrillance dans l'arbre. Les points alloués sont indiqués.
           </p>
           <div className="grid grid-cols-2 gap-1.5">
-            {CONSTELLATION_LIST.filter((id) => !CONSTELLATIONS[id].archetype).map((id) => (
-              <VoieButton key={id} id={id} focus={focus} talents={char.talents} onPick={(v) => { setFocus(v); setVoiesOpen(false) }} />
+            {CONSTELLATION_LIST.filter((id) => !CONSTELLATIONS[id].archetype && (CONSTELLATIONS[id].tree ?? 'base') === tree).map((id) => (
+              <VoieButton key={id} id={id} focus={focus} talents={alloc} onPick={(v) => { setFocus(v); setVoiesOpen(false) }} />
             ))}
           </div>
           <div className="mb-1.5 mt-3 text-[10px] font-semibold uppercase tracking-wide text-amber-300">⚔ Classes — chacune a ses archétypes</div>
           <div className="grid grid-cols-2 gap-1.5">
-            {CONSTELLATION_LIST.filter((id) => CONSTELLATIONS[id].archetype).map((id) => (
-              <VoieButton key={id} id={id} focus={focus} talents={char.talents} onPick={(v) => { setFocus(v); setVoiesOpen(false) }} />
+            {CONSTELLATION_LIST.filter((id) => CONSTELLATIONS[id].archetype && (CONSTELLATIONS[id].tree ?? 'base') === tree).map((id) => (
+              <VoieButton key={id} id={id} focus={focus} talents={alloc} onPick={(v) => { setFocus(v); setVoiesOpen(false) }} />
             ))}
           </div>
         </Sheet>
@@ -387,8 +433,8 @@ export function TalentTree() {
           {layout.links.map((l, i) => {
             const toNode = TALENTS.find((n) => n.id === l.to)!
             const fromCid = getTalent(l.from)?.constellation
-            const filled = (char.talents[l.from] ?? 0) > 0 && (char.talents[l.to] ?? 0) > 0
-            const reach = filled || isReachable(toNode, char.talents)
+            const filled = (alloc[l.from] ?? 0) > 0 && (alloc[l.to] ?? 0) > 0
+            const reach = filled || isReachable(toNode, alloc)
             const dim = !!focus && toNode.constellation !== focus && fromCid !== focus
             const color = filled ? CONSTELLATIONS[toNode.constellation].color : reach ? '#475569' : '#283449'
             return (
@@ -405,18 +451,19 @@ export function TalentTree() {
           })}
         </svg>
 
-        {/* Nœuds */}
-        {TALENTS.map((node) => (
+        {/* Nœuds (de l'arbre actif uniquement) */}
+        {TALENTS.filter((node) => nodeTree(node) === tree).map((node) => (
           <CanvasNode
             key={node.id}
             node={node}
             x={sx(node.id)}
             y={sy(node.id)}
             scale={view.scale}
-            talents={char.talents}
+            talents={alloc}
             selected={selected === node.id}
             dimmed={!!focus && node.constellation !== focus}
             gateHighlight={!!gateTarget && node.constellation === gateTarget.c}
+            forceLock={!!node.requiresPrestige && prestigeRank < node.requiresPrestige}
             showLabel={showLabels}
             onSelect={() => { if (!drag.current?.moved) setSelected(node.id) }}
           />
@@ -425,18 +472,44 @@ export function TalentTree() {
         <div className="pointer-events-none absolute left-2 top-2 rounded bg-black/40 px-1.5 py-0.5 text-[9px] text-slate-400">
           Glisse pour explorer · pince ou molette pour zoomer
         </div>
+
+        {/* Panthéon entièrement verrouillé (aucun Éveil encore fait) : overlay givré + progression. */}
+        {pantheonLocked && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-slate-950/70 px-6 text-center backdrop-blur-sm">
+            <span className="text-4xl">🌌🔒</span>
+            <div className="text-sm font-bold text-fuchsia-200">Le Panthéon dort encore</div>
+            <p className="max-w-[280px] text-[11px] leading-snug text-slate-300">
+              Les classes avancées — Chaman, Paladin, Démoniste, Chevalier de la mort — s'éveillent une par une
+              à chaque <span className="font-semibold text-fuchsia-200">Éveil Primordial</span>. Réalise ton 1ᵉʳ Éveil
+              pour débloquer le <span className="font-semibold text-cyan-200">Chaman</span> et tes premiers Points d'Éveil ✨.
+            </p>
+            <div className="mt-1 flex flex-wrap items-center justify-center gap-1.5 text-[10px]">
+              {PANTHEON_CLASS_ORDER.map((c) => (
+                <span key={c.node} className="flex items-center gap-1 rounded-full bg-slate-800/80 px-2 py-0.5 text-slate-400">
+                  {CONSTELLATIONS[c.constellation].icon} {CONSTELLATIONS[c.constellation].name}
+                  <span className="text-fuchsia-300/70">· Éveil {c.prestige}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Panneau de détail */}
-      {selectedNode && <NodeDetail node={selectedNode} char={char} weaponType={weaponType} onClose={() => setSelected(null)} />}
+      {selectedNode && (
+        <NodeDetail
+          node={selectedNode} weaponType={weaponType}
+          tree={tree} alloc={alloc} points={points} prestigeRank={prestigeRank}
+          onClose={() => setSelected(null)}
+        />
+      )}
 
       {/* Barre d'outils SOUS l'arbre (v0.24) : le zoom ne recouvre plus jamais une node. */}
       <div className="mt-2 flex gap-1.5">
         <CtrlBtn onClick={() => zoomBy(1.25)} label="+" title="Zoomer" />
         <CtrlBtn onClick={() => zoomBy(0.8)} label="−" title="Dézoomer" />
         <CtrlBtn onClick={center} label="⌖" title="Recentrer" />
-        <PresetsButton />
-        <RespecBar char={char} />
+        {isPantheon ? <PantheonRespecBar char={char} /> : (<><PresetsButton /><RespecBar char={char} /></>)}
       </div>
     </div>
   )
@@ -478,7 +551,7 @@ function CtrlBtn({ onClick, label, title }: { onClick: () => void; label: string
 
 /** Nœud sur le canevas : pastille colorée + libellé (pour les nœuds marquants / sélectionné). */
 function CanvasNode({
-  node, x, y, scale, talents, selected, dimmed, gateHighlight, showLabel, onSelect,
+  node, x, y, scale, talents, selected, dimmed, gateHighlight, forceLock, showLabel, onSelect,
 }: {
   node: TalentNode
   x: number
@@ -489,13 +562,15 @@ function CanvasNode({
   dimmed: boolean
   /** v0.25 : nœud où investir pour ouvrir le palier du nœud sélectionné (surligné ambre + tier). */
   gateHighlight: boolean
+  /** v0.33 : classe du Panthéon pas encore débloquée par l'Éveil → cadenas franc (gate de prestige). */
+  forceLock: boolean
   showLabel: boolean
   onSelect: () => void
 }) {
   const rank = talents[node.id] ?? 0
   const allocated = rank > 0
-  const reachable = isReachable(node, talents)
-  const exclBlocked = !allocated && !!exclusiveBlocker(node, talents)
+  const reachable = !forceLock && isReachable(node, talents)
+  const exclBlocked = !allocated && !forceLock && !!exclusiveBlocker(node, talents)
   const meta = CONSTELLATIONS[node.constellation]
   // La pastille SUIT (en partie) le zoom : dézoomer ne crée plus un mur de pastilles qui se
   // chevauchent, zoomer grossit la cible tactile (v0.24).
@@ -610,33 +685,43 @@ function SpellCard({ power, weaponType }: { power: PowerDef; weaponType: DamageT
 }
 
 function NodeDetail({
-  node, char, weaponType, onClose,
+  node, weaponType, tree, alloc, points, prestigeRank, onClose,
 }: {
   node: TalentNode
-  char: { talents: Record<string, number>; talentPoints: number }
   weaponType: DamageType
+  tree: TalentTreeId
+  alloc: Record<string, number>
+  /** Points restants du pool de l'arbre actif (points de niveau OU Points d'Éveil). */
+  points: number
+  prestigeRank: number
   onClose: () => void
 }) {
   const allocateTalent = useGame((s) => s.allocateTalent)
-  const rank = char.talents[node.id] ?? 0
-  const reachable = isReachable(node, char.talents)
+  const allocatePantheon = useGame((s) => s.allocatePantheon)
+  const isPantheon = tree === 'pantheon'
+  const rank = alloc[node.id] ?? 0
   const maxed = rank >= node.maxRank
-  const can = canAllocate(node, char.talents, char.talentPoints)
   const meta = CONSTELLATIONS[node.constellation]
   const power = node.unlockPower ? getPower(node.unlockPower) : undefined
-  // v0.29.3 : verrou de BUDGET (pts dans la voie) + CHOIX EXCLUSIF (un frère déjà pris).
-  const gate = gateInfo(node, char.talents)
+  // v0.29.3 : verrou de BUDGET (pts dans la voie) + CHOIX EXCLUSIF + v0.33 : gate de prestige.
+  const gate = gateInfo(node, alloc, prestigeRank)
+  const prestigeLocked = !!gate.prestigeLocked
+  const reachable = !prestigeLocked && isReachable(node, alloc)
+  const can = isPantheon
+    ? canAllocatePantheon(node, alloc, eveilBudget(prestigeRank), prestigeRank)
+    : canAllocate(node, alloc, points)
   const gateLocked = gate.need > 0 && gate.spent < gate.need
   const exclLocked = !!gate.exclusiveBlocked
   const rankLocked = !!gate.rankReq
 
   let btnLabel: string
   if (maxed) btnLabel = `✓ Rang maximum (${rank}/${node.maxRank})`
+  else if (prestigeLocked) btnLabel = `🔒 Débloqué au ${gate.prestigeLocked}ᵉ Éveil Primordial`
   else if (exclLocked) btnLabel = `🔒 Choix verrouillé par « ${gate.exclusiveBlocked} »`
   else if (!reachable) btnLabel = '🔒 Aucun nœud voisin alloué'
   else if (rankLocked) btnLabel = `🔒 Monte « ${gate.rankReq!.name} » au rang ${gate.rankReq!.need} (${gate.rankReq!.have}/${gate.rankReq!.need})`
   else if (gateLocked) btnLabel = `🔒 Investis ${gate.need} pts dans la voie (${gate.spent}/${gate.need})`
-  else if (char.talentPoints <= 0) btnLabel = 'Aucun point disponible'
+  else if (points <= 0) btnLabel = isPantheon ? 'Aucun Point d\'Éveil disponible' : 'Aucun point disponible'
   else btnLabel = node.maxRank > 1 ? `Allouer 1 point  (${rank} → ${rank + 1}/${node.maxRank})` : 'Allouer 1 point'
 
   return (
@@ -690,10 +775,13 @@ function NodeDetail({
       )}
 
       {power && <SpellCard power={power} weaponType={weaponType} />}
-      {exclLocked && !maxed && (
+      {prestigeLocked && !maxed && (
+        <p className="mb-1 text-[10px] text-fuchsia-300">🔒 Classe scellée : réalise {gate.prestigeLocked} Éveil{gate.prestigeLocked! > 1 ? 's' : ''} Primordial{gate.prestigeLocked! > 1 ? 'aux' : ''} pour éveiller cette classe (Éveil actuel : {prestigeRank}).</p>
+      )}
+      {exclLocked && !maxed && !prestigeLocked && (
         <p className="mb-1 text-[10px] text-rose-300">🔒 Choix exclusif : « {gate.exclusiveBlocked} » est déjà pris — tu ne peux pas avoir les deux.</p>
       )}
-      {!reachable && !exclLocked && (
+      {!reachable && !exclLocked && !prestigeLocked && (
         <p className="mb-1 text-[10px] text-rose-300">🔒 Relie ce nœud : alloue d'abord un nœud voisin.</p>
       )}
       {rankLocked && reachable && !exclLocked && !maxed && (
@@ -708,7 +796,7 @@ function NodeDetail({
       )}
 
       <button
-        onClick={() => allocateTalent(node.id)}
+        onClick={() => (isPantheon ? allocatePantheon : allocateTalent)(node.id)}
         disabled={!can}
         className="mt-1 w-full rounded-lg py-2 text-xs font-bold transition-colors disabled:bg-slate-800 disabled:text-slate-500"
         style={can ? { background: meta.color, color: '#0b1120' } : undefined}
@@ -734,6 +822,22 @@ function RespecBar({ char }: { char: { level: number; talents: Record<string, nu
       className="flex-1 rounded-lg bg-slate-800 py-1.5 text-[11px] text-slate-300 hover:bg-slate-700 disabled:opacity-40"
     >
       Réinitialiser · 💰 {respecCost.toLocaleString('fr-FR')}
+    </ConfirmButton>
+  )
+}
+
+/** v0.33 — réinitialisation du Panthéon : GRATUITE (le joueur refait son build d'Éveil librement). */
+function PantheonRespecBar({ char }: { char: { pantheon?: Record<string, number> } }) {
+  const respecPantheon = useGame((s) => s.respecPantheon)
+  const refundable = spentInPantheon(char.pantheon ?? {})
+  if (refundable <= 0) return null
+  return (
+    <ConfirmButton
+      onConfirm={respecPantheon}
+      confirmLabel={`⚠ Vider le Panthéon ? (${refundable} pts)`}
+      className="flex-1 rounded-lg bg-slate-800 py-1.5 text-[11px] text-slate-300 hover:bg-slate-700"
+    >
+      🌌 Réinitialiser le Panthéon · gratuit
     </ConfirmButton>
   )
 }

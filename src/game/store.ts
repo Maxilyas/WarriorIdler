@@ -10,7 +10,7 @@ import {
   charResist, charCombatMods, abilityPower, powerScale, computeUnlockedPowers, setGlobalCombatMods, setGlobalPrestigeResist,
   setPactDerivedMods, talentPointsForLevel, charDeck, isGenerator, GENERATOR_SLOTS, type CombatMods as CharCombatMods,
 } from './character'
-import { getTalent, canAllocate } from './talents'
+import { getTalent, canAllocate, canAllocatePantheon, nodeTree, eveilBudget } from './talents'
 import { getPower } from './powers'
 import { getUpgrade, upgradeCost as accountUpgradeCost, upgradePoussiere, upgradeEclats, isMaxed, computeGlobalMods, REMOVED_UPGRADES } from './upgrades'
 import { achievementBonuses, evaluateNewAchievements, fullyEquippedMinIlvl, getAchievement, type AchvCtx } from './achievements'
@@ -612,6 +612,10 @@ interface GameState extends SaveData {
   castPower: (slot: number) => void
   allocateTalent: (nodeId: string) => void
   respecTalents: () => void
+  /** v0.33 — alloue un nœud du PANTHÉON (2e arbre) avec le budget de Points d'Éveil (perso actif). */
+  allocatePantheon: (nodeId: string) => void
+  /** v0.33 — réinitialise le Panthéon du perso actif (gratuit : rebuild libre à chaque run). */
+  respecPantheon: () => void
   /** Sauvegarde le build courant (talents + capacités + spé) dans un emplacement (0-2). */
   saveBuildPreset: (slot: number, name?: string) => void
   /** Applique un préset : respec payant + réallocation validée nœud par nœud. */
@@ -1858,24 +1862,35 @@ function sanitize(save: SaveData): SaveData {
       const it = c.equipment[slot as EquipSlotId]
       if (it) sanitizeItem(it)
     }
-    // Talents : on CONSERVE l'allocation du joueur. On purge seulement les nœuds
-    // inconnus (vieilles sauvegardes), on garantit la racine, et on recalcule les dérivés.
+    // Talents : on CONSERVE l'allocation du joueur. On purge les nœuds inconnus (vieilles saves),
+    // on garantit les racines, et on recalcule les dérivés. v0.33 : on ROUTE chaque nœud vers son
+    // arbre (base / Panthéon) d'après sa constellation — migre les saves v0.32 où les 4 classes
+    // avancées vivaient dans l'arbre unique (elles atterrissent dans `pantheon`, build préservé).
     const rawTalents = c.talents && typeof c.talents === 'object' ? c.talents : {}
+    const rawPantheon = c.pantheon && typeof c.pantheon === 'object' ? c.pantheon : {}
     const talents: Record<string, number> = { co_start: 1 }
+    const pantheon: Record<string, number> = { pa_start: 1 }
     let spent = 0
-    for (const id in rawTalents) {
-      if (id === 'co_start') continue
-      const node = getTalent(id)
-      const rank = rawTalents[id]
-      if (!node || rank <= 0) continue
-      const r = Math.min(rank, node.maxRank)
-      talents[id] = r
-      spent += r
+    for (const src of [rawTalents, rawPantheon]) {
+      for (const id in src) {
+        if (id === 'co_start' || id === 'pa_start') continue
+        const node = getTalent(id)
+        const rank = src[id]
+        if (!node || rank <= 0) continue
+        const r = Math.min(rank, node.maxRank)
+        if (nodeTree(node) === 'pantheon') {
+          pantheon[id] = r // Panthéon : pool de Points d'Éveil séparé (ne grève pas les points de niveau).
+        } else {
+          talents[id] = r
+          spent += r
+        }
+      }
     }
     c.talents = talents
+    c.pantheon = pantheon
     // Points restants = gagnés (au-delà du niveau de départ des talents) − dépensés (hors racine gratuite).
     c.talentPoints = Math.max(0, talentPointsForLevel(c.level) - spent)
-    c.unlockedPowers = computeUnlockedPowers(talents)
+    c.unlockedPowers = computeUnlockedPowers({ ...talents, ...pantheon })
     // v0.30 : RÉPARTITION actifs (5) / GÉNÉRATEURS (3) / passifs (3). Migration : on relit les anciens
     // `powers` (qui mélangeaient builders & actifs) + `generators` + `passives`, on valide, on range par
     // genre — les builders QUITTENT la barre des actifs et atterrissent dans leurs slots dédiés.
@@ -6342,7 +6357,7 @@ export const useGame = create<GameState>((set, get) => {
       const node = getTalent(nodeId)
       if (!node || !canAllocate(node, char.talents, char.talentPoints)) return
       const talents = { ...char.talents, [nodeId]: (char.talents[nodeId] ?? 0) + 1 }
-      const unlockedPowers = computeUnlockedPowers(talents)
+      const unlockedPowers = computeUnlockedPowers({ ...talents, ...(char.pantheon ?? {}) })
       const nc = { ...char, talents, talentPoints: char.talentPoints - 1, unlockedPowers }
       nc.hp = Math.min(nc.hp, charMaxHp(nc))
       const characters = s.characters.map((c, i) => (i === s.activeChar ? nc : c))
@@ -6362,7 +6377,8 @@ export const useGame = create<GameState>((set, get) => {
       const cost = 200 * char.level
       if (s.gold < cost) return
       const talents = { co_start: 1 }
-      const unlockedPowers = computeUnlockedPowers(talents)
+      // Le respec de base NE touche PAS au Panthéon (pool & arbre séparés) : on conserve `char.pantheon`.
+      const unlockedPowers = computeUnlockedPowers({ ...talents, ...(char.pantheon ?? {}) })
       const powers = char.powers.map((p) => (p && unlockedPowers.includes(p) ? p : null))
       const passives = (char.passives ?? []).map((p) => (p && unlockedPowers.includes(p) ? p : null))
       const generators = (char.generators ?? []).map((p) => (p && unlockedPowers.includes(p) ? p : null))
@@ -6370,6 +6386,43 @@ export const useGame = create<GameState>((set, get) => {
       nc.hp = Math.min(nc.hp, charMaxHp(nc))
       const characters = s.characters.map((c, i) => (i === s.activeChar ? nc : c))
       const next = { ...s, gold: s.gold - cost, characters, log: pushLog(s.log, `Talents réinitialisés (-${cost} or).`, 'craft') }
+      persist(next)
+      set(next)
+    },
+
+    // v0.33 — PANTHÉON : alloue un nœud du 2e arbre avec le budget de Points d'Éveil (= prestigeRank × K,
+    // identique pour chaque perso). Pool & arbre SÉPARÉS de la base : ne touche jamais `talentPoints`.
+    allocatePantheon: (nodeId) => {
+      const s = get()
+      const char = s.characters[s.activeChar]
+      if (!char) return
+      const node = getTalent(nodeId)
+      const pantheon = char.pantheon ?? { pa_start: 1 }
+      if (!node || !canAllocatePantheon(node, pantheon, eveilBudget(s.prestigeRank), s.prestigeRank)) return
+      const next2 = { ...pantheon, [nodeId]: (pantheon[nodeId] ?? 0) + 1 }
+      const unlockedPowers = computeUnlockedPowers({ ...char.talents, ...next2 })
+      const nc = { ...char, pantheon: next2, unlockedPowers }
+      nc.hp = Math.min(nc.hp, charMaxHp(nc))
+      const characters = s.characters.map((c, i) => (i === s.activeChar ? nc : c))
+      const next = { ...s, characters }
+      persist(next)
+      set(next)
+    },
+
+    // v0.33 — réinitialise le Panthéon (gratuit : le joueur refait son build d'Éveil à chaque run).
+    respecPantheon: () => {
+      const s = get()
+      const char = s.characters[s.activeChar]
+      if (!char) return
+      const pantheon = { pa_start: 1 }
+      const unlockedPowers = computeUnlockedPowers({ ...char.talents, ...pantheon })
+      const powers = char.powers.map((p) => (p && unlockedPowers.includes(p) ? p : null))
+      const passives = (char.passives ?? []).map((p) => (p && unlockedPowers.includes(p) ? p : null))
+      const generators = (char.generators ?? []).map((p) => (p && unlockedPowers.includes(p) ? p : null))
+      const nc = { ...char, pantheon, unlockedPowers, powers, passives, generators }
+      nc.hp = Math.min(nc.hp, charMaxHp(nc))
+      const characters = s.characters.map((c, i) => (i === s.activeChar ? nc : c))
+      const next = { ...s, characters, log: pushLog(s.log, '🌌 Panthéon réinitialisé.', 'craft') }
       persist(next)
       set(next)
     },
@@ -6422,7 +6475,7 @@ export const useGame = create<GameState>((set, get) => {
           }
         }
       }
-      const unlockedPowers = computeUnlockedPowers(talents)
+      const unlockedPowers = computeUnlockedPowers({ ...talents, ...(char.pantheon ?? {}) })
       const powers = preset.powers.map((p) => (p && unlockedPowers.includes(p) ? p : null))
       const passives = (preset.passives ?? [null, null, null]).map((p) => (p && unlockedPowers.includes(p) ? p : null))
       const generators = (preset.generators ?? [null, null, null]).map((p) => (p && unlockedPowers.includes(p) ? p : null))
