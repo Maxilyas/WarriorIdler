@@ -309,6 +309,9 @@ export interface PowerDef {
    * classes mettent 'Rage', 'Pouvoir sacré', 'Maelström'… → même mécanique, nom propre.
    */
   resource?: string
+  /** Ressource générée par lancement d'un GÉNÉRATEUR (`builder`), défaut 1 (v0.31). Levier d'identité :
+   *  un générateur INT lent peut donner +2 d'un coup, un AGI rapide +1. */
+  gen?: number
 }
 
 // ---- Personnage ----

@@ -114,6 +114,8 @@ export interface SpellSpec {
   tags?: string[]
   /** Nom de la RESSOURCE build/spend (générateur/finisseur) — défaut « Combo » si absent. */
   resource?: string
+  /** Ressource générée par lancement (générateur) — défaut 1. INT lent → +2 d'un coup, AGI rapide → +1. */
+  gen?: number
 }
 
 /** Spécification d'un nœud-keystone (effet + stats/résist éventuels). */

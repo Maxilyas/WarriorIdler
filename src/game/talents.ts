@@ -168,7 +168,7 @@ ks('om_surin', 'ombrelame', 2, 'Surin mortel', 'Tes finisseurs frappent +25% plu
 ks('om_refund', 'ombrelame', 3, 'Effusion', 'COMBO : un finisseur te REND 2 Points de Combo (spam de finisseurs).', { stat: { hate: 14 }, ks: { comboRefund: 2 } }, { requires: ['om_surin'] })
 
 // --- CONVERGENCE : exige Génération ET Finition ---
-ks('om_danse', 'ombrelame', 4, 'Danse de l\'ombre', 'IDENTITÉ (carrefour) : +2 Points de Combo max et +15% de dégâts. Exige Saignée preste ET Surin mortel.', { stat: { critique: 18 }, ks: { comboCap: 2, damageMult: 1.15 } }, { requiresAll: ['om_saig', 'om_surin'], links: ['om_saig', 'om_surin'], minSpent: 8 })
+ks('om_danse', 'ombrelame', 4, 'Danse de l\'ombre', 'IDENTITÉ (carrefour) : +2 Points de Combo max et +15% de dégâts. Exige Saignée preste ET Surin mortel.', { stat: { critique: 18 }, ks: { comboCap: 2, damageMult: 1.15 } }, { requiresAll: ['om_saig', 'om_surin'], minSpent: 8 })
 minor('om_buf_fin', 'ombrelame', 4, 'Maître-lame', 5, { degatsCrit: 8 }, { requires: ['om_surin'] }) // ⛓ TAMPON : max (5 pts) vers l'ultime
 ability('om_linceul', 'ombrelame', 5, 'Linceul', 'om_linceul', 'ULTIME — un finisseur dévastateur enveloppe la cible d\'ombre. Gaté : Maître-lame au max + 20 pts dans la voie.', { requires: ['om_danse'], requiresRank: { id: 'om_buf_fin', rank: 5 }, minSpent: 20 })
 
@@ -261,7 +261,7 @@ minor('ar_buf_dep', 'arcaniste', 3, 'Érudition', 5, { intelligence: 8 }, { requ
 ability('ar_orbe', 'arcaniste', 4, 'Orbe des arcanes', 'ar_orbe', 'CHOIX de SORT : un orbe instable balaie le pack (zone). Gaté : Érudition au max + 8 pts.', { requires: ['ar_buf_dep'], requiresRank: { id: 'ar_buf_dep', rank: 5 }, exclusive: 'ar_arme2', minSpent: 8 })
 ability('ar_rupture', 'arcaniste', 4, 'Rupture des arcanes', 'ar_rupture', 'CHOIX de SORT : exécution arcane (amplifiée par les PV manquants). Gaté : Érudition au max + 8 pts.', { requires: ['ar_buf_dep'], requiresRank: { id: 'ar_buf_dep', rank: 5 }, exclusive: 'ar_arme2', minSpent: 8 })
 // ── CARREFOUR optionnel : exige Génération ET Trop-plein.
-ks('ar_apogee', 'arcaniste', 4, 'Apogée arcanique', 'IDENTITÉ (carrefour) : +2 Charges max et +15% de dégâts. Exige Flux de mana ET Trop-plein.', { stat: { intelligence: 18 }, ks: { comboCap: 2, damageMult: 1.15 } }, { requiresAll: ['ar_flux', 'ar_surcharge'], links: ['ar_flux', 'ar_surcharge'], minSpent: 10 })
+ks('ar_apogee', 'arcaniste', 4, 'Apogée arcanique', 'IDENTITÉ (carrefour) : +2 Charges max et +15% de dégâts. Exige Flux de mana ET Trop-plein.', { stat: { intelligence: 18 }, ks: { comboCap: 2, damageMult: 1.15 } }, { requiresAll: ['ar_flux', 'ar_surcharge'], minSpent: 10 })
 // SURVIE : voile arcanique.
 minor('ar_voile', 'arcaniste', 1, 'Voile arcanique', 5, { barriere: 12 }, { requires: ['ar_hub'] }) // ⛓ TAMPON survie (maxRank 5)
 ability('ar_barriere', 'arcaniste', 2, 'Bouclier des arcanes', 'bouclier_runique', 'SURVIE : débloque Bouclier des arcanes (absorption).', { requires: ['ar_voile'] })
@@ -310,7 +310,7 @@ ks('fa_letalite', 'faucon', 2, 'Létalité', 'Tes finisseurs frappent +25% plus 
 ks('fa_mise_a_mort', 'faucon', 3, 'Mise à mort', 'Tes finisseurs exécutent les ennemis sous 20% de PV (×2,2).', { stat: { degatsBoss: 14 }, ks: { executeBonus: { threshold: 0.2, mult: 2.2 } } }, { requires: ['fa_letalite'] })
 minor('fa_buf_tir', 'faucon', 4, 'Maîtrise de l\'arc', 5, { precision: 8 }, { requires: ['fa_letalite'] }) // ⛓ TAMPON : max (5 pts) vers l'ultime
 // CONVERGENCE + ULTIME.
-ks('fa_oeil', 'faucon', 4, 'Œil du faucon', 'IDENTITÉ (carrefour) : +2 Concentration max et +15% de dégâts. Exige Respiration ET Létalité.', { stat: { precision: 18 }, ks: { comboCap: 2, damageMult: 1.15 } }, { requiresAll: ['fa_respire', 'fa_letalite'], links: ['fa_respire', 'fa_letalite'], minSpent: 8 })
+ks('fa_oeil', 'faucon', 4, 'Œil du faucon', 'IDENTITÉ (carrefour) : +2 Concentration max et +15% de dégâts. Exige Respiration ET Létalité.', { stat: { precision: 18 }, ks: { comboCap: 2, damageMult: 1.15 } }, { requiresAll: ['fa_respire', 'fa_letalite'], minSpent: 8 })
 ability('fa_aigle', 'faucon', 5, 'Tir de l\'aigle', 'fa_aigle', 'ULTIME — un tir parfait qui consume toute ta Concentration. Gaté : Maîtrise de l\'arc au max + 20 pts dans la voie.', { requires: ['fa_oeil'], requiresRank: { id: 'fa_buf_tir', rank: 5 }, minSpent: 20 })
 // 2e SORT : choix exclusif (AoE vs exécution).
 minor('fa_pisteur', 'faucon', 1, 'Pisteur', 3, { critique: 18 }, { requires: ['fa_hub'] })
@@ -343,7 +343,7 @@ ks('se_finamp', 'sentence', 2, 'Mise à mort', 'Tes sorts [finisseur] +15% (marc
 ks('se_mortel', 'sentence', 2, 'Coups mortels', 'Tes finisseurs frappent +25% plus fort.', { stat: { degatsCrit: 20 }, ks: { finisherMult: 0.25 } }, { requires: ['se_fin'] })
 ks('se_execute', 'sentence', 3, 'Exécution', 'Tes finisseurs exécutent les ennemis sous 20% de PV (×2,2).', { stat: { degatsBoss: 14 }, ks: { executeBonus: { threshold: 0.2, mult: 2.2 } } }, { requires: ['se_mortel'] })
 // CONVERGENCE + ULTIME.
-ks('se_rage', 'sentence', 4, 'Soif de sang', 'IDENTITÉ (carrefour) : +2 Rage max et +15% de dégâts. Exige Colère bouillonnante ET Coups mortels.', { stat: { force: 18 }, ks: { comboCap: 2, damageMult: 1.15 } }, { requiresAll: ['se_colere', 'se_mortel'], links: ['se_colere', 'se_mortel'], minSpent: 8 })
+ks('se_rage', 'sentence', 4, 'Soif de sang', 'IDENTITÉ (carrefour) : +2 Rage max et +15% de dégâts. Exige Colère bouillonnante ET Coups mortels.', { stat: { force: 18 }, ks: { comboCap: 2, damageMult: 1.15 } }, { requiresAll: ['se_colere', 'se_mortel'], minSpent: 8 })
 minor('se_buf_rage', 'sentence', 4, 'Maîtrise martiale', 5, { force: 8 }, { requires: ['se_rage'] }) // ⛓ TAMPON : max (5 pts) vers l'ultime
 ability('se_carnage', 'sentence', 5, 'Carnage', 'se_carnage', 'ULTIME — un finisseur dévastateur qui décime. Gaté : Maîtrise martiale au max + 20 pts dans la voie.', { requires: ['se_buf_rage'], requiresRank: { id: 'se_buf_rage', rank: 5 }, minSpent: 20 })
 // SAIGNEMENT : DoT + choix de 2e sort.

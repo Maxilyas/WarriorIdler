@@ -233,7 +233,7 @@ function comboGenPerSec(char: Character, derived: DerivedStats, comboGen: number
   for (const pid of char.generators ?? []) {
     if (!pid) continue
     const p = getPower(pid)
-    if (p?.kind === 'active' && p.effect === 'builder') g += (1 + comboGen) / Math.max(0.5, (p.cooldown ?? 3) * (1 - derived.cdr))
+    if (p?.kind === 'active' && p.effect === 'builder') g += ((p.gen ?? 1) + comboGen) / Math.max(0.5, (p.cooldown ?? 3) * (1 - derived.cdr))
   }
   return g
 }

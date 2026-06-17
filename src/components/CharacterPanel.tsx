@@ -35,6 +35,9 @@ function powerDetail(p: PowerDef, derived: DerivedStats, weaponType: DamageType)
 function scaleHint(scale: string): string {
   return `Scale sur la MEILLEURE de ${scale} et de ta stat DOMINANTE. Un sort « ${scale} » sur un build d'une autre stat scale quand même sur ta stat dominante (c'est pour ça qu'un finisseur « FOR » fait gros sur un build AGI).`
 }
+const HEAL_EFFECTS: ReadonlySet<string> = new Set(['heal', 'hot', 'buffParty', 'bigHeal'])
+const SHIELD_EFFECTS: ReadonlySet<string> = new Set(['shield', 'bigShield'])
+
 /** Infobulle « d'où vient le DPS » : la formule selon l'effet (puissance = ta stat dominante). */
 function dpsHint(p: PowerDef): string {
   const base = 'DPS moyen estimé, hors cible (armure/résist/pénétration s\'appliquent en plus en combat). Puissance = ta stat DOMINANTE.'
@@ -487,6 +490,8 @@ function PowersSection({ char }: { char: Character }) {
                     {det.scale && <span className="text-amber-300/80" title={scaleHint(det.scale)}>📈 {det.scale}</span>}
                     <span>CD {det.cd.toFixed(1)}s</span>
                     {dps > 0 && <span className="font-semibold text-emerald-300" title={dpsHint(p)}>≈ {Math.round(dps).toLocaleString('fr-FR')} DPS</span>}
+                    {dps === 0 && HEAL_EFFECTS.has(p.effect ?? '') && <span className="font-semibold text-emerald-300" title="PV soignés estimés par lancement (allié le plus blessé ; scale sur ta stat dominante)">≈ {det.value.toLocaleString('fr-FR')} PV</span>}
+                    {dps === 0 && SHIELD_EFFECTS.has(p.effect ?? '') && <span className="font-semibold text-sky-300" title="Bouclier d'absorption estimé (scale stat principale ou Endurance)">≈ {det.value.toLocaleString('fr-FR')} absorb</span>}
                   </div>
                 )}
                 <p className="mt-0.5 text-[10px] leading-snug text-slate-500">{p.description}</p>

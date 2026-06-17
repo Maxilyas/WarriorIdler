@@ -278,6 +278,7 @@ function specToPower(s: SpellSpec): PowerDef {
     ...(s.icon ? { icon: s.icon } : {}),
     ...(s.tags ? { tags: s.tags } : {}),
     ...(s.resource ? { resource: s.resource } : {}),
+    ...(s.gen ? { gen: s.gen } : {}),
   }
 }
 /* Sorts du VOLEUR (handcrafted). Catégorie Cuir → Assassin (venin) + Ombrelame (combo/ombre). */
@@ -291,7 +292,7 @@ const VOLEUR_SPELLS: SpellSpec[] = [
   { id: 'as_nuee', name: 'Nuée toxique', icon: '☁️', effect: 'poison', mag: 1.0, cd: 5, type: 'nature', scale: ['force', 'agilite'], tags: ['zone', 'dot'] },
   { id: 'as_peste_souveraine', name: 'Peste Souveraine', icon: '☠️', effect: 'detonate', mag: 1.1, cd: 18, type: 'nature', scale: ['force', 'agilite'], tags: ['zone', 'finisseur', 'ultime'] },
   // Ombrelame (combo / ombre)
-  { id: 'om_frappe_sournoise', name: 'Frappe sournoise', icon: '🗡', effect: 'builder', mag: 1.5, cd: 2.5, scale: 'agilite', tags: ['mono', 'direct', 'generateur'] },
+  { id: 'om_frappe_sournoise', name: 'Frappe sournoise', icon: '🗡', effect: 'builder', mag: 1.2, cd: 2.0, scale: 'agilite', tags: ['mono', 'direct', 'generateur'] }, // AGI : rapide, petit
   { id: 'om_eviscaration', name: 'Éviscération', icon: '🔪', effect: 'finisher', mag: 1.4, cd: 3.5, type: 'ombre', scale: 'agilite', tags: ['mono', 'direct', 'finisseur'] },
   { id: 'om_embuscade', name: 'Embuscade', icon: '💨', effect: 'nuke', mag: 7.5, cd: 12, type: 'ombre', scale: 'agilite', tags: ['mono', 'direct', 'furtif'] },
   { id: 'om_eventail', name: 'Éventail de couteaux', icon: '🔪', effect: 'finisher', mag: 1.0, cd: 4, type: 'physique', scale: 'agilite', tags: ['zone', 'direct', 'finisseur'] },
@@ -318,7 +319,7 @@ const MAGE_SPELLS: SpellSpec[] = [
   { id: 'cr_nova', name: 'Nova de givre', icon: '💠', effect: 'cleave', mag: 3.0, cd: 6, duration: 3, type: 'froid', scale: 'intelligence', tags: ['zone', 'direct', 'froid', 'controle'] },
   { id: 'cr_hiver', name: 'Hiver éternel', icon: '🌨️', effect: 'megaCleave', mag: 7, cd: 22, duration: 4, type: 'froid', scale: 'intelligence', tags: ['zone', 'direct', 'froid', 'controle', 'ultime'] },
   // Arcaniste (Charge des arcanes — build/spend + surcharge/CDR)
-  { id: 'ar_trait', name: 'Trait des arcanes', icon: '🔹', effect: 'builder', mag: 1.6, cd: 2.5, type: 'arcane', scale: 'intelligence', tags: ['mono', 'direct', 'arcane', 'generateur'], resource: 'Charge des arcanes' },
+  { id: 'ar_trait', name: 'Trait des arcanes', icon: '🔹', effect: 'builder', mag: 2.2, cd: 3.2, type: 'arcane', scale: 'intelligence', tags: ['mono', 'direct', 'arcane', 'generateur'], resource: 'Charge des arcanes', gen: 2 }, // INT : lent mais +2 Charges
   { id: 'ar_deflag', name: 'Déflagration des arcanes', icon: '🔷', effect: 'finisher', mag: 1.5, cd: 3.5, type: 'arcane', scale: 'intelligence', tags: ['mono', 'direct', 'arcane', 'finisseur'], resource: 'Charge des arcanes' },
   { id: 'ar_orbe', name: 'Orbe des arcanes', icon: '🟣', effect: 'cleave', mag: 3.4, cd: 3.2, type: 'arcane', scale: 'intelligence', tags: ['zone', 'direct', 'arcane'] },
   { id: 'ar_rupture', name: 'Rupture des arcanes', icon: '🌀', effect: 'executeNuke', mag: 4.0, cd: 5, type: 'arcane', scale: 'intelligence', tags: ['mono', 'direct', 'arcane'] },
@@ -337,7 +338,7 @@ const CHASSEUR_SPELLS: SpellSpec[] = [
   { id: 'me_saignee', name: 'Saignée bestiale', icon: '🩸', effect: 'dot', mag: 2.4, cd: 4, type: 'nature', scale: 'agilite', tags: ['mono', 'dot', 'nature'] },
   { id: 'me_curee', name: 'Curée sauvage', icon: '🐗', effect: 'megaCleave', mag: 7, cd: 20, type: 'nature', scale: 'agilite', tags: ['zone', 'direct', 'nature', 'ultime', 'invocation'] },
   // Œil de faucon (Concentration : générateur → finisseur + exécution)
-  { id: 'fa_visee', name: 'Tir assuré', icon: '🎯', effect: 'builder', mag: 1.6, cd: 2.5, scale: 'agilite', tags: ['mono', 'direct', 'generateur'], resource: 'Concentration' },
+  { id: 'fa_visee', name: 'Tir assuré', icon: '🎯', effect: 'builder', mag: 1.3, cd: 2.0, scale: 'agilite', tags: ['mono', 'direct', 'generateur'], resource: 'Concentration' }, // AGI : rapide, petit
   { id: 'fa_tir_vise', name: 'Tir visé', icon: '🏹', effect: 'finisher', mag: 1.6, cd: 3.5, scale: 'agilite', tags: ['mono', 'direct', 'finisseur'], resource: 'Concentration' },
   { id: 'fa_mortel', name: 'Tir mortel', icon: '💀', effect: 'executeNuke', mag: 4.0, cd: 5, scale: 'agilite', tags: ['mono', 'direct'] },
   { id: 'fa_salve', name: 'Salve de flèches', icon: '🎇', effect: 'cleave', mag: 3.2, cd: 3, scale: 'agilite', tags: ['zone', 'direct'] },
@@ -351,14 +352,14 @@ const GUERRIER_SPELLS: SpellSpec[] = [
   // Classe
   { id: 'gu_frappe', name: 'Frappe d\'arme', icon: '⚔️', effect: 'nuke', mag: 2.6, cd: 2.8, scale: 'force', tags: ['mono', 'direct'] },
   // Sentence (DPS — Rage → exécution + saignements)
-  { id: 'se_mutile', name: 'Coup mutilant', icon: '🪓', effect: 'builder', mag: 1.6, cd: 2.5, scale: 'force', tags: ['mono', 'direct', 'generateur'], resource: 'Rage' },
+  { id: 'se_mutile', name: 'Coup mutilant', icon: '🪓', effect: 'builder', mag: 2.6, cd: 3.5, scale: 'force', tags: ['mono', 'direct', 'generateur'], resource: 'Rage' }, // FOR : lent, gros coup
   { id: 'se_sentence', name: 'Sentence', icon: '⚖️', effect: 'finisher', mag: 1.6, cd: 3.5, scale: 'force', tags: ['mono', 'direct', 'finisseur'], resource: 'Rage' },
   { id: 'se_saignement', name: 'Saignement profond', icon: '🩸', effect: 'dot', mag: 2.4, cd: 4, scale: 'force', tags: ['mono', 'dot'] },
   { id: 'se_decapite', name: 'Décapitation', icon: '🗡️', effect: 'executeNuke', mag: 4.0, cd: 5, scale: 'force', tags: ['mono', 'direct'] },
   { id: 'se_tourmente', name: 'Tourmente', icon: '🌀', effect: 'cleave', mag: 3.0, cd: 3, scale: 'force', tags: ['zone', 'direct'] },
   { id: 'se_carnage', name: 'Carnage', icon: '💥', effect: 'finisher', mag: 3.0, cd: 16, scale: 'force', tags: ['mono', 'direct', 'finisseur', 'ultime'], resource: 'Rage' },
   // Rempart (TANK — Rage → bouclier + provocation + épines)
-  { id: 're_bouclier_coup', name: 'Coup de bouclier', icon: '🛡️', effect: 'builder', mag: 1.4, cd: 2.5, scale: 'force', tags: ['mono', 'direct', 'generateur', 'protection'], resource: 'Rage' },
+  { id: 're_bouclier_coup', name: 'Coup de bouclier', icon: '🛡️', effect: 'builder', mag: 2.2, cd: 3.2, scale: 'force', tags: ['mono', 'direct', 'generateur', 'protection'], resource: 'Rage' }, // FOR : lent, solide
   { id: 're_revanche', name: 'Revanche', icon: '🤺', effect: 'finisher', mag: 1.4, cd: 3.5, scale: 'force', tags: ['mono', 'direct', 'finisseur', 'protection'], resource: 'Rage' },
 ]
 for (const s of GUERRIER_SPELLS) POWERS.push(specToPower(s))

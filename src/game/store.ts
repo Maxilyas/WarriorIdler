@@ -2530,9 +2530,9 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
       return done
     }
     case 'builder': {
-      // OMBRELAME : +1 Point de Combo (+ petit coup).
+      // OMBRELAME : +`gen` Point(s) de Combo (défaut 1 ; un générateur INT lent peut en donner +2) (+ petit coup).
       const cap = 5 + cm.comboCap
-      caster.combo = Math.min(cap, (caster.combo ?? 0) + 1 + cm.comboGen)
+      caster.combo = Math.min(cap, (caster.combo ?? 0) + (p.gen ?? 1) + cm.comboGen)
       // ARCANISTE « Surcharge instable » : au PLEIN de Charges, déclenche la fenêtre (et CONSOMME les Charges).
       if (cm.overload && (caster.overload ?? 0) <= 0 && (caster.combo ?? 0) >= cap) {
         caster.overload = cm.overload.window
