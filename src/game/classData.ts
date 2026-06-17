@@ -168,6 +168,16 @@ export interface KeystoneEffect {
   finisherRefreshBleed?: boolean
   /** FURIE : un coup CRITIQUE déclenche/rafraîchit l'ENRAGE (+mult de dégâts, durée). On garde le plus fort. */
   enrageOnCrit?: { mult: number; duration: number }
+
+  /* ---- v0.34 : CHASSEUR « Symbiose » (Meute × Œil de faucon, calibré par sim) ---- */
+  /** SYMBIOSE : +frac de dégâts de FAMILIER (il hérite de tes stats) ET le familier respecte la marque/vuln. Somme. */
+  petBonus?: number
+  /** ŒIL ET CROC : +frac × Précision de dégâts de familier — cross-scaling BORNÉ (précision saturée). Somme. */
+  petFromPrecision?: number
+  /** LIEN INSTINCTIF : le familier génère `petCombo` Concentration/seconde (alimente tes finisseurs). Somme. */
+  petCombo?: number
+  /** BOND COORDONNÉ : un FINISSEUR fait bondir le familier (pic = `petBurstOnFinisher` s de DPS de familier). Somme. */
+  petBurstOnFinisher?: number
 }
 
 /** Vocabulaire des TAGS de comportement (12) — les 7 types de dégâts servent aussi de tags. */

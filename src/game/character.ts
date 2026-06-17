@@ -534,6 +534,11 @@ export interface CombatMods {
   damageToRage: number
   finisherRefreshBleed: boolean
   enrageOnCrit?: { mult: number; duration: number }
+  // --- v0.34 : CHASSEUR « Symbiose » ---
+  petBonus: number
+  petFromPrecision: number
+  petCombo: number
+  petBurstOnFinisher: number
 }
 
 export function charCombatMods(char: Character): CombatMods {
@@ -554,6 +559,8 @@ export function charCombatMods(char: Character): CombatMods {
     hotStreakCharges: 0, overloadFreezes: false, frozenIgnites: 0, elementalStates: 0, shatterFromAlteration: 0,
     // v0.34 : Guerrier (Juggernaut + Furie)
     shieldToFinisher: 0, damageToRage: 0, finisherRefreshBleed: false,
+    // v0.34 : Chasseur (Symbiose)
+    petBonus: 0, petFromPrecision: 0, petCombo: 0, petBurstOnFinisher: 0,
   }
   // Multiplicateur de dégâts des bonus de SET (s'applique aux auto-attaques ET aux sorts,
   // et donc au DPS affiché via charDps — même chemin que les keystones).
@@ -659,6 +666,11 @@ export function charCombatMods(char: Character): CombatMods {
     if (k.enrageOnCrit) out.enrageOnCrit = out.enrageOnCrit
       ? { mult: Math.max(out.enrageOnCrit.mult, k.enrageOnCrit.mult), duration: Math.max(out.enrageOnCrit.duration, k.enrageOnCrit.duration) }
       : { ...k.enrageOnCrit }
+    // --- v0.34 : CHASSEUR « Symbiose » ---
+    if (k.petBonus) out.petBonus += k.petBonus
+    if (k.petFromPrecision) out.petFromPrecision += k.petFromPrecision
+    if (k.petCombo) out.petCombo += k.petCombo
+    if (k.petBurstOnFinisher) out.petBurstOnFinisher += k.petBurstOnFinisher
     if (k.hotStreak) out.hotStreak = out.hotStreak ? { cap: Math.min(out.hotStreak.cap, k.hotStreak.cap), mult: Math.max(out.hotStreak.mult, k.hotStreak.mult) } : { ...k.hotStreak }
     if (k.overload) out.overload = out.overload ? { window: Math.max(out.overload.window, k.overload.window), mult: Math.max(out.overload.mult, k.overload.mult) } : { ...k.overload }
     if (k.multiTypeBonus) {

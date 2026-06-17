@@ -348,6 +348,9 @@ const CHASSEUR_SPELLS: SpellSpec[] = [
   { id: 'fa_mortel', name: 'Tir mortel', icon: '💀', effect: 'executeNuke', mag: 4.0, cd: 5, scale: 'agilite', tags: ['mono', 'direct'] },
   { id: 'fa_salve', name: 'Salve de flèches', icon: '🎇', effect: 'cleave', mag: 3.2, cd: 3, scale: 'agilite', tags: ['zone', 'direct'] },
   { id: 'fa_aigle', name: 'Tir de l\'aigle', icon: '🦅', effect: 'finisher', mag: 3.0, cd: 16, scale: 'agilite', tags: ['mono', 'direct', 'finisseur', 'ultime'], resource: 'Concentration' },
+  // Symbiose (chasseur × bête) — marque la proie + assaut coordonné de la meute.
+  { id: 'sy_marque', name: 'Marque du chasseur', icon: '🎯', effect: 'mark', mag: 1.3, cd: 8, duration: 10, scale: 'agilite', tags: ['mono'] },
+  { id: 'sy_assaut', name: 'Assaut de la meute', icon: '🐾', effect: 'megaCleave', mag: 7, cd: 20, type: 'nature', scale: 'agilite', tags: ['zone', 'direct', 'nature', 'ultime', 'invocation'] },
 ]
 for (const s of CHASSEUR_SPELLS) POWERS.push(specToPower(s))
 

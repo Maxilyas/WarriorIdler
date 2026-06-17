@@ -26,7 +26,7 @@ import type { KeystoneEffect } from './classData'
 export type ConstellationId =
   | 'coeur' | 'pantheon' | 'voleur' | 'assassin' | 'ombrelame' | 'lamevenin'
   | 'mage' | 'pyromancien' | 'cryomancien' | 'arcaniste' | 'convergence'
-  | 'chasseur' | 'meute' | 'faucon'
+  | 'chasseur' | 'meute' | 'faucon' | 'symbiose'
   | 'guerrier' | 'sentence' | 'rempart' | 'juggernaut' | 'furie'
   | 'pretre' | 'lumiere' | 'vide' | 'crepuscule'
   | 'dk' | 'givremort' | 'sang'
@@ -414,6 +414,26 @@ ability('fa_posture', 'faucon', 2, 'Posture défensive', 'posture_defensive', 'S
 ks('fa_retraite', 'faucon', 2, 'Retraite feinte', 'SURVIE : +30 Esquive, +12% de dégâts (tu frappes en reculant). Exige Camouflage au rang max (5).', { stat: { esquive: 30 }, ks: { damageMult: 1.12 } }, { requires: ['fa_camo'], requiresRank: { id: 'fa_camo', rank: 5 } })
 
 /* ================================================================== */
+/* SYMBIOSE (v0.34) — SECTION SYNERGIE Meneur de meute × Œil de faucon : le chasseur & sa bête.
+ * Le familier hérite de tes stats, tes tirs le font bondir, ses attaques nourrissent ta Concentration,
+ * ta marque guide la mise à mort. Calibré par scripts/sim-chasseur-hybride.mjs (×1,41 plat ; hybride
+ * ×1,25 vs build pur). Sorts : Marque du chasseur (mark), Assaut de la meute (ultime). */
+/* ================================================================== */
+ks('sy_pivot', 'symbiose', 0, 'Symbiose', 'PIVOT : ton familier HÉRITE de ta Précision/Critique (+25 % de ses dégâts) ET suit ta MARQUE (frappe plus fort la proie marquée). Exige Familier ET Respiration.',
+  { stat: { agilite: 16 }, ks: { petBonus: 0.25 } }, { requiresAll: ['me_familier', 'fa_respire'] })
+ks('sy_lien', 'symbiose', 1, 'Lien instinctif', 'Les attaques de ton familier génèrent de la Concentration → plus de Tirs visés.', { stat: { critique: 14 }, ks: { petCombo: 1 } }, { requires: ['sy_pivot'] })
+ks('sy_bond', 'symbiose', 1, 'Bond coordonné', 'Un Tir visé (finisseur) commande au familier de BONDIR (pic de dégâts de familier).', { stat: { agilite: 14 }, ks: { petBurstOnFinisher: 0.6 } }, { requires: ['sy_pivot'] })
+ability('sy_marque', 'symbiose', 2, 'Marque du chasseur', 'sy_marque', 'Débloque la Marque : ta proie subit +30 % de TES dégâts ET de ceux du familier. +12 Précision.', { requires: ['sy_pivot'], statMods: { precision: 12 } })
+ks('sy_affutee', 'symbiose', 2, 'Meute affûtée', '+25 % de dégâts de familier de plus (il frappe comme toi).', { stat: { agilite: 14 }, ks: { petBonus: 0.25 } }, { requires: ['sy_lien'] })
+ks('sy_predateur', 'symbiose', 3, 'Prédateur', 'CHOIX : +0,3 DPS de familier (la bête au cœur du build).', { stat: { agilite: 16 }, ks: { petDps: 0.3 } }, { requires: ['sy_affutee'], exclusive: 'sy_voie' })
+ks('sy_tireur', 'symbiose', 3, 'Tireur d\'élite', 'CHOIX : +0,2 finisseur & +24 Précision (le tir au cœur).', { stat: { precision: 24 }, ks: { finisherMult: 0.2 } }, { requires: ['sy_affutee'], exclusive: 'sy_voie' })
+minor('sy_instinct', 'symbiose', 2, 'Instinct de chasse', 5, { agilite: 6, precision: 6 }, { requires: ['sy_pivot'] }) // ⛓ tampon Agi/Précision
+ks('sy_oeilcroc', 'symbiose', 3, 'Œil et croc', 'CROSS-SCALING : ton familier inflige +50 % × ta Précision (BORNÉ) — la Précision sert au tir ET à la bête. Exige Instinct de chasse au max (5) + 10 pts.', { stat: { precision: 16 }, ks: { petFromPrecision: 0.5 } }, { requires: ['sy_instinct'], requiresRank: { id: 'sy_instinct', rank: 5 }, minSpent: 10 })
+ks('sy_miseamort', 'symbiose', 4, 'Mise à mort partagée', 'EXÉCUTION : tes finisseurs exécutent sous 25 % de PV (×2,4) ; +10 % de dégâts de familier. Profond : 8 pts.', { stat: { degatsBoss: 16 }, ks: { executeBonus: { threshold: 0.25, mult: 2.4 }, petBonus: 0.1 } }, { requires: ['sy_bond'], minSpent: 8 })
+ks('sy_seigneur', 'symbiose', 5, 'Seigneur des bêtes', 'CAPSTONE : +12 % de dégâts permanent ET +25 % de dégâts de familier (la bête déchaînée). Tout au fond : 14 pts.', { stat: { agilite: 20 }, ks: { damageMult: 1.12, petBonus: 0.25 } }, { requires: ['sy_oeilcroc'], minSpent: 14 })
+ability('sy_assaut', 'symbiose', 6, 'Assaut de la meute', 'sy_assaut', 'ULTIME — toi et toute la meute déferlez sur le pack en un assaut coordonné. Gaté : Seigneur des bêtes + 14 pts.', { requires: ['sy_seigneur'], minSpent: 14 })
+
+/* ================================================================== */
 /* GUERRIER (Plaque) — Sentence (DPS) · Rempart (TANK, ressource Rage). */
 /* ================================================================== */
 node('cl_guerrier', 'guerrier', 'ability', 0, 1, 'Guerrier', 'Maître d\'armes nourri par la Rage du combat. Débloque Frappe d\'arme et ouvre ses deux archétypes. +25 Force.',
@@ -790,6 +810,7 @@ export const CONSTELLATIONS: Record<ConstellationId, ConstellationMeta> = {
   chasseur: { id: 'chasseur', name: 'Chasseur', role: 'Mailles · classe', color: '#94d82d', icon: '🏹' },
   meute: { id: 'meute', name: 'Meneur de meute', role: 'Chasseur · familier', color: '#82c91e', icon: '🐺', archetype: true },
   faucon: { id: 'faucon', name: 'Œil de faucon', role: 'Chasseur · concentration', color: '#fab005', icon: '🦅', archetype: true },
+  symbiose: { id: 'symbiose', name: 'Symbiose', role: 'Chasseur · chasseur & bête (synergie)', color: '#38d9a9', icon: '🐾', archetype: true },
   guerrier: { id: 'guerrier', name: 'Guerrier', role: 'Plaque · classe', color: '#e8590c', icon: '⚔' },
   sentence: { id: 'sentence', name: 'Sentence', role: 'Guerrier · Rage & exécution', color: '#fa5252', icon: '⚖', archetype: true },
   rempart: { id: 'rempart', name: 'Rempart', role: 'Guerrier · TANK', color: '#f08c00', icon: '🛡', archetype: true },
@@ -820,7 +841,7 @@ export const CONSTELLATIONS: Record<ConstellationId, ConstellationMeta> = {
 export const CONSTELLATION_LIST: ConstellationId[] = [
   'coeur', 'pantheon', 'voleur', 'assassin', 'ombrelame', 'lamevenin',
   'mage', 'pyromancien', 'cryomancien', 'arcaniste', 'convergence',
-  'chasseur', 'meute', 'faucon',
+  'chasseur', 'meute', 'faucon', 'symbiose',
   'guerrier', 'sentence', 'rempart', 'juggernaut', 'furie',
   'pretre', 'lumiere', 'vide', 'crepuscule',
   'dk', 'givremort', 'sang',

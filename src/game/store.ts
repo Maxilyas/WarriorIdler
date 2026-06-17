@@ -2700,6 +2700,11 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
       const done = hit(magDmg * pts * 0.55 * finMult * vm)
       // v0.34 « Sang et acier » (Juggernaut) : un finisseur rafraîchit tes saignements (DoT physique).
       if (cm.finisherRefreshBleed && enemy.dot) enemy.dot.remaining = Math.max(enemy.dot.remaining, 5)
+      // v0.34 « Bond coordonné » (Symbiose) : un finisseur fait BONDIR le familier (pic ≈ N s de son DPS).
+      if (cm.petBurstOnFinisher > 0 && cm.petDps > 0) {
+        const petMult = 1 + cm.petBonus + cm.petFromPrecision * derived.precision
+        hit(theoreticalDps(derived, profile, cm.damageMult) * cm.petDps * petMult * cm.petBurstOnFinisher * vm)
+      }
       // Lame Vénéneuse : le finisseur applique du venin (⌈PC × frac⌉). Entaille septique : rafraîchit.
       if (cm.finisherToPoison > 0) applyVenom(Math.ceil(pts * cm.finisherToPoison))
       else if (cm.finisherRefreshPoison && enemy.dot && venoms > 0) enemy.dot.remaining = 8
@@ -3077,8 +3082,12 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
     }
     // 🐾 INVOCATION : le familier inflige en continu une fraction de ton DPS d'auto-attaque.
     if (d.cmods.petDps > 0 && enemy.hp > 0) {
-      const pet = theoreticalDps(d.derived, d.profile, d.cmods.damageMult) * d.cmods.petDps * dt
+      // v0.34 SYMBIOSE : le familier hérite de tes stats (petBonus + Précision, BORNÉ) et suit ta marque (vuln).
+      const petMult = (1 + d.cmods.petBonus + d.cmods.petFromPrecision * d.derived.precision) * (d.cmods.petBonus > 0 ? enemyVuln(enemy) : 1)
+      const pet = theoreticalDps(d.derived, d.profile, d.cmods.damageMult) * d.cmods.petDps * petMult * dt
       enemy.hp = Math.max(0, enemy.hp - pet); dealtThis += pet
+      // LIEN INSTINCTIF : le familier génère de la Concentration (combo) au fil du temps → alimente tes finisseurs.
+      if (d.cmods.petCombo > 0) c.combo = Math.min(5 + d.cmods.comboCap, (c.combo ?? 0) + d.cmods.petCombo * dt)
     }
     if (c.charge) c.charge.dealt += dealtThis
     if (healed && !mods?.pact?.noHeal) gemLeechHeal(c, healed, mods?.cond) // 💧 l'excès est conservé
@@ -3528,7 +3537,12 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
     // 🐾 INVOCATION : le familier frappe la cible focus, en continu.
     if (d.cmods.petDps > 0) {
       const f = focus()
-      if (f && f.hp > 0) { const pet = theoreticalDps(d.derived, d.profile, d.cmods.damageMult) * d.cmods.petDps * dt; f.hp = Math.max(0, f.hp - pet); dealtThis += pet }
+      if (f && f.hp > 0) {
+        const petMult = (1 + d.cmods.petBonus + d.cmods.petFromPrecision * d.derived.precision) * (d.cmods.petBonus > 0 ? enemyVuln(f) : 1)
+        const pet = theoreticalDps(d.derived, d.profile, d.cmods.damageMult) * d.cmods.petDps * petMult * dt
+        f.hp = Math.max(0, f.hp - pet); dealtThis += pet
+        if (d.cmods.petCombo > 0) c.combo = Math.min(5 + d.cmods.comboCap, (c.combo ?? 0) + d.cmods.petCombo * dt)
+      }
     }
     if (c.charge) c.charge.dealt += dealtThis
     if (healed && !mods?.pact?.noHeal) gemLeechHeal(c, healed, mods?.cond) // 💧 l'excès est conservé
