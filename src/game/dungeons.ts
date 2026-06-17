@@ -3,6 +3,7 @@ import { DAMAGE_TYPES } from './damage'
 import type { GemFamily } from './condGems'
 import { dungeonReq } from './resist'
 import { enemyHp, enemyDmg, enemyArmor, lootFarmIlvl } from './progression'
+import { onboardingMult } from './enemies'
 
 /**
  * DONJONS « par RESSOURCE » (refonte v0.17).
@@ -412,8 +413,12 @@ export function makeDungeonEnemy(
   // v0.30 — base UNIFIÉE b^ilvl à l'ilvl de difficulté du donjon (+ rampe douce par combat) ;
   // l'identité (cfg.hp/dmg/armor) et la classe (boss/élite) restent des multiplicateurs.
   const diffIlvl = dungeonContentIlvl(level, bestStage) + fightIndex * DUNGEON_FIGHT_RAMP_ILVL
+  // v0.35 — MÊME atténuation d'onboarding que le farm (onboardingMult(bestStage)) : le donjon est calé
+  // sur le gear RÉEL du joueur à son Palier (très en dessous du « calé » des sims tôt, plateau de farm
+  // ensuite). Sans ça les donjons étaient infranchissables au Palier 1 → la passerelle = intro, pas un mur.
+  const soft = onboardingMult(bestStage)
   const classHp = isBoss ? DUNGEON_BOSS_HP_MULT : isElite ? DUNGEON_ELITE_HP_MULT : 1
-  const maxHp = Math.round(enemyHp(diffIlvl, 'trash') * classHp * cfg.hp * hpMods)
+  const maxHp = Math.round(enemyHp(diffIlvl, 'trash') * classHp * cfg.hp * hpMods * soft)
   const effStage = level * EFF_STAGE_PER_LEVEL + fightIndex // récompenses (xp) — économie inchangée
 
   const baseName = `${pick(ENEMY_NAMES)} ${DAMAGE_TYPES[def.element].name.toLowerCase()}`
@@ -425,7 +430,7 @@ export function makeDungeonEnemy(
     hp: maxHp,
     armor: Math.round(enemyArmor(diffIlvl, cfg.armor * armorMods)),
     // Dégâts : MÊME base b que les PV ; identité (cfg.dmg) + boss ×1,8 en multiplicateurs.
-    damage: Math.round(enemyDmg(diffIlvl, 'trash') * cfg.dmg * (isBoss ? 1.8 : 1)),
+    damage: Math.round(enemyDmg(diffIlvl, 'trash') * cfg.dmg * (isBoss ? 1.8 : 1) * soft),
     xp: Math.round(8 * Math.pow(1.12, effStage - 1) * (isBoss ? 5 : 1) * xpMult),
     resist: {},
     damageType: def.element,
