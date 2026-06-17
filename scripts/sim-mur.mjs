@@ -28,17 +28,18 @@ const M = await load(`
 const { makeCharacter, charDerived, charDamageProfile, charDps, charMaxHp, charEhp, charCombatMods, setGlobalCombatMods, generateItem, EQUIP_SLOTS, P } = M
 setGlobalCombatMods({ power: 1, attackSpeed: 1, vitality: 1 })
 
-// ---- KNOBS (à éprouver) ----
+// ---- KNOBS ----
+// Les knobs de MUR (TTK cible, margeMur, nova) viennent de progression.ts (source de vérité — le
+// harnais teste le VRAI code, pas une copie). Restent locaux ici : τ et le nb de dimensions testées.
 const PALIERS = [1, 5, 10, 15, 20, 25, 30, 35, 40]
-const TARGET_BOSS_TTK = P.TTK.boss            // ~35 s : clear visé du Build CIBLE
+const TARGET_BOSS_TTK = P.MUR_TARGET_TTK      // ~35 s : clear visé du Build CIBLE
 const SURVIVE = P.SURVIVE_SECONDS             // ~8 s : secondes de boss encaissables minimum
 
 /** Taux d'optimisation ATTENDU au Palier (§5.2) — par paliers (pas une rampe). */
 function tau(p) { return p <= 10 ? 0.40 : p <= 25 ? 0.65 : 0.90 }
 /** Nombre de checks ACTIFS (§5.2) : DPS tôt → +survie → +sustain. */
 function nbChecks(p) { return p <= 10 ? 1 : p <= 25 ? 2 : 3 }
-/** Marge de clear du CIBLE — large tôt, serrée tard (§6). */
-function margeMur(p) { return Math.max(1.05, Math.min(1.30, 1.30 - (p - 10) * (0.25 / 30))) }
+const margeMur = (p) => P.margeMur(p)
 
 // Enveloppes des systèmes SITUATIONNELS (gemmes/runes/pacte/alch), au PLEIN (τ=1), d'après §5.1.
 // (Les secondaires + talents NE sont PAS ici : ils sont dans le DPS/EHP réel du Build CIBLE.)
@@ -117,10 +118,8 @@ function ehpOf(maker, stage, ilvl) {
 const fmt = (n) => n >= 1e9 ? (n / 1e9).toFixed(2) + 'Md' : n >= 1e6 ? (n / 1e6).toFixed(2) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : Math.round(n).toString()
 const ok = (b) => b ? '✅' : '❌'
 const pad = (s, n) => String(s).padStart(n)
-const NOVA_FULL = 3.6 // pic de nova PLEIN (raids.ts, endgame) — la sévérité du burst RAMPE avec le Palier :
-// nulle avant P20 (survie = « ne pas mourir aux autos », défenses encore minces) → pleine à P40.
-// Sinon la survie est infranchissable à P15-20 puis triviale (soft-caps défensifs s'allumant ~P25).
-const novaReq = (p) => Math.max(0, NOVA_FULL * (p - 20) / 20)
+const NOVA_FULL = P.NOVA_FULL // pic de nova PLEIN (endgame). La sévérité RAMPE avec le Palier
+const novaReq = (p) => P.novaReqAt(p) // nulle avant P20 → pleine à P40 (source : progression.ts)
 
 console.log('================= HARNAIS MURS v0.35 (code réel + enveloppe τ) =================')
 console.log(`LAG0=${P.LAG0} K_LAG=${P.K_LAG} · pente ${P.PENTE_VAGUE} ilvl/vague · TTK cible boss ${TARGET_BOSS_TTK}s · survie ${SURVIVE}s + nova rampe→×${NOVA_FULL}`)

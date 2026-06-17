@@ -153,6 +153,28 @@ export const TTK = { trash: 3, elite: 8, boss: 35, raidboss: 40 } as const
 /** Secondes d'auto-attaque de boss encaissables à stuff calé (avant burst/nova). */
 export const SURVIVE_SECONDS = 8
 
+// ---- MURS (boss de fin de Palier) : knobs de difficulté (refonte v0.35 — DESIGN_v0.35 §6) ----
+// Le mur est calé pour que le Build CIBLE (optimisation ATTENDUE au Palier) clear JUSTE, et qu'un
+// build sous-optimisé tape l'enrage et échoue. Source de vérité PARTAGÉE avec `scripts/sim-mur.mjs`.
+
+/** TTK boss visé au Build CIBLE. */
+export const MUR_TARGET_TTK = TTK.boss
+/** Marge de clear du CIBLE : large tôt (1,30 à P10) → serrée tard (1,05 à P40). Knob de tension. */
+export function margeMur(palier: number): number {
+  return Math.max(1.05, Math.min(1.30, 1.30 - (palier - 10) * (0.25 / 30)))
+}
+/** Délai d'enrage DUR (s) : l'ossature de tous les murs (check de DPS présent partout). */
+export function murEnrage(palier: number): number {
+  return MUR_TARGET_TTK * margeMur(palier)
+}
+/** Pic de nova PLEIN exigé par un mur de survie endgame. */
+export const NOVA_FULL = 3.6
+/** Sévérité du burst exigée par un mur de SURVIE au Palier : nulle avant P20 → pleine à P40 (la
+ *  survie n'est un vrai mur qu'une fois les défenses mûres — finding du harnais sim-mur.mjs). */
+export function novaReqAt(palier: number): number {
+  return Math.max(0, NOVA_FULL * (palier - 20) / 20)
+}
+
 // ---- Mapping contenu → ilvl (axe unique, hybride — DESIGN_v0.30 §4) ----
 // Bornes = calibration de départ (faciles à nudger). Le gear-up (farm+donjons) plafonne ; les raids
 // portent la frontière jusqu'à 700.

@@ -165,19 +165,35 @@ enrage(p)  = murHp(p) / dpsCible(p)        // dpsCible = DPS du Build CIBLE
 ```
 La frontière du mur intègre le `LAG` parce que le **loot** du joueur, lui, sort à `frontière − LAG`.
 
-### 6.2 Les 3 checks (réutilisent les mécaniques de raid `raids.ts`)
-Un mur impose **1 à 3 checks** selon la tranche (§5.2) :
+### 6.2 Une mécanique DOMINANTE par mur (révisé après le harnais — `sim-mur.mjs`)
 
-| Check | Mécanique | Ce qu'il EXIGE (dimension) |
+Le harnais a montré que **seul le DPS/enrage discrimine finement** : l'écart d'EHP entre un build
+optimisé et un sous-optimisé est structurellement trop petit (les PV suivent l'ilvl quel que soit le
+build, les soft-caps défensifs compressent). Forcer 3 checks co-égaux à chaque mur est donc
+impossible sans rééquilibrage lourd du combat.
+
+**Décision (joueur) : murs VARIÉS, une mécanique DOMINANTE par mur, façon boss de raid, CYCLÉE** sur
+le parcours. Les 3 dimensions comptent **sur le parcours**, pas à chaque mur. Le DPS/enrage reste
+l'**ossature** présente partout (le gate qui filtre l'optimisation) ; la dominante ajoute le défi de
+la dimension du mur.
+
+| Dominante | Mécanique (`raids.ts`) | Ce que le mur EXIGE en plus du DPS |
 |---|---|---|
-| **DPS** | `berserk` (enrage dur) | dégâts : secondaires off. + gemmes rythme/acharné + runes usure + pacte off. + alch + talents |
-| **Survie** | `nova` / `execute` | survie : END + réducDmg/esquive/barrière + gemmes bastion + runes latence/sursis + alch antidote/garde + talents tank |
-| **Soin** | `leech` / DoT / `swarm` | sustain : régen/volDeVie + gemmes flux + talents heal + pacte sangVicié |
-| (résist) | élément qui **tourne** par mur | → te dit quel **biome** préparer (§9) |
+| **Course au DPS** | `berserk` (enrage serré) | dégâts purs : tout le stack offensif |
+| **Mur de survie** | `nova` / `execute` | EHP/mitigation : END + réducDmg/esquive/barrière + gemmes bastion + runes + alch antidote |
+| **Mur de sustain** | `leech` / DoT (`swarm`) | soin : régen/volDeVie + gemmes flux + talents heal + pacte sangVicié |
+| **Forteresse** | `fortress` | pénétration : sinon le DPS s'effondre |
+| **Prisme** | `rotate` | résistance large → te dit quel **biome** préparer (§9) |
 
-Tôt : 1 check (DPS). Tard : les 3 empilés → **il faut optimiser dégâts ET survie ET soin**
-ensemble. La **fiche de mur** (déjà existante pour les raids : `raidReqs`) est affichée avant
-l'engagement pour préparer son stuff.
+- **Enrage DUR partout** (l'ossature) : `enrage(p) = TARGET_BOSS_TTK × margeMur(p)` ; le Build CIBLE
+  clear, le sous-optimisé tape l'enrage et échoue. `margeMur` se resserre tard (§5.3).
+- La **dominante** est calée pour MORDRE sur sa dimension à ce Palier (ex. nova qui RAMPE — nulle
+  avant ~P20, pleine à P40 ; cf. finding du harnais : la survie n'est viable comme mur qu'une fois
+  les défenses mûres).
+- L'**élément tourne** par mur → fiche de mur (`raidReqs`-like) affichée avant l'engagement → indique
+  la dominante + l'élément → le joueur prépare son stuff (et le **biome**, §9).
+- **Pic de difficulté relatif en milieu de jeu (P20-25)** : avant que les soft-caps « s'allument ».
+  Knob `margeMur` à reshaper pour garder le late tendu.
 
 ---
 
