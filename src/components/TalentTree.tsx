@@ -136,10 +136,19 @@ function computeRadialLayout(tree: TalentTreeId): RadialLayout {
 
   // 5) Liens : arêtes de l'arbre (propres) + ponts de carrefours.
   const links: Link[] = []
-  for (const [p, ch] of children) for (const c of ch) links.push({ from: p, to: c })
+  const parentOf = new Map<string, string>()
+  for (const [p, ch] of children) for (const c of ch) { links.push({ from: p, to: c }); parentOf.set(c, p) }
   for (const t of nodes) {
     if (!isCarrefour(t.id)) continue
     for (const r of t.requires ?? []) if (pos.has(r)) links.push({ from: r, to: t.id, bridge: true })
+  }
+  // v0.35.2 : CONVERGENCE — un nœud `requiresAll` a DEUX parents, mais l'arbre couvrant n'en relie
+  //   qu'un seul. On trace le(s) lien(s) manquant(s) en pont, sinon la 2e exigence est invisible.
+  for (const t of nodes) {
+    if (isCarrefour(t.id)) continue
+    for (const r of t.requiresAll ?? []) {
+      if (pos.has(r) && pos.has(t.id) && parentOf.get(t.id) !== r) links.push({ from: r, to: t.id, bridge: true })
+    }
   }
   // v0.29.3 : les `links` (anneau de navigation, routes croisées) sont tracés comme des ponts.
   for (const t of nodes) {
@@ -713,12 +722,19 @@ function NodeDetail({
   const gateLocked = gate.need > 0 && gate.spent < gate.need
   const exclLocked = !!gate.exclusiveBlocked
   const rankLocked = !!gate.rankReq
+  // v0.35.2 : CONVERGENCE (requiresAll) — un pivot hybride exige DEUX nœuds précis (souvent dans des
+  //   voies opposées). On les NOMME (✓/✗) au lieu du générique « nœud voisin », sinon il paraît injouable.
+  const convergence = node.requiresAll && node.requiresAll.length
+    ? node.requiresAll.map((r) => ({ name: getTalent(r)?.name ?? r, have: (alloc[r] ?? 0) > 0 }))
+    : null
 
   let btnLabel: string
   if (maxed) btnLabel = `✓ Rang maximum (${rank}/${node.maxRank})`
   else if (prestigeLocked) btnLabel = `🔒 Débloqué au ${gate.prestigeLocked}ᵉ Éveil Primordial`
   else if (exclLocked) btnLabel = `🔒 Choix verrouillé par « ${gate.exclusiveBlocked} »`
-  else if (!reachable) btnLabel = '🔒 Aucun nœud voisin alloué'
+  else if (!reachable) btnLabel = convergence
+    ? `🔒 Convergence : ${convergence.filter((c) => !c.have).map((c) => c.name).join(' + ')} requis`
+    : '🔒 Aucun nœud voisin alloué'
   else if (rankLocked) btnLabel = `🔒 Monte « ${gate.rankReq!.name} » au rang ${gate.rankReq!.need} (${gate.rankReq!.have}/${gate.rankReq!.need})`
   else if (gateLocked) btnLabel = `🔒 Investis ${gate.need} pts dans la voie (${gate.spent}/${gate.need})`
   else if (points <= 0) btnLabel = isPantheon ? 'Aucun Point d\'Éveil disponible' : 'Aucun point disponible'
@@ -782,7 +798,18 @@ function NodeDetail({
         <p className="mb-1 text-[10px] text-rose-300">🔒 Choix exclusif : « {gate.exclusiveBlocked} » est déjà pris — tu ne peux pas avoir les deux.</p>
       )}
       {!reachable && !exclLocked && !prestigeLocked && (
-        <p className="mb-1 text-[10px] text-rose-300">🔒 Relie ce nœud : alloue d'abord un nœud voisin.</p>
+        convergence ? (
+          <p className="mb-1 text-[10px] text-rose-300">
+            🔀 Convergence — exige les DEUX :{' '}
+            {convergence.map((c, i) => (
+              <span key={i} className={c.have ? 'text-emerald-300' : 'text-rose-300'}>
+                {i > 0 ? ' + ' : ''}{c.have ? '✓' : '✗'} {c.name}
+              </span>
+            ))}
+          </p>
+        ) : (
+          <p className="mb-1 text-[10px] text-rose-300">🔒 Relie ce nœud : alloue d'abord un nœud voisin.</p>
+        )
       )}
       {rankLocked && reachable && !exclLocked && !maxed && (
         <p className="mb-1 text-[10px] text-amber-300">
