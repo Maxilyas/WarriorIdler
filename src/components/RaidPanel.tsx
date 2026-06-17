@@ -86,6 +86,16 @@ export function RaidPanel() {
         <div className="mt-0.5 text-[9px] leading-snug text-slate-600">« prêt » = DPS ET PV au-dessus du conseillé. La résistance se vérifie par boss (fiche ci-dessous).</div>
       </div>
 
+      {/* v0.35.1 — les raids sont du contenu de GROUPE : on pousse explicitement le recrutement (le bouton
+          vivait, caché, dans le Marché). Visible tant que l'équipe n'est pas pleine. */}
+      {anyUnlocked && characters.length < 3 && (
+        <div className="mb-2 rounded-lg border border-indigo-700/50 bg-indigo-950/20 px-2.5 py-1.5 text-[10.5px] leading-snug text-indigo-200">
+          🧑‍🤝‍🧑 <b>Les raids sont du contenu de groupe.</b> En solo, les boss te <b className="text-rose-300">submergent</b> :
+          recrute un {characters.length === 1 ? '2ᵉ' : '3ᵉ'} héros au <b className="text-amber-300">Marché 🛒</b> pour le <b>heal / bouclier / la synergie</b>.
+          Avec une vraie équipe, la difficulté brute devient gérable.
+        </div>
+      )}
+
       {(raid || dungeon) && (
         <div className="mb-2 rounded-lg border border-rose-700/50 bg-rose-950/20 p-2 text-[11px] text-rose-200">
           {raid ? 'Raid en cours — va dans l\'onglet Combat.' : 'Termine ton donjon avant de lancer un raid.'}

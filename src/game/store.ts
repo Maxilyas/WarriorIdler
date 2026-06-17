@@ -122,11 +122,13 @@ const FARM_REZ_DELAY = 20
 const RETREAT_STAGES = 2
 /** Intervalle (s) entre deux étourdissements d'un boss (après le 1er, cadencé par ccCd). */
 const CC_INTERVAL = 8
-// Personnages 2 & 3 = VERY END-GAME (déblocage gratuit très tardif, recrutement très cher).
+// v0.35.1 — Personnages 2 & 3 = la « dynamique reine » REQUISE pour les RAIDS (contenu de groupe :
+// heal/bouclier/synergie). Recrutable au Marché à un coût MODESTE et abordable dès que les raids
+// comptent (palier 50) ; déblocage gratuit très tardif conservé comme filet de sécurité.
 const CHAR2_STAGE = 350
 const CHAR3_STAGE = 800
-export const RECRUIT_COST = [10_000_000, 100_000_000] // or pour recruter le 2ᵉ / 3ᵉ perso
-export const RECRUIT_POUSSIERE = [25, 120] // + Poussière d'étoile (matériau rare)
+export const RECRUIT_COST = [1_000_000, 8_000_000] // or — 2ᵉ abordable dès le palier 50, 3ᵉ = vrai objectif
+export const RECRUIT_POUSSIERE = [0, 30] // 2ᵉ : que de l'or (la poussière sert au craft) ; 3ᵉ : un peu
 const RECRUE_NAMES = ['Lyra', 'Kael', 'Sora', 'Dorn', 'Mira']
 
 export type LogKind = 'hit' | 'crit' | 'loot' | 'kill' | 'info' | 'level' | 'death' | 'gold' | 'craft'

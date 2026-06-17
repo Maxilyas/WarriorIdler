@@ -71,10 +71,10 @@ export const ENEMY_HP_CLASS: Record<EnemyClass, number> = {
 }
 /** Multiplicateur de dégâts par classe (les boss frappent plus fort, mais bornés par la base b). */
 export const ENEMY_DMG_CLASS: Record<EnemyClass, number> = {
-  // v0.35.1 — raidboss 2.0→1.4 (retour joueur : « oblitéré au raid niv1, les télégraphes font trop
-  // mal »). Baisse autos ET télégraphes (qui multiplient la base) → survivable, sans toucher aux PV
-  // (le check DPS/enrage reste). Le raid garde son défi via les MÉCANIQUES + l'exigence de résistance.
-  trash: 1, elite: 1.4, champion: 1.25, boss: 1.8, raidboss: 1.4,
+  // v0.35.1 — raidboss = 2.0 (le nerf à 1.4 était une ERREUR, annulé) : les RAIDS sont du contenu de
+  // GROUPE. La survie vient d'un 2e/3e héros qui HEAL/BOUCLIER (la « dynamique reine » multi-classe),
+  // pas d'un nerf des dégâts. Dur en solo = VOULU.
+  trash: 1, elite: 1.4, champion: 1.25, boss: 1.8, raidboss: 2.0,
 }
 
 /** Échelle de PV de base (ennemi trash, ilvl 0). Calibrée par `npm run ttk` (médian implicite) pour
