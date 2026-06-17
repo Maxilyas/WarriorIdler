@@ -501,4 +501,7 @@ export interface Enemy {
   enraged?: boolean
   /** Âge du combat (s) contre cet ennemi — transitoire, pour le Sablier de l'Acharné. */
   age?: number
+  /** MUR (v0.35) : boss de fin de Palier. `mechanic` = dominante (berserk/nova/fortress/leech/rotate),
+   *  `enrageAt` = délai (s) avant l'enrage dur. Métadonnée pour la fiche + l'enrage (appliqué au tick). */
+  mur?: { mechanic: string; palier: number; enrageAt: number }
 }

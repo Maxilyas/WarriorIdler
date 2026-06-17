@@ -2,7 +2,7 @@ import type { Enemy, DamageType, EnemyAbility } from './types'
 import { DAMAGE_TYPE_LIST } from './damage'
 import type { BiomeId } from './biomes'
 import { farmReq } from './resist'
-import { enemyHp, enemyDmg, enemyArmor, farmDifficultyIlvl, ilvlFarm } from './progression'
+import { enemyHp, enemyDmg, enemyArmor, farmDifficultyIlvl, ilvlFarm, murEnrage } from './progression'
 
 /**
  * Technique SIGNATURE par biome (l'« autre chose » qui s'ajoute aux frappes physiques de base).
@@ -120,6 +120,23 @@ export function onboardingMult(stage: number): number {
   return Math.max(0.004, FARM_PLATEAU * Math.pow(stage / ONBOARD_STAGES, 2.6))
 }
 
+// ---- MURS (v0.35) : boss de fin de Palier (vague 10) — DESIGN_v0.35 §6 ----
+// Le mur est un VRAI boss-classe (~35 s) avec une mécanique DOMINANTE cyclée (l'enrage DPS est
+// l'ossature présente partout ; la dominante ajoute le défi de sa dimension). NB v0.35 (tranche 1) :
+// la dominante est posée en MÉTADONNÉE (fiche + enrage) ; son application en combat (nova/fortress/
+// leech/rotate) arrive avec le câblage du tick (tranche suivante).
+const MUR_DOMINANTS = ['berserk', 'nova', 'fortress', 'leech', 'rotate'] as const
+/** Mécanique dominante du mur d'un Palier (cycle de 5 ; Palier 1 = course au DPS pure). */
+export function murMechanic(palier: number): string {
+  return MUR_DOMINANTS[(Math.max(1, palier) - 1) % MUR_DOMINANTS.length]
+}
+/** Atténuation d'un MUR : rampe douce les tout premiers (jamais infranchissable d'emblée) puis PLEINE
+ *  puissance (un mur ne doit pas être bridé par le plateau de farm — il est calé sur la frontière). */
+export function murSoftness(stage: number): number {
+  if (stage >= ONBOARD_STAGES) return 1
+  return Math.max(0.02, onboardingMult(stage) / FARM_PLATEAU)
+}
+
 /** Crée l'ennemi correspondant à un palier (stage) dans un biome donné. Boss tous les 10 paliers.
  *  `championMult` (v0.26, 🍖 rune d'Appât) : multiplie la chance d'apparition des champions ✦. */
 export function makeEnemy(stage: number, biome: BiomeId = 'physique', championMult = 1): Enemy {
@@ -130,18 +147,19 @@ export function makeEnemy(stage: number, biome: BiomeId = 'physique', championMu
   // Trait déterministe sur certains paliers (cycle), hors boss/élite/champion.
   const trait = !isBoss && !isElite && !isChampion && stage % 3 === 0 ? TRAITS[Math.floor(stage / 3) % TRAITS.length] : undefined
 
-  // v0.30 — courbe UNIFIÉE : PV/dégâts = base commune b^ilvl (progression.ts) à partir du trash, ×
-  // multiplicateur de CLASSE propre au FARM. Les boss de farm (jalon tous les 10 paliers) restent
-  // LÉGERS (×5, comme à l'origine) — pas des murs de 35 s façon raid. Difficulté = STAGE (non capée).
-  const farmHpMult = isBoss ? 5 : isElite ? 2.7 : isChampion ? 4 : 1
+  // v0.35 — MUR : le boss de vague 10 devient un VRAI boss-classe (×11,7, ~35 s à stuff CIBLE), à
+  // PLEINE puissance (pas le plateau de farm). Les autres rangs gardent la classe 'trash' × multi de
+  // farm. Difficulté = STAGE (frontière, non capée).
+  const farmHpMult = isElite ? 2.7 : isChampion ? 4 : 1
   const farmDmgMult = isBoss ? 1.8 : isElite ? 1.4 : isChampion ? 1.25 : 1
   const diffIlvl = farmDifficultyIlvl(stage)
   const traitHp = trait?.hpMult ?? 1
   const traitDmg = trait?.dmgMult ?? 1
   const armorMult = trait?.armorMult ?? 1
-  // v0.30.1 — rampe d'onboarding : PV & dégâts des premiers paliers atténués (démarrage de zéro).
-  const onboard = onboardingMult(stage)
-  const maxHp = Math.round(enemyHp(diffIlvl, 'trash') * farmHpMult * traitHp * onboard)
+  // Atténuation : rampe d'onboarding pour le farm normal ; pour un MUR, rampe douce les tout premiers
+  // paliers puis pleine puissance (murSoftness).
+  const soft = isBoss ? murSoftness(stage) : onboardingMult(stage)
+  const maxHp = Math.round((isBoss ? enemyHp(diffIlvl, 'boss') : enemyHp(diffIlvl, 'trash') * farmHpMult) * traitHp * soft)
   const pool = BIOME_ENEMIES[biome]
   const baseName = pool[(stage - 1) % pool.length]
   const bosses = BIOME_BOSSES[biome]
@@ -176,7 +194,7 @@ export function makeEnemy(stage: number, biome: BiomeId = 'physique', championMu
     // Dégâts : MÊME base b que les PV (et que le joueur) → la pression suit la montée, fini le
     // one-shot exponentiel ET le « trop mou ». La menace vient des techniques télégraphiées + du
     // check de résistance (req), pas d'un mur sec. La classe encode le ratio (boss ×1,8 trash).
-    damage: Math.round(enemyDmg(diffIlvl, 'trash') * farmDmgMult * traitDmg * onboard),
+    damage: Math.round(enemyDmg(diffIlvl, 'trash') * farmDmgMult * traitDmg * soft),
     // XP rare (monter de niveau se mérite — levelling volontairement lent au début).
     xp: Math.round((isBoss ? 38 : isElite || isChampion ? 17 : 4) * Math.pow(1.115, stage - 1)),
     resist,
@@ -188,7 +206,11 @@ export function makeEnemy(stage: number, biome: BiomeId = 'physique', championMu
     ...(isElite || isChampion ? { elite: true, dodge: 0.1 } : {}),
     ...(isChampion ? { champion: true } : {}),
     // Boss : reçoivent les « Dégâts vs Boss », esquivent (→ Précision) et étourdissent (→ Ténacité).
-    ...(isBoss ? { boss: true, dodge: 0.15, ccDur: 1.5, ccCd: 7 } : {}),
+    // MUR (v0.35) : métadonnée de dominante + enrage (fiche + tick), au Palier = stage / 10.
+    ...(isBoss ? {
+      boss: true, dodge: 0.15, ccDur: 1.5, ccCd: 7,
+      mur: { mechanic: murMechanic(stage / 10), palier: stage / 10, enrageAt: murEnrage(stage / 10) },
+    } : {}),
   }
 }
 
