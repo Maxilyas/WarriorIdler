@@ -529,8 +529,8 @@ ks('fu_carnage', 'furie', 3, 'Carnage', 'CHOIX : +0,12 Multifrappe & +20 Hâte (
 ks('fu_cruaute', 'furie', 3, 'Cruauté', 'CHOIX : +24 Critique & +24 Dégâts crit. (puissance par coup, uptime d\'Enrage).', { stat: { critique: 24, degatsCrit: 24 } }, { requires: ['fu_temerite'], exclusive: 'fu_voie' })
 minor('fu_bataille', 'furie', 2, 'Soif de bataille', 5, { force: 6, critique: 6 }, { requires: ['fu_pivot'] }) // ⛓ tampon crit-force
 ks('fu_sang_pour_sang', 'furie', 3, 'Sang pour sang', 'Sous 40 % de PV, +35 % de dégâts ET tes saignements te soignent davantage. Exige Soif de bataille au max (5) + 10 pts.', { stat: { volDeVie: 16 }, ks: { lowHpBonus: { threshold: 0.4, mult: 1.35 }, dotLeech: 0.15 } }, { requires: ['fu_bataille'], requiresRank: { id: 'fu_bataille', rank: 5 }, minSpent: 10 })
-ks('fu_coeur', 'furie', 4, 'Cœur enragé', 'CAPSTONE : ton Enrage dure 12 s (rafraîchi par les crits → quasi permanent) ET +10 % de dégâts permanent. Tout au fond : 14 pts.', { stat: { force: 20 }, ks: { enrageOnCrit: { mult: 1.25, duration: 12 }, damageMult: 1.1 } }, { requires: ['fu_sang_pour_sang'], minSpent: 14 })
-ability('fu_berserk', 'furie', 5, 'Berserk', 'fu_berserk', 'ULTIME — tu te déchaînes : +90 % de dégâts 8 s et un vol de vie massif. Gaté : Cœur enragé + 14 pts.', { requires: ['fu_coeur'], minSpent: 14 })
+ks('fu_coeur', 'furie', 4, 'Cœur enragé', 'CAPSTONE : ton Enrage dure 12 s (rafraîchi par les crits → quasi permanent) ET +10 % de dégâts permanent. Tout au fond : 13 pts.', { stat: { force: 20 }, ks: { enrageOnCrit: { mult: 1.25, duration: 12 }, damageMult: 1.1 } }, { requires: ['fu_sang_pour_sang'], minSpent: 13 })
+ability('fu_berserk', 'furie', 5, 'Berserk', 'fu_berserk', 'ULTIME — tu te déchaînes : +90 % de dégâts 8 s et un vol de vie massif. Gaté : Cœur enragé + 13 pts.', { requires: ['fu_coeur'], minSpent: 13 })
 
 /* ================================================================== */
 /* PRÊTRE (Tissu) — Lumière (HEAL) · Vide (DPS).                        */
