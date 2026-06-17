@@ -74,6 +74,9 @@ import { welcomeMessage, offlineMessage, hasReward as inboxHasReward, INBOX_CAP,
 import {
   emptyDaily, dailyMetrics, rollDaily, getDailyQuest, questDone, todayStr, LOGIN_REWARDS, type DailyState,
 } from './daily'
+import {
+  emptyEvent, rollEvent, eventPoints, EVENT_MILESTONES, invasionAuraId, type EventState,
+} from './event'
 import { essenceGain, upgradeCost, insertCost, getUnique, UNIQUE_MAX_RANK, randomUniqueInstance, undiscoveredUnique } from './uniques'
 import {
   generateDungeon, makeDungeonPack, dungeonIlvl, dungeonRegen, getDungeonDef, dungeonLuckTier,
@@ -441,6 +444,10 @@ interface SaveData {
   totalKills: number
   /** Compteur de donjons terminés à vie — métrique des contrats du jour. */
   totalDungeons: number
+  /** 🎉 Event Invasion élémentaire (v0.31.5) : élément de la semaine + paliers réclamés. */
+  event: EventState
+  /** 🎉 Auras d'invasion débloquées (ids AVATAR_AURAS) — cosmétiques d'event, collectionnés au fil des semaines. */
+  eventCosmetics: string[]
   /** Rune du Karma (pity) : kills depuis le dernier drop Épique+ (compté en permanence). */
   killsSinceEpic: number
   /** Horodatage de la dernière sauvegarde (progression hors-ligne). */
@@ -483,6 +490,10 @@ interface GameState extends SaveData {
   claimDailyQuest: (id: string) => void
   /** 📅 Réclame la récompense de connexion du jour (1×/jour). */
   claimLogin: () => void
+  /** 🎉 Fait tourner l'event Invasion si la semaine a changé (nouvel élément + reset). */
+  rollEventIfNeeded: () => void
+  /** 🎉 Réclame un palier de l'event (le capstone débloque l'aura élémentaire). */
+  claimEventMilestone: (index: number) => void
   /** v0.27 (F3) — cycle de vie mobile : l'appli passe en arrière-plan (horodate la mise en veille). */
   markAway: () => void
   /** v0.27 (F3) — retour au premier plan : crédite les gains hors-ligne accumulés en arrière-plan. */
@@ -1394,6 +1405,8 @@ function freshSave(): SaveData {
     daily: emptyDaily(),
     totalKills: 0,
     totalDungeons: 0,
+    event: emptyEvent(),
+    eventCosmetics: [],
     killsSinceEpic: 0,
     lastSeen: Date.now(),
     lastShopRefresh: 0,
@@ -1480,6 +1493,9 @@ function sanitize(save: SaveData): SaveData {
   if (typeof save.totalKills !== 'number') save.totalKills = 0
   if (typeof save.totalDungeons !== 'number') save.totalDungeons = 0
   if (!save.daily || typeof save.daily.date !== 'string' || !Array.isArray(save.daily.questIds)) save.daily = emptyDaily()
+  // 🎉 Event : défauts pour les vieilles saves (le passage de semaine initialise au cold-start).
+  if (!save.event || typeof save.event.week !== 'string' || !Array.isArray(save.event.claimed)) save.event = emptyEvent()
+  if (!Array.isArray(save.eventCosmetics)) save.eventCosmetics = []
   {
     const q = emptyQuint()
     const src = (save.quint ?? {}) as Record<string, number>
@@ -2045,6 +2061,8 @@ function persist(s: GameState) {
     daily: s.daily,
     totalKills: s.totalKills,
     totalDungeons: s.totalDungeons,
+    event: s.event,
+    eventCosmetics: s.eventCosmetics,
     autoRecycle: s.autoRecycle,
     killsSinceEpic: s.killsSinceEpic,
     lastSeen: Date.now(),
@@ -2446,7 +2464,19 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
   // l'Endurance obtient un énorme bouclier (levier de survie qui suit l'Endurance).
   const shieldBase = (p.magnitude ?? 1) * Math.max(abilityPower(derived, powerScale(p)), derived.endurancePower)
   const vm = enemyVuln(enemy)
-  const hit = (dmg: number): number => { const before = enemy.hp; enemy.hp = Math.max(0, enemy.hp - dmg); return before - enemy.hp }
+  const hit = (dmg: number): number => {
+    const before = enemy.hp; enemy.hp = Math.max(0, enemy.hp - dmg); const done = before - enemy.hp
+    // PALADIN AUBE : une fraction de TES DÉGÂTS soigne l'allié le plus blessé (« soigne en frappant »).
+    if (cm.damageToHeal > 0 && done > 0 && !pact?.noHeal) {
+      const allies = chars.filter((c) => c.hp > 0)
+      if (allies.length) {
+        let low = allies[0]
+        for (const a of allies) if (a.hp / charMaxHp(a) < low.hp / charMaxHp(low)) low = a
+        gemAbilityHeal(low, done * cm.damageToHeal, cond, chars)
+      }
+    }
+    return done
+  }
   // ORACLE SANGLANT : une fraction du SOIN est aussi infligée en dégâts à l'ennemi focus.
   const bleedHeal = (healed: number): number => (healToDamage > 0 && enemy.hp > 0 ? hit(healed * healToDamage * vm) : 0)
   switch (p.effect) {
@@ -4236,6 +4266,8 @@ export const useGame = create<GameState>((set, get) => {
       save.daily = rollDaily(save.daily, dailyMetrics(save), today, { bestStage: save.bestStage })
     }
   }
+  // 🎉 Event Invasion : initialise / fait tourner l'event de la semaine (cold-start).
+  save.event = rollEvent(save.event, save.totalKills)
 
   return {
     ...save,
@@ -6594,6 +6626,44 @@ export const useGame = create<GameState>((set, get) => {
         poussiere: s.poussiere + (r.poussiere ?? 0),
         daily: { ...s.daily, loginClaimed: today },
         log: pushLog(s.log, `📅 Connexion jour ${((s.daily.streak - 1) % LOGIN_REWARDS.length) + 1} réclamée !`, 'level'),
+      }
+      persist(next)
+      set(next)
+    },
+
+    rollEventIfNeeded: () => {
+      const s = get()
+      const event = rollEvent(s.event, s.totalKills)
+      if (event === s.event) return
+      const next = { ...s, event }
+      persist(next)
+      set(next)
+    },
+
+    claimEventMilestone: (index) => {
+      const s = get()
+      const m = EVENT_MILESTONES[index]
+      if (!m || s.event.claimed.includes(index)) return
+      if (eventPoints(s.event, s.totalKills) < m.points) return
+      const r = m.reward
+      let eventCosmetics = s.eventCosmetics
+      let log = pushLog(s.log, `🎉 Invasion — palier ${index + 1} réclamé !`, 'level')
+      if (m.aura) {
+        const auraId = invasionAuraId(s.event.element)
+        if (!eventCosmetics.includes(auraId)) eventCosmetics = [...eventCosmetics, auraId]
+        log = pushLog(log, `🏅 Aura d'invasion débloquée ! (Apparence → Parures)`, 'level')
+      }
+      const next = {
+        ...s,
+        gold: s.gold + (r.gold ?? 0),
+        essence: s.essence + (r.eclats ?? 0),
+        noyau: s.noyau + (r.noyau ?? 0),
+        sceaux: s.sceaux + (r.sceaux ?? 0),
+        fragments: s.fragments + (r.fragments ?? 0),
+        poussiere: s.poussiere + (r.poussiere ?? 0),
+        eventCosmetics,
+        event: { ...s.event, claimed: [...s.event.claimed, index] },
+        log,
       }
       persist(next)
       set(next)

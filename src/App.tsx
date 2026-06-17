@@ -58,6 +58,7 @@ export default function App() {
   const rotateBiomeIfDue = useGame((s) => s.rotateBiomeIfDue)
   const checkAchievements = useGame((s) => s.checkAchievements)
   const rollDailyIfNeeded = useGame((s) => s.rollDailyIfNeeded)
+  const rollEventIfNeeded = useGame((s) => s.rollEventIfNeeded)
   const inventory = useGame((s) => s.inventory)
   const gold = useGame((s) => s.gold)
   const essence = useGame((s) => s.essence)
@@ -108,13 +109,14 @@ export default function App() {
     return () => clearInterval(id)
   }, [checkAchievements, paused])
 
-  // 📅 Quotidien : passage de jour (minuit local) vérifié hors du tick + un passage immédiat au montage.
+  // 📅🎉 Quotidien + event : passage de jour/semaine vérifié hors du tick + un passage immédiat au montage.
   useEffect(() => {
     if (paused) return
     rollDailyIfNeeded()
-    const id = setInterval(() => rollDailyIfNeeded(), 60000)
+    rollEventIfNeeded()
+    const id = setInterval(() => { rollDailyIfNeeded(); rollEventIfNeeded() }, 60000)
     return () => clearInterval(id)
-  }, [rollDailyIfNeeded, paused])
+  }, [rollDailyIfNeeded, rollEventIfNeeded, paused])
 
   // F3 — cycle de vie mobile : arrière-plan → suspend le tick + horodate ; retour → gains hors-ligne.
   useEffect(() => {

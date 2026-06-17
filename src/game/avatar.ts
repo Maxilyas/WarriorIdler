@@ -110,6 +110,14 @@ export const AVATAR_AURAS: AvatarAura[] = [
   { id: 'arcenciel', name: 'Arc-en-ciel', color: '#f472b6', anim: true },
   { id: 'primordialePlus', name: 'Primordiale absolue', color: '#e879f9', anim: true },
   { id: 'flamme', name: 'Flamme', color: '#f97316', anim: true },
+  // 🎉 Auras d'INVASION (event élémentaire, v0.31.5) — débloquées au capstone de l'event de la semaine
+  // (zéro puissance). Une par élément, à collectionner au fil des semaines. Id = `inv_<element>`.
+  { id: 'inv_feu', name: 'Brasier', color: '#ff6b35', anim: true },
+  { id: 'inv_froid', name: 'Blizzard', color: '#4dd0e1', anim: true },
+  { id: 'inv_foudre', name: 'Orage', color: '#ffd54f', anim: true },
+  { id: 'inv_arcane', name: 'Faille arcanique', color: '#c084fc', anim: true },
+  { id: 'inv_ombre', name: 'Pénombre', color: '#a78bfa', anim: true },
+  { id: 'inv_nature', name: 'Sylve', color: '#66bb6a', anim: true },
 ]
 
 const BORDER_BY_ID = new Map(AVATAR_BORDERS.map((b) => [b.id, b]))

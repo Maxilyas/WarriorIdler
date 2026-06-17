@@ -14,13 +14,15 @@ export function AvatarEditor() {
   const poussiere = useGame((s) => s.poussiere)
   const unlockCosmetic = useGame((s) => s.unlockCosmetic)
   const achievements = useGame((s) => s.achievements)
+  const eventCosmetics = useGame((s) => s.eventCosmetics)
   const char = characters[activeChar] ?? characters[0]
   if (!char) return null
   const { pal, emb, border, aura } = resolveAvatar(char.primaryBias, char.avatar)
 
   const parures = unlockedCosmetics(achievements)
   const myBorders = AVATAR_BORDERS.filter((b) => parures.borders.includes(b.id))
-  const myAuras = AVATAR_AURAS.filter((a) => parures.auras.includes(a.id))
+  // Auras = parures de hauts faits (Légende) ∪ auras d'invasion débloquées en event (🎉).
+  const myAuras = AVATAR_AURAS.filter((a) => parures.auras.includes(a.id) || eventCosmetics.includes(a.id))
 
   const isLocked = (cost?: number, id?: string) => !!cost && cost > 0 && !cosmetics[id ?? '']
 
@@ -75,9 +77,9 @@ export function AvatarEditor() {
           </div>
           {/* 🏅 Parures de prestige — débloquées par les hauts faits Légende (pas d'achat). */}
           <div>
-            <div className="mb-1 text-[10px] text-slate-500">🏅 Parures <span className="text-slate-600">· débloquées par hauts faits Légende 👑</span></div>
+            <div className="mb-1 text-[10px] text-slate-500">🏅 Parures <span className="text-slate-600">· hauts faits Légende 👑 & events 🎉</span></div>
             {myBorders.length === 0 && myAuras.length === 0 ? (
-              <div className="text-[10px] italic text-slate-600">Aucune parure pour l'instant — décroche un haut fait Légende.</div>
+              <div className="text-[10px] italic text-slate-600">Aucune parure pour l'instant — décroche un haut fait Légende ou un capstone d'invasion 🎉.</div>
             ) : (
               <div className="space-y-1.5">
                 {myBorders.length > 0 && (

@@ -7,6 +7,10 @@ import {
   dailyMetrics, dailyClaimableCount, getDailyQuest, questProgress, questDone, todayStr, msUntilReset,
   rewardLines, LOGIN_REWARDS, type DailyState, type DailyMetrics,
 } from '../game/daily'
+import {
+  eventPoints, eventClaimableCount, msUntilEventEnd, invasionAuraId, EVENT_MILESTONES, INVASION_ELEMENTS, type EventState,
+} from '../game/event'
+import { getAura } from '../game/avatar'
 import { Sheet } from './ui'
 import { LevelBadge } from './LevelBadge'
 import { charMaxHp, charDps, charResist, charCombatMods, TALENT_START_LEVEL } from '../game/character'
@@ -79,6 +83,10 @@ export function CombatPanel() {
   const metiers = useGame((s) => s.metiers)
   const claimDailyQuest = useGame((s) => s.claimDailyQuest)
   const claimLogin = useGame((s) => s.claimLogin)
+  // 🎉 Event Invasion élémentaire (v0.31.5).
+  const event = useGame((s) => s.event)
+  const eventCosmetics = useGame((s) => s.eventCosmetics)
+  const claimEventMilestone = useGame((s) => s.claimEventMilestone)
 
   // Biome + palier + verrou fusionnés en une ligne « zone » : le détail s'ouvre en feuille
   // (libère un tiers d'écran pour le journal sur mobile).
@@ -87,6 +95,7 @@ export function CombatPanel() {
   const [questsOpen, setQuestsOpen] = useState(false)
   const [inboxOpen, setInboxOpen] = useState(false)
   const [dailyOpen, setDailyOpen] = useState(false)
+  const [eventOpen, setEventOpen] = useState(false)
   const [logFilter, setLogFilter] = useState('tout')
 
   const me = characters[activeChar] ?? characters[0]
@@ -121,7 +130,10 @@ export function CombatPanel() {
   // 📅 Quotidien : contrats finis non réclamés + connexion du jour → red-dot de l'icône 📅.
   const dailyMetricsNow = dailyMetrics({ totalKills, totalDungeons, metiers, bestStage })
   const dailyClaim = dailyClaimableCount(daily, dailyMetricsNow, todayStr())
-  // Le cluster s'affiche hors instance (🎯 selon tuto · ✉ et 📅 toujours).
+  // 🎉 Event Invasion : paliers réclamables → red-dot 🎉. Icône débloquée avec les biomes élémentaires (palier 20).
+  const eventUnlocked = bestStage >= 20
+  const eventClaim = eventClaimableCount(event, totalKills)
+  // Le cluster s'affiche hors instance (🎯 selon tuto · ✉/📅 toujours · 🎉 dès palier 20).
   const clusterVisible = !dungeon && !raid
   const partyDps = characters
     .filter((c) => c.hp > 0)
@@ -156,7 +168,7 @@ export function CombatPanel() {
             </div>
           )}
           {clusterVisible && (
-            <div className="flex shrink-0 flex-col gap-2">
+            <div className="flex w-[88px] shrink-0 flex-wrap justify-end gap-2">
               {tutActive && (
                 <button
                   onClick={() => setQuestsOpen(true)}
@@ -197,6 +209,21 @@ export function CombatPanel() {
                   </span>
                 )}
               </button>
+              {eventUnlocked && (
+                <button
+                  onClick={() => setEventOpen(true)}
+                  aria-label={`Invasion élémentaire — ${eventClaim} palier${eventClaim > 1 ? 's' : ''} à réclamer`}
+                  className="relative flex h-10 w-10 items-center justify-center rounded-full border text-xl active:scale-95"
+                  style={{ borderColor: DAMAGE_TYPES[event.element].color + '80', background: '#160d14' }}
+                >
+                  🎉
+                  {eventClaim > 0 && (
+                    <span className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] animate-pulse items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white ring-2 ring-[#0d111a]">
+                      {eventClaim}
+                    </span>
+                  )}
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -732,6 +759,13 @@ export function CombatPanel() {
         </Sheet>
       )}
 
+      {/* Feuille 🎉 Invasion élémentaire : event hebdomadaire (paliers → aura exclusive). */}
+      {eventOpen && (
+        <Sheet title="🎉 Invasion élémentaire" onClose={() => setEventOpen(false)}>
+          <EventPanel event={event} totalKills={totalKills} collected={eventCosmetics.length} onClaim={claimEventMilestone} />
+        </Sheet>
+      )}
+
       {/* Journal plein écran */}
       {journalOpen && (
         <Sheet title="Journal de combat" onClose={() => setJournalOpen(false)}>
@@ -978,6 +1012,56 @@ function DailyPanel({ daily, metrics, onClaimQuest, onClaimLogin }: { daily: Dai
           })}
         </ul>
       </div>
+    </div>
+  )
+}
+
+/** 🎉 Panneau Invasion élémentaire : header thématique + barre de points + paliers (capstone = aura). */
+function EventPanel({ event, totalKills, collected, onClaim }: { event: EventState; totalKills: number; collected: number; onClaim: (index: number) => void }) {
+  const el = DAMAGE_TYPES[event.element]
+  const pts = eventPoints(event, totalKills)
+  const max = EVENT_MILESTONES[EVENT_MILESTONES.length - 1].points
+  const ms = msUntilEventEnd()
+  const days = Math.floor(ms / 86400000)
+  const hours = Math.floor((ms % 86400000) / 3600000)
+  const ends = days > 0 ? `${days} j ${hours} h` : `${Math.max(1, hours)} h`
+  const auraName = getAura(invasionAuraId(event.element))?.name
+  return (
+    <div className="space-y-3">
+      <div className="rounded-lg border p-2.5 text-center" style={{ borderColor: el.color + '66', background: el.color + '14' }}>
+        <div className="text-sm font-bold" style={{ color: el.color }}>{el.icon} Invasion de {el.name}</div>
+        <div className="text-[10.5px] text-slate-400">L'élément {el.name} déferle sur les terres — finit dans {ends}</div>
+        <div className="mt-1.5 text-[11px] text-slate-300">Points d'invasion : <b style={{ color: el.color }}>{pts.toLocaleString('fr-FR')}</b> <span className="text-slate-600">/ {max.toLocaleString('fr-FR')}</span></div>
+        <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-slate-800">
+          <div className="h-full" style={{ width: `${Math.min(100, (pts / max) * 100)}%`, background: el.color }} />
+        </div>
+        <div className="mt-1 text-[9.5px] text-slate-500">Gagne des points en tuant des ennemis (tout biome). Reset hebdomadaire.</div>
+      </div>
+
+      <ul className="space-y-1.5">
+        {EVENT_MILESTONES.map((m, i) => {
+          const reached = pts >= m.points
+          const claimed = event.claimed.includes(i)
+          const claimable = reached && !claimed
+          return (
+            <li key={i} className={'rounded-lg px-2.5 py-2 ' + (claimed ? 'opacity-45' : claimable ? 'bg-emerald-900/25 ring-1 ring-emerald-500/30' : 'bg-slate-900/40')}>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[12px] font-medium text-slate-100">{claimed ? '✅' : reached ? '🟡' : '⬜'} Palier {i + 1} — {m.points.toLocaleString('fr-FR')} pts</span>
+                {claimable && (
+                  <button onClick={() => onClaim(i)} className="shrink-0 rounded bg-emerald-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-emerald-500 active:scale-95">
+                    Réclamer 🎁
+                  </button>
+                )}
+              </div>
+              <div className="mt-1 text-[11px] font-medium text-emerald-300/80">
+                🎁 {formatInboxReward(m.reward)}{m.aura ? <span style={{ color: el.color }}> · 🏅 Aura exclusive « {auraName} »</span> : null}
+              </div>
+            </li>
+          )
+        })}
+      </ul>
+
+      <div className="text-center text-[10px] text-slate-500">🏅 Auras d'invasion collectées : <b className="text-slate-300">{collected}</b> / {INVASION_ELEMENTS.length} — équipe-les dans 🛡 Héros → Apparence.</div>
     </div>
   )
 }
