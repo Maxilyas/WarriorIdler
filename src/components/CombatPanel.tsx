@@ -19,7 +19,7 @@ import { isBossStage } from '../game/enemies'
 import { getPower, powerIcon } from '../game/powers'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from '../game/damage'
 import { RAID_MECHANIC_META } from '../game/raids'
-import { BIOME_LIST, biomeUnlocked, biomeUnlockHint, getBiomeDef, BIOME_LOCK_FRAGMENTS, BIOME_LOCK_MS } from '../game/biomes'
+import { BIOME_LIST, biomeUnlocked, biomeUnlockHint, getBiomeDef } from '../game/biomes'
 import { maitriseBonus, maitriseSum, surgeBiome, surgeRemainingMs } from '../game/biomeBonus'
 import type { Character, DamageType, Enemy, EnemyAbility, PowerDef } from '../game/types'
 
@@ -54,10 +54,7 @@ export function CombatPanel() {
   const bestStage = useGame((s) => s.bestStage)
   const activeBiome = useGame((s) => s.activeBiome)
   const biomeBest = useGame((s) => s.biomeBest)
-  const lockBiome = useGame((s) => s.lockBiome)
-  const fragments = useGame((s) => s.fragments)
-  const nextRotateAt = useGame((s) => s.nextRotateAt)
-  const biomeLockUntil = useGame((s) => s.biomeLockUntil)
+  const setBiome = useGame((s) => s.setBiome)
   const activeChar = useGame((s) => s.activeChar)
   const setActiveChar = useGame((s) => s.setActiveChar)
   const castPower = useGame((s) => s.castPower)
@@ -105,8 +102,8 @@ export function CombatPanel() {
 
   const biomeDef = getBiomeDef(activeBiome)
   const physiqueBest = biomeBest.physique ?? 0
-  // Cap de farm = record DANS LE BIOME ACTIF (pas le record global).
-  const activeBiomeBest = Math.max(1, biomeBest[activeBiome] ?? 1)
+  // v0.35 — Palier GLOBAL : le cap de farm = ton record global (le biome ne change pas ton Palier).
+  const activeBiomeBest = Math.max(1, bestStage)
   // Bonus de biome : surcharge tournante + Maîtrise des Zones (v0.25 : Élan supprimé).
   const surge = surgeBiome()
   const maitrise = maitriseBonus(biomeBest)
@@ -331,52 +328,39 @@ export function CombatPanel() {
       {/* Feuille zone : choix du biome, palier, verrou de farm */}
       {zoneOpen && (
         <Sheet title="🧭 Zone de chasse" onClose={() => setZoneOpen(false)}>
-          {/* v0.28 — la zone change AU HASARD toutes les ~1 h ; pour rester, on FORCE un biome (Fragments). */}
-          {(() => {
-            const now = Date.now()
-            const locked = now < biomeLockUntil
-            const mins = (ms: number) => Math.max(0, Math.ceil(ms / 60000))
-            return (
-              <div className={'mb-2 rounded-lg px-2 py-1.5 text-[10.5px] leading-snug ' + (locked ? 'bg-emerald-900/20 text-emerald-200' : 'bg-slate-800/40 text-slate-300')}>
-                {locked
-                  ? <>🔒 Forcé sur <b style={{ color: biomeDef.color }}>{biomeDef.icon} {biomeDef.name}</b> — encore ~{mins(biomeLockUntil - now)} min, puis rotation aléatoire.</>
-                  : <>🧭 Rotation aléatoire — la zone change au hasard dans ~{mins(nextRotateAt - now)} min. Force un biome ({BIOME_LOCK_FRAGMENTS} ✨) pour y rester ~{Math.round(BIOME_LOCK_MS / 60000)} min (farm ciblé).</>}
-              </div>
-            )
-          })()}
+          {/* v0.35 — UNE seule zone : le biome = canal d'élément/résistance, choix LIBRE (plus de rotation
+              ni de coût en Fragments). Le Palier est GLOBAL : on le garde en changeant de zone. */}
+          <p className="mb-2 text-[10.5px] leading-snug text-slate-400">
+            Une seule zone : choisis ton <b className="text-slate-200">élément</b> de chasse — le butin et la résistance du biome suivent (prépare l'élément du prochain mur). Ton Palier est <b className="text-slate-200">global</b>, conservé d'une zone à l'autre.
+          </p>
           <div className="grid grid-cols-4 gap-1.5">
             {BIOME_LIST.map((b) => {
-              const unlocked = biomeUnlocked(b.id, physiqueBest, bestStage)
+              const unlocked = biomeUnlocked(b.id, bestStage, bestStage)
               const active = b.id === activeBiome
-              const rec = biomeBest[b.id] ?? 0
-              const affordable = fragments >= BIOME_LOCK_FRAGMENTS
-              // Un biome déjà forcé (actif + verrou en cours) n'est pas re-forçable (éviter de re-payer).
-              const forcedActive = active && Date.now() < biomeLockUntil
               return (
                 <button
                   key={b.id}
-                  disabled={!unlocked || !affordable || forcedActive}
-                  onClick={() => lockBiome(b.id)}
-                  title={!unlocked ? 'Biome verrouillé' : forcedActive ? 'Déjà forcé' : affordable ? `Forcer ce biome 1 h (${BIOME_LOCK_FRAGMENTS} ✨)` : `Pas assez de Fragments (${BIOME_LOCK_FRAGMENTS} ✨)`}
+                  disabled={!unlocked || active}
+                  onClick={() => setBiome(b.id)}
+                  title={!unlocked ? biomeUnlockHint(b.id) : active ? 'Zone actuelle' : `Chasser en ${DAMAGE_TYPES[b.id].name}`}
                   className={
                     'relative flex flex-col items-center gap-0.5 rounded-lg border px-1 py-2 transition-colors ' +
                     (active ? 'border-current bg-white/10' : unlocked ? 'border-slate-700 hover:border-slate-500' : 'border-slate-800 opacity-50')
                   }
                   style={active ? { color: b.color } : undefined}
                 >
-                  {surge === b.id && <span className="absolute -right-1 -top-1 rounded-full bg-amber-400 px-1 text-[10px] text-slate-950">⚡</span>}
+                  {surge === b.id && <span className="absolute -right-1 -top-1 rounded-full bg-amber-400 px-1 text-[10px] text-slate-950" title="Surcharge : +or/XP ici">⚡</span>}
                   <span className="text-xl leading-none">{unlocked ? b.icon : '🔒'}</span>
                   <span className={'w-full truncate text-center text-[10px] font-semibold ' + (active ? '' : 'text-slate-300')}>
                     {DAMAGE_TYPES[b.id].name}
                   </span>
-                  <span className="text-[9px] text-slate-500">{unlocked ? (forcedActive ? '🔒 forcé' : active ? '◉ actif' : `🔒 ${BIOME_LOCK_FRAGMENTS}✨`) : ''}</span>
-                  {unlocked && rec > 0 && <span className="text-[8px] text-slate-600">rec. {rec}</span>}
+                  <span className="text-[9px] text-slate-500">{unlocked ? (active ? '◉ actif' : 'chasser') : '🔒'}</span>
                 </button>
               )
             })}
           </div>
           {(() => {
-            const lockedBiome = BIOME_LIST.find((b) => !biomeUnlocked(b.id, physiqueBest, bestStage))
+            const lockedBiome = BIOME_LIST.find((b) => !biomeUnlocked(b.id, bestStage, bestStage))
             return lockedBiome ? (
               <p className="mt-1.5 text-[10px] leading-snug text-slate-500">🔒 {biomeUnlockHint(lockedBiome.id)}</p>
             ) : null

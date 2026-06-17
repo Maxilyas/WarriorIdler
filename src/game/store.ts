@@ -4837,14 +4837,14 @@ export const useGame = create<GameState>((set, get) => {
       const s = get()
       if (s.dungeon || s.raid) return
       if (!BIOME_IDS.includes(biome) || biome === s.activeBiome) return
-      if (!biomeUnlocked(biome, s.biomeBest.physique ?? 0, s.bestStage)) return
-      // Mémorise le palier du biome quitté, charge celui du biome rejoint.
-      const biomeStages = { ...s.biomeStages, [s.activeBiome]: s.stage }
-      const stage = Math.max(1, biomeStages[biome] ?? 1)
+      if (!biomeUnlocked(biome, s.bestStage, s.bestStage)) return
+      // v0.35 — progression GLOBALE : changer de biome GARDE ton Palier (le biome n'est qu'un CANAL
+      // d'élément/résistance, pas un monde séparé). Une seule zone, un seul Palier.
+      const stage = s.stage
       const next = {
-        ...s, activeBiome: biome, biomeStages, stage,
+        ...s, activeBiome: biome,
         enemy: makeEnemy(stage, biome),
-        log: pushLog(s.log, `🧭 Tu pars pour : ${getBiomeDef(biome).icon} ${getBiomeDef(biome).name}.`, 'info'),
+        log: pushLog(s.log, `🧭 Zone : ${getBiomeDef(biome).icon} ${getBiomeDef(biome).name} (élément ${DAMAGE_TYPES[biome].name}).`, 'info'),
       }
       persist(next)
       set(next)
