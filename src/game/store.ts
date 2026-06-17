@@ -58,7 +58,7 @@ import {
 } from './alchimie'
 import { makeEnemy, isBossStage, stageIlvl, stageLuckTier } from './enemies'
 import {
-  BIOME_IDS, biomeUnlocked, getBiomeDef, randomUnlockedBiome,
+  BIOME_IDS, biomeUnlocked, getBiomeDef,
   BIOME_ROTATE_MS, BIOME_LOCK_MS, BIOME_LOCK_FRAGMENTS, type BiomeId,
 } from './biomes'
 import {
@@ -4853,28 +4853,11 @@ export const useGame = create<GameState>((set, get) => {
       set(next)
     },
 
-    // v0.28 — ROTATION ALÉATOIRE HORAIRE, automatique : à l'échéance, la zone bascule TOUTE SEULE
-    // vers un biome débloqué tiré au hasard (sauf en donjon/raid ou pendant un forçage).
+    // v0.35 — la ROTATION HORAIRE FORCÉE est DÉSACTIVÉE : le biome est un CHOIX du joueur (l'axe
+    // élément/résistance du modèle à mur unique — on prépare le biome que le mur exige). On change de
+    // zone via setBiome, jamais subi. (Lot 4 : progression de Palier GLOBALE au lieu de par-biome.)
     rotateBiomeIfDue: () => {
-      const s = get()
-      if (s.dungeon || s.raid) return
-      const now = Date.now()
-      if (now < s.biomeLockUntil || now < s.nextRotateAt) return
-      const nb = randomUnlockedBiome(s.activeBiome, s.biomeBest.physique ?? 0, s.bestStage)
-      if (nb === s.activeBiome) { // un seul biome débloqué : on repousse juste l'échéance
-        const next = { ...s, nextRotateAt: now + BIOME_ROTATE_MS }
-        persist(next); set(next); return
-      }
-      const biomeStages = { ...s.biomeStages, [s.activeBiome]: s.stage }
-      const stage = Math.max(1, biomeStages[nb] ?? 1)
-      const next = {
-        ...s, activeBiome: nb, biomeStages, stage,
-        nextRotateAt: now + BIOME_ROTATE_MS,
-        enemy: makeEnemy(stage, nb),
-        log: pushLog(s.log, `🧭 La zone de chasse a changé : ${getBiomeDef(nb).icon} ${getBiomeDef(nb).name}.`, 'info'),
-      }
-      persist(next)
-      set(next)
+      /* no-op : plus de rotation automatique. */
     },
 
     toggleFarmLock: () => {
