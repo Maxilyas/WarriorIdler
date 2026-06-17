@@ -6,7 +6,7 @@ import { PRIMARY_META, SECONDARY_META } from '../game/stats'
 import { currentWeek } from '../game/maitrise'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from '../game/damage'
 import { RARITIES, RARITY_LIST } from '../game/rarities'
-import { maxCraftTier, createCost } from '../game/items'
+import { maxCraftTier, createCost, contentRarityTier } from '../game/items'
 import type { Item } from '../game/types'
 import { ComparePanel } from './ComparePanel'
 import { QualityStars } from './ItemRow'
@@ -379,7 +379,7 @@ function ForgeronWorkshop() {
   const signCost = activeSignature ? signatureLingotCost(tier) : 0
   const mwReady = forge.masterwork && lastMasterwork < currentWeek()
   const mwOn = masterwork && mwReady
-  const raw = createCost(tier, ilvl)
+  const raw = createCost(tier, ilvl, contentRarityTier(bestStage))
   const cm = mods.costMult * (mwOn ? 1.5 : 1)
   const cost = { eclats: Math.round(raw.eclats * cm), noyau: Math.round(raw.noyau * cm), fragments: Math.round((raw.fragments ?? 0) * cm), poussiere: Math.round((raw.poussiere ?? 0) * cm), cosmic: Math.round((raw.cosmic ?? 0) * cm) }
   const lingotNeed = signCost + (mwOn ? MASTERWORK_LINGOTS : 0)

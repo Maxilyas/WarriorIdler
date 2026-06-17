@@ -5,7 +5,7 @@ import { RARITIES } from '../game/rarities'
 import { ALL_STAT_META } from '../game/stats'
 import {
   sellValue, recycleValue, itemStatBlock, itemHasRareStat, itemStatTotals,
-  reforgeCost, surillvlCost, ascendCost, nextRarity, transmuteCost, craftRaidGate,
+  reforgeCost, surillvlCost, ascendCost, nextRarity, transmuteCost, craftRaidGate, contentRarityTier,
   SURILLVL_OVER_MARGIN,
   quintCost, QUINT_GAIN, qualityName, qualityColor,
 } from '../game/items'
@@ -318,7 +318,7 @@ function CraftSection({ item }: { item: Item }) {
   const surCapped = surTarget > contentIlvl + SURILLVL_OVER_MARGIN
   const surOver = Math.max(0, Math.ceil((surTarget - contentIlvl) / mods.surillvlStep))
   const sCost = Math.round(surillvlCost(item, surOver) * cm)
-  const rawA = ascendCost(item)
+  const rawA = ascendCost(item, contentRarityTier(bestStage))
   const aCost = { eclats: Math.round(rawA.eclats * cm), noyau: Math.round(rawA.noyau * cm), fragments: Math.round((rawA.fragments ?? 0) * cm), poussiere: Math.round((rawA.poussiere ?? 0) * cm), cosmic: Math.round((rawA.cosmic ?? 0) * cm) }
   const nr = nextRarity(item.rarity)
   // v0.25 : verrou raid sur l'Ascension (miroir du craft) — tier cible − 8.

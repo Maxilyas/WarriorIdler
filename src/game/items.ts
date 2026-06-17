@@ -307,6 +307,28 @@ export function rollFarmRarity(stage: number, shift = 0): RarityId {
   return rollWindowRarity(Math.max(1, peak - 2), peak, Math.min(FARM_RARITY_CAP, peak + 2))
 }
 
+// v0.35 — RARETÉ « DU CONTENU » à un Palier : ce que le farm donne SANS payer (le baseline). Monter
+// une rareté AU-DESSUS = le CHASE de puissance (la pièce-signature). Climbe puis plateau à Légendaire. KNOB.
+export function contentRarityTier(bestStage: number): number {
+  return Math.max(3, Math.min(FARM_RARITY_CAP, 3 + Math.floor(bestStage / 25)))
+}
+/** Multiplicateur de coût « AU-DESSUS DU CONTENU » : ×OVER_CONTENT_STEEP par cran de rareté au-dessus
+ *  de ce que le farm donne au Palier. +1 = ×4 (dizaines de runs), +2 = ×16 (centaines), +3 = ×64. */
+export const OVER_CONTENT_STEEP = 4
+export function overContentMult(targetTier: number, contentTier: number): number {
+  return Math.pow(OVER_CONTENT_STEEP, Math.max(0, targetTier - contentTier))
+}
+function scaleCraftCost(c: CraftCost, m: number): CraftCost {
+  if (m === 1) return c
+  return {
+    eclats: Math.round(c.eclats * m),
+    noyau: Math.round(c.noyau * m),
+    ...(c.poussiere ? { poussiere: Math.round(c.poussiere * m) } : {}),
+    ...(c.fragments ? { fragments: Math.round(c.fragments * m) } : {}),
+    ...(c.cosmic ? { cosmic: Math.round(c.cosmic * m) } : {}),
+  }
+}
+
 /**
  * Tire une rareté pour un coffre : distribution pondérée (favorise le bas de la fourchette)
  * entre minTier et maxTier, avec une petite chance de JACKPOT au-dessus de maxTier.
@@ -488,12 +510,14 @@ function materialCost(tier: number, ilvl: number, factor: number): Omit<CraftCos
  * meilleur qu'une création ALÉATOIRE du même tier → ça doit coûter PLUS cher, pas moitié prix.
  * Avant : éclats ×0.7 / matériaux ×0.55 — monter son BiS coûtait ~2× moins que forger un inconnu.
  */
-export function ascendCost(item: Item): CraftCost {
+export function ascendCost(item: Item, contentTier = Infinity): CraftCost {
   const nt = RARITIES[item.rarity].tier + 1
-  return {
+  const base: CraftCost = {
     eclats: Math.round(craftEclats(nt, item.ilvl) * 1.15),
     ...materialCost(nt, item.ilvl, 1.35),
   }
+  // v0.35 — monter une rareté AU-DESSUS du contenu explose le coût (×4/cran) → dizaines→centaines de runs.
+  return scaleCraftCost(base, overContentMult(nt, contentTier))
 }
 
 // ---- Craft : créer un objet ----
@@ -513,11 +537,13 @@ export function maxCraftTier(bestStage: number, bestRaidTier = 0): number {
 }
 
 /** Coût de création d'un objet d'une rareté/ilvl donnés (éclats scalent rareté+iLvl ; matériaux par table). */
-export function createCost(rarityTier: number, ilvl: number): CraftCost {
-  return {
+export function createCost(rarityTier: number, ilvl: number, contentTier = Infinity): CraftCost {
+  const base: CraftCost = {
     eclats: craftEclats(rarityTier, ilvl),
     ...materialCost(rarityTier, ilvl, 1),
   }
+  // v0.35 — forger une rareté AU-DESSUS du contenu explose le coût (×4/cran) → c'est le chase, pas du farm.
+  return scaleCraftCost(base, overContentMult(rarityTier, contentTier))
 }
 
 /* ---- ⭐ QUALITÉ unifiée (v0.27, ex-Polissage Forgeron) : 1–5 sur TOUT le stuff, drop & craft ----

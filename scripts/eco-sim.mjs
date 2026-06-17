@@ -8,7 +8,7 @@ const load = async (entry) => {
   return import('data:text/javascript;base64,' + Buffer.from(res.outputFiles[0].text).toString('base64'))
 }
 const M = await load(`
-  export { createCost, ascendCost, surillvlCost, reforgeCost, transmuteCost } from './src/game/items.ts'
+  export { createCost, ascendCost, surillvlCost, reforgeCost, transmuteCost, contentRarityTier } from './src/game/items.ts'
   export { dungeonRunYield, geodeDustYield, dungeonFights } from './src/game/dungeons.ts'
   export { GEM_CUT_COST, recutCost, GEM_FUSE_COST, GEM_CORRUPT_COST, drillCost } from './src/game/condGems.ts'
   export { unsocketCost } from './src/game/gems.ts'
@@ -48,12 +48,18 @@ for (const best of [10, 30, 60, 100, 200]) {
   line('forge runique (or)', gold, M.runeForgeCost(TIME_RUNE, 0).gold, 'or')
 
   // ♦ ÉCLATS — Faille Arcanique (+ recyclage)
+  const ct = M.contentRarityTier(best)
   const ecl = M.dungeonRunYield('eclats', REF_LEVEL)
-  console.log(`  ♦ ÉCLATS (Faille Arcanique) — rendement/run ${fmt(ecl)}`)
-  line('forge : créer 1 objet', ecl, M.createCost(tier, ilvl).eclats, '♦')
-  line('ascension (cran +1)', ecl, M.ascendCost(item).eclats, '♦')
-  line('surilvl (1 pas)', ecl, M.surillvlCost(item, 0), '♦')
+  const runsFor = (cost) => (cost / ecl).toFixed(cost / ecl >= 10 ? 0 : 1)
+  console.log(`  ♦ ÉCLATS (Faille Arcanique) — rendement/run ${fmt(ecl)} · rareté du contenu = t${ct}`)
+  // CHASE de rareté (forge AU-DESSUS du contenu) — en RUNS par craft (doit exploser ×4/cran) :
+  for (const d of [0, 1, 2, 3]) {
+    const cost = M.createCost(ct + d, ilvl, ct).eclats
+    console.log(`    forge t${ct + d} (${d === 0 ? 'contenu' : '+' + d + ' au-dessus'})`.padEnd(30) + ` ${fmt(cost).padStart(9)} ♦ → ${runsFor(cost).padStart(6)} runs/craft`)
+  }
+  // Routines en-tranche (actions par run) :
   line('reforge (affixe sec.)', ecl, M.reforgeCost(item, 0), '♦')
+  line('surilvl (1 pas)', ecl, M.surillvlCost(item, 0), '♦')
   line('désertir une gemme', ecl, M.unsocketCost(), '♦')
   line('graver une rune', ecl, M.enchantCost(TIME_RUNE, item).eclats, '♦')
   line('transmutation', ecl, M.transmuteCost(item), '♦')
