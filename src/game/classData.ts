@@ -178,6 +178,24 @@ export interface KeystoneEffect {
   petCombo?: number
   /** BOND COORDONNÉ : un FINISSEUR fait bondir le familier (pic = `petBurstOnFinisher` s de DPS de familier). Somme. */
   petBurstOnFinisher?: number
+
+  /* ---- v0.34 : DRUIDE « Métamorphe » — système de FORMES rotatives (calibré par sim) ---- */
+  /** DANSE PRIMORDIALE : active la rotation des formes (Fauve→Ours→Hibou toutes les ~5 s). */
+  shifter?: boolean
+  /** Bonus de dégâts (frac) tant que tu es en forme du FAUVE. Somme. */
+  formFauve?: number
+  /** Bonus de dégâts (frac) tant que tu es en forme de l'OURS. Somme. (Le nœud donne aussi flatDr/thorns passifs.) */
+  formOurs?: number
+  /** Bonus de dégâts (frac) tant que tu es en forme du HIBOU. Somme. */
+  formHibou?: number
+  /** INSTINCT PRIMAL : +frac de dégâts par stack d'Instinct (gagné à chaque métamorphose). Somme. */
+  instinctPer?: number
+  /** INSTINCT PRIMAL : plafond de stacks d'Instinct. Max. */
+  instinctMax?: number
+  /** CÉLÉRITÉ PRIMALE : réduit l'intervalle entre métamorphoses (s). Somme. */
+  shiftHaste?: number
+  /** MÉMOIRE DES FORMES (capstone) : conserve cette frac du don de la forme quittée (écho → cumul des aspects). Max. */
+  formEcho?: number
 }
 
 /** Vocabulaire des TAGS de comportement (12) — les 7 types de dégâts servent aussi de tags. */

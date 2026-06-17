@@ -32,7 +32,7 @@ export type ConstellationId =
   | 'dk' | 'givremort' | 'sang'
   | 'demoniste' | 'pestilence' | 'legion'
   | 'chaman' | 'elementaire' | 'vague'
-  | 'druide' | 'lunaire' | 'ronce' | 'floraison'
+  | 'druide' | 'lunaire' | 'ronce' | 'floraison' | 'metamorphe'
   | 'paladin' | 'croise' | 'templier' | 'aube'
 
 export interface ConstellationMeta {
@@ -755,6 +755,28 @@ minor('fo_buf3', 'floraison', 1, 'Carapace végétale', 5, { barriere: 12 }, { r
 ability('fo_bouclier', 'floraison', 2, 'Bouclier d\'écorce', 'bouclier_runique', 'SURVIE : bouclier d\'absorption.', { requires: ['fo_buf3'] })
 
 /* ================================================================== */
+/* MÉTAMORPHE (v0.34) — « La Danse Primordiale » : 4e voie AUTONOME du druide, mécanique NEUVE.
+ * Le druide CHANGE DE FORME en boucle (Fauve→Ours→Hibou, ~5 s chacune) ; chaque forme transforme son
+ * style, chaque métamorphose accumule l'INSTINCT (momentum), et la Mémoire des formes fait cumuler les
+ * aspects. Calibré par scripts/sim-druide-metamorphe.mjs (×1,48 plat ; ≈ Lunaire pur en DPS).
+ * Sorts ORIGINAUX : Bond sauvage (shift-éclair), Forme Chimère (les 3 formes à la fois). */
+/* ================================================================== */
+ks('mf_danse', 'metamorphe', 0, 'Danse Primordiale', 'PIVOT : tu te MÉTAMORPHOSES en boucle (Fauve → Ours → Hibou, ~5 s chacune). Chaque forme accorde +10 % de dégâts de base ; tu sculptes ensuite chaque aspect.',
+  { stat: { agilite: 16 }, ks: { shifter: true, formFauve: 0.1, formOurs: 0.1, formHibou: 0.1 } }, { requires: ['cl_druide'] })
+ks('mf_fauve', 'metamorphe', 1, 'Forme du Fauve', 'En FAUVE : +25 % de dégâts de plus (le prédateur fulgurant — fenêtre burst).', { stat: { critique: 16 }, ks: { formFauve: 0.25 } }, { requires: ['mf_danse'] })
+ks('mf_ours', 'metamorphe', 1, 'Forme de l\'Ours', 'En OURS : +8 % de dégâts ET, en permanence, -10 % de dégâts subis + 30 % d\'épines (le colosse).', { stat: { endurance: 20 }, ks: { formOurs: 0.08, flatDr: 0.1, thorns: 0.3 } }, { requires: ['mf_danse'] })
+ks('mf_hibou', 'metamorphe', 1, 'Forme du Hibou', 'En HIBOU : +20 % de dégâts de plus, +Altération (l\'astral — DoT et sorts).', { stat: { alteration: 18 }, ks: { formHibou: 0.2 } }, { requires: ['mf_danse'] })
+ks('mf_instinct', 'metamorphe', 2, 'Instinct primal', 'PAYOFF : chaque métamorphose t\'accorde 1 Instinct (+4 % de dégâts, max 5) ; il décroît si tu cesses de changer — le flux perpétuel te garde au sommet. Gaté : 4 pts.', { stat: { agilite: 16 }, ks: { instinctPer: 0.04, instinctMax: 5 } }, { requires: ['mf_danse'], minSpent: 4 })
+ks('mf_celerite', 'metamorphe', 3, 'Célérité primale', 'Tes formes changent plus vite (5 s → 3,5 s) — plus d\'Instinct, plus de fenêtres. Profond : 8 pts.', { stat: { hate: 18 }, ks: { shiftHaste: 1.5 } }, { requires: ['mf_instinct'], minSpent: 8 })
+ks('mf_coeur_fauve', 'metamorphe', 3, 'Cœur de fauve', 'CHOIX : ta forme du Fauve frappe encore +15 %.', { stat: { critique: 18 }, ks: { formFauve: 0.15 } }, { requires: ['mf_celerite'], exclusive: 'mf_coeur' })
+ks('mf_coeur_ours', 'metamorphe', 3, 'Cœur d\'ours', 'CHOIX : ta forme de l\'Ours frappe +15 % et encaisse encore mieux.', { stat: { endurance: 18 }, ks: { formOurs: 0.15, flatDr: 0.06 } }, { requires: ['mf_celerite'], exclusive: 'mf_coeur' })
+ks('mf_coeur_hibou', 'metamorphe', 3, 'Cœur du hibou', 'CHOIX : ta forme du Hibou frappe encore +15 %.', { stat: { alteration: 18 }, ks: { formHibou: 0.15 } }, { requires: ['mf_celerite'], exclusive: 'mf_coeur' })
+ability('mf_bond', 'metamorphe', 2, 'Bond sauvage', 'mf_bond', 'Débloque Bond sauvage : une frappe [nature] qui te MÉTAMORPHOSE à l\'instant dans la forme suivante (+1 Instinct). +14 Agilité.', { requires: ['mf_danse'], statMods: { agilite: 14 } })
+minor('mf_sang', 'metamorphe', 2, 'Sang primal', 5, { agilite: 6, intelligence: 6 }, { requires: ['mf_danse'] }) // ⛓ tampon Agi/Int
+ks('mf_memoire', 'metamorphe', 4, 'Mémoire des formes', 'CAPSTONE : quand tu changes de forme, tu CONSERVES la moitié du don de la forme quittée (écho) → tu incarnes progressivement les 3 aspects. Exige Sang primal au max (5) + 12 pts.', { stat: { agilite: 20 }, ks: { formEcho: 0.5 } }, { requires: ['mf_sang'], requiresRank: { id: 'mf_sang', rank: 5 }, minSpent: 12 })
+ability('mf_chimere', 'metamorphe', 5, 'Forme Chimère', 'mf_chimere', 'ULTIME — tu fusionnes les 3 formes : pendant 10 s, tu bénéficies des dons du Fauve, de l\'Ours ET du Hibou à la fois. Gaté : Mémoire des formes + 14 pts.', { requires: ['mf_memoire'], minSpent: 14 })
+
+/* ================================================================== */
 /* PALADIN (Plaque) — Croisé (DPS) · Templier (TANK) · Aube (HEAL).    */
 /* ================================================================== */
 node('cl_paladin', 'paladin', 'ability', 0, 1, 'Paladin', 'Champion sacré porté par le Pouvoir Sacré. Débloque Châtiment du croisé. +40 Force, +40 Endurance. Débloqué au 2e Éveil.', { requires: ['pa_start'], requiresPrestige: 2, statMods: { force: 40, endurance: 40 }, unlockPower: 'pa_chatiment' })
@@ -833,6 +855,7 @@ export const CONSTELLATIONS: Record<ConstellationId, ConstellationMeta> = {
   lunaire: { id: 'lunaire', name: 'Lunaire', role: 'Druide · astral', color: '#748ffc', icon: '🌙', archetype: true },
   ronce: { id: 'ronce', name: 'Ronce', role: 'Druide · TANK', color: '#2f9e44', icon: '🌳', archetype: true },
   floraison: { id: 'floraison', name: 'Floraison', role: 'Druide · HEAL HoT', color: '#69db7c', icon: '🌸', archetype: true },
+  metamorphe: { id: 'metamorphe', name: 'Métamorphe', role: 'Druide · formes rotatives (Danse Primordiale)', color: '#fd7e14', icon: '🌀', archetype: true },
   paladin: { id: 'paladin', name: 'Paladin', role: 'Panthéon · classe', color: '#ffd43b', icon: '⚜', tree: 'pantheon' },
   croise: { id: 'croise', name: 'Croisé', role: 'Paladin · sacré DPS', color: '#ffe066', icon: '⚔', archetype: true, tree: 'pantheon' },
   templier: { id: 'templier', name: 'Templier', role: 'Paladin · TANK aura', color: '#f59f00', icon: '🛡', archetype: true, tree: 'pantheon' },
@@ -847,7 +870,7 @@ export const CONSTELLATION_LIST: ConstellationId[] = [
   'dk', 'givremort', 'sang',
   'demoniste', 'pestilence', 'legion',
   'chaman', 'elementaire', 'vague',
-  'druide', 'lunaire', 'ronce', 'floraison',
+  'druide', 'lunaire', 'ronce', 'floraison', 'metamorphe',
   'paladin', 'croise', 'templier', 'aube',
 ]
 

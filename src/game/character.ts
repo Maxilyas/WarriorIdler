@@ -539,6 +539,15 @@ export interface CombatMods {
   petFromPrecision: number
   petCombo: number
   petBurstOnFinisher: number
+  // --- v0.34 : DRUIDE « Métamorphe » ---
+  shifter: boolean
+  formFauve: number
+  formOurs: number
+  formHibou: number
+  instinctPer: number
+  instinctMax: number
+  shiftHaste: number
+  formEcho: number
 }
 
 export function charCombatMods(char: Character): CombatMods {
@@ -561,6 +570,8 @@ export function charCombatMods(char: Character): CombatMods {
     shieldToFinisher: 0, damageToRage: 0, finisherRefreshBleed: false,
     // v0.34 : Chasseur (Symbiose)
     petBonus: 0, petFromPrecision: 0, petCombo: 0, petBurstOnFinisher: 0,
+    // v0.34 : Druide (Métamorphe)
+    shifter: false, formFauve: 0, formOurs: 0, formHibou: 0, instinctPer: 0, instinctMax: 0, shiftHaste: 0, formEcho: 0,
   }
   // Multiplicateur de dégâts des bonus de SET (s'applique aux auto-attaques ET aux sorts,
   // et donc au DPS affiché via charDps — même chemin que les keystones).
@@ -671,6 +682,15 @@ export function charCombatMods(char: Character): CombatMods {
     if (k.petFromPrecision) out.petFromPrecision += k.petFromPrecision
     if (k.petCombo) out.petCombo += k.petCombo
     if (k.petBurstOnFinisher) out.petBurstOnFinisher += k.petBurstOnFinisher
+    // --- v0.34 : DRUIDE « Métamorphe » ---
+    if (k.shifter) out.shifter = true
+    if (k.formFauve) out.formFauve += k.formFauve
+    if (k.formOurs) out.formOurs += k.formOurs
+    if (k.formHibou) out.formHibou += k.formHibou
+    if (k.instinctPer) out.instinctPer += k.instinctPer
+    if (k.instinctMax) out.instinctMax = Math.max(out.instinctMax, k.instinctMax)
+    if (k.shiftHaste) out.shiftHaste += k.shiftHaste
+    if (k.formEcho) out.formEcho = Math.max(out.formEcho, k.formEcho)
     if (k.hotStreak) out.hotStreak = out.hotStreak ? { cap: Math.min(out.hotStreak.cap, k.hotStreak.cap), mult: Math.max(out.hotStreak.mult, k.hotStreak.mult) } : { ...k.hotStreak }
     if (k.overload) out.overload = out.overload ? { window: Math.max(out.overload.window, k.overload.window), mult: Math.max(out.overload.mult, k.overload.mult) } : { ...k.overload }
     if (k.multiTypeBonus) {

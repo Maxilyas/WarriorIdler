@@ -260,6 +260,7 @@ const EFFECT_FR: Record<PowerEffect, string> = {
   builder: 'générateur (+1 Point de Combo)', finisher: 'finisseur (× Points de Combo)',
   smiteHeal: 'frappe d\'ombre qui soigne', eclipse: 'cataclysme d\'ombre + soin de groupe',
   avatar: 'transe de guerre (+dégâts) + bouclier',
+  shift: 'métamorphose-éclair + frappe', chimera: 'les 3 formes à la fois',
 }
 const SCALE_FR: Record<OffensiveStat, string> = { force: 'FOR', agilite: 'AGI', intelligence: 'INT' }
 function spellDescription(s: SpellSpec): string {
@@ -467,6 +468,9 @@ const DRUIDE_SPELLS: SpellSpec[] = [
   { id: 'fo_pousse', name: 'Pousse de vie', icon: '🌱', effect: 'hot', mag: 1.8, cd: 4, scale: 'intelligence', tags: ['soin'] },
   { id: 'fo_floraison', name: 'Floraison', icon: '🌸', effect: 'heal', mag: 2.4, cd: 3, scale: 'intelligence', tags: ['soin'] },
   { id: 'fo_eclosion', name: 'Éclosion', icon: '🌺', effect: 'bigHeal', mag: 12, cd: 24, scale: 'intelligence', tags: ['soin', 'ultime'] },
+  // Métamorphe (Danse Primordiale) — sorts de FORME (mécanique neuve).
+  { id: 'mf_bond', name: 'Bond sauvage', icon: '🌀', effect: 'shift', mag: 3.2, cd: 5, type: 'nature', scale: 'intelligence', tags: ['mono', 'direct', 'nature'] },
+  { id: 'mf_chimere', name: 'Forme Chimère', icon: '🐲', effect: 'chimera', mag: 1, cd: 30, duration: 10, scale: 'intelligence', tags: ['ultime'] },
 ]
 for (const s of DRUIDE_SPELLS) POWERS.push(specToPower(s))
 
@@ -567,6 +571,9 @@ export const POWER_EFFECT_META: Record<PowerEffect, PowerEffectMeta> = {
   eclipse: { label: 'Éclipse (zone)', icon: '🌘', targets: 'Tout le pack + soin de groupe', family: 'offense' },
   // v0.34 — socle Guerrier « Juggernaut »
   avatar: { label: 'Avatar de guerre', icon: '🗿', targets: 'Porteur · transe + bouclier', family: 'soutien' },
+  // v0.34 — socle Druide « Métamorphe »
+  shift: { label: 'Métamorphose-éclair', icon: '🌀', targets: 'Porteur · change de forme + frappe', family: 'offense' },
+  chimera: { label: 'Forme Chimère', icon: '🐲', targets: 'Porteur · les 3 formes à la fois', family: 'offense' },
 }
 
 /** Stat de scaling d'un sort, en court (FOR / AGI / INT). */

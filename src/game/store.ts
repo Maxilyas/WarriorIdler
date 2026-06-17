@@ -1295,6 +1295,23 @@ function healDotParty(chars: Character[], info: ({ cmods: CharCombatMods } | nul
   low.hp = Math.min(charMaxHp(low), low.hp + pool)
 }
 
+/** 🌀 MÉTAMORPHE (v0.34) « Danse Primordiale » : multiplicateur de dégâts de la FORME active + Instinct.
+ *  Fauve/Ours/Hibou donnent chacun leur bonus tant qu'ils sont actifs ; la Chimère cumule les 3 ;
+ *  la Mémoire des formes (echo) garde une part des deux autres formes ; l'Instinct ajoute son momentum.
+ *  Tout est BORNÉ (% fixes, stacks plafonnés) → plat en ilvl. */
+function formDamageMult(c: Character, cm: CharCombatMods): number {
+  if (!cm.shifter) return 1
+  let bonus: number
+  if ((c.chimera ?? 0) > 0) {
+    bonus = cm.formFauve + cm.formOurs + cm.formHibou // Forme Chimère : les 3 formes à la fois
+  } else {
+    const f = c.form ?? 0
+    bonus = f === 1 ? cm.formOurs : f === 2 ? cm.formHibou : cm.formFauve
+    if (cm.formEcho > 0) bonus += cm.formEcho * (cm.formFauve + cm.formOurs + cm.formHibou - bonus) / 2 // écho des 2 autres formes
+  }
+  return 1 + bonus + cm.instinctPer * (c.instinct ?? 0)
+}
+
 /** 🛎️ Carillon : à appeler au moment de POSER une recharge — renvoie 0,5 quand le bonus est mûr. */
 function carillonMult(cond?: CondMods): number {
   if (!cond?.carillonN) return 1
@@ -2497,7 +2514,7 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
     ? (enemy.dot ? 1 : 0) + ((enemy.controlled ?? 0) > 0 ? 1 : 0) + ((caster.overload ?? 0) > 0 ? 1 : 0)
     : 0
   const trinityMult = 1 + cm.elementalStates * elemStates
-  const magDmg = base * profileDamageMult(profile) * dmgMult * tagMult * shatterMult * hotMult * trinityMult // profil + keystones + tags + shatter + Hot Streak + Trinité
+  const magDmg = base * profileDamageMult(profile) * dmgMult * tagMult * shatterMult * hotMult * trinityMult * formDamageMult(caster, cm) // profil + keystones + tags + shatter + Hot Streak + Trinité + Forme
   // Boucliers : scalent sur la MEILLEURE de (stat principale, Endurance) → un tank qui empile
   // l'Endurance obtient un énorme bouclier (levier de survie qui suit l'Endurance).
   const shieldBase = (p.magnitude ?? 1) * Math.max(abilityPower(derived, powerScale(p)), derived.endurancePower)
@@ -2642,6 +2659,17 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
       caster.absorb = Math.max(caster.absorb ?? 0, grant)
       return 0
     }
+    // v0.34 « Bond sauvage » (Métamorphe) : métamorphose-éclair (forme suivante + Instinct) puis frappe.
+    case 'shift': {
+      caster.form = ((caster.form ?? 0) + 1) % 3
+      caster.formClock = Math.max(2, 5 - cm.shiftHaste)
+      caster.instinct = Math.min(cm.instinctMax || 0, (caster.instinct ?? 0) + 1)
+      return hit(magDmg * vm)
+    }
+    // v0.34 « Forme Chimère » (Métamorphe) : les 3 formes actives à la fois pendant `duration`.
+    case 'chimera':
+      caster.chimera = Math.max(caster.chimera ?? 0, p.duration ?? 10)
+      return 0
     // --- v0.29.2 : socle VOLEUR ---
     case 'poison': {
       // ASSASSIN : empile un STACK de venin ; le DoT (enemy.dot) monte avec les stacks.
@@ -2883,6 +2911,19 @@ function tickHeroStatuses(chars: Character[], dt: number, cond?: CondMods, pact?
     if ((c.invuln ?? 0) > 0) { c.invuln = Math.max(0, c.invuln! - dt); if ((c.invuln ?? 0) <= 0) c.invuln = undefined }
     if (c.frenzy) { c.frenzy.remaining -= dt; if (c.frenzy.remaining <= 0) c.frenzy = undefined }
     if ((c.overload ?? 0) > 0) { c.overload = Math.max(0, c.overload! - dt) || undefined } // ✨ Surcharge Arcaniste
+    if ((c.chimera ?? 0) > 0) { c.chimera = Math.max(0, c.chimera! - dt) || undefined } // 🐲 Forme Chimère
+    // 🌀 MÉTAMORPHE « Danse Primordiale » : rotation auto des formes + Instinct (momentum).
+    const cmF = charCombatMods(c)
+    if (cmF.shifter) {
+      const interval = Math.max(2, 5 - cmF.shiftHaste)
+      c.formClock = (c.formClock ?? interval) - dt
+      if (c.formClock <= 0) {
+        c.form = ((c.form ?? 0) + 1) % 3                                  // Fauve → Ours → Hibou → …
+        c.formClock = interval
+        c.instinct = Math.min(cmF.instinctMax, (c.instinct ?? 0) + 1)     // chaque métamorphose : +1 Instinct
+      }
+      c.instinct = Math.max(0, (c.instinct ?? 0) - 0.05 * dt)             // décroît à l'arrêt (l'auto-cycle le maintient)
+    }
     if (c.charge) c.charge.remaining -= dt // la frappe différée est résolue dans le pas de combat
     // v0.26 : horloges par héros des gemmes de Bastion/Flux.
     verreTimer.set(c.id, (verreTimer.get(c.id) ?? 0) + dt)
@@ -3005,7 +3046,7 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
     const gemMult = gemOffenseMult(c, mods?.cond, enemy, false)
     const pactAuto = (mods?.pact?.autoMult ?? 1) * (1 + (mods?.pact?.focusBonus ?? 0))
     const runePact = runePactOffense(enemy.age ?? 0, mods?.runes, mods?.pact)
-    const bonusMult = d.cmods.damageMult * lowHp * highHp * weakenMult * frenzyMult * (mods?.heroMult ?? 1) * acharne * souffle * opportunisteMult * opener * fuel * surplusMult * gemMult * pactAuto * runePact
+    const bonusMult = d.cmods.damageMult * lowHp * highHp * weakenMult * frenzyMult * (mods?.heroMult ?? 1) * acharne * souffle * opportunisteMult * opener * fuel * surplusMult * gemMult * pactAuto * runePact * formDamageMult(c, d.cmods)
     const multistrikeChance = Math.min(0.85, d.derived.multistrike + d.cmods.multistrike)
     const metroN = mods?.cond?.metronomeN
     // 🔁 Da capo : au-delà du seuil, les compteurs de RYTHME avancent ×2.
@@ -3418,7 +3459,7 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
     // dégâts globaux (Verre, Meute…) + 🪦 Usure / 💀 Memento.
     const pactAuto = (mods?.pact?.autoMult ?? 1) * (1 + (mods?.pact?.focusBonus ?? 0))
     const runePact = runePactOffense(mods?.fightTime ?? 0, mods?.runes, mods?.pact)
-    const bonusMult = d.cmods.damageMult * lowHp * highHp * weakenMult * frenzyMult * (mods?.heroMult ?? 1) * nuee * acharne * souffle * opportunisteMult * opener * fuel * perEnemy * surplusMult * gemMult * pactAuto * runePact
+    const bonusMult = d.cmods.damageMult * lowHp * highHp * weakenMult * frenzyMult * (mods?.heroMult ?? 1) * nuee * acharne * souffle * opportunisteMult * opener * fuel * perEnemy * surplusMult * gemMult * pactAuto * runePact * formDamageMult(c, d.cmods)
     const multistrikeChance = Math.min(0.85, d.derived.multistrike + d.cmods.multistrike)
     const metroN = mods?.cond?.metronomeN
     // 🔁 Da capo : au-delà du seuil de la RENCONTRE, les compteurs de RYTHME avancent ×2.

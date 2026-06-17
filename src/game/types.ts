@@ -267,6 +267,9 @@ export type PowerEffect =
   | 'eclipse'      // CRÉPUSCULE : ULTIME — cataclysme d'ombre de zone qui restaure TOUT le groupe
   // --- v0.34 : socle Guerrier « Juggernaut » ---
   | 'avatar'       // AVATAR DE GUERRE : transe de dégâts (frenzy) + énorme bouclier d'absorption
+  // --- v0.34 : socle Druide « Métamorphe » ---
+  | 'shift'        // BOND SAUVAGE : métamorphose-éclair (forme suivante + Instinct) puis frappe
+  | 'chimera'      // FORME CHIMÈRE : les 3 formes (Fauve+Ours+Hibou) actives à la fois pendant une fenêtre
 
 /** Définition d'une capacité dans le registre (valeurs de base, montées par le rang plus tard). */
 export interface PowerDef {
@@ -396,6 +399,14 @@ export interface Character {
   /** ARCANISTE (v0.31) « Surcharge instable » : secondes restantes de la fenêtre de Surcharge (déclenchée
    *  quand les Charges atteignent le max) — pendant, dégâts arcanes ↑ et recharges ↑↑. Transitoire. */
   overload?: number
+  /** DRUIDE MÉTAMORPHE (v0.34) « Danse Primordiale » : forme active (0=Fauve, 1=Ours, 2=Hibou). Transitoire. */
+  form?: number
+  /** Métamorphe : secondes avant la prochaine métamorphose (rotation auto des formes). Transitoire. */
+  formClock?: number
+  /** Métamorphe : stacks d'INSTINCT (momentum, +dégâts/stack) — montent à chaque forme, décroissent à l'arrêt. Transitoire. */
+  instinct?: number
+  /** Métamorphe « Forme Chimère » : secondes restantes où les 3 formes sont actives à la fois. Transitoire. */
+  chimera?: number
 }
 
 // ---- Sorts ennemis (techniques télégraphiées, miroir du kit héros) ----
