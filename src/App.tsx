@@ -15,6 +15,7 @@ import { ResetButton } from './components/CharacterPanel'
 import { Sheet } from './components/ui'
 import { ChestModal } from './components/ChestModal'
 import { ChoiceModal } from './components/ChoiceModal'
+import { WelcomeScreen } from './components/WelcomeScreen'
 
 const TICK_MS = 200
 
@@ -75,6 +76,7 @@ export default function App() {
   const characters = useGame((s) => s.characters)
   const dungeonProgress = useGame((s) => s.dungeonProgress)
   const upgrades = useGame((s) => s.upgrades)
+  const onboarded = useGame((s) => s.onboarded)
   const inDungeon = useGame((s) => s.dungeon !== null)
   const inRaid = useGame((s) => s.raid !== null)
   const isDesktop = useMediaQuery('(min-width: 1024px)')
@@ -87,12 +89,13 @@ export default function App() {
     try { return localStorage.getItem('wi-keepAwake') === '1' } catch { return false }
   })
 
-  // Boucle de tick — suspendue quand l'appli passe en arrière-plan (F3).
+  // Boucle de tick — suspendue en arrière-plan (F3) ET tant que l'écran d'accueil n'est pas franchi
+  // (sinon le combat lancerait les paliers — et le butin — avant le choix de spé).
   useEffect(() => {
-    if (paused) return
+    if (paused || !onboarded) return
     const id = setInterval(() => tick(TICK_MS / 1000), TICK_MS)
     return () => clearInterval(id)
-  }, [tick, paused])
+  }, [tick, paused, onboarded])
 
   // F2 — rotation subie des biomes : vérifiée toutes les 5 s (hors du tick de combat).
   useEffect(() => {
@@ -187,6 +190,10 @@ export default function App() {
     { icon: '💫', name: 'Éclats cosmiques', value: cosmic, cls: 'text-violet-300' },
   ]
   const extraCount = currencies.slice(2).filter((c) => c.value > 0).length
+
+  // Partie NEUVE : on présente le but du jeu + le choix de spé avant tout. Le combat reste en pause
+  // (tick gardé ci-dessus) jusqu'à ce que le joueur lance l'aventure.
+  if (!onboarded) return <WelcomeScreen />
 
   return (
     <div className="mx-auto flex h-[100dvh] max-w-6xl flex-col">

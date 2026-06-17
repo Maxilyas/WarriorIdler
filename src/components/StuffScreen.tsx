@@ -20,9 +20,19 @@ import type { Character, DamageType, EquipSlotId, Equipment, Item, ItemType, Off
 
 type SortMode = 'recent' | 'score' | 'rarity' | 'ilvl' | 'dpsUp' | 'ehpUp'
 const SORT_LABELS: Record<SortMode, string> = {
-  score: 'Score', ilvl: 'iLvl', rarity: 'Rareté', dpsUp: '+DPS', ehpUp: '+Survie', recent: 'Récent',
+  dpsUp: '+DPS', ehpUp: '+Survie', score: 'Score', ilvl: 'iLvl', rarity: 'Rareté', recent: 'Récent',
 }
-const SORT_ORDER: SortMode[] = ['score', 'dpsUp', 'ehpUp', 'ilvl', 'rarity', 'recent']
+// Sous-titre de chaque tri (lisible dans le menu déroulant) — rend « Score » & co explicites.
+const SORT_DESC: Record<SortMode, string> = {
+  dpsUp: 'Plus gros gain de dégâts pour ce héros',
+  ehpUp: 'Plus gros gain de survie pour ce héros',
+  score: 'Valeur brute des stats (toutes affinités confondues)',
+  ilvl: 'Niveau d\'objet le plus élevé',
+  rarity: 'Rareté la plus élevée',
+  recent: 'Derniers objets ramassés',
+}
+// +DPS en tête : le tri par défaut, celui qui répond à « que dois-je équiper ? ».
+const SORT_ORDER: SortMode[] = ['dpsUp', 'ehpUp', 'score', 'ilvl', 'rarity', 'recent']
 const PRIMARY_FILTERS: OffensiveStat[] = ['force', 'agilite', 'intelligence']
 const ITEM_TYPE_LIST = Object.values(ITEM_TYPES)
 
@@ -95,7 +105,8 @@ export function StuffScreen() {
 
   const [selectedSlot, setSelectedSlot] = useState<EquipSlotId | null>(null)
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
-  const [sort, setSort] = useState<SortMode>('score')
+  const [sort, setSort] = useState<SortMode>('dpsUp')
+  const [sortOpen, setSortOpen] = useState(false)
   const [primaryFilter, setPrimaryFilter] = useState<OffensiveStat | null>(null)
   const [statFilter, setStatFilter] = useState<SecondaryStat[]>([])
   // Filtres typés : dégâts / résistance d'un élément (l'objet doit porter TOUTES les lignes cochées).
@@ -312,12 +323,35 @@ export function StuffScreen() {
               🔍 Filtres
               {activeFilterCount > 0 && <span className="rounded bg-orange-500 px-1.5 text-[10px] font-bold text-slate-950">{activeFilterCount}</span>}
             </button>
-            <button
-              onClick={() => setSheet('filters')}
-              className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-slate-800 px-2 py-2 text-xs font-medium text-slate-200 hover:bg-slate-700"
-            >
-              ↕ {SORT_LABELS[sort]} <span className="text-slate-500">▾</span>
-            </button>
+            {/* Tri : menu déroulant dédié (≠ Filtres) — un tap → choix → fermé. Chaque tri est décrit. */}
+            <div className="relative flex-1">
+              <button
+                onClick={() => setSortOpen((v) => !v)}
+                className="flex w-full items-center justify-center gap-1 rounded-lg bg-slate-800 px-2 py-2 text-xs font-medium text-slate-200 hover:bg-slate-700"
+              >
+                ↕ {SORT_LABELS[sort]} <span className="text-slate-500">▾</span>
+              </button>
+              {sortOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setSortOpen(false)} />
+                  <div className="absolute inset-x-0 top-full z-50 mt-1 overflow-hidden rounded-lg border border-slate-700 bg-[#0e131d] shadow-2xl">
+                    <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">Trier par</div>
+                    {SORT_ORDER.map((m) => (
+                      <button
+                        key={m}
+                        onClick={() => { setSort(m); setSortOpen(false) }}
+                        className={'block w-full px-3 py-2 text-left hover:bg-white/5 ' + (sort === m ? 'bg-orange-500/10' : '')}
+                      >
+                        <div className={'text-xs font-semibold ' + (sort === m ? 'text-orange-300' : 'text-slate-200')}>
+                          {sort === m ? '● ' : ''}{SORT_LABELS[m]}
+                        </div>
+                        <div className="text-[10px] leading-tight text-slate-500">{SORT_DESC[m]}</div>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
             <button
               onClick={() => setSheet('manage')}
               className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-slate-800 px-2 py-2 text-xs font-medium text-slate-200 hover:bg-slate-700"
@@ -438,11 +472,10 @@ export function StuffScreen() {
         </Sheet>
       )}
 
-      {/* Feuille « Filtres & tri » : tous les filtres consolidés en un seul endroit. */}
+      {/* Feuille « Filtres » : tous les filtres consolidés en un seul endroit (le tri vit dans son menu dédié). */}
       {sheet === 'filters' && (
-        <Sheet title="🔍 Filtres & tri" onClose={() => setSheet(null)}>
+        <Sheet title="🔍 Filtres" onClose={() => setSheet(null)}>
           <FiltersSheet
-            sort={sort} setSort={setSort}
             primaryFilter={primaryFilter} setPrimaryFilter={setPrimaryFilter}
             filterType={filterType} setTypeSel={(t) => { setTypeSel(t); setSelectedSlot(null); setSelectedItemId(null) }}
             statFilter={statFilter} setStatFilter={setStatFilter}
@@ -685,13 +718,12 @@ function PaperDoll({ characters, activeChar, onSwitch, equipment, selectedSlot, 
   )
 }
 
-/** Feuille « Filtres & tri » : tri + type + affinité + stats + élément + set, tout en un. */
+/** Feuille « Filtres » : type + affinité + stats + élément + set, tout en un (le tri a son menu dédié). */
 function FiltersSheet({
-  sort, setSort, primaryFilter, setPrimaryFilter, filterType, setTypeSel,
+  primaryFilter, setPrimaryFilter, filterType, setTypeSel,
   statFilter, setStatFilter, typeFilter, setTypeFilter, setFilter, setSetFilter, setsInInv,
   count, onReset, onClose,
 }: {
-  sort: SortMode; setSort: (s: SortMode) => void
   primaryFilter: OffensiveStat | null; setPrimaryFilter: (f: OffensiveStat | null) => void
   filterType: ItemType | null; setTypeSel: (t: ItemType | null) => void
   statFilter: SecondaryStat[]; setStatFilter: React.Dispatch<React.SetStateAction<SecondaryStat[]>>
@@ -705,19 +737,6 @@ function FiltersSheet({
   )
   return (
     <div className="text-[11px]">
-      <Label>Trier par</Label>
-      <div className="flex flex-wrap gap-1.5">
-        {SORT_ORDER.map((m) => (
-          <button
-            key={m}
-            onClick={() => setSort(m)}
-            className={'rounded-lg px-3 py-1.5 font-medium ' + (sort === m ? 'bg-orange-500 text-slate-950' : 'bg-slate-800 text-slate-300')}
-          >
-            {SORT_LABELS[m]}
-          </button>
-        ))}
-      </div>
-
       <Label>Type d'objet</Label>
       <div className="flex flex-wrap gap-1.5">
         <button

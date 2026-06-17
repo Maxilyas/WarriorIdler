@@ -454,6 +454,8 @@ interface SaveData {
   lastSeen: number
   /** Horodatage de la dernière rotation de l'échoppe (rotation horaire, indépendante du combat). */
   lastShopRefresh: number
+  /** Écran d'accueil franchi (choix de spé + but du jeu) : false sur une partie NEUVE, true ensuite. */
+  onboarded: boolean
 }
 
 interface GameState extends SaveData {
@@ -602,6 +604,8 @@ interface GameState extends SaveData {
   /** Renomme un personnage (personnalisation du joueur). */
   renameCharacter: (index: number, name: string) => void
   setBias: (p: PrimaryStat) => void
+  /** Écran d'accueil : valide le choix de spé de départ et lance la partie (one-shot, partie neuve). */
+  completeOnboarding: (bias: PrimaryStat) => void
   setPower: (slot: number, powerId: string | null) => void
   setPassive: (slot: number, powerId: string | null) => void
   /** Équipe un GÉNÉRATEUR (sort builder) dans l'un des 3 slots dédiés (auto-cast). */
@@ -1444,6 +1448,8 @@ function freshSave(): SaveData {
     killsSinceEpic: 0,
     lastSeen: Date.now(),
     lastShopRefresh: 0,
+    // Partie NEUVE : on montre l'écran d'accueil (but du jeu + choix de spé) avant de lancer le combat.
+    onboarded: false,
   }
 }
 
@@ -1773,6 +1779,9 @@ function sanitize(save: SaveData): SaveData {
   if (typeof save.killsSinceEpic !== 'number') save.killsSinceEpic = 0
   if (typeof save.lastSeen !== 'number') save.lastSeen = Date.now()
   if (typeof save.lastShopRefresh !== 'number') save.lastShopRefresh = 0
+  // Filet de sécurité : une save chargée SANS le flag = joueur existant → déjà onboardé (pas d'écran
+  // d'accueil). Seul `freshSave()` pose explicitement `false` (et false reste false : c'est un booléen).
+  if (typeof save.onboarded !== 'boolean') save.onboarded = true
 
   // v0.27 (F2) — rotation/lock des biomes (défauts pour les anciennes saves).
   if (typeof save.nextRotateAt !== 'number') save.nextRotateAt = Date.now() + BIOME_ROTATE_MS
@@ -1998,6 +2007,7 @@ function migrateOldSave(p: any): SaveData {
   const fresh = freshSave()
   return sanitize({
     ...fresh,
+    onboarded: true, // save migrée = joueur existant : pas d'écran d'accueil.
     characters: [hero],
     stage: p.stage ?? 1,
     bestStage: p.bestStage ?? 1,
@@ -2018,7 +2028,9 @@ function loadSave(): SaveData {
     const raw = localStorage.getItem(SAVE_KEY)
     if (raw) {
       const p = JSON.parse(raw)
-      if (Array.isArray(p.characters)) return sanitize({ ...freshSave(), ...p })
+      // Save existante : si le flag d'accueil n'y figure pas (versions < accueil), on considère le
+      // joueur déjà onboardé — on ne lui réimpose pas l'écran de choix de spé.
+      if (Array.isArray(p.characters)) return sanitize({ ...freshSave(), ...p, onboarded: p.onboarded ?? true })
       return migrateOldSave(p)
     }
   } catch {
@@ -2112,6 +2124,7 @@ function persist(s: GameState) {
     killsSinceEpic: s.killsSinceEpic,
     lastSeen: Date.now(),
     lastShopRefresh: s.lastShopRefresh,
+    onboarded: s.onboarded,
   }
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify(data))
@@ -6478,6 +6491,16 @@ export const useGame = create<GameState>((set, get) => {
       set(next)
     },
 
+    completeOnboarding: (bias) => {
+      const s = get()
+      if (s.onboarded) return
+      // Le héros de départ adopte la spé choisie → le butin penche du bon côté dès le 1er kill.
+      const characters = s.characters.map((c, i) => (i === s.activeChar ? { ...c, primaryBias: bias } : c))
+      const next = { ...s, characters, onboarded: true }
+      persist(next)
+      set(next)
+    },
+
     setPower: (slot, powerId) => {
       const s = get()
       const char = s.characters[s.activeChar]
@@ -7189,6 +7212,7 @@ export const useGame = create<GameState>((set, get) => {
       const fresh = freshSave()
       let base = {
         ...fresh,
+        onboarded: true, // prestige ≠ nouvelle partie : pas de réaffichage de l'écran d'accueil.
         echos: s.echos + gained,
         prestigeRank: s.prestigeRank + 1,
         lastPrestigeAt: Date.now(), // ⏱️ départ du chrono « Renaissance Fulgurante »
