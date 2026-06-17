@@ -3,7 +3,7 @@ import { DAMAGE_TYPES } from './damage'
 import type { GemFamily } from './condGems'
 import { dungeonReq } from './resist'
 import { enemyHp, enemyDmg, enemyArmor, lootFarmIlvl } from './progression'
-import { onboardingMult } from './enemies'
+import { murSoftness } from './enemies'
 
 /**
  * DONJONS « par RESSOURCE » (refonte v0.17).
@@ -367,10 +367,11 @@ const DUNGEON_FIGHT_RAMP_ILVL = 2 // +ilvl de difficulté par combat DANS un run
 const DUNGEON_BOSS_HP_MULT = 5    // boss (dernier combat) : pic de PV (~15 s, pacing donjon court)
 const DUNGEON_ELITE_HP_MULT = 2.7 // élites coriaces (Cache)
 
-// v0.35 — DIFFICULTÉ RELATIVE AU JOUEUR : fini l'ilvl absolu (« donjon 1 = ilvl 54 »). Niveau 1 = ton
-// LOOT ilvl (gear-matched) : un donjon est un OUTIL de farm, PAS un 2e mur — le mur, lui, est calé sur
-// la frontière, AU-DESSUS de ton gear. Chaque niveau au-dessus = un PUSH (+ rareté/rendement).
-const DUNGEON_PUSH_STEP = 5
+// v0.35 — ÉCHELLE DE PUSH (façon Mythique+) relative au joueur. Niveau 1 = ton LOOT ilvl
+// (gear-matched, revenu régulier) ; chaque niveau = un PUSH RAIDE de +DUNGEON_PUSH_STEP ilvl (≈ ×1,2
+// de puissance/niveau → +1 niveau ≈ 1 cran d'optimisation, fini d'enjamber 5 niveaux d'un coup).
+// Ton niveau-plafond = ton niveau d'optimisation ; les récompenses (rareté/rendement) suivent.
+const DUNGEON_PUSH_STEP = 10
 export function dungeonContentIlvl(level: number, bestStage: number): number {
   return Math.max(1, lootFarmIlvl(bestStage) + Math.max(0, level - 1) * DUNGEON_PUSH_STEP)
 }
@@ -413,10 +414,10 @@ export function makeDungeonEnemy(
   // v0.30 — base UNIFIÉE b^ilvl à l'ilvl de difficulté du donjon (+ rampe douce par combat) ;
   // l'identité (cfg.hp/dmg/armor) et la classe (boss/élite) restent des multiplicateurs.
   const diffIlvl = dungeonContentIlvl(level, bestStage) + fightIndex * DUNGEON_FIGHT_RAMP_ILVL
-  // v0.35 — MÊME atténuation d'onboarding que le farm (onboardingMult(bestStage)) : le donjon est calé
-  // sur le gear RÉEL du joueur à son Palier (très en dessous du « calé » des sims tôt, plateau de farm
-  // ensuite). Sans ça les donjons étaient infranchissables au Palier 1 → la passerelle = intro, pas un mur.
-  const soft = onboardingMult(bestStage)
+  // v0.35 — atténuation = murSoftness(bestStage) : rampe douce les tout premiers Paliers (intro
+  // franchissable d'emblée) PUIS PLEINE puissance (pas le plateau 0,55 du farm → les donjons mid/late
+  // ne sont plus « trop faciles »). Le niveau 1 reste gear-matched ; la difficulté vient du PUSH.
+  const soft = murSoftness(bestStage)
   const classHp = isBoss ? DUNGEON_BOSS_HP_MULT : isElite ? DUNGEON_ELITE_HP_MULT : 1
   const maxHp = Math.round(enemyHp(diffIlvl, 'trash') * classHp * cfg.hp * hpMods * soft)
   const effStage = level * EFF_STAGE_PER_LEVEL + fightIndex // récompenses (xp) — économie inchangée
