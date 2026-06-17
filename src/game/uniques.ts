@@ -264,7 +264,9 @@ export function instanceResist(inst: UniqueInstance): Partial<Record<DamageType,
  */
 export function rollUnique(rarityTier: number): UniqueInstance | undefined {
   if (rarityTier < 5) return undefined
-  const chance = Math.min(0.9, (rarityTier - 4) * 0.1)
+  // v0.32.2 : pente relevée (0.1 → 0.14/cran) + GARANTI au sommet (Céleste t11 ~98 %, Éternel+ = 100 %)
+  // — l'unique est LE pic d'euphorie ARPG : une très haute rareté doit quasi toujours en porter un.
+  const chance = Math.min(1, (rarityTier - 4) * 0.14)
   if (Math.random() > chance) return undefined
   const def = UNIQUE_EFFECTS[Math.floor(Math.random() * UNIQUE_EFFECTS.length)]
   return { id: def.id, rank: 1 }

@@ -24,8 +24,13 @@ export const POW_BASE = 1.018
 /** Cap DUR d'ilvl : aucun drop / craft / surillvl / boss de raid ne dépasse cette valeur. */
 export const ILVL_MAX = 700
 /** Rareté = bonus ADDITIF en ilvl-équivalent (au lieu d'un multiplicateur de budget qui se faisait
- *  « cuber » par le DPS convexe). +3/cran → Médiocre→Transcendant = +45 ilvl = ×3,8 (vs ×223 en v0.29). */
-export const RARITY_ILVL_PER_TIER = 3
+ *  « cuber » par le DPS convexe).
+ *  v0.32.2 : relevé 3 → 8 (retour joueur « une rareté supérieure doit VALOIR le coup / se garder
+ *  plus longtemps »). +8/cran → +15 %/cran de puissance (b^8), un drop d'une rareté au-dessus se
+ *  garde ~3 paliers de plus. Médiocre→Transcendant = +120 ilvl-équiv = ×8,4 (informatif : JAMAIS
+ *  vécu, la rareté est gatée par l'ilvl → l'écart RÉEL dans une fenêtre de contenu = ~3 crans = ×1,5,
+ *  sous le seuil snowball 1,8 du harnais). Anti-snowball préservé par le GATING, pas par un K minuscule. */
+export const RARITY_ILVL_PER_TIER = 8
 
 /** Puissance relative à un ilvl (normalisée : `powerAt(0) = 1`). LA fonction centrale. */
 export function powerAt(ilvl: number): number {
@@ -72,8 +77,9 @@ export const ENEMY_DMG_CLASS: Record<EnemyClass, number> = {
 /** Échelle de PV de base (ennemi trash, ilvl 0). Calibrée par `npm run ttk` (médian implicite) pour
  *  que le trash meure en ~`TTK.trash` à stuff calé. v0.30.1 : ×8 (suit ITEM_BUDGET0, ratio préservé).
  *  v0.32.1 : recalé 9000 → 7500 — avec b=1.018 (courbe plus plate) les secondaires soft-capés montent
- *  plus lentement → DPS mid-game un peu plus bas → TTK avait dérivé +20 %. Recentre boss endgame ~35 s. */
-export const ENEMY_HP0 = 7500
+ *  plus lentement → TTK avait dérivé +20 %. v0.32.2 : 7500 → 12500 — la rareté musclée (K=8 + lignes +
+ *  unique) rend le stuff calé (légendaire) ~×1,7 plus fort → recentre le boss endgame ~35 s. */
+export const ENEMY_HP0 = 12500
 /** Échelle de dégâts de base. Calibrée par `npm run ttk` pour viser `SURVIVE_SECONDS` à stuff calé. */
 export const ENEMY_DMG0 = 320
 

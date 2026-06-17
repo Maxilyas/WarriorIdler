@@ -6,10 +6,11 @@ import type { Rarity, RarityId } from './types'
  * et plus il est rare au drop (weight décroissant).
  */
 // statMult : ⚠️ NE PILOTE PLUS le budget de stats depuis la v0.30 (ne sert QU'aux effets uniques, cf.
-// uniques.ts). Le budget primaire/endurance/lignes d'une rareté = +RARITY_ILVL_PER_TIER (3) ilvl-équiv
-// PAR CRAN (progression.ts) → un Transcendant à ilvl ÉGAL vaut ~×3,8 un Médiocre (et NON ×22 : la
-// puissance vient de l'ilvl, pas de la rareté). La rareté apporte surtout des LIGNES en plus (affixCount)
-// + la chance/force d'unique. Garder ce champ ~géométrique reste cohérent pour le scaling des uniques.
+// uniques.ts). Le budget primaire/endurance/lignes d'une rareté = +RARITY_ILVL_PER_TIER (8 depuis
+// v0.32.2) ilvl-équiv PAR CRAN (progression.ts) → ~+15 %/cran, un Transcendant à ilvl ÉGAL vaut ~×8,4
+// un Médiocre (et NON ×22 : la puissance vient surtout de l'ilvl). La rareté apporte AUSSI des LIGNES
+// en plus (affixCount, courbe v0.32.2 plus généreuse au sommet) + une chance d'unique relevée — pour
+// que monter d'une rareté SE SENTE. Garder statMult ~géométrique reste cohérent pour le scaling des uniques.
 export const RARITIES: Record<RarityId, Rarity> = {
   mediocre: { id: 'mediocre', name: 'Médiocre', tier: 1, color: '#9d9d9d', affixCount: 1, statMult: 0.55, weight: 1000 },
   commun: { id: 'commun', name: 'Commun', tier: 2, color: '#ffffff', affixCount: 2, statMult: 0.70, weight: 700 },
@@ -18,15 +19,15 @@ export const RARITIES: Record<RarityId, Rarity> = {
   epique: { id: 'epique', name: 'Épique', tier: 5, color: '#a335ee', affixCount: 3, statMult: 1.30, weight: 120 },
   legendaire: { id: 'legendaire', name: 'Légendaire', tier: 6, color: '#ff8000', affixCount: 4, statMult: 1.60, weight: 55 },
   artefact: { id: 'artefact', name: 'Artefact', tier: 7, color: '#e6cc80', affixCount: 4, statMult: 1.95, weight: 26 },
-  patrimoine: { id: 'patrimoine', name: 'Patrimoine', tier: 8, color: '#00ccff', affixCount: 4, statMult: 2.40, weight: 13 },
+  patrimoine: { id: 'patrimoine', name: 'Patrimoine', tier: 8, color: '#00ccff', affixCount: 5, statMult: 2.40, weight: 13 },
   mythique: { id: 'mythique', name: 'Mythique', tier: 9, color: '#ff2d55', affixCount: 5, statMult: 2.95, weight: 7 },
-  ascendant: { id: 'ascendant', name: 'Ascendant', tier: 10, color: '#ff5ed2', affixCount: 5, statMult: 3.60, weight: 4 },
-  celeste: { id: 'celeste', name: 'Céleste', tier: 11, color: '#1fd9b0', affixCount: 5, statMult: 4.40, weight: 2.2 },
-  eternel: { id: 'eternel', name: 'Éternel', tier: 12, color: '#ffe14d', affixCount: 5, statMult: 5.40, weight: 1.2 },
-  cosmique: { id: 'cosmique', name: 'Cosmique', tier: 13, color: '#7af0ff', affixCount: 6, statMult: 6.60, weight: 0.6 },
-  abyssal: { id: 'abyssal', name: 'Abyssal', tier: 14, color: '#c026d3', affixCount: 6, statMult: 8.10, weight: 0.3 },
-  primordial: { id: 'primordial', name: 'Primordial', tier: 15, color: '#ff3b00', affixCount: 6, statMult: 9.90, weight: 0.15 },
-  transcendant: { id: 'transcendant', name: 'Transcendant', tier: 16, color: '#f5f5ff', affixCount: 6, statMult: 12.10, weight: 0.07 },
+  ascendant: { id: 'ascendant', name: 'Ascendant', tier: 10, color: '#ff5ed2', affixCount: 6, statMult: 3.60, weight: 4 },
+  celeste: { id: 'celeste', name: 'Céleste', tier: 11, color: '#1fd9b0', affixCount: 6, statMult: 4.40, weight: 2.2 },
+  eternel: { id: 'eternel', name: 'Éternel', tier: 12, color: '#ffe14d', affixCount: 7, statMult: 5.40, weight: 1.2 },
+  cosmique: { id: 'cosmique', name: 'Cosmique', tier: 13, color: '#7af0ff', affixCount: 7, statMult: 6.60, weight: 0.6 },
+  abyssal: { id: 'abyssal', name: 'Abyssal', tier: 14, color: '#c026d3', affixCount: 8, statMult: 8.10, weight: 0.3 },
+  primordial: { id: 'primordial', name: 'Primordial', tier: 15, color: '#ff3b00', affixCount: 8, statMult: 9.90, weight: 0.15 },
+  transcendant: { id: 'transcendant', name: 'Transcendant', tier: 16, color: '#f5f5ff', affixCount: 8, statMult: 12.10, weight: 0.07 },
 }
 
 /** Liste ordonnée par tier croissant. */

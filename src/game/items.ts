@@ -229,7 +229,8 @@ export function generateItem(opts: GenerateOptions): Item {
   const endurance = Math.max(1, Math.round(budget * (1 - offFrac) * 1.9 * (0.85 + Math.random() * 0.3)))
 
   // La qualité AJOUTE des lignes au-dessus du plancher FIXE de la rareté (+0/+0/+1/+1/+2).
-  const affixCount = Math.min(7, rarity.affixCount + qualityBonusAffixes(stars))
+  // v0.32.2 : cap 7 → 9 (les hautes raretés montent jusqu'à 8 lignes de base ; +qualité au-dessus).
+  const affixCount = Math.min(9, rarity.affixCount + qualityBonusAffixes(stars))
   const affixes = rollAffixes(affixCount, ilvl, qMult, rarity.tier, opts)
   const unique = rollUnique(rarity.tier)
 
