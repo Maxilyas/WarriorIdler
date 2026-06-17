@@ -71,6 +71,9 @@ import { DAMAGE_TYPE_LIST, DAMAGE_TYPES, profileDamageMult, type DamageProfile }
 import { equipSlotsForType, slotAccepts, EQUIP_SLOTS } from './slots'
 import { TUT_QUESTS, TUT_QUEST_IDS, type TutCtx } from './tutorial'
 import { welcomeMessage, offlineMessage, hasReward as inboxHasReward, INBOX_CAP, type InboxMessage } from './inbox'
+import {
+  emptyDaily, dailyMetrics, rollDaily, getDailyQuest, questDone, todayStr, LOGIN_REWARDS, type DailyState,
+} from './daily'
 import { essenceGain, upgradeCost, insertCost, getUnique, UNIQUE_MAX_RANK, randomUniqueInstance, undiscoveredUnique } from './uniques'
 import {
   generateDungeon, makeDungeonPack, dungeonIlvl, dungeonRegen, getDungeonDef, dungeonLuckTier,
@@ -432,6 +435,12 @@ interface SaveData {
   tut: { claimed: string[]; bought: boolean }
   /** ✉ Boîte de réception (v0.31.2) : gains à collecter (cadeaux, hors-ligne, events) — sortis du combat. */
   inbox: InboxMessage[]
+  /** 📅 Quotidien (v0.31.4) : contrats du jour + connexion. */
+  daily: DailyState
+  /** Compteur de kills à vie (combat classique) — métrique des contrats du jour (delta depuis baseline). */
+  totalKills: number
+  /** Compteur de donjons terminés à vie — métrique des contrats du jour. */
+  totalDungeons: number
   /** Rune du Karma (pity) : kills depuis le dernier drop Épique+ (compté en permanence). */
   killsSinceEpic: number
   /** Horodatage de la dernière sauvegarde (progression hors-ligne). */
@@ -468,6 +477,12 @@ interface GameState extends SaveData {
   pushInbox: (msg: InboxMessage) => void
   /** ✉ Marque tous les messages comme lus (appelé à l'ouverture de la boîte) → éteint les red-dots « non lu ». */
   markInboxSeen: () => void
+  /** 📅 Passe au jour suivant si minuit local est franchi (tire de nouveaux contrats + avance le streak). */
+  rollDailyIfNeeded: () => void
+  /** 📅 Réclame la récompense d'un contrat du jour terminé. */
+  claimDailyQuest: (id: string) => void
+  /** 📅 Réclame la récompense de connexion du jour (1×/jour). */
+  claimLogin: () => void
   /** v0.27 (F3) — cycle de vie mobile : l'appli passe en arrière-plan (horodate la mise en veille). */
   markAway: () => void
   /** v0.27 (F3) — retour au premier plan : crédite les gains hors-ligne accumulés en arrière-plan. */
@@ -1376,6 +1391,9 @@ function freshSave(): SaveData {
     // ✉ Boîte de réception semée d'un cadeau de bienvenue (montre OÙ atterrissent les gains). Pour les
     // saves existantes, le merge `{ ...freshSave(), ...p }` injecte ce message une fois (p.inbox absent).
     inbox: [welcomeMessage(Date.now())],
+    daily: emptyDaily(),
+    totalKills: 0,
+    totalDungeons: 0,
     killsSinceEpic: 0,
     lastSeen: Date.now(),
     lastShopRefresh: 0,
@@ -1458,6 +1476,10 @@ function sanitize(save: SaveData): SaveData {
   }
   // ✉ Filet de sécurité (le semis de bienvenue arrive déjà via le merge freshSave → tableau présent).
   if (!Array.isArray(save.inbox)) save.inbox = []
+  // 📅 Quotidien : défauts pour les vieilles saves (le passage de jour initialise au cold-start).
+  if (typeof save.totalKills !== 'number') save.totalKills = 0
+  if (typeof save.totalDungeons !== 'number') save.totalDungeons = 0
+  if (!save.daily || typeof save.daily.date !== 'string' || !Array.isArray(save.daily.questIds)) save.daily = emptyDaily()
   {
     const q = emptyQuint()
     const src = (save.quint ?? {}) as Record<string, number>
@@ -2020,6 +2042,9 @@ function persist(s: GameState) {
     recycleThreshold: s.recycleThreshold,
     tut: s.tut,
     inbox: s.inbox,
+    daily: s.daily,
+    totalKills: s.totalKills,
+    totalDungeons: s.totalDungeons,
     autoRecycle: s.autoRecycle,
     killsSinceEpic: s.killsSinceEpic,
     lastSeen: Date.now(),
@@ -3810,7 +3835,8 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
       const dungeonProgress = { ...s.dungeonProgress, [d.dungeonId]: Math.max(s.dungeonProgress[d.dungeonId] ?? 0, lv) }
       const repeatLeft = d.repeatLeft ?? 0
       // État avec les pools PAR COMBAT déjà crédités (le coffre est un bonus en plus).
-      const base = { ...s, gold, essence, noyau, poussiere, sceaux, orbes, gemDust, inventory, codex, runesOwned, metiers: pm.metiers, conseil: cp.conseil, maitrisePoints: cp.maitrisePoints }
+      // 📅 totalDungeons += 1 : porté par `base`, donc compté sur les DEUX chemins (auto-farm + normal).
+      const base = { ...s, gold, essence, noyau, poussiere, sceaux, orbes, gemDust, inventory, codex, runesOwned, metiers: pm.metiers, conseil: cp.conseil, maitrisePoints: cp.maitrisePoints, totalDungeons: s.totalDungeons + 1 }
 
       // Auto-farm : on encaisse le coffre directement (sans modal) et on relance.
       if (repeatLeft > 0) {
@@ -4203,6 +4229,14 @@ export const useGame = create<GameState>((set, get) => {
     }
   }
 
+  // 📅 Quotidien : initialise / fait tourner les contrats du jour si le jour a changé (cold-start).
+  {
+    const today = todayStr()
+    if (save.daily.date !== today) {
+      save.daily = rollDaily(save.daily, dailyMetrics(save), today, { bestStage: save.bestStage })
+    }
+  }
+
   return {
     ...save,
     enemy: makeEnemy(save.stage, save.activeBiome),
@@ -4512,7 +4546,7 @@ export const useGame = create<GameState>((set, get) => {
         if (res.overkill > 0) enemyNext.hp = Math.max(1, enemyNext.maxHp - res.overkill)
         if (isBossStage(stage)) log = pushLog(log, `⚔ Un boss vous barre la route : ${enemyNext.name} !`, 'info')
 
-        const next = { ...s, characters, stage, bestStage, biomeBest, conseil, maitrisePoints, gold, sceaux, poussiere, quint, gems, gemDust, gemsSeen, reagents, essence, codex, inventory, killsSinceEpic, enemy: enemyNext, log, killCount: s.killCount + 1 }
+        const next = { ...s, characters, stage, bestStage, biomeBest, conseil, maitrisePoints, gold, sceaux, poussiere, quint, gems, gemDust, gemsSeen, reagents, essence, codex, inventory, killsSinceEpic, enemy: enemyNext, log, killCount: s.killCount + 1, totalKills: s.totalKills + 1 }
         persist(next)
         set(next)
         return
@@ -6510,6 +6544,57 @@ export const useGame = create<GameState>((set, get) => {
       const s = get()
       if (s.inbox.every((m) => m.seen)) return
       const next = { ...s, inbox: s.inbox.map((m) => (m.seen ? m : { ...m, seen: true })) }
+      persist(next)
+      set(next)
+    },
+
+    rollDailyIfNeeded: () => {
+      const s = get()
+      const today = todayStr()
+      if (s.daily.date === today) return
+      const daily = rollDaily(s.daily, dailyMetrics(s), today, { bestStage: s.bestStage })
+      const next = { ...s, daily }
+      persist(next)
+      set(next)
+    },
+
+    claimDailyQuest: (id) => {
+      const s = get()
+      if (s.daily.claimed.includes(id) || !s.daily.questIds.includes(id)) return
+      const q = getDailyQuest(id)
+      if (!q || !questDone(q, dailyMetrics(s), s.daily.baseline)) return
+      const r = q.reward
+      const next = {
+        ...s,
+        gold: s.gold + (r.gold ?? 0),
+        essence: s.essence + (r.eclats ?? 0),
+        noyau: s.noyau + (r.noyau ?? 0),
+        sceaux: s.sceaux + (r.sceaux ?? 0),
+        fragments: s.fragments + (r.fragments ?? 0),
+        poussiere: s.poussiere + (r.poussiere ?? 0),
+        daily: { ...s.daily, claimed: [...s.daily.claimed, id] },
+        log: pushLog(s.log, `📅 Contrat du jour accompli : ${q.icon} ${q.title} !`, 'level'),
+      }
+      persist(next)
+      set(next)
+    },
+
+    claimLogin: () => {
+      const s = get()
+      const today = todayStr()
+      if (s.daily.date !== today || s.daily.loginClaimed === today) return
+      const r = LOGIN_REWARDS[(s.daily.streak - 1 + LOGIN_REWARDS.length) % LOGIN_REWARDS.length]
+      const next = {
+        ...s,
+        gold: s.gold + (r.gold ?? 0),
+        essence: s.essence + (r.eclats ?? 0),
+        noyau: s.noyau + (r.noyau ?? 0),
+        sceaux: s.sceaux + (r.sceaux ?? 0),
+        fragments: s.fragments + (r.fragments ?? 0),
+        poussiere: s.poussiere + (r.poussiere ?? 0),
+        daily: { ...s.daily, loginClaimed: today },
+        log: pushLog(s.log, `📅 Connexion jour ${((s.daily.streak - 1) % LOGIN_REWARDS.length) + 1} réclamée !`, 'level'),
+      }
       persist(next)
       set(next)
     },

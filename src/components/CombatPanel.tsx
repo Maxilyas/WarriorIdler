@@ -3,6 +3,10 @@ import { useGame, powerCooldowns, tutContext } from '../game/store'
 import type { LogKind } from '../game/store'
 import { TUT_QUESTS, tutDone, tutAllClaimed, tutClaimableCount, type TutCtx } from '../game/tutorial'
 import { hasReward, formatInboxReward, inboxAttentionCount, type InboxMessage } from '../game/inbox'
+import {
+  dailyMetrics, dailyClaimableCount, getDailyQuest, questProgress, questDone, todayStr, msUntilReset,
+  rewardLines, LOGIN_REWARDS, type DailyState, type DailyMetrics,
+} from '../game/daily'
 import { Sheet } from './ui'
 import { LevelBadge } from './LevelBadge'
 import { charMaxHp, charDps, charResist, charCombatMods, TALENT_START_LEVEL } from '../game/character'
@@ -68,6 +72,13 @@ export function CombatPanel() {
   const claimInbox = useGame((s) => s.claimInbox)
   const claimAllInbox = useGame((s) => s.claimAllInbox)
   const markInboxSeen = useGame((s) => s.markInboxSeen)
+  // 📅 Quotidien (v0.31.4) : contrats du jour + connexion.
+  const daily = useGame((s) => s.daily)
+  const totalKills = useGame((s) => s.totalKills)
+  const totalDungeons = useGame((s) => s.totalDungeons)
+  const metiers = useGame((s) => s.metiers)
+  const claimDailyQuest = useGame((s) => s.claimDailyQuest)
+  const claimLogin = useGame((s) => s.claimLogin)
 
   // Biome + palier + verrou fusionnés en une ligne « zone » : le détail s'ouvre en feuille
   // (libère un tiers d'écran pour le journal sur mobile).
@@ -75,6 +86,7 @@ export function CombatPanel() {
   const [journalOpen, setJournalOpen] = useState(false)
   const [questsOpen, setQuestsOpen] = useState(false)
   const [inboxOpen, setInboxOpen] = useState(false)
+  const [dailyOpen, setDailyOpen] = useState(false)
   const [logFilter, setLogFilter] = useState('tout')
 
   const me = characters[activeChar] ?? characters[0]
@@ -104,10 +116,13 @@ export function CombatPanel() {
   const tutActive = !tutAllClaimed(tut.claimed)
   // Récompenses de tuto prêtes à réclamer → red-dot de l'icône 🎯 flottante (cf. cluster live-ops).
   const tutClaimable = tutClaimableCount(tutCtx, tut.claimed)
-  // ✉ Inbox : récompenses à réclamer + messages non lus → red-dot de l'icône ✉. Le cluster s'affiche
-  // dès qu'il a une icône à montrer.
+  // ✉ Inbox : récompenses à réclamer + messages non lus → red-dot de l'icône ✉.
   const inboxAttention = inboxAttentionCount(inbox)
-  const clusterVisible = !dungeon && !raid && (tutActive || inbox.length > 0)
+  // 📅 Quotidien : contrats finis non réclamés + connexion du jour → red-dot de l'icône 📅.
+  const dailyMetricsNow = dailyMetrics({ totalKills, totalDungeons, metiers, bestStage })
+  const dailyClaim = dailyClaimableCount(daily, dailyMetricsNow, todayStr())
+  // Le cluster s'affiche hors instance (🎯 selon tuto · ✉ et 📅 toujours).
+  const clusterVisible = !dungeon && !raid
   const partyDps = characters
     .filter((c) => c.hp > 0)
     .reduce((sum, c) => sum + charDps(c), 0)
@@ -170,6 +185,18 @@ export function CombatPanel() {
                   )}
                 </button>
               )}
+              <button
+                onClick={() => setDailyOpen(true)}
+                aria-label={`Quotidien — ${dailyClaim} récompense${dailyClaim > 1 ? 's' : ''} à réclamer`}
+                className="relative flex h-10 w-10 items-center justify-center rounded-full border border-emerald-700/50 bg-[#0d1a14] text-xl active:scale-95"
+              >
+                📅
+                {dailyClaim > 0 && (
+                  <span className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] animate-pulse items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white ring-2 ring-[#0d111a]">
+                    {dailyClaim}
+                  </span>
+                )}
+              </button>
             </div>
           )}
         </div>
@@ -698,6 +725,13 @@ export function CombatPanel() {
         </Sheet>
       )}
 
+      {/* Feuille 📅 Quotidien : contrats du jour + connexion. */}
+      {dailyOpen && (
+        <Sheet title="📅 Quotidien" onClose={() => setDailyOpen(false)}>
+          <DailyPanel daily={daily} metrics={dailyMetricsNow} onClaimQuest={claimDailyQuest} onClaimLogin={claimLogin} />
+        </Sheet>
+      )}
+
       {/* Journal plein écran */}
       {journalOpen && (
         <Sheet title="Journal de combat" onClose={() => setJournalOpen(false)}>
@@ -866,6 +900,84 @@ function InboxList({ inbox, onClaim, onClaimAll }: { inbox: InboxMessage[]; onCl
           )
         })}
       </ul>
+    </div>
+  )
+}
+
+/** 📅 Panneau Quotidien : connexion (calendrier 7 j) + 3 contrats du jour, rendu dans une feuille. */
+function DailyPanel({ daily, metrics, onClaimQuest, onClaimLogin }: { daily: DailyState; metrics: DailyMetrics; onClaimQuest: (id: string) => void; onClaimLogin: () => void }) {
+  const today = todayStr()
+  const loginDay = ((daily.streak - 1) % LOGIN_REWARDS.length + LOGIN_REWARDS.length) % LOGIN_REWARDS.length // 0..6
+  const loginClaimable = daily.date === today && daily.loginClaimed !== today
+  const ms = msUntilReset()
+  const resetIn = ms >= 3600000 ? `${Math.floor(ms / 3600000)} h ${Math.floor((ms % 3600000) / 60000)} min` : `${Math.max(1, Math.floor(ms / 60000))} min`
+  return (
+    <div className="space-y-3">
+      <div className="text-center text-[10.5px] text-slate-500">↻ Réinitialisation dans {resetIn}</div>
+
+      {/* Connexion quotidienne */}
+      <div>
+        <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-emerald-300">🔔 Connexion — jour {loginDay + 1}/{LOGIN_REWARDS.length}</div>
+        <div className="grid grid-cols-7 gap-1">
+          {LOGIN_REWARDS.map((r, i) => {
+            const isToday = i === loginDay
+            const past = i < loginDay
+            const line = rewardLines(r)[0]
+            return (
+              <div key={i} className={'flex flex-col items-center gap-0.5 rounded-lg border px-0.5 py-1.5 ' + (isToday ? 'border-emerald-500 bg-emerald-900/30' : past ? 'border-slate-800 opacity-40' : 'border-slate-700')}>
+                <span className="text-[8px] text-slate-500">J{i + 1}</span>
+                <span className="text-base leading-none">{line.icon}</span>
+                <span className="text-[8px] tabular-nums text-slate-400">{line.amount.toLocaleString('fr-FR')}</span>
+              </div>
+            )
+          })}
+        </div>
+        <button
+          disabled={!loginClaimable}
+          onClick={onClaimLogin}
+          className={'mt-2 w-full rounded-lg py-2 text-xs font-semibold ' + (loginClaimable ? 'bg-emerald-600 text-white hover:bg-emerald-500 active:scale-95' : 'bg-slate-800 text-slate-500')}
+        >
+          {loginClaimable ? `Réclamer le jour ${loginDay + 1} 🎁` : '✅ Connexion réclamée aujourd\'hui'}
+        </button>
+      </div>
+
+      {/* Contrats du jour */}
+      <div>
+        <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-emerald-300">Contrats du jour</div>
+        <ul className="space-y-1.5">
+          {daily.questIds.map((id) => {
+            const q = getDailyQuest(id)
+            if (!q) return null
+            const prog = questProgress(q, metrics, daily.baseline)
+            const done = questDone(q, metrics, daily.baseline)
+            const claimed = daily.claimed.includes(id)
+            return (
+              <li key={id} className={'rounded-lg px-2.5 py-2 ' + (claimed ? 'opacity-45' : done ? 'bg-emerald-900/25 ring-1 ring-emerald-500/30' : 'bg-slate-900/40')}>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[12px] font-medium text-slate-100">{claimed ? '✅' : done ? '🟡' : '⬜'} {q.icon} {q.title}</span>
+                  {done && !claimed && (
+                    <button onClick={() => onClaimQuest(id)} className="shrink-0 rounded bg-emerald-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-emerald-500 active:scale-95">
+                      Réclamer 🎁
+                    </button>
+                  )}
+                </div>
+                {!claimed && (
+                  <>
+                    <div className="mt-1 text-[11px] leading-snug text-slate-400">{q.desc}</div>
+                    <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+                      <div className="h-full bg-emerald-500" style={{ width: `${(prog / q.target) * 100}%` }} />
+                    </div>
+                    <div className="mt-0.5 flex items-center justify-between text-[10px]">
+                      <span className="tabular-nums text-slate-500">{prog.toLocaleString('fr-FR')} / {q.target.toLocaleString('fr-FR')}</span>
+                      <span className="font-medium text-emerald-300/80">🎁 {formatInboxReward(q.reward)}</span>
+                    </div>
+                  </>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+      </div>
     </div>
   )
 }
