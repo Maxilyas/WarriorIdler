@@ -25,7 +25,7 @@ import type { KeystoneEffect } from './classData'
 
 export type ConstellationId =
   | 'coeur' | 'pantheon' | 'voleur' | 'assassin' | 'ombrelame' | 'lamevenin'
-  | 'mage' | 'pyromancien' | 'cryomancien' | 'arcaniste'
+  | 'mage' | 'pyromancien' | 'cryomancien' | 'arcaniste' | 'convergence'
   | 'chasseur' | 'meute' | 'faucon'
   | 'guerrier' | 'sentence' | 'rempart'
   | 'pretre' | 'lumiere' | 'vide' | 'crepuscule'
@@ -325,6 +325,37 @@ ks('ar_apogee', 'arcaniste', 4, 'Apogée arcanique', 'IDENTITÉ (carrefour) : +2
 minor('ar_voile', 'arcaniste', 1, 'Voile arcanique', 5, { barriere: 12 }, { requires: ['ar_hub'] }) // ⛓ TAMPON survie (maxRank 5)
 ability('ar_barriere', 'arcaniste', 2, 'Bouclier des arcanes', 'bouclier_runique', 'SURVIE : débloque Bouclier des arcanes (absorption).', { requires: ['ar_voile'] })
 ks('ar_clignement', 'arcaniste', 3, 'Clignement', 'SURVIE : +30 Esquive, +18 Récupération (tu te téléportes hors de danger). Exige Voile arcanique au rang max (5).', { stat: { esquive: 30, recuperation: 18 } }, { requires: ['ar_voile'], requiresRank: { id: 'ar_voile', rank: 5 } })
+
+/* ================================================================== */
+/* CONVERGENCE (v0.34) — SOMMET ABSOLU DU MAGE : tri-élément feu × givre × arcane.
+ * Ne part PAS du nœud de classe : se REJOINT sur les nœuds les plus profonds des 3 archétypes.
+ * Calibré par scripts/sim-mage-convergence.mjs (convergence ≈ ×1,34 PLAT, tri ×1,45 vs pur).
+ * La cascade : Hot Streak → Charges (Feu→Arcane) ; Surcharge → gel (Arcane→Givre) ; gel → embrasement
+ * (Givre→Feu). Payoff TRINITÉ : +dégâts par état élémentaire actif (borné). Apex « Archimage » gaté
+ * sur les 3 ULTIMES (Météore + Hiver éternel + Singularité) = il faut TOUT avoir. */
+/* ================================================================== */
+// CARREFOUR — se rejoint sur les 3 keystones PROFONDS (les signatures que la cascade utilise).
+ks('cv_convergence', 'convergence', 0, 'Convergence', 'PIVOT : les trois écoles convergent. Débloque la cascade tri-élémentaire et la Trinité. Exige Combustion (feu) ET Abîme glaciaire (givre) ET Surcharge instable (arcane).',
+  { stat: { intelligence: 20 } }, { requiresAll: ['py_combustion', 'cr_abime', 'ar_overload'] })
+
+// LA CASCADE — chaque école en déclenche une autre.
+ks('cv_combustion_rune', 'convergence', 1, 'Combustion runique', 'CASCADE (Feu→Arcane) : un déclenchement de Hot Streak t\'octroie 2 Charges des arcanes.', { stat: { hate: 14 }, ks: { hotStreakCharges: 2 } }, { requires: ['cv_convergence'] })
+ks('cv_gel_arcanique', 'convergence', 1, 'Gel arcanique', 'CASCADE (Arcane→Givre) : entrer en Surcharge GÈLE tout le pack (3 s) — fracas de masse sans caster Cône.', { stat: { intelligence: 12 }, ks: { overloadFreezes: true } }, { requires: ['cv_convergence'] })
+ks('cv_fracas_ardent', 'convergence', 1, 'Fracas ardent', 'CASCADE (Givre→Feu) : tes coups [feu] sur une cible GELÉE posent un Embrasement (DoT = 30 % du coup), même sans crit.', { stat: { alteration: 14 }, ks: { frozenIgnites: 0.3 } }, { requires: ['cv_convergence'] })
+
+// SORT SIGNATURE — porte les 3 éléments à la fois.
+ability('cv_prisme', 'convergence', 2, 'Prisme élémentaire', 'cv_prisme', 'Débloque Prisme élémentaire : un trait [feu][froid][arcane] qui GÈLE la cible, profite de tes 3 bonus d\'école et embrase au crit. +14 Intelligence.', { requires: ['cv_convergence'], statMods: { intelligence: 14 } })
+
+// LE PAYOFF.
+ks('cv_trinite', 'convergence', 3, 'Trinité', 'PAYOFF : +7 % de TOUS tes dégâts PAR état élémentaire ACTIF sur la cible (Embrasement en cours · Gelée · toi en Surcharge), max +21 %. Exige les 3 nœuds de cascade.', { stat: { intelligence: 16 }, ks: { elementalStates: 0.07 } }, { requiresAll: ['cv_combustion_rune', 'cv_gel_arcanique', 'cv_fracas_ardent'] })
+
+// CŒUR MULTI-STAT.
+minor('cv_savoir', 'convergence', 2, 'Savoir interdit', 5, { intelligence: 6, hate: 4 }, { requires: ['cv_convergence'] }) // ⛓ tampon → gate Équilibre
+ks('cv_equilibre', 'convergence', 3, 'Équilibre des sphères', 'CROSS-SCALING : ton fracas (dégâts vs gelés) +16 % × (multiplicateur d\'Altération − 1) — BORNÉ. Exige Savoir interdit au max (5) + 8 pts.', { stat: { alteration: 16 }, ks: { shatterFromAlteration: 0.16 } }, { requires: ['cv_savoir'], requiresRank: { id: 'cv_savoir', rank: 5 }, minSpent: 8 })
+
+// APEX & SORT CAPSTONE — exige littéralement TOUT (les 3 ultimes).
+ks('cv_archimage', 'convergence', 4, 'Archimage', 'APEX : la Trinité passe à +10 %/état (max +30 %) ET +8 % de dégâts permanent. Le sommet absolu : exige Trinité ET les 3 ULTIMES (Météore + Hiver éternel + Singularité).', { stat: { intelligence: 20 }, ks: { elementalStates: 0.03, damageMult: 1.08 } }, { requiresAll: ['cv_trinite', 'py_meteore', 'cr_hiver', 'ar_singularite'], minSpent: 10 })
+ability('cv_cataclysme', 'convergence', 4, 'Cataclysme', 'cv_cataclysme', 'ULTIME — une déflagration feu+givre+arcane gèle ET pulvérise tout le pack. Gaté : Trinité + 10 pts.', { requires: ['cv_trinite'], minSpent: 10 })
 
 /* ================================================================== */
 /* CHASSEUR (Mailles) — Meneur de meute · Œil de faucon.               */
@@ -710,6 +741,7 @@ export const CONSTELLATIONS: Record<ConstellationId, ConstellationMeta> = {
   pyromancien: { id: 'pyromancien', name: 'Pyromancien', role: 'Mage · feu & embrasement', color: '#ff6b6b', icon: '🔥', archetype: true },
   cryomancien: { id: 'cryomancien', name: 'Cryomancien', role: 'Mage · givre & contrôle', color: '#3bc9db', icon: '❄️', archetype: true },
   arcaniste: { id: 'arcaniste', name: 'Arcaniste', role: 'Mage · charges & surcharge', color: '#b197fc', icon: '🔮', archetype: true },
+  convergence: { id: 'convergence', name: 'Convergence', role: 'Mage · tri-élément (sommet)', color: '#f5d0fe', icon: '🔱', archetype: true },
   chasseur: { id: 'chasseur', name: 'Chasseur', role: 'Mailles · classe', color: '#94d82d', icon: '🏹' },
   meute: { id: 'meute', name: 'Meneur de meute', role: 'Chasseur · familier', color: '#82c91e', icon: '🐺', archetype: true },
   faucon: { id: 'faucon', name: 'Œil de faucon', role: 'Chasseur · concentration', color: '#fab005', icon: '🦅', archetype: true },
@@ -740,7 +772,7 @@ export const CONSTELLATIONS: Record<ConstellationId, ConstellationMeta> = {
 }
 export const CONSTELLATION_LIST: ConstellationId[] = [
   'coeur', 'pantheon', 'voleur', 'assassin', 'ombrelame', 'lamevenin',
-  'mage', 'pyromancien', 'cryomancien', 'arcaniste',
+  'mage', 'pyromancien', 'cryomancien', 'arcaniste', 'convergence',
   'chasseur', 'meute', 'faucon',
   'guerrier', 'sentence', 'rempart',
   'pretre', 'lumiere', 'vide', 'crepuscule',

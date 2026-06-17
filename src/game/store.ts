@@ -2474,7 +2474,9 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
   if (p.tags) for (const t of p.tags) tagMult *= (cm.tagBonus[t] ?? 1)
   // CONTRÔLE (v0.29.6) : un sort [controle] gèle/ralentit ; SHATTER : +dégâts aux ennemis contrôlés.
   if (p.tags?.includes('controle')) enemy.controlled = Math.max(enemy.controlled ?? 0, p.duration ?? 4)
-  const shatterMult = (enemy.controlled ?? 0) > 0 ? 1 + cm.shatter : 1
+  // SHATTER : +dégâts vs gelé/contrôlé. v0.34 « Équilibre des sphères » : shatter +frac×(altMult−1), BORNÉ.
+  const shatterTot = cm.shatter + cm.shatterFromAlteration * (derived.alterationMult - 1)
+  const shatterMult = (enemy.controlled ?? 0) > 0 ? 1 + shatterTot : 1
   // PYROMANCIEN « Hot Streak » (v0.31) : tes sorts [feu] chargent la Chaleur (montée pondérée par le Critique).
   // Un sort [feu][direct] lancé à PLEINE Chaleur est SURPUISSANT (×mult) puis remet la Chaleur à 0.
   let hotMult = 1
@@ -2483,11 +2485,19 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
     if (isNuke && p.tags.includes('direct') && (caster.heat ?? 0) >= cm.hotStreak.cap) {
       hotMult = cm.hotStreak.mult
       caster.heat = 0
+      // v0.34 « Combustion runique » : un déclenchement de Hot Streak octroie des Charges des arcanes (Feu→Arcane).
+      if (cm.hotStreakCharges > 0) caster.combo = Math.min(5 + cm.comboCap, (caster.combo ?? 0) + cm.hotStreakCharges)
     } else {
       caster.heat = Math.min(cm.hotStreak.cap, (caster.heat ?? 0) + 1 + 2 * derived.critChance)
     }
   }
-  const magDmg = base * profileDamageMult(profile) * dmgMult * tagMult * shatterMult * hotMult // profil + keystones + tags + shatter + Hot Streak
+  // v0.34 « TRINITÉ » (Convergence) : +frac de TOUS tes dégâts par état élémentaire ACTIF (embrasement /
+  // gel / surcharge), borné à 3 états (indépendant de l'ilvl → pas de snowball).
+  const elemStates = cm.elementalStates > 0
+    ? (enemy.dot ? 1 : 0) + ((enemy.controlled ?? 0) > 0 ? 1 : 0) + ((caster.overload ?? 0) > 0 ? 1 : 0)
+    : 0
+  const trinityMult = 1 + cm.elementalStates * elemStates
+  const magDmg = base * profileDamageMult(profile) * dmgMult * tagMult * shatterMult * hotMult * trinityMult // profil + keystones + tags + shatter + Hot Streak + Trinité
   // Boucliers : scalent sur la MEILLEURE de (stat principale, Endurance) → un tank qui empile
   // l'Endurance obtient un énorme bouclier (levier de survie qui suit l'Endurance).
   const shieldBase = (p.magnitude ?? 1) * Math.max(abilityPower(derived, powerScale(p)), derived.endurancePower)
@@ -2537,8 +2547,14 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
   switch (p.effect) {
     case 'nuke':
     case 'cleave':
-    case 'megaCleave':
-      return hit(magDmg * vm)
+    case 'megaCleave': {
+      const done = hit(magDmg * vm)
+      // v0.34 « Fracas ardent » (Convergence) : un coup [feu] sur un GELÉ pose un Embrasement (Givre→Feu).
+      if (cm.frozenIgnites > 0 && (enemy.controlled ?? 0) > 0 && p.tags?.includes('feu') && enemy.hp > 0) {
+        enemy.dot = { dps: Math.max(magDmg * cm.frozenIgnites * derived.alterationMult, enemy.dot?.dps ?? 0), remaining: 6 }
+      }
+      return done
+    }
     case 'executeNuke': {
       // +250% de dégâts selon les PV MANQUANTS : finisher dévastateur.
       const missing = 1 - enemy.hp / Math.max(1, enemy.maxHp)
@@ -2656,6 +2672,8 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
       if (cm.overload && (caster.overload ?? 0) <= 0 && (caster.combo ?? 0) >= cap) {
         caster.overload = cm.overload.window
         caster.combo = 0
+        // v0.34 « Gel arcanique » (Convergence) : entrer en Surcharge GÈLE le pack (Arcane→Givre).
+        if (cm.overloadFreezes) enemy.controlled = Math.max(enemy.controlled ?? 0, 3)
       }
       return hit(magDmg * vm)
     }

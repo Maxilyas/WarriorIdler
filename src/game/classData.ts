@@ -146,6 +146,18 @@ export interface KeystoneEffect {
   noSelfHeal?: boolean
   /** COMMUNION D'OMBRE : tes DoT soignent l'allié le plus blessé (frac du tick). Somme. */
   dotHealsParty?: number
+
+  /* ---- v0.34 : MAGE « Convergence » (tri-élément feu × givre × arcane, calibré par sim) ---- */
+  /** COMBUSTION RUNIQUE : un déclenchement de Hot Streak octroie N Charges des arcanes (Feu→Arcane). Somme. */
+  hotStreakCharges?: number
+  /** GEL ARCANIQUE : entrer en Surcharge GÈLE le pack (contrôle) (Arcane→Givre). */
+  overloadFreezes?: boolean
+  /** FRACAS ARDENT : un coup [feu] sur une cible GELÉE pose un Embrasement = frac (Givre→Feu). Somme. */
+  frozenIgnites?: number
+  /** TRINITÉ : +frac de TOUS tes dégâts PAR état élémentaire ACTIF (embrasement / gel / surcharge), max 3. Somme. */
+  elementalStates?: number
+  /** ÉQUILIBRE DES SPHÈRES : shatter += frac×(alterationMult−1) — cross-scaling BORNÉ. Somme. */
+  shatterFromAlteration?: number
 }
 
 /** Vocabulaire des TAGS de comportement (12) — les 7 types de dégâts servent aussi de tags. */
