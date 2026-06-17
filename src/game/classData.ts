@@ -158,6 +158,16 @@ export interface KeystoneEffect {
   elementalStates?: number
   /** ÉQUILIBRE DES SPHÈRES : shatter += frac×(alterationMult−1) — cross-scaling BORNÉ. Somme. */
   shatterFromAlteration?: number
+
+  /* ---- v0.34 : GUERRIER « Juggernaut » + « Furie » (calibré par sim) ---- */
+  /** BOUCLIER OFFENSIF : finisseur +frac × (bouclier d'absorption actuel / PV max) — BORNÉ (bouclier ≤ PV). Somme. */
+  shieldToFinisher?: number
+  /** VENGEANCE : encaisser des dégâts génère de la Rage (Combo) ∝ aux PV perdus. Somme. */
+  damageToRage?: number
+  /** SANG ET ACIER : un finisseur RAFRAÎCHIT tes saignements (enemy.dot). */
+  finisherRefreshBleed?: boolean
+  /** FURIE : un coup CRITIQUE déclenche/rafraîchit l'ENRAGE (+mult de dégâts, durée). On garde le plus fort. */
+  enrageOnCrit?: { mult: number; duration: number }
 }
 
 /** Vocabulaire des TAGS de comportement (12) — les 7 types de dégâts servent aussi de tags. */

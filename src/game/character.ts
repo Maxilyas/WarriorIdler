@@ -529,6 +529,11 @@ export interface CombatMods {
   frozenIgnites: number
   elementalStates: number
   shatterFromAlteration: number
+  // --- v0.34 : GUERRIER « Juggernaut » + « Furie » ---
+  shieldToFinisher: number
+  damageToRage: number
+  finisherRefreshBleed: boolean
+  enrageOnCrit?: { mult: number; duration: number }
 }
 
 export function charCombatMods(char: Character): CombatMods {
@@ -547,6 +552,8 @@ export function charCombatMods(char: Character): CombatMods {
     folieEmpowersAtonement: 0, folieDot: 0, noSelfHeal: false, dotHealsParty: 0,
     // v0.34 : Convergence (Mage)
     hotStreakCharges: 0, overloadFreezes: false, frozenIgnites: 0, elementalStates: 0, shatterFromAlteration: 0,
+    // v0.34 : Guerrier (Juggernaut + Furie)
+    shieldToFinisher: 0, damageToRage: 0, finisherRefreshBleed: false,
   }
   // Multiplicateur de dégâts des bonus de SET (s'applique aux auto-attaques ET aux sorts,
   // et donc au DPS affiché via charDps — même chemin que les keystones).
@@ -645,6 +652,13 @@ export function charCombatMods(char: Character): CombatMods {
     if (k.frozenIgnites) out.frozenIgnites += k.frozenIgnites
     if (k.elementalStates) out.elementalStates += k.elementalStates
     if (k.shatterFromAlteration) out.shatterFromAlteration += k.shatterFromAlteration
+    // --- v0.34 : GUERRIER « Juggernaut » + « Furie » ---
+    if (k.shieldToFinisher) out.shieldToFinisher += k.shieldToFinisher
+    if (k.damageToRage) out.damageToRage += k.damageToRage
+    if (k.finisherRefreshBleed) out.finisherRefreshBleed = true
+    if (k.enrageOnCrit) out.enrageOnCrit = out.enrageOnCrit
+      ? { mult: Math.max(out.enrageOnCrit.mult, k.enrageOnCrit.mult), duration: Math.max(out.enrageOnCrit.duration, k.enrageOnCrit.duration) }
+      : { ...k.enrageOnCrit }
     if (k.hotStreak) out.hotStreak = out.hotStreak ? { cap: Math.min(out.hotStreak.cap, k.hotStreak.cap), mult: Math.max(out.hotStreak.mult, k.hotStreak.mult) } : { ...k.hotStreak }
     if (k.overload) out.overload = out.overload ? { window: Math.max(out.overload.window, k.overload.window), mult: Math.max(out.overload.mult, k.overload.mult) } : { ...k.overload }
     if (k.multiTypeBonus) {

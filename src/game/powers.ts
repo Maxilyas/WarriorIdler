@@ -259,6 +259,7 @@ const EFFECT_FR: Record<PowerEffect, string> = {
   poison: 'venin cumulatif (+1 stack)', detonate: 'détonation des stacks de venin',
   builder: 'générateur (+1 Point de Combo)', finisher: 'finisseur (× Points de Combo)',
   smiteHeal: 'frappe d\'ombre qui soigne', eclipse: 'cataclysme d\'ombre + soin de groupe',
+  avatar: 'transe de guerre (+dégâts) + bouclier',
 }
 const SCALE_FR: Record<OffensiveStat, string> = { force: 'FOR', agilite: 'AGI', intelligence: 'INT' }
 function spellDescription(s: SpellSpec): string {
@@ -365,6 +366,12 @@ const GUERRIER_SPELLS: SpellSpec[] = [
   // Rempart (TANK — Rage → bouclier + provocation + épines)
   { id: 're_bouclier_coup', name: 'Coup de bouclier', icon: '🛡️', effect: 'builder', mag: 2.2, cd: 3.2, scale: 'force', tags: ['mono', 'direct', 'generateur', 'protection'], resource: 'Rage' }, // FOR : lent, solide
   { id: 're_revanche', name: 'Revanche', icon: '🤺', effect: 'finisher', mag: 1.4, cd: 3.5, scale: 'force', tags: ['mono', 'direct', 'finisseur', 'protection'], resource: 'Rage' },
+  // Juggernaut (hybride défense ⇄ offense) — finisseur dopé par le bouclier + transe-bouclier.
+  { id: 'gu_condamnation', name: 'Condamnation', icon: '⚖️', effect: 'finisher', mag: 1.8, cd: 4, scale: 'force', tags: ['mono', 'direct', 'finisseur'], resource: 'Rage' },
+  { id: 'gu_avatar', name: 'Avatar de guerre', icon: '🗿', effect: 'avatar', mag: 1.8, cd: 24, duration: 8, scale: 'force', tags: ['ultime'] },
+  // Furie (Berserker bi-arme + Enrage + vol de vie) — finisseur multi-coups + transe sanguinaire.
+  { id: 'fu_rampage', name: 'Rampage', icon: '🪓', effect: 'finisher', mag: 1.7, cd: 3.5, scale: 'force', tags: ['mono', 'direct', 'finisseur'], resource: 'Rage' },
+  { id: 'fu_berserk', name: 'Berserk', icon: '🩸', effect: 'frenzy', mag: 1.9, cd: 20, duration: 8, scale: 'force', tags: ['ultime'] },
 ]
 for (const s of GUERRIER_SPELLS) POWERS.push(specToPower(s))
 
@@ -555,6 +562,8 @@ export const POWER_EFFECT_META: Record<PowerEffect, PowerEffectMeta> = {
   // v0.34 — socle Prêtre « Crépuscule »
   smiteHeal: { label: 'Châtiment soignant', icon: '🌗', targets: 'Mono-cible + soin de l\'allié blessé', family: 'offense' },
   eclipse: { label: 'Éclipse (zone)', icon: '🌘', targets: 'Tout le pack + soin de groupe', family: 'offense' },
+  // v0.34 — socle Guerrier « Juggernaut »
+  avatar: { label: 'Avatar de guerre', icon: '🗿', targets: 'Porteur · transe + bouclier', family: 'soutien' },
 }
 
 /** Stat de scaling d'un sort, en court (FOR / AGI / INT). */

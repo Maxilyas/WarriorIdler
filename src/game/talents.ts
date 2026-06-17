@@ -27,7 +27,7 @@ export type ConstellationId =
   | 'coeur' | 'pantheon' | 'voleur' | 'assassin' | 'ombrelame' | 'lamevenin'
   | 'mage' | 'pyromancien' | 'cryomancien' | 'arcaniste' | 'convergence'
   | 'chasseur' | 'meute' | 'faucon'
-  | 'guerrier' | 'sentence' | 'rempart'
+  | 'guerrier' | 'sentence' | 'rempart' | 'juggernaut' | 'furie'
   | 'pretre' | 'lumiere' | 'vide' | 'crepuscule'
   | 'dk' | 'givremort' | 'sang'
   | 'demoniste' | 'pestilence' | 'legion'
@@ -468,6 +468,51 @@ ability('re_bouclier', 'rempart', 2, 'Bouclier runique', 'bouclier_runique', 'SU
 ks('re_colosse', 'rempart', 3, 'Colosse', 'À plus de 60% de PV, +20% de dégâts (un mur qui frappe). Profond : 10 pts dans la voie.', { stat: { force: 16 }, ks: { highHpBonus: { threshold: 0.6, mult: 1.2 } } }, { requires: ['re_inebranlable'], minSpent: 10 })
 
 /* ================================================================== */
+/* JUGGERNAUT (v0.34) — SECTION SYNERGIE Sentence × Rempart : DPS-TANK hybride.
+ * Défense ⇄ offense fusionnées : Endurance → Force, le bouclier nourrit les finisseurs, encaisser
+ * génère de la Rage. Calibré par scripts/sim-guerrier-hybride.mjs (×1,25 plat ; DPS ≈ spec pure,
+ * mais BIEN plus tanky → l'edge est la survie). Sorts : Condamnation, Avatar de guerre. */
+/* ================================================================== */
+ks('ju_pivot', 'juggernaut', 0, 'Indomptable', 'PIVOT : ton Endurance compte comme +20 % de Force (tu frappes avec ta carrure). Exige Coups mortels (Sentence) ET Mur de boucliers (Rempart).',
+  { stat: { force: 16 }, ks: { enduranceAs: { to: 'force', frac: 0.2 } } }, { requiresAll: ['se_mortel', 're_bloc'] })
+// DÉFENSE → OFFENSE.
+ks('ju_bouclier', 'juggernaut', 1, 'Bouclier offensif', 'Tes finisseurs +16 % de dégâts × (ton bouclier d\'absorption actuel / PV max) — BORNÉ (bouclier ≤ PV).', { stat: { endurance: 16 }, ks: { shieldToFinisher: 0.16 } }, { requires: ['ju_pivot'] })
+ks('ju_vengeance', 'juggernaut', 1, 'Vengeance', 'Les dégâts que tu SUBIS génèrent de la Rage (∝ aux PV perdus) ; -6 % de dégâts subis.', { stat: { force: 14 }, ks: { damageToRage: 1, flatDr: 0.06 } }, { requires: ['ju_pivot'] })
+ks('ju_represailles', 'juggernaut', 2, 'Représailles ardentes', 'Tes assaillants encaissent 40 % de tes dégâts d\'auto en retour (épines). Profond : 8 pts.', { stat: { endurance: 18 }, ks: { thorns: 0.4 } }, { requires: ['ju_vengeance'], minSpent: 8 })
+// OFFENSE → DÉFENSE.
+ks('ju_sang', 'juggernaut', 1, 'Sang et acier', 'Tes saignements te SOIGNENT (25 % du tick) ET un finisseur les rafraîchit.', { stat: { volDeVie: 14 }, ks: { dotLeech: 0.25, finisherRefreshBleed: true } }, { requires: ['ju_pivot'] })
+ks('ju_carapace', 'juggernaut', 2, 'Carapace de rage', 'TANK (cd 30 s) : un finisseur t\'accorde un bouclier = 20 % de ses dégâts (≤ PV max) — alimente Bouclier offensif.', { stat: { endurance: 20 }, ks: { finisherShield: 0.2 } }, { requires: ['ju_sang'] })
+ability('ju_condamnation', 'juggernaut', 2, 'Condamnation', 'gu_condamnation', 'Débloque Condamnation : un finisseur brutal (× Rage) dopé par ton bouclier d\'absorption. +16 Force.', { requires: ['ju_bouclier'], statMods: { force: 16 } })
+// ÉTAT (choix) & cœur multi-stat.
+ks('ju_colosse', 'juggernaut', 3, 'Colosse de guerre', 'CHOIX : au-dessus de 60 % de PV, +26 % de TOUS tes dégâts (le mur qui frappe).', { stat: { endurance: 16 }, ks: { highHpBonus: { threshold: 0.6, mult: 1.26 } } }, { requires: ['ju_represailles'], exclusive: 'ju_etat' })
+ks('ju_accule', 'juggernaut', 3, 'Acculé', 'CHOIX : sous 40 % de PV, +40 % de TOUS tes dégâts (le dos au mur).', { stat: { force: 16 }, ks: { lowHpBonus: { threshold: 0.4, mult: 1.4 } } }, { requires: ['ju_represailles'], exclusive: 'ju_etat' })
+minor('ju_maitre', 'juggernaut', 2, 'Maître de guerre', 5, { force: 6, endurance: 6 }, { requires: ['ju_pivot'] }) // ⛓ tampon double-stat
+ks('ju_equilibre', 'juggernaut', 3, 'Équilibre martial', 'Ton Bouclier offensif +50 % (le bouclier compte double pour tes finisseurs). Exige Maître de guerre au max (5) + 10 pts.', { stat: { endurance: 16 }, ks: { shieldToFinisher: 0.16 } }, { requires: ['ju_maitre'], requiresRank: { id: 'ju_maitre', rank: 5 }, minSpent: 10 })
+// CAPSTONE & sort ultime.
+ks('ju_titan', 'juggernaut', 4, 'Cœur de titan', 'CAPSTONE : +10 % de dégâts permanent ET ton bouclier de Carapace de rage frappe plus fort (+15 %). Tout au fond : 14 pts.', { stat: { force: 20, endurance: 20 }, ks: { damageMult: 1.1, finisherShield: 0.15 } }, { requires: ['ju_equilibre'], minSpent: 14 })
+ability('ju_avatar', 'juggernaut', 5, 'Avatar de guerre', 'gu_avatar', 'ULTIME — tu deviens un titan : +80 % de dégâts 8 s ET un ÉNORME bouclier d\'absorption. Gaté : Cœur de titan + 14 pts.', { requires: ['ju_titan'], minSpent: 14 })
+
+/* ================================================================== */
+/* FURIE (v0.34) — BERSERKER (Fury) : DPS PUR, bi-arme + Enrage + vol de vie.
+ * Branche profonde de la Sentence. Gros dégâts soutenus, « tanky » par le SANG (vol de vie + Enrage),
+ * pas l'armure. Calibré par scripts/sim-guerrier-hybride.mjs (×1,38 plat ; le DPS le plus haut des 3
+ * voies, mais auto-sustain). Sorts : Rampage, Berserk. */
+/* ================================================================== */
+ks('fu_pivot', 'furie', 0, 'Furie', 'PIVOT : tes coups CRITIQUES te mettent en ENRAGE (+15 % de dégâts 6 s, rafraîchi par chaque crit). Exige Colère bouillonnante ET Coups mortels.',
+  { stat: { critique: 16 }, ks: { enrageOnCrit: { mult: 1.15, duration: 6 } } }, { requiresAll: ['se_colere', 'se_mortel'] })
+ks('fu_jumelage', 'furie', 1, 'Jumelage', 'BI-ARME : +18 % de chance de Multifrappe (tu manies deux armes).', { stat: { hate: 14 }, ks: { multistrike: 0.18 } }, { requires: ['fu_pivot'] })
+ks('fu_soif', 'furie', 1, 'Soif de sang', 'SANG : +24 Vol de vie ET tes saignements te soignent (25 % du tick) — tu survis en frappant.', { stat: { volDeVie: 24 }, ks: { dotLeech: 0.25 } }, { requires: ['fu_pivot'] })
+ks('fu_temerite', 'furie', 2, 'Témérité', 'Ton Enrage passe à +25 % de dégâts (au lieu de +15 %).', { stat: { degatsCrit: 18 }, ks: { enrageOnCrit: { mult: 1.25, duration: 6 } } }, { requires: ['fu_jumelage'] })
+ks('fu_frenesie', 'furie', 2, 'Frénésie sanguinaire', 'GÉNÉRATION : +1 Rage par générateur (tes coups en chaîne nourrissent la Rage).', { stat: { hate: 20 }, ks: { comboGen: 1 } }, { requires: ['fu_jumelage'] })
+ability('fu_rampage', 'furie', 2, 'Rampage', 'fu_rampage', 'Débloque Rampage : un finisseur MULTI-COUPS brutal (× Rage). +16 Force.', { requires: ['fu_pivot'], statMods: { force: 16 } })
+ks('fu_carnage', 'furie', 3, 'Carnage', 'CHOIX : +0,12 Multifrappe & +20 Hâte (vitesse de frappe).', { stat: { hate: 20 }, ks: { multistrike: 0.12 } }, { requires: ['fu_temerite'], exclusive: 'fu_voie' })
+ks('fu_cruaute', 'furie', 3, 'Cruauté', 'CHOIX : +24 Critique & +24 Dégâts crit. (puissance par coup, uptime d\'Enrage).', { stat: { critique: 24, degatsCrit: 24 } }, { requires: ['fu_temerite'], exclusive: 'fu_voie' })
+minor('fu_bataille', 'furie', 2, 'Soif de bataille', 5, { force: 6, critique: 6 }, { requires: ['fu_pivot'] }) // ⛓ tampon crit-force
+ks('fu_sang_pour_sang', 'furie', 3, 'Sang pour sang', 'Sous 40 % de PV, +35 % de dégâts ET tes saignements te soignent davantage. Exige Soif de bataille au max (5) + 10 pts.', { stat: { volDeVie: 16 }, ks: { lowHpBonus: { threshold: 0.4, mult: 1.35 }, dotLeech: 0.15 } }, { requires: ['fu_bataille'], requiresRank: { id: 'fu_bataille', rank: 5 }, minSpent: 10 })
+ks('fu_coeur', 'furie', 4, 'Cœur enragé', 'CAPSTONE : ton Enrage dure 12 s (rafraîchi par les crits → quasi permanent) ET +10 % de dégâts permanent. Tout au fond : 14 pts.', { stat: { force: 20 }, ks: { enrageOnCrit: { mult: 1.25, duration: 12 }, damageMult: 1.1 } }, { requires: ['fu_sang_pour_sang'], minSpent: 14 })
+ability('fu_berserk', 'furie', 5, 'Berserk', 'fu_berserk', 'ULTIME — tu te déchaînes : +90 % de dégâts 8 s et un vol de vie massif. Gaté : Cœur enragé + 14 pts.', { requires: ['fu_coeur'], minSpent: 14 })
+
+/* ================================================================== */
 /* PRÊTRE (Tissu) — Lumière (HEAL) · Vide (DPS).                        */
 /* ================================================================== */
 node('cl_pretre', 'pretre', 'ability', 0, 1, 'Prêtre', 'Canal du sacré et de l\'ombre. Débloque Châtiment et ouvre ses deux archétypes. +30 Intelligence.',
@@ -748,6 +793,8 @@ export const CONSTELLATIONS: Record<ConstellationId, ConstellationMeta> = {
   guerrier: { id: 'guerrier', name: 'Guerrier', role: 'Plaque · classe', color: '#e8590c', icon: '⚔' },
   sentence: { id: 'sentence', name: 'Sentence', role: 'Guerrier · Rage & exécution', color: '#fa5252', icon: '⚖', archetype: true },
   rempart: { id: 'rempart', name: 'Rempart', role: 'Guerrier · TANK', color: '#f08c00', icon: '🛡', archetype: true },
+  juggernaut: { id: 'juggernaut', name: 'Juggernaut', role: 'Guerrier · DPS-tank (défense ⇄ offense)', color: '#d9480f', icon: '🗿', archetype: true },
+  furie: { id: 'furie', name: 'Furie', role: 'Guerrier · Berserker (bi-arme, Enrage, sang)', color: '#e03131', icon: '🩸', archetype: true },
   pretre: { id: 'pretre', name: 'Prêtre', role: 'Tissu · classe', color: '#f1f3f5', icon: '✚' },
   lumiere: { id: 'lumiere', name: 'Lumière', role: 'Prêtre · HEAL', color: '#ffd43b', icon: '🌟', archetype: true },
   vide: { id: 'vide', name: 'Vide', role: 'Prêtre · DoT ombre', color: '#9775fa', icon: '🌑', archetype: true },
@@ -774,7 +821,7 @@ export const CONSTELLATION_LIST: ConstellationId[] = [
   'coeur', 'pantheon', 'voleur', 'assassin', 'ombrelame', 'lamevenin',
   'mage', 'pyromancien', 'cryomancien', 'arcaniste', 'convergence',
   'chasseur', 'meute', 'faucon',
-  'guerrier', 'sentence', 'rempart',
+  'guerrier', 'sentence', 'rempart', 'juggernaut', 'furie',
   'pretre', 'lumiere', 'vide', 'crepuscule',
   'dk', 'givremort', 'sang',
   'demoniste', 'pestilence', 'legion',

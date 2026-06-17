@@ -2635,6 +2635,13 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
     case 'frenzy':
       caster.frenzy = { mult: p.magnitude ?? 2, remaining: p.duration ?? 6 }
       return 0
+    // v0.34 « Avatar de guerre » (Juggernaut) : transe de dégâts (frenzy) + ÉNORME bouclier d'absorption.
+    case 'avatar': {
+      caster.frenzy = { mult: p.magnitude ?? 1.8, remaining: p.duration ?? 8 }
+      const grant = Math.min(charMaxHp(caster), shieldBase * 2.5) // bouclier scalé sur Endurance, ≤ PV max
+      caster.absorb = Math.max(caster.absorb ?? 0, grant)
+      return 0
+    }
     // --- v0.29.2 : socle VOLEUR ---
     case 'poison': {
       // ASSASSIN : empile un STACK de venin ; le DoT (enemy.dot) monte avec les stacks.
@@ -2688,7 +2695,11 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
       if (cm.finisherVsVenom > 0 && venoms > 0) finMult *= 1 + cm.finisherVsVenom // Verdict toxique
       if (cm.finisherFromAlteration > 0) finMult *= 1 + cm.finisherFromAlteration * (derived.alterationMult - 1) // Symbiose (borné)
       if (cm.finisherVenomBonus > 0) finMult *= 1 + Math.min(0.4, cm.finisherVenomBonus * venoms) // Pacte (capé 40 %)
+      // v0.34 « Bouclier offensif » (Juggernaut) : le finisseur frappe selon ton bouclier d'absorption (BORNÉ : ≤ PV).
+      if (cm.shieldToFinisher > 0 && (caster.absorb ?? 0) > 0) finMult *= 1 + cm.shieldToFinisher * Math.min(1, (caster.absorb ?? 0) / Math.max(1, charMaxHp(caster)))
       const done = hit(magDmg * pts * 0.55 * finMult * vm)
+      // v0.34 « Sang et acier » (Juggernaut) : un finisseur rafraîchit tes saignements (DoT physique).
+      if (cm.finisherRefreshBleed && enemy.dot) enemy.dot.remaining = Math.max(enemy.dot.remaining, 5)
       // Lame Vénéneuse : le finisseur applique du venin (⌈PC × frac⌉). Entaille septique : rafraîchit.
       if (cm.finisherToPoison > 0) applyVenom(Math.ceil(pts * cm.finisherToPoison))
       else if (cm.finisherRefreshPoison && enemy.dot && venoms > 0) enemy.dot.remaining = 8
@@ -3048,6 +3059,11 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
         if (hit.crit && d.cmods.igniteOnCrit) {
           enemy.dot = { dps: Math.max(hit.damage * d.cmods.igniteOnCrit.frac * d.derived.alterationMult, enemy.dot?.dps ?? 0), remaining: d.cmods.igniteOnCrit.duration }
         }
+        // 🩸 FURIE « Enrage » (v0.34) : un coup CRITIQUE déclenche/rafraîchit l'Enrage (frenzy) — sans jamais downgrader une transe plus forte.
+        if (hit.crit && d.cmods.enrageOnCrit) {
+          const e = d.cmods.enrageOnCrit
+          c.frenzy = { mult: Math.max(e.mult, c.frenzy?.mult ?? 0), remaining: Math.max(e.duration, c.frenzy?.remaining ?? 0) }
+        }
         const dmg = hit.damage * enemyVuln(enemy) * (s === 0 ? staticMult : 1) // Sceau de faiblesse + Décharge
         if (mods?.cond?.overkill && dmg > enemy.hp) overkill += dmg - enemy.hp
         enemy.hp = Math.max(0, enemy.hp - dmg)
@@ -3227,6 +3243,8 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
       if (cd2.cmods.adaptiveResist && taken > 0) adaptiveAdd(cc.id, enemy.damageType, cd2.cmods.adaptiveResist.gain * dt, cd2.cmods.adaptiveResist.cap)
       // Épines (thorns) : renvoie une fraction de l'attaque à l'ennemi (basée sur le coup, bouclier inclus).
       if (cd2.cmods.thorns > 0 && enemy.hp > 0) enemy.hp = Math.max(0, enemy.hp - dmg * cd2.cmods.thorns)
+      // 🩸 VENGEANCE (v0.34, Juggernaut) : encaisser génère de la Rage (Combo) ∝ aux PV perdus.
+      if (cd2.cmods.damageToRage > 0 && taken > 0) cc.combo = Math.min(5 + cd2.cmods.comboCap, (cc.combo ?? 0) + cd2.cmods.damageToRage * Math.min(0.3, taken / Math.max(1, charMaxHp(cc))) * 8)
     }
     // 🤺 Riposte mesurée : le temps sous le feu se mue en contre-attaques.
     totalDealt += gemRiposte(t, td, enemy, dt, mods?.cond)
@@ -3452,6 +3470,11 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
         // 🔥 PYROMANCIEN « Embrasement » : un coup CRITIQUE pose/rafraîchit un DoT feu.
         if (hit.crit && d.cmods.igniteOnCrit) {
           t2.dot = { dps: Math.max(hit.damage * d.cmods.igniteOnCrit.frac * d.derived.alterationMult, t2.dot?.dps ?? 0), remaining: d.cmods.igniteOnCrit.duration }
+        }
+        // 🩸 FURIE « Enrage » (v0.34) : un coup CRITIQUE déclenche/rafraîchit l'Enrage (frenzy).
+        if (hit.crit && d.cmods.enrageOnCrit) {
+          const e = d.cmods.enrageOnCrit
+          c.frenzy = { mult: Math.max(e.mult, c.frenzy?.mult ?? 0), remaining: Math.max(e.duration, c.frenzy?.remaining ?? 0) }
         }
         const dmg = hit.damage * enemyVuln(t2) * (st === 0 ? staticMult : 1)
         // Étoile d'Overkill : l'excédent du coup fatal déborde sur les ennemis suivants du pack
@@ -3684,6 +3707,8 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
       // ÉGIDE « Aegis adaptatif » : être frappé par un type endurcit contre ce type.
       if (cd2.cmods.adaptiveResist && taken > 0) adaptiveAdd(cc.id, enemy.damageType, cd2.cmods.adaptiveResist.gain * dt, cd2.cmods.adaptiveResist.cap)
       if (cd2.cmods.thorns > 0 && enemy.hp > 0) enemy.hp = Math.max(0, enemy.hp - dmg * cd2.cmods.thorns)
+      // 🩸 VENGEANCE (v0.34, Juggernaut) : encaisser génère de la Rage (Combo) ∝ aux PV perdus.
+      if (cd2.cmods.damageToRage > 0 && taken > 0) cc.combo = Math.min(5 + cd2.cmods.comboCap, (cc.combo ?? 0) + cd2.cmods.damageToRage * Math.min(0.3, taken / Math.max(1, charMaxHp(cc))) * 8)
     }
     // Techniques signature de CET ennemi (sur la plus haute menace).
     tickEnemyAbilities(enemy, chars, info, dt, mods?.runes)
