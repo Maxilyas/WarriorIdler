@@ -14,6 +14,7 @@
     "survival": "node scripts/survival-sim.mjs",
     "dungeon": "node scripts/dungeon-sim.mjs",
     "ttk": "node scripts/ttk-sim.mjs",
+    "mur": "node scripts/sim-mur.mjs",
     "eco": "node scripts/eco-sim.mjs",
     "weights": "node scripts/stat-weights.mjs"
   },
