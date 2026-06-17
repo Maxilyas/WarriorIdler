@@ -4,6 +4,7 @@ import type { GemFamily } from './condGems'
 import { dungeonReq } from './resist'
 import { enemyHp, enemyDmg, enemyArmor, lootFarmIlvl } from './progression'
 import { murSoftness } from './enemies'
+import { createCost, contentRarityTier } from './items'
 
 /**
  * DONJONS « par RESSOURCE » (refonte v0.17).
@@ -321,28 +322,33 @@ export function dungeonIlvl(_level: number, bestStage: number): number {
 }
 
 /**
- * RENDEMENT par run d'un donjon, par ressource — MAPPÉ sur les coûts de craft (atelier/forge).
- * Avant : indexé sur packXp (∝ 1.12^(7·niveau) ≈ 2.21^niveau) → explosion, 1 run = des milliers de
- * crafts en fin de course. Désormais : base × growth^(niveau-1), où growth ≈ la croissance du COÛT
- * de la ressource correspondante (éclats ~1.13, noyau/poussière ~1.45 via la table de rareté, or ~1.40)
- * → le ratio « crafts par run » reste stable (~2-4) à tous les niveaux. Voir `npm run eco`.
+ * RENDEMENT par run (v0.35, Part 2) — ∝ TA TRANCHE : ancré sur le coût d'un craft À LA RARETÉ DU
+ * CONTENU à ton Palier. Un run au niveau REF ≈ 1/CRAFT_RUNS_TARGET d'un tel craft → les ratios
+ * restent STABLES sur toute la progression (le coût scale, le rendement aussi). Couplé à l'over-content
+ * (×4/cran), un craft-contenu ≈ 10 runs ⇒ +1 cran au-dessus = dizaines, +2 = centaines de runs.
  */
-const DUNGEON_YIELD: Partial<Record<DungeonReward, { base: number; growth: number }>> = {
-  gold: { base: 6000, growth: 1.40 },
-  // Éclats ÷4 (v0.20) : contrairement aux noyaux/poussière, les éclats arrivent AUSSI en masse par
-  // le recyclage et l'achat à l'or → la Faille seule couvrait tout le craft et l'éclat ne valait
-  // plus rien. Le donjon reste la meilleure source PONCTUELLE (~0.5-0.65 craft/run), le recyclage
-  // fait l'appoint. (Réf : npm run eco.)
-  eclats: { base: 10000, growth: 1.13 },
-  noyau: { base: 500, growth: 1.45 },
-  poussiere: { base: 25, growth: 1.47 },
-}
+const DUNGEON_RUN_REF_LEVEL = 5   // niveau de farm « confortable » de référence
+const DUNGEON_LEVEL_GROWTH = 1.18 // +rendement par niveau au-dessus du REF (le PUSH paie)
+const CRAFT_RUNS_TARGET = 10      // craft à la rareté du contenu ≈ 10 runs au niveau REF
+const GOLD_BUYS_PER_RUN = 3       // l'or = dump marché : ~3 achats par run (généreux)
 /** Part du rendement distribuée PAR COMBAT (le reste tombe dans le coffre de fin). */
 export const DUNGEON_YIELD_PERFIGHT_FRAC = 0.4
-/** Rendement TOTAL d'un run (par-combat + coffre) pour la ressource du donjon. */
-export function dungeonRunYield(reward: DungeonReward, level: number): number {
-  const y = DUNGEON_YIELD[reward]
-  return y ? Math.round(y.base * Math.pow(y.growth, level - 1)) : 0
+/** Rendement TOTAL d'un run (par-combat + coffre) pour la ressource du donjon, à ta tranche. */
+export function dungeonRunYield(reward: DungeonReward, level: number, bestStage: number): number {
+  const lvlMult = Math.pow(DUNGEON_LEVEL_GROWTH, level - DUNGEON_RUN_REF_LEVEL)
+  const ilvl = lootFarmIlvl(bestStage)
+  const ct = contentRarityTier(bestStage)
+  if (reward === 'gold') {
+    const marketBuy = ilvl * Math.pow(ct, 2.6) * 1.5 // ≈ shopBuyPrice à la tranche (dump d'or)
+    return Math.max(1, Math.round(marketBuy * GOLD_BUYS_PER_RUN * lvlMult))
+  }
+  // Ancre = coût d'un craft à la rareté du contenu (poussière d'étoile : à partir de Légendaire t6).
+  const anchor = reward === 'eclats' ? createCost(ct, ilvl, ct).eclats
+    : reward === 'noyau' ? createCost(ct, ilvl, ct).noyau
+    : reward === 'poussiere' ? (createCost(Math.max(6, ct), ilvl).poussiere ?? 0)
+    : 0
+  if (anchor <= 0) return 0
+  return Math.max(1, Math.round((anchor / CRAFT_RUNS_TARGET) * lvlMult))
 }
 
 /**

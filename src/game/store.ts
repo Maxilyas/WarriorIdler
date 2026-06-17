@@ -3951,7 +3951,7 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
     let leveled = false
     // Rendement par combat = part PERFIGHT du rendement total mappé sur les coûts (voir dungeons.ts),
     // × rwMult (v0.25.x : les affixes paient).
-    const perFight = (r: 'gold' | 'eclats' | 'noyau' | 'poussiere') => dungeonRunYield(r, lv) * DUNGEON_YIELD_PERFIGHT_FRAC * rwMult / Math.max(1, d.totalFights)
+    const perFight = (r: 'gold' | 'eclats' | 'noyau' | 'poussiere') => dungeonRunYield(r, lv, d.bestStage ?? s.bestStage) * DUNGEON_YIELD_PERFIGHT_FRAC * rwMult / Math.max(1, d.totalFights)
     switch (def.reward) {
       case 'gold': { if (!noGold) { const g = Math.round(perFight('gold') * eco.goldGain); gold += g; logBit = `+${g.toLocaleString('fr-FR')} or` } break }
       case 'eclats': { const e2 = Math.round(perFight('eclats')); essence += e2; logBit = `+${e2.toLocaleString('fr-FR')} éclats` } break
@@ -4015,10 +4015,10 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
       let cGem: { id: CondGemId; rank: number } | undefined
       const chestFrac = (1 - DUNGEON_YIELD_PERFIGHT_FRAC) * chestMult // 60% du rendement mappé, × affixes
       switch (def.reward) {
-        case 'gold': cGold = noGold ? 0 : Math.round(dungeonRunYield('gold', lv) * chestFrac * eco.goldGain); break
-        case 'eclats': cEclats = Math.round(dungeonRunYield('eclats', lv) * chestFrac); break
-        case 'noyau': cNoyau = Math.round(dungeonRunYield('noyau', lv) * chestFrac); break
-        case 'poussiere': cPous = Math.round(dungeonRunYield('poussiere', lv) * chestFrac); break
+        case 'gold': cGold = noGold ? 0 : Math.round(dungeonRunYield('gold', lv, d.bestStage ?? s.bestStage) * chestFrac * eco.goldGain); break
+        case 'eclats': cEclats = Math.round(dungeonRunYield('eclats', lv, d.bestStage ?? s.bestStage) * chestFrac); break
+        case 'noyau': cNoyau = Math.round(dungeonRunYield('noyau', lv, d.bestStage ?? s.bestStage) * chestFrac); break
+        case 'poussiere': cPous = Math.round(dungeonRunYield('poussiere', lv, d.bestStage ?? s.bestStage) * chestFrac); break
         case 'orbes': cOrbes = Math.round(dungeonKeyYield('orbes', lv) * chestFrac); break
         case 'sceaux': cSceaux = Math.round(dungeonKeyYield('sceaux', lv) * chestFrac); break
         // (🔑 Clés en double appliquée après le switch — voir plus bas.)

@@ -40,7 +40,7 @@ for (const best of [10, 30, 60, 100, 200]) {
   console.log(`========== bestStage ${best} · tranche ilvl ${ilvl} · pièce de réf Légendaire(t${tier}) ==========`)
 
   // 🪙 OR — Chambre du Trésor
-  const gold = M.dungeonRunYield('gold', REF_LEVEL)
+  const gold = M.dungeonRunYield('gold', REF_LEVEL, best)
   console.log(`  🪙 OR (Chambre du Trésor) — rendement/run ${fmt(gold)}`)
   line('marché : acheter 1 objet', gold, shopBuyPrice(item), 'or')
   line('marché : rafraîchir', gold, shopRefreshCost(best), 'or')
@@ -49,7 +49,7 @@ for (const best of [10, 30, 60, 100, 200]) {
 
   // ♦ ÉCLATS — Faille Arcanique (+ recyclage)
   const ct = M.contentRarityTier(best)
-  const ecl = M.dungeonRunYield('eclats', REF_LEVEL)
+  const ecl = M.dungeonRunYield('eclats', REF_LEVEL, best)
   const runsFor = (cost) => (cost / ecl).toFixed(cost / ecl >= 10 ? 0 : 1)
   console.log(`  ♦ ÉCLATS (Faille Arcanique) — rendement/run ${fmt(ecl)} · rareté du contenu = t${ct}`)
   // CHASE de rareté (forge AU-DESSUS du contenu) — en RUNS par craft (doit exploser ×4/cran) :
@@ -65,13 +65,13 @@ for (const best of [10, 30, 60, 100, 200]) {
   line('transmutation', ecl, M.transmuteCost(item), '♦')
 
   // 💠 NOYAU — Forge du Noyau
-  const noy = M.dungeonRunYield('noyau', REF_LEVEL)
+  const noy = M.dungeonRunYield('noyau', REF_LEVEL, best)
   console.log(`  💠 NOYAU (Forge du Noyau) — rendement/run ${fmt(noy)}`)
   line('forge : créer 1 objet', noy, M.createCost(tier, ilvl).noyau, '💠')
   line('ascension (cran +1)', noy, M.ascendCost(item).noyau, '💠')
 
   // 🌌 POUSSIÈRE D'ÉTOILE — Observatoire
-  const pous = M.dungeonRunYield('poussiere', REF_LEVEL)
+  const pous = M.dungeonRunYield('poussiere', REF_LEVEL, best)
   console.log(`  🌌 POUSSIÈRE D'ÉTOILE (Observatoire) — rendement/run ${fmt(pous)}`)
   line('forge : créer 1 objet', pous, M.createCost(tier, ilvl).poussiere ?? 0, '🌌')
   line('graver une rune', pous, M.enchantCost(TIME_RUNE, item).poussiere, '🌌')

@@ -95,15 +95,15 @@ export function missionKeyCost(m: AutomateMission): { sceaux: number; orbes: num
 }
 
 /** Gains BRUTS d'un run (avant efficacité), en flottants. `xp` = XP par personnage vivant. */
-function runGains(m: AutomateMission): Record<string, number> {
+function runGains(m: AutomateMission, bestStage: number): Record<string, number> {
   if (m.kind === 'dungeon') {
     const def = DUNGEONS[m.id as DungeonId]
     const N = m.level
     switch (def.reward) {
-      case 'gold': return { gold: dungeonRunYield('gold', N) }
-      case 'eclats': return { essence: dungeonRunYield('eclats', N) }
-      case 'noyau': return { noyau: dungeonRunYield('noyau', N) }
-      case 'poussiere': return { poussiere: dungeonRunYield('poussiere', N) }
+      case 'gold': return { gold: dungeonRunYield('gold', N, bestStage) }
+      case 'eclats': return { essence: dungeonRunYield('eclats', N, bestStage) }
+      case 'noyau': return { noyau: dungeonRunYield('noyau', N, bestStage) }
+      case 'poussiere': return { poussiere: dungeonRunYield('poussiere', N, bestStage) }
       case 'sceaux': return { sceaux: dungeonKeyYield('sceaux', N) }
       case 'orbes': return { orbes: dungeonKeyYield('orbes', N) }
       case 'xp': return { xp: 1200 * N * Math.pow(1.12, N) }
@@ -129,6 +129,8 @@ function runGains(m: AutomateMission): Record<string, number> {
 /** Pool de ressources sur lequel les automates opèrent (sous-ensemble du store). */
 export interface AutomateEconomy {
   automates: Automate[]
+  /** Record de farm (v0.35) : le rendement des automates suit ta tranche, comme un run manuel. */
+  bestStage: number
   gold: number
   essence: number
   noyau: number
@@ -189,7 +191,7 @@ export function tickAutomates(input: AutomateEconomy, dt: number, keySaveChance 
       runs++
       // 🎁 Rune des Coffres doubles (v0.26) : ce run rapporte le double.
       const chestMult = doubleChestChance > 0 && Math.random() < doubleChestChance ? 2 : 1
-      const gains = runGains(a.mission)
+      const gains = runGains(a.mission, eco.bestStage)
       for (const k in gains) {
         a.bank[k] = (a.bank[k] ?? 0) + gains[k] * eff * chestMult
       }
