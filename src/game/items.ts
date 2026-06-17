@@ -12,7 +12,7 @@ import { itemBudget, effItemIlvl, clampIlvl, powerAt, RARITY_ILVL_PER_TIER } fro
  *  SECONDARY_CAP (rating) une fois le mid-game atteint. Le plafond garde le % borné (compatible avec
  *  le /PER_PCT fixe dont dépendent talents/sets) et le TTL plat en endgame, tout en restant toujours
  *  < primaire (≈0,43× : SECONDARY_FRAC/offFrac). */
-export const SECONDARY_FRAC = 0.35
+export const SECONDARY_FRAC = 0.7 // v0.35 : 0,35→0,7 (reste < offFrac 0,82 → le nombre primaire domine encore)
 /** Soft cap du RATING d'une ligne secondaire : transition DOUCE vers SECONDARY_HARD (pas de saut net
  *  quand le budget dépasse le seuil, contrairement à un min() — évite le « kink » de DPS au mid-game). */
 export const SECONDARY_SOFT = 400

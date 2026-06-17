@@ -124,7 +124,7 @@ export interface DerivedStats {
   cdr: number // 0..1 réduction de cooldown (Récupération)
 }
 
-export const RATING_PER_PERCENT = 50 // ratings nécessaires pour 1% (style WoW)
+export const RATING_PER_PERCENT = 25 // v0.35 : 50→25 (les secondaires comptaient ~1/50 d'une ligne %type)
 const PER_PCT = RATING_PER_PERCENT * 100 // ratings pour +1.0 (100%)
 /** v0.27 (C5) — part de la 2e stat offensive reversée dans la puissance (knob d'équilibrage). */
 export const SECOND_STAT_SHARE = 0.2
