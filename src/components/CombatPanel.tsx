@@ -460,6 +460,22 @@ export function CombatPanel() {
           ) : (
             <>
               <div className={'text-lg font-bold ' + (boss ? 'text-rose-300' : 'text-slate-100')}>{enemy.name}</div>
+              {enemy.mur ? (
+                <div className="mt-1 flex flex-wrap items-center justify-center gap-1.5 text-[11px]">
+                  <span className="rounded bg-rose-500/20 px-1.5 py-px font-semibold text-rose-200" title="Boss de fin de Palier : optimise ton build (stuff, gemmes, runes, talents) pour le franchir.">
+                    🧱 MUR · {(({ berserk: '⚔ Course au DPS', nova: '☄ Survie', fortress: '🛡 Pénétration', leech: '🩸 Burst', rotate: '🌈 Résistances' } as Record<string, string>)[enemy.mur.mechanic]) ?? enemy.mur.mechanic}
+                  </span>
+                  {enemy.mur.enrageAt - (enemy.age ?? 0) > 0 ? (
+                    <span className="rounded bg-amber-500/20 px-1.5 py-px font-semibold text-amber-200" title="Passé ce délai, les dégâts du boss EXPLOSENT (+50%/s). Tue-le avant !">
+                      ⏱ enrage {Math.ceil(enemy.mur.enrageAt - (enemy.age ?? 0))}s
+                    </span>
+                  ) : (
+                    <span className="rounded bg-rose-600/30 px-1.5 py-px font-bold text-rose-200 animate-pulse" title="ENRAGÉ : les dégâts explosent (+50%/s). Tue-le vite ou l'équipe tombe.">
+                      🔥 ENRAGÉ
+                    </span>
+                  )}
+                </div>
+              ) : null}
               <div className="mt-2 h-5 w-full overflow-hidden rounded-full bg-slate-800">
                 <div
                   className={'h-full transition-all duration-150 ' + (boss ? 'bg-gradient-to-r from-rose-700 to-rose-500' : 'bg-gradient-to-r from-red-700 to-red-500')}

@@ -2966,6 +2966,8 @@ function tickHeroStatuses(chars: Character[], dt: number, cond?: CondMods, pact?
 }
 
 /** Un pas de combat de l'équipe contre un ennemi. Renvoie l'état mis à jour. */
+/** v0.35 — vitesse d'explosion des dégâts d'un MUR passé son enrage (fraction/s). Course au DPS. */
+const MUR_ENRAGE_RAMP = 0.5
 function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: CombatMods) {
   const enemy: Enemy = { ...enemyIn, dot: enemyIn.dot ? { ...enemyIn.dot } : undefined, abilities: enemyIn.abilities?.map((a) => ({ ...a })) }
   const chars: Character[] = input.map((c) => ({ ...c, dots: c.dots?.map((d) => ({ ...d })), weaken: c.weaken ? { ...c.weaken } : undefined }))
@@ -3262,7 +3264,13 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
     }
     // 🧊 Stase (rune) : la montée en puissance ennemie est gelée les X premières secondes.
     const rampT = Math.max(0, (mods?.fightTime ?? 0) - (mods?.runes?.staseSec ?? 0))
-    let effDmg = enemy.damage * (1 + (mods?.enrage ?? 0) * rampT) * (mods?.dmgMult ?? 1)
+    // v0.35 — ENRAGE DUR du MUR (boss de fin de Palier) : passé `mur.enrageAt`, les dégâts EXPLOSENT
+    // (+50 %/s) → course au DPS, l'ossature du mur (DESIGN_v0.35 §6). Depuis `enemy.age` (pas de
+    // compounding) ; sans effet sur le farm normal / les packs (pas de `mur`).
+    const murAge = enemy.age ?? 0
+    const murEnrage = enemy.mur && murAge > enemy.mur.enrageAt
+      ? 1 + (murAge - enemy.mur.enrageAt) * MUR_ENRAGE_RAMP : 1
+    let effDmg = enemy.damage * (1 + (mods?.enrage ?? 0) * rampT) * (mods?.dmgMult ?? 1) * murEnrage
     // 🫧 Latence (rune) : les ennemis frappent moins fort en début de combat.
     if (mods?.runes?.latence && (enemy.age ?? 0) <= 8) effDmg *= 1 - mods.runes.latence
     // L'atténuation générique (esquive/réduction/maîtrise + passives/keystones) est BORNÉE
@@ -3733,7 +3741,13 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
     }
     // 🧊 Stase (rune) : la montée en puissance ennemie est gelée les X premières secondes.
     const rampT = Math.max(0, (mods?.fightTime ?? 0) - (mods?.runes?.staseSec ?? 0))
-    let effDmg = enemy.damage * (1 + (mods?.enrage ?? 0) * rampT) * (mods?.dmgMult ?? 1)
+    // v0.35 — ENRAGE DUR du MUR (boss de fin de Palier) : passé `mur.enrageAt`, les dégâts EXPLOSENT
+    // (+50 %/s) → course au DPS, l'ossature du mur (DESIGN_v0.35 §6). Depuis `enemy.age` (pas de
+    // compounding) ; sans effet sur le farm normal / les packs (pas de `mur`).
+    const murAge = enemy.age ?? 0
+    const murEnrage = enemy.mur && murAge > enemy.mur.enrageAt
+      ? 1 + (murAge - enemy.mur.enrageAt) * MUR_ENRAGE_RAMP : 1
+    let effDmg = enemy.damage * (1 + (mods?.enrage ?? 0) * rampT) * (mods?.dmgMult ?? 1) * murEnrage
     // 🫧 Latence (rune) : les ennemis frappent moins fort en début de rencontre.
     if (mods?.runes?.latence && (mods?.fightTime ?? 99) <= 8) effDmg *= 1 - mods.runes.latence
     let incoming = incomingDps(
@@ -4557,7 +4571,10 @@ export const useGame = create<GameState>((set, get) => {
 
       if (!res.anyAlive) {
         crescendoReset() // 📯 Crescendo : l'équipe tombe, le cumul retombe
-        const stage = Math.max(1, s.stage - RETREAT_STAGES)
+        // v0.35 — la mort ne fait JAMAIS retomber sous le PALIER courant : le dernier mur franchi est un
+        // CHECKPOINT. Repli de RETREAT_STAGES vagues, borné au plancher du Palier (1re vague du bloc de 10).
+        const palierFloor = Math.floor((s.stage - 1) / 10) * 10 + 1
+        const stage = Math.max(1, palierFloor, s.stage - RETREAT_STAGES)
         const healed = chars.map(fullHeal)
         log = pushLog(log, `💀 Équipe vaincue ! Repli au palier ${stage}.`, 'death')
         const next = { ...s, characters: healed, stage, enemy: makeEnemy(stage, s.activeBiome), log }
