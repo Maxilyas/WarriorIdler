@@ -55,6 +55,43 @@ const cases = [
   ['Vide (DoT ombre)', 'intelligence',
     { cat_tissu: 1, cl_pretre: 1, vi_hub: 1, vi_tenebres: 1, vi_dotamp: 1, vi_ombre: 1, vi_demence: 1, vi_forme: 1, vi_insanite: 1, vi_soif: 1, vi_drain: 1 },
     ['vi_mot_ombre', 'vi_douleur', 'vi_devorer'], null],
+  // ---- v0.32 : 5 dernières classes ----
+  ['Givre-mort (shatter mêlée)', 'force',
+    { cat_plaque: 1, cl_dk: 1, gm_hub: 1, gm_obli: 1, gm_finamp: 1, gm_execute: 1, gm_buf1: 5, gm_fracas: 1, gm_glace: 1, gm_froid: 1 },
+    ['gm_givre', 'gm_obliteration', 'gm_pilier'], null],
+  ['Sang (TANK vampire)', 'force',
+    { cat_plaque: 1, cl_dk: 1, sg_hub: 1, sg_os: 5, sg_marque: 1, sg_bouclier: 1, sg_builder: 1, sg_vampirisme: 1 },
+    ['sg_drain', 'sg_marque'], null],
+  ['Pestilence (multi-DoT)', 'intelligence',
+    { cat_tissu: 1, cl_demoniste: 1, pe_hub: 1, pe_tox: 1, pe_dotamp: 1, pe_venmort: 1, pe_buf1: 5, pe_drain: 1, pe_chain: 1, pe_ombre: 1, pe_ombreamp: 1 },
+    ['pe_fleau', 'pe_drain', 'pe_corruption'], null],
+  ['Légion (démons)', 'intelligence',
+    { cat_tissu: 1, cl_demoniste: 1, lg_hub: 1, lg_pacte: 1, lg_demon: 1, lg_buf1: 5, lg_legion: 1, lg_chaos: 1, lg_ombreamp: 1 },
+    ['lg_nuee', 'lg_trait'], '🐾 Familier'],
+  ['Élémentaire (foudre)', 'intelligence',
+    { cat_mailles: 1, cl_chaman: 1, el_hub: 1, el_orage: 1, el_chain: 1, el_static: 1, el_buf1: 5, el_coulee: 1, el_maelstrom: 1, el_finamp: 1 },
+    ['el_foudre', 'el_maelstrom', 'el_lave'], null],
+  ['Vague (HEAL totems)', 'intelligence',
+    { cat_mailles: 1, cl_chaman: 1, va_hub: 1, va_eau: 5, va_totemks: 1, va_buf: 5, va_chatiment: 1 },
+    ['va_soin', 'va_chaine', 'va_totem'], null],
+  ['Lunaire (astral)', 'intelligence',
+    { cat_cuir: 1, cl_druide: 1, ln_hub: 1, ln_astre: 1, ln_dotamp: 1, ln_astral: 1, ln_finamp: 1, ln_buf1: 5, ln_plenitude: 1, ln_eclipse: 1 },
+    ['ln_lune', 'ln_astral', 'ln_plenitude'], null],
+  ['Ronce (TANK)', 'force',
+    { cat_cuir: 1, cl_druide: 1, ro_hub: 1, ro_ecorce: 5, ro_epines: 1, ro_colosse: 1, ro_buf2: 5, ro_resist: 1 },
+    ['ro_lacere', 'ro_ronces'], null],
+  ['Floraison (HEAL HoT)', 'intelligence',
+    { cat_cuir: 1, cl_druide: 1, fo_hub: 1, fo_seve: 5, fo_hot: 1, fo_buf: 5, fo_chatiment: 1 },
+    ['fo_pousse', 'fo_floraison'], null],
+  ['Croisé (sacré DPS)', 'force',
+    { cat_plaque: 1, cl_paladin: 1, cs_hub: 1, cs_jugement: 1, cs_finamp: 1, cs_zele: 1, cs_buf1: 5, cs_croisade: 1, cs_arcaneamp: 1 },
+    ['cs_marteau', 'cs_jugement'], null],
+  ['Templier (TANK aura)', 'force',
+    { cat_plaque: 1, cl_paladin: 1, tp_hub: 1, tp_aura: 5, tp_partage: 1, tp_epines: 1, tp_buf2: 5, tp_resist: 1 },
+    ['tp_consecration'], null],
+  ['Aube (HEAL en frappant)', 'force',
+    { cat_plaque: 1, cl_paladin: 1, au_hub: 1, au_zele: 5, au_chatiment: 1, au_ferveur: 1, au_foi: 5 },
+    ['au_verdict', 'au_lumiere'], null],
 ]
 
 let bad = 0
@@ -69,7 +106,7 @@ for (const [name, bias, talents, powers, expectLine] of cases) {
   if (nan || !hasExpected || total <= 0) bad++
   console.log(`\n■ ${name}`)
   console.log(`  DPS total : ${Math.round(total).toLocaleString('fr-FR')}${nan ? '  ⚠ NaN!' : ''}`)
-  console.log(`  igniteOnCrit=${cm.igniteOnCrit ? `frac ${cm.igniteOnCrit.frac.toFixed(2)}/${cm.igniteOnCrit.duration}s` : '—'}  hotStreak=${cm.hotStreak ? `${cm.hotStreak.cap}→×${cm.hotStreak.mult}` : '—'}  overload=${cm.overload ? `${cm.overload.window}s ×${cm.overload.mult}` : '—'}  shatter=+${cm.shatter}  petDps=${cm.petDps}  comboCap=+${cm.comboCap}  finisherShield=${cm.finisherShield}  thorns=${cm.thorns}  healToDmg=${cm.healToDamage}  dotLeech=${cm.dotLeech}`)
+  console.log(`  shatter=+${cm.shatter}  petDps=${cm.petDps}  comboCap=+${cm.comboCap}  finisherShield=${cm.finisherShield}  thorns=${cm.thorns}  healToDmg=${cm.healToDamage}  damageToHeal=${cm.damageToHeal}  shareResist=${cm.shareResist}  dotLeech=${cm.dotLeech}  chainArc=${cm.chainArc ? `${cm.chainArc.frac}/${cm.chainArc.targets}` : '—'}  staticN=${cm.staticN ? `${cm.staticN.every}/×${cm.staticN.mult}` : '—'}  poison=${cm.poison.maxStacks}st`)
   console.log(`  tagBonus=${JSON.stringify(cm.tagBonus)}`)
   console.log(`  sorts : ${lines}`)
   if (expectLine && !hasExpected) console.log(`  ✗ ligne attendue manquante : « ${expectLine} »`)

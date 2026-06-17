@@ -91,6 +91,11 @@ export interface KeystoneEffect {
   /** ARCANISTE « Surcharge instable » : quand tes Charges atteignent le max, tu entres en Surcharge `window` s
    *  (dégâts ×`mult`, recharges ×2) ; la Surcharge CONSOMME tes Charges. On garde la plus longue/forte. */
   overload?: { window: number; mult: number }
+
+  /* ---- v0.32 : PALADIN Aube (healer offensif) ---- */
+  /** PALADIN AUBE : une fraction de TES DÉGÂTS soigne l'allié le plus blessé (inverse de `healToDamage`).
+   *  → un healer qui soigne en TAPANT (scale FORCE). Somme entre keystones. */
+  damageToHeal?: number
 }
 
 /** Vocabulaire des TAGS de comportement (12) — les 7 types de dégâts servent aussi de tags. */

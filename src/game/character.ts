@@ -475,6 +475,8 @@ export interface CombatMods {
   hotStreak?: { cap: number; mult: number }
   /** ARCANISTE « Surcharge instable » : fenêtre de burst au plein de Charges (le plus fort). */
   overload?: { window: number; mult: number }
+  /** PALADIN AUBE : fraction de tes dégâts reversée en soin à l'allié le plus blessé (somme). */
+  damageToHeal: number
 }
 
 export function charCombatMods(char: Character): CombatMods {
@@ -483,7 +485,7 @@ export function charCombatMods(char: Character): CombatMods {
     healToDamage: 0, cleaveAuto: 0, perEnemyBonus: 0, dotLeech: 0, dotAoe: 0,
     spellMult: 1, cdrOnCast: 0, reqReduction: 0, surplusToDamage: 0, shareResist: 0, surplusRegen: 0,
     poison: { perStack: 0.08, maxStacks: 4 }, comboCap: 0, comboGen: 0, finisherMult: 0,
-    tagBonus: {}, detonateDouble: false, comboRefund: 0, petDps: 0, shatter: 0, finisherShield: 0,
+    tagBonus: {}, detonateDouble: false, comboRefund: 0, petDps: 0, shatter: 0, finisherShield: 0, damageToHeal: 0,
   }
   // Multiplicateur de dégâts des bonus de SET (s'applique aux auto-attaques ET aux sorts,
   // et donc au DPS affiché via charDps — même chemin que les keystones).
@@ -550,6 +552,7 @@ export function charCombatMods(char: Character): CombatMods {
         : { ...k.igniteOnCrit }
     }
     if (k.finisherShield) out.finisherShield += k.finisherShield
+    if (k.damageToHeal) out.damageToHeal += k.damageToHeal
     if (k.hotStreak) out.hotStreak = out.hotStreak ? { cap: Math.min(out.hotStreak.cap, k.hotStreak.cap), mult: Math.max(out.hotStreak.mult, k.hotStreak.mult) } : { ...k.hotStreak }
     if (k.overload) out.overload = out.overload ? { window: Math.max(out.overload.window, k.overload.window), mult: Math.max(out.overload.mult, k.overload.mult) } : { ...k.overload }
     if (k.multiTypeBonus) {

@@ -29,6 +29,11 @@ export type ConstellationId =
   | 'chasseur' | 'meute' | 'faucon'
   | 'guerrier' | 'sentence' | 'rempart'
   | 'pretre' | 'lumiere' | 'vide'
+  | 'dk' | 'givremort' | 'sang'
+  | 'demoniste' | 'pestilence' | 'legion'
+  | 'chaman' | 'elementaire' | 'vague'
+  | 'druide' | 'lunaire' | 'ronce' | 'floraison'
+  | 'paladin' | 'croise' | 'templier' | 'aube'
 
 export interface ConstellationMeta {
   id: ConstellationId
@@ -105,10 +110,10 @@ function ability(id: string, c: ConstellationId, tier: number, name: string, pow
 /* ------------------------------------------------------------------ */
 node('co_start', 'coeur', 'ability', 0, 1, 'Éveil', '+10 stats primaires, +20 Endurance, débloque Frappe. La racine de l\'arbre.',
   { statMods: { force: 10, agilite: 10, intelligence: 10, endurance: 20 }, unlockPower: 'frappe_simple' })
-node('cat_plaque', 'coeur', 'gateway', 1, 1, 'Plaque', 'Catégorie Plaque (Guerrier ✓, Paladin & Chevalier de la mort à venir). +40 Endurance, +15 Force.', { requires: ['co_start'], statMods: { endurance: 40, force: 15 } })
-node('cat_mailles', 'coeur', 'gateway', 1, 1, 'Mailles', 'Catégorie Mailles (Chasseur ✓, Chaman à venir). +20 Agilité, +20 Intelligence.', { requires: ['co_start'], statMods: { agilite: 20, intelligence: 20 } })
+node('cat_plaque', 'coeur', 'gateway', 1, 1, 'Plaque', 'Catégorie Plaque (Guerrier, Paladin, Chevalier de la mort). +40 Endurance, +15 Force.', { requires: ['co_start'], statMods: { endurance: 40, force: 15 } })
+node('cat_mailles', 'coeur', 'gateway', 1, 1, 'Mailles', 'Catégorie Mailles (Chasseur, Chaman). +20 Agilité, +20 Intelligence.', { requires: ['co_start'], statMods: { agilite: 20, intelligence: 20 } })
 node('cat_cuir', 'coeur', 'gateway', 1, 1, 'Cuir', 'Catégorie Cuir (Voleur, Druide). +30 Agilité, +15 Critique.', { requires: ['co_start'], statMods: { agilite: 30, critique: 15 } })
-node('cat_tissu', 'coeur', 'gateway', 1, 1, 'Tissu', 'Catégorie Tissu (Mage ✓, Démoniste & Prêtre à venir). +40 Intelligence.', { requires: ['co_start'], statMods: { intelligence: 40 } })
+node('cat_tissu', 'coeur', 'gateway', 1, 1, 'Tissu', 'Catégorie Tissu (Mage, Démoniste, Prêtre). +40 Intelligence.', { requires: ['co_start'], statMods: { intelligence: 40 } })
 
 /* VOLEUR — nœud de classe (peu cher : multi-classe natif). */
 node('cl_voleur', 'voleur', 'ability', 0, 1, 'Voleur', 'Maître de la lame et du poison. Débloque Tranchant et ouvre ses deux archétypes. +25 Agilité, +15 Critique.',
@@ -423,6 +428,180 @@ minor('vi_soif', 'vide', 1, 'Soif d\'âmes', 5, { volDeVie: 8 }, { requires: ['v
 ks('vi_drain', 'vide', 2, 'Drain d\'ombre', 'SURVIE : tes DoT te soignent (25% du tick), +20 Régén. Exige Soif d\'âmes au rang max (5).', { stat: { regen: 20 }, ks: { dotLeech: 0.25 } }, { requires: ['vi_soif'], requiresRank: { id: 'vi_soif', rank: 5 } })
 ks('vi_meta', 'vide', 3, 'Communion morbide', 'SURVIE : -8% de dégâts subis, +12 Vol de vie. Profond : 8 pts dans la voie.', { stat: { volDeVie: 12 }, ks: { flatDr: 0.08 } }, { requires: ['vi_drain'], minSpent: 8 })
 
+/* ================================================================== */
+/* CHEVALIER DE LA MORT (Plaque) — Givre-mort (DPS) · Sang (TANK).     */
+/* ================================================================== */
+node('cl_dk', 'dk', 'ability', 0, 1, 'Chevalier de la mort', 'Champion mort-vivant nourri par la Puissance runique. Débloque Frappe runique. +25 Force.', { requires: ['cat_plaque'], statMods: { force: 25 }, unlockPower: 'dk_frappe' })
+/* ---- GIVRE-MORT — contrôle de mêlée → FRACAS runique + exécution. ---- */
+ability('gm_hub', 'givremort', 0, 'Givre-mort', 'gm_givre', 'Débloque Lame de givre (générateur de Puissance runique). +18 Force, +12 Critique.', { requires: ['cl_dk'], statMods: { force: 18, critique: 12 } })
+ability('gm_obli', 'givremort', 1, 'Oblitération', 'gm_obliteration', 'FINITION : débloque Oblitération (finisseur froid × Puissance runique). +16 Force.', { requires: ['gm_hub'], statMods: { force: 16 } })
+ks('gm_finamp', 'givremort', 2, 'Lames affamées', 'Tes sorts [finisseur] +15% (cross-classe).', { stat: { degatsCrit: 12 }, ks: { tagBonus: { tag: 'finisseur', damageMult: 1.15 } } }, { requires: ['gm_obli'] })
+ks('gm_execute', 'givremort', 2, 'Exécution glaciale', 'Tes finisseurs exécutent les ennemis sous 20% de PV (×2,2).', { stat: { degatsBoss: 14 }, ks: { executeBonus: { threshold: 0.2, mult: 2.2 } } }, { requires: ['gm_obli'] })
+minor('gm_buf1', 'givremort', 3, 'Maîtrise runique', 5, { force: 8 }, { requires: ['gm_obli'] })
+ks('gm_fracas', 'givremort', 4, 'Fracas runique', 'SHATTER : tes sorts +35% contre une cible GELÉE/contrôlée. Exige Maîtrise runique au max (5).', { stat: { degatsCrit: 18 }, ks: { shatter: 0.35 } }, { requires: ['gm_buf1'], requiresRank: { id: 'gm_buf1', rank: 5 } })
+ability('gm_apoc', 'givremort', 5, 'Apocalypse', 'gm_apocalypse', 'ULTIME — un cataclysme de givre pulvérise le pack. Tout au fond : 20 pts dans la voie.', { requires: ['gm_fracas'], minSpent: 20 })
+minor('gm_glace', 'givremort', 1, 'Givre mordant', 3, { critique: 18 }, { requires: ['gm_hub'] })
+ks('gm_froid', 'givremort', 2, 'Maîtrise du givre', 'Tes sorts [froid] +12% (cross-classe).', { stat: { intelligence: 12 }, ks: { tagBonus: { tag: 'froid', damageMult: 1.12 } } }, { requires: ['gm_glace'] })
+minor('gm_buf2', 'givremort', 3, 'Aura de givre', 5, { critique: 8 }, { requires: ['gm_froid'] })
+ability('gm_souffle', 'givremort', 4, 'Souffle givrant', 'gm_souffle', 'CHOIX de SORT : GÈLE le pack (le contrôle du fracas). Exige Aura de givre au max + 8 pts.', { requires: ['gm_buf2'], requiresRank: { id: 'gm_buf2', rank: 5 }, exclusive: 'gm_arme2', minSpent: 8 })
+ability('gm_pilier', 'givremort', 4, 'Pilier de glace', 'gm_pilier', 'CHOIX de SORT : gros nuke froid mono. Exige Aura de givre au max + 8 pts.', { requires: ['gm_buf2'], requiresRank: { id: 'gm_buf2', rank: 5 }, exclusive: 'gm_arme2', minSpent: 8 })
+minor('gm_buf3', 'givremort', 1, 'Carcasse', 5, { endurance: 12 }, { requires: ['gm_hub'] })
+ability('gm_souffle_s', 'givremort', 2, 'Second souffle', 'second_souffle', 'SURVIE : auto-soin.', { requires: ['gm_buf3'] })
+ks('gm_resist', 'givremort', 2, 'Endurance morbide', 'SURVIE : -10% de dégâts subis. Exige Carcasse au max (5).', { stat: { endurance: 16 }, ks: { flatDr: 0.1 } }, { requires: ['gm_buf3'], requiresRank: { id: 'gm_buf3', rank: 5 } })
+/* ---- SANG (TANK) — encaisser → drainer (lifeNuke/dotLeech) → bouclier d'os (finisherShield). ---- */
+ability('sg_hub', 'sang', 0, 'Sang', 'sg_drain', 'Débloque Frappe vampirique (drain). +18 Force, +40 Endurance.', { requires: ['cl_dk'], statMods: { force: 18, endurance: 40 } })
+minor('sg_os', 'sang', 1, 'Os d\'acier', 5, { endurance: 14 }, { requires: ['sg_hub'] })
+ability('sg_marque', 'sang', 1, 'Marque sanglante', 'sg_marque', 'FINITION : débloque Marque sanglante (finisseur). +16 Force.', { requires: ['sg_hub'], statMods: { force: 16 } })
+ks('sg_bouclier', 'sang', 2, 'Bouclier d\'os', 'TANK (cd 30 s) : un finisseur t\'accorde un bouclier = 35% de ses dégâts (≤ tes PV). Exige Os d\'acier au max (5).', { stat: { endurance: 20 }, ks: { finisherShield: 0.35 } }, { requires: ['sg_os'], requiresRank: { id: 'sg_os', rank: 5 } })
+ability('sg_builder', 'sang', 1, 'Soif de sang', 'sg_builder', 'GÉNÉRATION : débloque Soif de sang (générateur).', { requires: ['sg_hub'] })
+ks('sg_vampirisme', 'sang', 2, 'Vampirisme', 'SURVIE : tes DoT te soignent (25% du tick), +20 Régén.', { stat: { regen: 20 }, ks: { dotLeech: 0.25 } }, { requires: ['sg_builder'] })
+minor('sg_buf2', 'sang', 3, 'Sang noir', 5, { endurance: 12 }, { requires: ['sg_vampirisme'] })
+ks('sg_caillot', 'sang', 4, 'Caillot', 'SURVIE : -12% de dégâts subis. Exige Sang noir au max (5).', { stat: { endurance: 16 }, ks: { flatDr: 0.12 } }, { requires: ['sg_buf2'], requiresRank: { id: 'sg_buf2', rank: 5 } })
+ability('sg_provoc', 'sang', 2, 'Provocation', 'provocation', 'MENACE : attire les attaques (rôle de tank).', { requires: ['sg_os'] })
+ability('sg_egide', 'sang', 5, 'Égide titanesque', 'egide_titanesque', 'ULTIME — énorme bouclier d\'absorption. Tout au fond : 20 pts dans la voie.', { requires: ['sg_bouclier'], minSpent: 20 })
+
+/* ================================================================== */
+/* DÉMONISTE (Tissu) — Pestilence (multi-DoT) · Légion (démons).       */
+/* ================================================================== */
+node('cl_demoniste', 'demoniste', 'ability', 0, 1, 'Démoniste', 'Maître des afflictions et des démons. Débloque Trait de l\'ombre. +30 Intelligence.', { requires: ['cat_tissu'], statMods: { intelligence: 30 }, unlockPower: 'de_trait' })
+/* ---- PESTILENCE — empile des fléaux (poison ombre) → détone tout (drain). ---- */
+ability('pe_hub', 'pestilence', 0, 'Pestilence', 'pe_fleau', 'Débloque Fléau (affliction d\'ombre cumulative). +18 Intelligence, +15 Altération.', { requires: ['cl_demoniste'], statMods: { intelligence: 18, alteration: 15 } })
+minor('pe_tox', 'pestilence', 1, 'Virulence', 3, { alteration: 18 }, { requires: ['pe_hub'] })
+ks('pe_dotamp', 'pestilence', 1, 'Affliction', 'Tes sorts [dot] +12% (cross-classe).', { stat: { alteration: 12 }, ks: { tagBonus: { tag: 'dot', damageMult: 1.12 } } }, { requires: ['pe_tox'] })
+ks('pe_venmort', 'pestilence', 2, 'Fléau mortel', 'Tes fléaux s\'empilent plus haut et plus fort.', { stat: { alteration: 16 }, ks: { poison: { perStack: 0.05, maxStacks: 2 } } }, { requires: ['pe_tox'] })
+minor('pe_buf1', 'pestilence', 3, 'Putréfaction', 5, { alteration: 8 }, { requires: ['pe_venmort'] })
+ability('pe_drain', 'pestilence', 4, 'Drain d\'âme', 'pe_drain', 'Débloque Drain d\'âme : DÉTONE tous les fléaux (pic = stacks × dégâts). Exige Putréfaction au max + 8 pts.', { requires: ['pe_buf1'], requiresRank: { id: 'pe_buf1', rank: 5 }, minSpent: 8 })
+ks('pe_chain', 'pestilence', 5, 'Propagation', 'Tes fléaux et la détonation se propagent au pack (50%). Profond : 12 pts.', { stat: { penetration: 16 }, ks: { dotAoe: 0.5 } }, { requires: ['pe_drain'], minSpent: 12 })
+ability('pe_fin', 'pestilence', 6, 'Fin du monde', 'pe_fin', 'ULTIME — détonation cataclysmique de tous les fléaux du pack. Tout au fond : 20 pts.', { requires: ['pe_chain'], minSpent: 20 })
+minor('pe_ombre', 'pestilence', 1, 'Ténèbres', 3, { intelligence: 16 }, { requires: ['pe_hub'] })
+ks('pe_ombreamp', 'pestilence', 2, 'Maîtrise de l\'ombre', 'Tes sorts [ombre] +12% (cross-classe).', { stat: { intelligence: 12 }, ks: { tagBonus: { tag: 'ombre', damageMult: 1.12 } } }, { requires: ['pe_ombre'] })
+minor('pe_buf2', 'pestilence', 3, 'Corruption', 5, { alteration: 8 }, { requires: ['pe_ombreamp'] })
+ability('pe_nuee', 'pestilence', 4, 'Nuée de fléaux', 'pe_nuee', 'CHOIX de SORT : un nuage de fléaux sur tout le pack. Exige Corruption au max + 8 pts.', { requires: ['pe_buf2'], requiresRank: { id: 'pe_buf2', rank: 5 }, exclusive: 'pe_arme2', minSpent: 8 })
+ability('pe_corr', 'pestilence', 4, 'Corruption majeure', 'pe_corruption', 'CHOIX de SORT : un gros DoT d\'ombre mono. Exige Corruption au max + 8 pts.', { requires: ['pe_buf2'], requiresRank: { id: 'pe_buf2', rank: 5 }, exclusive: 'pe_arme2', minSpent: 8 })
+minor('pe_buf3', 'pestilence', 1, 'Pacte', 5, { volDeVie: 8 }, { requires: ['pe_hub'] })
+ks('pe_drainlife', 'pestilence', 2, 'Vampirisme d\'ombre', 'SURVIE : tes DoT te soignent (25% du tick). Exige Pacte au max (5).', { stat: { regen: 20 }, ks: { dotLeech: 0.25 } }, { requires: ['pe_buf3'], requiresRank: { id: 'pe_buf3', rank: 5 } })
+/* ---- LÉGION — démons cumulés (petDps) + Tyran (frenzy). ---- */
+ability('lg_hub', 'legion', 0, 'Légion', 'lg_nuee', 'Débloque Nuée démoniaque. +18 Intelligence, +12 Critique.', { requires: ['cl_demoniste'], statMods: { intelligence: 18, critique: 12 } })
+minor('lg_pacte', 'legion', 1, 'Pacte démoniaque', 3, { intelligence: 16 }, { requires: ['lg_hub'] })
+ks('lg_demon', 'legion', 2, 'Invocation', 'INVOCATION : un démon combat à tes côtés (+30% de ton DPS d\'auto, en continu).', { stat: { intelligence: 12 }, ks: { petDps: 0.3 } }, { requires: ['lg_pacte'] })
+minor('lg_buf1', 'legion', 3, 'Lien démoniaque', 5, { intelligence: 8 }, { requires: ['lg_demon'] })
+ks('lg_legion', 'legion', 4, 'Légion', 'INVOCATION : un second démon te rejoint (+35% de plus). Exige Lien démoniaque au max (5).', { stat: { intelligence: 14 }, ks: { petDps: 0.35 } }, { requires: ['lg_buf1'], requiresRank: { id: 'lg_buf1', rank: 5 } })
+ability('lg_tyran', 'legion', 5, 'Tyran de l\'effroi', 'lg_tyran', 'ULTIME — invoque le Tyran qui survolte ta Légion (+dégâts). Tout au fond : 20 pts.', { requires: ['lg_legion'], minSpent: 20 })
+minor('lg_chaos', 'legion', 1, 'Chaos', 3, { critique: 18 }, { requires: ['lg_hub'] })
+ks('lg_ombreamp', 'legion', 2, 'Maître démoniste', 'Tes sorts [ombre] +12% (cross-classe).', { stat: { intelligence: 12 }, ks: { tagBonus: { tag: 'ombre', damageMult: 1.12 } } }, { requires: ['lg_chaos'] })
+minor('lg_buf2', 'legion', 3, 'Savoir interdit', 5, { critique: 8 }, { requires: ['lg_ombreamp'] })
+ability('lg_trait', 'legion', 4, 'Trait du chaos', 'lg_trait', 'CHOIX de SORT : un trait de chaos dévastateur. Exige Savoir interdit au max + 8 pts.', { requires: ['lg_buf2'], requiresRank: { id: 'lg_buf2', rank: 5 }, exclusive: 'lg_arme2', minSpent: 8 })
+ability('lg_arma', 'legion', 4, 'Armageddon', 'lg_armageddon', 'CHOIX de SORT : une pluie de feu démoniaque (zone). Exige Savoir interdit au max + 8 pts.', { requires: ['lg_buf2'], requiresRank: { id: 'lg_buf2', rank: 5 }, exclusive: 'lg_arme2', minSpent: 8 })
+minor('lg_buf3', 'legion', 1, 'Cuirasse d\'âmes', 5, { barriere: 12 }, { requires: ['lg_hub'] })
+ks('lg_protection', 'legion', 2, 'Armure démoniaque', 'SURVIE : -10% de dégâts subis, +20 Régén. Exige Cuirasse d\'âmes au max (5).', { stat: { regen: 20 }, ks: { flatDr: 0.1 } }, { requires: ['lg_buf3'], requiresRank: { id: 'lg_buf3', rank: 5 } })
+
+/* ================================================================== */
+/* CHAMAN (Mailles) — Élémentaire (DPS) · Vague (HEAL).                */
+/* ================================================================== */
+node('cl_chaman', 'chaman', 'ability', 0, 1, 'Chaman', 'Voix des éléments. Débloque Éclair. +20 Agilité, +20 Intelligence.', { requires: ['cat_mailles'], statMods: { agilite: 20, intelligence: 20 }, unlockPower: 'sh_eclair' })
+/* ---- ÉLÉMENTAIRE — foudre en chaîne + Surcharge (procs) + Maelström. ---- */
+ability('el_hub', 'elementaire', 0, 'Élémentaire', 'el_foudre', 'Débloque Foudre en chaîne (rebondit sur le pack). +18 Intelligence, +12 Critique.', { requires: ['cl_chaman'], statMods: { intelligence: 18, critique: 12 } })
+minor('el_orage', 'elementaire', 1, 'Orage', 3, { critique: 18 }, { requires: ['el_hub'] })
+ks('el_chain', 'elementaire', 2, 'Foudre en chaîne', 'FOUDRE : tes éclairs rebondissent (+50% sur 2 cibles de plus).', { stat: { intelligence: 12 }, ks: { chainArc: { frac: 0.5, targets: 2 } } }, { requires: ['el_orage'] })
+ks('el_static', 'elementaire', 3, 'Surcharge', 'PROC : toutes les 4 attaques, la suivante frappe ×1,6.', { stat: { hate: 14 }, ks: { staticN: { every: 4, mult: 1.6 } } }, { requires: ['el_chain'] })
+minor('el_buf1', 'elementaire', 3, 'Fureur élémentaire', 5, { intelligence: 8 }, { requires: ['el_static'] })
+ability('el_coulee', 'elementaire', 4, 'Coulée de lave', 'el_coulee', 'Débloque Coulée de lave (gros nuke de feu). Exige Fureur élémentaire au max + 10 pts.', { requires: ['el_buf1'], requiresRank: { id: 'el_buf1', rank: 5 }, minSpent: 10 })
+ks('el_foudreamp', 'elementaire', 5, 'Maître de la foudre', 'Tes sorts [foudre] +18%. Profond : 12 pts.', { stat: { intelligence: 16 }, ks: { tagBonus: { tag: 'foudre', damageMult: 1.18 } } }, { requires: ['el_coulee'], minSpent: 12 })
+ability('el_tempete', 'elementaire', 6, 'Tempête primordiale', 'el_tempete', 'ULTIME — une tempête pulvérise le pack. Tout au fond : 20 pts.', { requires: ['el_foudreamp'], minSpent: 20 })
+ability('el_maelstrom', 'elementaire', 1, 'Vague de Maelström', 'el_maelstrom', 'GÉNÉRATION : débloque Vague de Maelström (générateur INT, +2 d\'un coup). +16 Intelligence.', { requires: ['el_hub'], statMods: { intelligence: 16 } })
+ks('el_finamp', 'elementaire', 2, 'Maîtrise du Maelström', 'Tes sorts [finisseur] +15% (cross-classe).', { stat: { degatsCrit: 12 }, ks: { tagBonus: { tag: 'finisseur', damageMult: 1.15 } } }, { requires: ['el_maelstrom'] })
+minor('el_buf2', 'elementaire', 3, 'Flux tellurique', 5, { hate: 8 }, { requires: ['el_finamp'] })
+ability('el_lave', 'elementaire', 4, 'Salve de lave', 'el_lave', 'CHOIX de SORT : un finisseur de feu (× Maelström). Exige Flux tellurique au max + 8 pts.', { requires: ['el_buf2'], requiresRank: { id: 'el_buf2', rank: 5 }, minSpent: 8 })
+minor('el_buf3', 'elementaire', 1, 'Bouclier de pierre', 5, { barriere: 12 }, { requires: ['el_hub'] })
+ks('el_protection', 'elementaire', 2, 'Bouclier élémentaire', 'SURVIE : -10% de dégâts subis, +30 Esquive. Exige Bouclier de pierre au max (5).', { stat: { esquive: 30 }, ks: { flatDr: 0.1 } }, { requires: ['el_buf3'], requiresRank: { id: 'el_buf3', rank: 5 } })
+/* ---- VAGUE (HEAL) — soin de groupe en chaîne + totem (HoT). ---- */
+ability('va_hub', 'vague', 0, 'Vague', 'va_soin', 'Débloque Vague de soin. +18 Intelligence.', { requires: ['cl_chaman'], statMods: { intelligence: 18 } })
+minor('va_eau', 'vague', 1, 'Source vive', 5, { regen: 10 }, { requires: ['va_hub'] })
+ability('va_totem', 'vague', 2, 'Totem de jouvence', 'va_totem', 'TOTEM : débloque Totem de jouvence (soin sur la durée).', { requires: ['va_eau'] })
+ks('va_totemks', 'vague', 2, 'Totem de soin', 'TOTEM : un soin sur la durée constant sur l\'allié blessé (+régén d\'équipe). Exige Source vive au max (5).', { stat: { regen: 20 }, ks: { hot: 0.5 } }, { requires: ['va_eau'], requiresRank: { id: 'va_eau', rank: 5 } })
+ability('va_chaine', 'vague', 3, 'Soin en chaîne', 'va_chaine', 'Débloque Soin en chaîne (groupe). Gaté : 6 pts dans la voie.', { requires: ['va_eau'], minSpent: 6 })
+minor('va_buf', 'vague', 1, 'Communion', 5, { intelligence: 8 }, { requires: ['va_hub'] })
+ks('va_chatiment', 'vague', 2, 'Courroux ancestral', 'ATONEMENT : 35% de tes soins frappent aussi l\'ennemi (solo viable). Exige Communion au max (5).', { stat: { intelligence: 12 }, ks: { healToDamage: 0.35 } }, { requires: ['va_buf'], requiresRank: { id: 'va_buf', rank: 5 } })
+ability('va_maree', 'vague', 5, 'Marée de vie', 'va_maree', 'ULTIME — restaure énormément tout le groupe. Tout au fond : 20 pts.', { requires: ['va_chatiment'], minSpent: 20 })
+minor('va_buf3', 'vague', 1, 'Carapace d\'écailles', 5, { barriere: 12 }, { requires: ['va_hub'] })
+ability('va_bouclier', 'vague', 2, 'Bouclier de pierre', 'bouclier_runique', 'SURVIE : bouclier d\'absorption.', { requires: ['va_buf3'] })
+
+/* ================================================================== */
+/* DRUIDE (Cuir) — Lunaire (DPS) · Ronce (TANK) · Floraison (HEAL).    */
+/* ================================================================== */
+node('cl_druide', 'druide', 'ability', 0, 1, 'Druide', 'Gardien du cycle naturel et astral. Débloque Griffe lunaire. +30 Agilité.', { requires: ['cat_cuir'], statMods: { agilite: 30 }, unlockPower: 'dd_griffe' })
+/* ---- LUNAIRE (DPS) — DoT astraux (Lune/Soleil) + Pouvoir astral → Plénitude. ---- */
+ability('ln_hub', 'lunaire', 0, 'Lunaire', 'ln_lune', 'Débloque Éclat lunaire (DoT arcane). +18 Intelligence, +15 Altération.', { requires: ['cl_druide'], statMods: { intelligence: 18, alteration: 15 } })
+minor('ln_astre', 'lunaire', 1, 'Affinité astrale', 3, { alteration: 18 }, { requires: ['ln_hub'] })
+ks('ln_dotamp', 'lunaire', 1, 'Équinoxe', 'Tes sorts [dot] +12% (cross-classe).', { stat: { alteration: 12 }, ks: { tagBonus: { tag: 'dot', damageMult: 1.12 } } }, { requires: ['ln_astre'] })
+ability('ln_soleil', 'lunaire', 2, 'Feu solaire', 'ln_soleil', 'Débloque Feu solaire (DoT nature) — l\'autre face de l\'Éclipse.', { requires: ['ln_astre'] })
+ability('ln_astral', 'lunaire', 1, 'Éclair astral', 'ln_astral', 'GÉNÉRATION : débloque Éclair astral (génère le Pouvoir astral, +2 d\'un coup). +16 Intelligence.', { requires: ['ln_hub'], statMods: { intelligence: 16 } })
+ks('ln_finamp', 'lunaire', 2, 'Maîtrise astrale', 'Tes sorts [finisseur] +15% (cross-classe).', { stat: { degatsCrit: 12 }, ks: { tagBonus: { tag: 'finisseur', damageMult: 1.15 } } }, { requires: ['ln_astral'] })
+minor('ln_buf1', 'lunaire', 3, 'Pleine lune', 5, { intelligence: 8 }, { requires: ['ln_finamp'] })
+ability('ln_plenitude', 'lunaire', 4, 'Plénitude', 'ln_plenitude', 'Débloque Plénitude (finisseur astral × Pouvoir astral). Exige Pleine lune au max + 8 pts.', { requires: ['ln_buf1'], requiresRank: { id: 'ln_buf1', rank: 5 }, minSpent: 8 })
+ks('ln_eclipse', 'lunaire', 5, 'Éclipse', 'Tes sorts [arcane] ET [nature] +15% de dégâts. Profond : 12 pts.', { stat: { intelligence: 16 }, ks: { tagBonus: { tag: 'arcane', damageMult: 1.15 } } }, { requires: ['ln_plenitude'], minSpent: 12 })
+ability('ln_etoiles', 'lunaire', 6, 'Chute d\'étoiles', 'ln_etoiles', 'ULTIME — une pluie d\'étoiles s\'abat sur le pack. Tout au fond : 20 pts.', { requires: ['ln_eclipse'], minSpent: 20 })
+minor('ln_buf3', 'lunaire', 1, 'Fourrure', 5, { esquive: 12 }, { requires: ['ln_hub'] })
+ks('ln_protection', 'lunaire', 2, 'Peau d\'écorce', 'SURVIE : -10% de dégâts subis. Exige Fourrure au max (5).', { stat: { esquive: 20 }, ks: { flatDr: 0.1 } }, { requires: ['ln_buf3'], requiresRank: { id: 'ln_buf3', rank: 5 } })
+/* ---- RONCE (TANK) — gros PV, épines, +dégâts à PV hauts. ---- */
+ability('ro_hub', 'ronce', 0, 'Ronce', 'ro_lacere', 'Débloque Lacération (zone). +18 Force, +40 Endurance.', { requires: ['cl_druide'], statMods: { force: 18, endurance: 40 } })
+minor('ro_ecorce', 'ronce', 1, 'Écorce', 5, { endurance: 14 }, { requires: ['ro_hub'] })
+ks('ro_epines', 'ronce', 2, 'Épines', 'Tes assaillants encaissent 30% de tes dégâts d\'auto en retour. Exige Écorce au max (5).', { stat: { endurance: 20 }, ks: { thorns: 0.3 } }, { requires: ['ro_ecorce'], requiresRank: { id: 'ro_ecorce', rank: 5 } })
+ks('ro_colosse', 'ronce', 3, 'Colosse sylvestre', 'À plus de 60% de PV, +20% de dégâts. Profond : 10 pts.', { stat: { force: 16 }, ks: { highHpBonus: { threshold: 0.6, mult: 1.2 } } }, { requires: ['ro_epines'], minSpent: 10 })
+ability('ro_provoc', 'ronce', 2, 'Provocation', 'provocation', 'MENACE : attire les attaques.', { requires: ['ro_ecorce'] })
+minor('ro_buf2', 'ronce', 1, 'Régénération', 5, { regen: 12 }, { requires: ['ro_hub'] })
+ks('ro_resist', 'ronce', 2, 'Cuir épais', 'SURVIE : -12% de dégâts subis. Exige Régénération au max (5).', { stat: { endurance: 16 }, ks: { flatDr: 0.12 } }, { requires: ['ro_buf2'], requiresRank: { id: 'ro_buf2', rank: 5 } })
+ability('ro_ronces', 'ronce', 3, 'Ronces acérées', 'ro_ronces', 'CHOIX de SORT : un DoT nature qui saigne le pack. Gaté : 8 pts.', { requires: ['ro_buf2'], minSpent: 8 })
+ability('ro_souffle', 'ronce', 2, 'Second souffle', 'second_souffle', 'SURVIE : auto-soin.', { requires: ['ro_buf2'] })
+/* ---- FLORAISON (HEAL) — HoT empilés. ---- */
+ability('fo_hub', 'floraison', 0, 'Floraison', 'fo_pousse', 'Débloque Pousse de vie (soin sur la durée). +18 Intelligence.', { requires: ['cl_druide'], statMods: { intelligence: 18 } })
+minor('fo_seve', 'floraison', 1, 'Sève', 5, { regen: 10 }, { requires: ['fo_hub'] })
+ks('fo_hot', 'floraison', 2, 'Floraison persistante', 'SOIN : un soin sur la durée constant (+régén d\'équipe). Exige Sève au max (5).', { stat: { regen: 20 }, ks: { hot: 0.5 } }, { requires: ['fo_seve'], requiresRank: { id: 'fo_seve', rank: 5 } })
+ability('fo_floraison', 'floraison', 3, 'Floraison', 'fo_floraison', 'Débloque Floraison (soin direct). Gaté : 6 pts.', { requires: ['fo_seve'], minSpent: 6 })
+ability('fo_eclosion', 'floraison', 5, 'Éclosion', 'fo_eclosion', 'ULTIME — toutes les fleurs éclosent : énorme soin de groupe. Tout au fond : 20 pts.', { requires: ['fo_hot'], minSpent: 20 })
+minor('fo_buf', 'floraison', 1, 'Symbiose', 5, { intelligence: 8 }, { requires: ['fo_hub'] })
+ks('fo_chatiment', 'floraison', 2, 'Courroux de la nature', 'ATONEMENT : 35% de tes soins frappent aussi l\'ennemi (solo viable). Exige Symbiose au max (5).', { stat: { intelligence: 12 }, ks: { healToDamage: 0.35 } }, { requires: ['fo_buf'], requiresRank: { id: 'fo_buf', rank: 5 } })
+minor('fo_buf3', 'floraison', 1, 'Carapace végétale', 5, { barriere: 12 }, { requires: ['fo_hub'] })
+ability('fo_bouclier', 'floraison', 2, 'Bouclier d\'écorce', 'bouclier_runique', 'SURVIE : bouclier d\'absorption.', { requires: ['fo_buf3'] })
+
+/* ================================================================== */
+/* PALADIN (Plaque) — Croisé (DPS) · Templier (TANK) · Aube (HEAL).    */
+/* ================================================================== */
+node('cl_paladin', 'paladin', 'ability', 0, 1, 'Paladin', 'Champion sacré porté par le Pouvoir Sacré. Débloque Châtiment du croisé. +25 Force.', { requires: ['cat_plaque'], statMods: { force: 25 }, unlockPower: 'pa_chatiment' })
+/* ---- CROISÉ (DPS) — Pouvoir Sacré → Jugement + fenêtre de Croisade. ---- */
+ability('cs_hub', 'croise', 0, 'Croisé', 'cs_marteau', 'Débloque Marteau du juste (générateur de Pouvoir Sacré). +18 Force, +12 Critique.', { requires: ['cl_paladin'], statMods: { force: 18, critique: 12 } })
+ability('cs_jugement', 'croise', 1, 'Jugement', 'cs_jugement', 'FINITION : débloque Jugement (finisseur sacré × Pouvoir Sacré). +16 Force.', { requires: ['cs_hub'], statMods: { force: 16 } })
+ks('cs_finamp', 'croise', 2, 'Verdict', 'Tes sorts [finisseur] +15% (cross-classe).', { stat: { degatsCrit: 12 }, ks: { tagBonus: { tag: 'finisseur', damageMult: 1.15 } } }, { requires: ['cs_jugement'] })
+ks('cs_zele', 'croise', 2, 'Zèle', 'Tes finisseurs frappent +25% plus fort.', { stat: { degatsCrit: 20 }, ks: { finisherMult: 0.25 } }, { requires: ['cs_jugement'] })
+minor('cs_buf1', 'croise', 3, 'Ferveur sacrée', 5, { force: 8 }, { requires: ['cs_jugement'] })
+ability('cs_croisade', 'croise', 4, 'Croisade', 'cs_croisade', 'Débloque Croisade (fenêtre de burst : +80% de dégâts 8 s). Exige Ferveur sacrée au max + 10 pts.', { requires: ['cs_buf1'], requiresRank: { id: 'cs_buf1', rank: 5 }, minSpent: 10 })
+ks('cs_arcaneamp', 'croise', 5, 'Lumière vengeresse', 'Tes sorts [arcane] +18%. Profond : 12 pts.', { stat: { force: 16 }, ks: { tagBonus: { tag: 'arcane', damageMult: 1.18 } } }, { requires: ['cs_croisade'], minSpent: 12 })
+ability('cs_aile', 'croise', 6, 'Aile de l\'aurore', 'cs_aile', 'ULTIME — les ailes de l\'aurore balaient le pack. Tout au fond : 20 pts.', { requires: ['cs_arcaneamp'], minSpent: 20 })
+minor('cs_buf2', 'croise', 1, 'Zèle ardent', 3, { critique: 18 }, { requires: ['cs_hub'] })
+ks('cs_directamp', 'croise', 2, 'Croisé fervent', 'Tes sorts [direct] +12% (cross-classe).', { stat: { critique: 14 }, ks: { tagBonus: { tag: 'direct', damageMult: 1.12 } } }, { requires: ['cs_buf2'] })
+minor('cs_buf3', 'croise', 1, 'Foi inébranlable', 5, { reductionDegats: 10 }, { requires: ['cs_hub'] })
+ks('cs_resist', 'croise', 2, 'Bouclier de foi', 'SURVIE : -10% de dégâts subis. Exige Foi inébranlable au max (5).', { stat: { endurance: 16 }, ks: { flatDr: 0.1 } }, { requires: ['cs_buf3'], requiresRank: { id: 'cs_buf3', rank: 5 } })
+/* ---- TEMPLIER (TANK) — aura de partage de résistance + épines. ---- */
+ability('tp_hub', 'templier', 0, 'Templier', 'tp_consecration', 'Débloque Consécration (zone qui tient le pack). +18 Force, +40 Endurance.', { requires: ['cl_paladin'], statMods: { force: 18, endurance: 40 } })
+minor('tp_aura', 'templier', 1, 'Aura sacrée', 5, { endurance: 14 }, { requires: ['tp_hub'] })
+ks('tp_partage', 'templier', 2, 'Aura de dévotion', 'AURA : partage 30% de ta résistance avec l\'équipe. Exige Aura sacrée au max (5).', { stat: { endurance: 20 }, ks: { shareResist: 0.3 } }, { requires: ['tp_aura'], requiresRank: { id: 'tp_aura', rank: 5 } })
+ks('tp_epines', 'templier', 3, 'Épines sacrées', 'Tes assaillants encaissent 30% de tes dégâts d\'auto en retour. Profond : 10 pts.', { stat: { endurance: 16 }, ks: { thorns: 0.3 } }, { requires: ['tp_partage'], minSpent: 10 })
+ability('tp_provoc', 'templier', 2, 'Provocation', 'provocation', 'MENACE : attire les attaques.', { requires: ['tp_aura'] })
+minor('tp_buf2', 'templier', 1, 'Plaque bénie', 5, { reductionDegats: 10 }, { requires: ['tp_hub'] })
+ks('tp_resist', 'templier', 2, 'Forteresse sacrée', 'SURVIE : -12% de dégâts subis. Exige Plaque bénie au max (5).', { stat: { endurance: 16 }, ks: { flatDr: 0.12 } }, { requires: ['tp_buf2'], requiresRank: { id: 'tp_buf2', rank: 5 } })
+ability('tp_egide', 'templier', 3, 'Égide titanesque', 'egide_titanesque', 'ULTIME — énorme bouclier d\'absorption (40% à l\'équipe). Tout au fond : 20 pts.', { requires: ['tp_resist'], minSpent: 20 })
+/* ---- AUBE (HEAL) — soigne en FRAPPANT (damageToHeal), scale FORCE. ---- */
+ability('au_hub', 'aube', 0, 'Aube', 'au_verdict', 'Débloque Verdict sacré : un healer offensif. +18 Force.', { requires: ['cl_paladin'], statMods: { force: 18 } })
+minor('au_zele', 'aube', 1, 'Zèle sacré', 5, { critique: 10 }, { requires: ['au_hub'] })
+ks('au_chatiment', 'aube', 2, 'Lumière rédemptrice', 'ATONEMENT INVERSÉ : 40% de tes DÉGÂTS soignent l\'allié le plus blessé (tu soignes en frappant). Exige Zèle sacré au max (5).', { stat: { force: 12 }, ks: { damageToHeal: 0.4 } }, { requires: ['au_zele'], requiresRank: { id: 'au_zele', rank: 5 } })
+ks('au_ferveur', 'aube', 3, 'Ferveur de l\'aube', '+40% de soin par tes dégâts (rédemption accrue). Profond : 10 pts.', { stat: { force: 14 }, ks: { damageToHeal: 0.4 } }, { requires: ['au_chatiment'], minSpent: 10 })
+ability('au_aurore', 'aube', 5, 'Aurore', 'au_aurore', 'ULTIME — une aurore restaure énormément tout le groupe. Tout au fond : 20 pts.', { requires: ['au_ferveur'], minSpent: 20 })
+minor('au_foi', 'aube', 1, 'Foi', 5, { regen: 10 }, { requires: ['au_hub'] })
+ability('au_lumiere', 'aube', 2, 'Flash de lumière', 'au_lumiere', 'SOIN : un soin direct en pic.', { requires: ['au_foi'] })
+ability('au_imposition', 'aube', 3, 'Imposition des mains', 'au_imposition', 'Débloque Imposition des mains (soin de groupe). Gaté : 6 pts.', { requires: ['au_foi'], minSpent: 6 })
+minor('au_buf3', 'aube', 1, 'Plaque sacrée', 5, { reductionDegats: 10 }, { requires: ['au_hub'] })
+ks('au_resist', 'aube', 2, 'Grâce protectrice', 'SURVIE : -10% de dégâts subis. Exige Plaque sacrée au max (5).', { stat: { endurance: 16 }, ks: { flatDr: 0.1 } }, { requires: ['au_buf3'], requiresRank: { id: 'au_buf3', rank: 5 } })
+
 /* ------------------------------------------------------------------ */
 /* Méta de constellation.                                             */
 /* ------------------------------------------------------------------ */
@@ -444,6 +623,23 @@ export const CONSTELLATIONS: Record<ConstellationId, ConstellationMeta> = {
   pretre: { id: 'pretre', name: 'Prêtre', role: 'Tissu · classe', color: '#f1f3f5', icon: '✚' },
   lumiere: { id: 'lumiere', name: 'Lumière', role: 'Prêtre · HEAL', color: '#ffd43b', icon: '🌟', archetype: true },
   vide: { id: 'vide', name: 'Vide', role: 'Prêtre · DoT ombre', color: '#9775fa', icon: '🌑', archetype: true },
+  dk: { id: 'dk', name: 'Chevalier de la mort', role: 'Plaque · classe', color: '#5c7cfa', icon: '☠' },
+  givremort: { id: 'givremort', name: 'Givre-mort', role: 'DK · givre & exécution', color: '#74c0fc', icon: '❄', archetype: true },
+  sang: { id: 'sang', name: 'Sang', role: 'DK · TANK vampire', color: '#e03131', icon: '🩸', archetype: true },
+  demoniste: { id: 'demoniste', name: 'Démoniste', role: 'Tissu · classe', color: '#9c36b5', icon: '💀' },
+  pestilence: { id: 'pestilence', name: 'Pestilence', role: 'Démoniste · multi-DoT', color: '#82c91e', icon: '☣', archetype: true },
+  legion: { id: 'legion', name: 'Légion', role: 'Démoniste · démons', color: '#7048e8', icon: '👹', archetype: true },
+  chaman: { id: 'chaman', name: 'Chaman', role: 'Mailles · classe', color: '#3bc9db', icon: '⚡' },
+  elementaire: { id: 'elementaire', name: 'Élémentaire', role: 'Chaman · foudre & Maelström', color: '#fcc419', icon: '🌩', archetype: true },
+  vague: { id: 'vague', name: 'Vague', role: 'Chaman · HEAL totems', color: '#22b8cf', icon: '💧', archetype: true },
+  druide: { id: 'druide', name: 'Druide', role: 'Cuir · classe', color: '#94d82d', icon: '🐾' },
+  lunaire: { id: 'lunaire', name: 'Lunaire', role: 'Druide · astral', color: '#748ffc', icon: '🌙', archetype: true },
+  ronce: { id: 'ronce', name: 'Ronce', role: 'Druide · TANK', color: '#2f9e44', icon: '🌳', archetype: true },
+  floraison: { id: 'floraison', name: 'Floraison', role: 'Druide · HEAL HoT', color: '#69db7c', icon: '🌸', archetype: true },
+  paladin: { id: 'paladin', name: 'Paladin', role: 'Plaque · classe', color: '#ffd43b', icon: '⚜' },
+  croise: { id: 'croise', name: 'Croisé', role: 'Paladin · sacré DPS', color: '#ffe066', icon: '⚔', archetype: true },
+  templier: { id: 'templier', name: 'Templier', role: 'Paladin · TANK aura', color: '#f59f00', icon: '🛡', archetype: true },
+  aube: { id: 'aube', name: 'Aube', role: 'Paladin · HEAL (frappe)', color: '#ffec99', icon: '🌅', archetype: true },
 }
 export const CONSTELLATION_LIST: ConstellationId[] = [
   'coeur', 'voleur', 'assassin', 'ombrelame',
@@ -451,6 +647,11 @@ export const CONSTELLATION_LIST: ConstellationId[] = [
   'chasseur', 'meute', 'faucon',
   'guerrier', 'sentence', 'rempart',
   'pretre', 'lumiere', 'vide',
+  'dk', 'givremort', 'sang',
+  'demoniste', 'pestilence', 'legion',
+  'chaman', 'elementaire', 'vague',
+  'druide', 'lunaire', 'ronce', 'floraison',
+  'paladin', 'croise', 'templier', 'aube',
 ]
 
 /* ------------------------------------------------------------------ */

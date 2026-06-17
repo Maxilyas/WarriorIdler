@@ -4,9 +4,10 @@
 > sans rien réexpliquer. Ce doc est la **source de vérité** ; il SUPERSÈDE `DESIGN_v0.29_refonte_classes.md`
 > (l'ancien plan « 39 specs générées », abandonné car trop linéaire).
 >
-> **État** : socles + **Voleur** (Assassin + Ombrelame) + **Mage** (Pyromancien + Cryomancien + Arcaniste)
-> + **Chasseur** (Meneur de meute + Œil de faucon) + **Guerrier** (Sentence + **Rempart = 1er TANK**)
-> + **Prêtre** (**Lumière = 1er HEAL** + Vide). **5 classes faites, 5 restantes.** Arbre = 198 nœuds.
+> **État (v0.32)** : **LES 10 CLASSES SONT FAITES** 🎉 (23 archétypes, arbre = 356 nœuds). Voleur · Mage ·
+> Chasseur · Guerrier · Prêtre · Chevalier de la mort · Démoniste · Chaman · Druide · Paladin. Détail des
+> 5 dernières dans `DESIGN_v0.32_CLASSES_FINALES.md`. **Reste : passe d'ÉQUILIBRAGE au simulateur** (valeurs
+> des knobs/tampons), lot gemmes/runes de conversion, déploiement. Rôles : 15 DPS / 4 TANK / 4 HEAL.
 
 ---
 
@@ -184,7 +185,7 @@ Format : **Nom** (rôle) — *boucle unique* — `tags` clés. (Noms = identité
 - **Assassin** (DPS) — venin cumulatif → détonation (Catalyse ×2 ; Réaction en chaîne = AoE) ; survie = Drain. `dot, finisseur`
 - **Ombrelame** (DPS) — Points de Combo (générateur→finisseur, Effusion = refund) ; convergence Danse ; survie = esquive/Voile. `generateur, finisseur, furtif`
 
-### ⚜ PALADIN (Plaque) — *ressource « Pouvoir Sacré » partagée 3 specs*
+### ⚜ PALADIN (Plaque) — ✅ FAIT (Pouvoir Sacré ; Aube = nouveau keystone `damageToHeal` : soigne en frappant) — détail : DESIGN_v0.32
 - **Croisé** (DPS) — build → Jugement (finisseur sacré). `mono, direct, finisseur` (arcane)
 - **Templier** (TANK) — blocage + **aura** partageant ta résistance à l'équipe + zone consacrée. `protection, zone`
 - **Aube** (HEAL) — soigne en frappant (Pouvoir Sacré → soins), scale FORCE (heal non-INT). `soin, generateur, finisseur`
@@ -193,7 +194,7 @@ Format : **Nom** (rôle) — *boucle unique* — `tags` clés. (Noms = identité
 - **Sentence** (DPS) — Rage (build/spend) → finisseur + **exécution** (`executeBonus`) + saignements (`dot`). `mono, direct, finisseur, dot`
 - **Rempart** (TANK ✓ 1er) — Rage → **bouclier** (`finisherShield`) + **épines** (`thorns`) + provocation (réutilise `provocation`) ; ultime = Égide. `protection, finisseur`
 
-### ☠ CHEVALIER DE LA MORT (Plaque) — *ressource « Puissance runique »*
+### ☠ CHEVALIER DE LA MORT (Plaque) — ✅ FAIT (Puissance runique ; Givre-mort = controle/shatter mêlée, Sang = tank vampire) — détail : DESIGN_v0.32
 - **Givre-mort** (DPS) — **brise** les cibles `controle` (exécution sur gelé/ralenti) + multifrappe runique. `mono, direct, finisseur, froid, controle`
 - **Sang** (TANK) — tank vampire : dégâts/DoT te **soignent** + bouclier d'os. `protection, soin, finisseur, ombre`
 
@@ -201,16 +202,16 @@ Format : **Nom** (rôle) — *boucle unique* — `tags` clés. (Noms = identité
 - **Meneur de meute** (DPS) — **familier** (`petDps`, DPS passif idle ; Meute = 2e fauve, Alpha/Frénésie au choix). `invocation, direct, nature`
 - **Œil de faucon** (DPS) — **Concentration** (`char.combo`) : générateur→finisseur + **exécution** (`executeBonus`) + précision. `mono, direct, finisseur`
 
-### ⚡ CHAMAN (Mailles)
+### ⚡ CHAMAN (Mailles) — ✅ FAIT (Élémentaire = chainArc+staticN, Vague = HEAL totem/hot) — détail : DESIGN_v0.32
 - **Élémentaire** (DPS) — **Maelström** + foudre en chaîne (zone) + procs de Surcharge. `zone, finisseur, foudre`
 - **Vague** (HEAL) — **totems** (`invocation`) + soin en chaîne (zone). `soin, zone, invocation`
 
-### 🐾 DRUIDE (Cuir)
+### 🐾 DRUIDE (Cuir) — ✅ FAIT (Lunaire = DoT astraux/Pouvoir astral, Ronce = TANK highHp/épines, Floraison = HEAL hot) — détail : DESIGN_v0.32
 - **Lunaire** (DPS) — **Éclipse** (Lune/Soleil) → Pouvoir astral → gros sort. `finisseur, zone` (arcane/nature)
 - **Ronce** (TANK) — gros PV + **épines** + régén, dégâts à PV hauts. `protection, soin`
 - **Floraison** (HEAL) — **HoT empilés** qui éclosent. `soin, dot, zone`
 
-### 💀 DÉMONISTE (Tissu)
+### 💀 DÉMONISTE (Tissu) — ✅ FAIT (Pestilence = multi-DoT/détonation, Légion = démons petDps/Tyran) — détail : DESIGN_v0.32
 - **Pestilence** (DPS) — gère **plusieurs DoT** ; un drain qui les **étend/détone** tous. `dot, finisseur, zone, ombre`
 - **Légion** (DPS) — **invoque des démons** cumulés (`invocation`) + Tyran qui les survolte. `invocation, ombre`
 

@@ -384,6 +384,95 @@ const PRETRE_SPELLS: SpellSpec[] = [
 ]
 for (const s of PRETRE_SPELLS) POWERS.push(specToPower(s))
 
+/* Sorts du CHEVALIER DE LA MORT (Plaque, FOR). Givre-mort (contrôle mêlée + fracas + exécution) + Sang (tank vampire). */
+const DK_SPELLS: SpellSpec[] = [
+  { id: 'dk_frappe', name: 'Frappe runique', icon: '☠', effect: 'nuke', mag: 2.6, cd: 2.8, type: 'froid', scale: 'force', tags: ['mono', 'direct', 'froid'] },
+  // Givre-mort
+  { id: 'gm_givre', name: 'Lame de givre', icon: '❄', effect: 'builder', mag: 2.4, cd: 3.5, type: 'froid', scale: 'force', tags: ['mono', 'direct', 'froid', 'generateur'], resource: 'Puissance runique' },
+  { id: 'gm_obliteration', name: 'Oblitération', icon: '🪓', effect: 'finisher', mag: 1.6, cd: 3.5, type: 'froid', scale: 'force', tags: ['mono', 'direct', 'froid', 'finisseur'], resource: 'Puissance runique' },
+  { id: 'gm_souffle', name: 'Souffle givrant', icon: '🌬️', effect: 'cleave', mag: 2.6, cd: 5, duration: 4, type: 'froid', scale: 'force', tags: ['zone', 'direct', 'froid', 'controle'] },
+  { id: 'gm_pilier', name: 'Pilier de glace', icon: '🧊', effect: 'nuke', mag: 5.4, cd: 6, type: 'froid', scale: 'force', tags: ['mono', 'direct', 'froid'] },
+  { id: 'gm_apocalypse', name: 'Apocalypse', icon: '💀', effect: 'megaCleave', mag: 7, cd: 20, type: 'froid', scale: 'force', tags: ['zone', 'direct', 'froid', 'ultime'] },
+  // Sang
+  { id: 'sg_drain', name: 'Frappe vampirique', icon: '🩸', effect: 'lifeNuke', mag: 3.0, cd: 3, type: 'ombre', scale: 'force', tags: ['mono', 'direct', 'ombre'] },
+  { id: 'sg_builder', name: 'Soif de sang', icon: '🗡', effect: 'builder', mag: 2.2, cd: 3.2, scale: 'force', tags: ['mono', 'direct', 'generateur'], resource: 'Puissance runique' },
+  { id: 'sg_marque', name: 'Marque sanglante', icon: '🦴', effect: 'finisher', mag: 1.5, cd: 3.5, type: 'ombre', scale: 'force', tags: ['mono', 'direct', 'finisseur', 'protection'], resource: 'Puissance runique' },
+]
+for (const s of DK_SPELLS) POWERS.push(specToPower(s))
+
+/* Sorts du DÉMONISTE (Tissu, INT). Pestilence (multi-DoT + détonation) + Légion (démons cumulés + Tyran). */
+const DEMONISTE_SPELLS: SpellSpec[] = [
+  { id: 'de_trait', name: 'Trait de l\'ombre', icon: '💀', effect: 'nuke', mag: 2.6, cd: 2.8, type: 'ombre', scale: 'intelligence', tags: ['mono', 'direct', 'ombre'] },
+  // Pestilence
+  { id: 'pe_fleau', name: 'Fléau', icon: '☣', effect: 'poison', mag: 1.2, cd: 3.5, type: 'ombre', scale: 'intelligence', tags: ['mono', 'dot', 'ombre'] },
+  { id: 'pe_corruption', name: 'Corruption', icon: '🟣', effect: 'dot', mag: 2.6, cd: 4, type: 'ombre', scale: 'intelligence', tags: ['mono', 'dot', 'ombre'] },
+  { id: 'pe_drain', name: 'Drain d\'âme', icon: '🌀', effect: 'detonate', mag: 0.6, cd: 7, type: 'ombre', scale: 'intelligence', tags: ['mono', 'finisseur', 'ombre'] },
+  { id: 'pe_nuee', name: 'Nuée de fléaux', icon: '☁️', effect: 'poison', mag: 1.0, cd: 5, type: 'ombre', scale: 'intelligence', tags: ['zone', 'dot', 'ombre'] },
+  { id: 'pe_fin', name: 'Fin du monde', icon: '🌑', effect: 'detonate', mag: 1.1, cd: 18, type: 'ombre', scale: 'intelligence', tags: ['zone', 'finisseur', 'ombre', 'ultime'] },
+  // Légion
+  { id: 'lg_nuee', name: 'Nuée démoniaque', icon: '👹', effect: 'cleave', mag: 3.0, cd: 3.2, type: 'ombre', scale: 'intelligence', tags: ['zone', 'direct', 'ombre', 'invocation'] },
+  { id: 'lg_trait', name: 'Trait du chaos', icon: '😈', effect: 'nuke', mag: 3.8, cd: 2.8, type: 'feu', scale: 'intelligence', tags: ['mono', 'direct', 'feu'] },
+  { id: 'lg_tyran', name: 'Tyran de l\'effroi', icon: '👿', effect: 'frenzy', mag: 1.8, cd: 18, duration: 6, scale: 'intelligence', tags: ['invocation', 'ombre'] },
+  { id: 'lg_armageddon', name: 'Armageddon', icon: '🔥', effect: 'megaCleave', mag: 7, cd: 20, type: 'ombre', scale: 'intelligence', tags: ['zone', 'direct', 'ombre', 'ultime', 'invocation'] },
+]
+for (const s of DEMONISTE_SPELLS) POWERS.push(specToPower(s))
+
+/* Sorts du CHAMAN (Mailles, INT). Élémentaire (foudre en chaîne + Maelström) + Vague (soin de groupe + totems). */
+const CHAMAN_SPELLS: SpellSpec[] = [
+  { id: 'sh_eclair', name: 'Éclair', icon: '⚡', effect: 'nuke', mag: 2.6, cd: 2.8, type: 'foudre', scale: 'intelligence', tags: ['mono', 'direct', 'foudre'] },
+  // Élémentaire
+  { id: 'el_foudre', name: 'Foudre en chaîne', icon: '🌩', effect: 'cleave', mag: 3.0, cd: 3, type: 'foudre', scale: 'intelligence', tags: ['zone', 'direct', 'foudre'] },
+  { id: 'el_maelstrom', name: 'Vague de Maelström', icon: '🌀', effect: 'builder', mag: 2.0, cd: 3.2, type: 'foudre', scale: 'intelligence', tags: ['mono', 'direct', 'foudre', 'generateur'], resource: 'Maelström', gen: 2 },
+  { id: 'el_lave', name: 'Salve de lave', icon: '🌋', effect: 'finisher', mag: 1.6, cd: 3.5, type: 'feu', scale: 'intelligence', tags: ['mono', 'direct', 'feu', 'finisseur'], resource: 'Maelström' },
+  { id: 'el_coulee', name: 'Coulée de lave', icon: '🔥', effect: 'nuke', mag: 5.4, cd: 6, type: 'feu', scale: 'intelligence', tags: ['mono', 'direct', 'feu'] },
+  { id: 'el_tempete', name: 'Tempête primordiale', icon: '🌪️', effect: 'megaCleave', mag: 7, cd: 20, type: 'foudre', scale: 'intelligence', tags: ['zone', 'direct', 'foudre', 'ultime'] },
+  // Vague (HEAL)
+  { id: 'va_soin', name: 'Vague de soin', icon: '💧', effect: 'heal', mag: 2.4, cd: 3, scale: 'intelligence', tags: ['soin'] },
+  { id: 'va_chaine', name: 'Soin en chaîne', icon: '💠', effect: 'buffParty', mag: 1.8, cd: 5, scale: 'intelligence', tags: ['soin'] },
+  { id: 'va_totem', name: 'Totem de jouvence', icon: '🪵', effect: 'hot', mag: 1.8, cd: 4, scale: 'intelligence', tags: ['soin'] },
+  { id: 'va_maree', name: 'Marée de vie', icon: '🌊', effect: 'bigHeal', mag: 12, cd: 24, scale: 'intelligence', tags: ['soin', 'ultime'] },
+]
+for (const s of CHAMAN_SPELLS) POWERS.push(specToPower(s))
+
+/* Sorts du DRUIDE (Cuir). Lunaire (DoT astraux + Pouvoir astral) + Ronce (TANK) + Floraison (HEAL HoT). */
+const DRUIDE_SPELLS: SpellSpec[] = [
+  { id: 'dd_griffe', name: 'Griffe lunaire', icon: '🐾', effect: 'nuke', mag: 2.6, cd: 2.8, type: 'nature', scale: 'intelligence', tags: ['mono', 'direct', 'nature'] },
+  // Lunaire (DPS)
+  { id: 'ln_lune', name: 'Éclat lunaire', icon: '🌙', effect: 'dot', mag: 2.4, cd: 4, type: 'arcane', scale: 'intelligence', tags: ['mono', 'dot', 'arcane'] },
+  { id: 'ln_soleil', name: 'Feu solaire', icon: '☀️', effect: 'dot', mag: 2.4, cd: 4, type: 'nature', scale: 'intelligence', tags: ['mono', 'dot', 'nature'] },
+  { id: 'ln_astral', name: 'Éclair astral', icon: '✨', effect: 'builder', mag: 2.0, cd: 3.2, type: 'arcane', scale: 'intelligence', tags: ['mono', 'direct', 'arcane', 'generateur'], resource: 'Pouvoir astral', gen: 2 },
+  { id: 'ln_plenitude', name: 'Plénitude', icon: '🌟', effect: 'finisher', mag: 1.6, cd: 3.5, type: 'arcane', scale: 'intelligence', tags: ['mono', 'direct', 'arcane', 'finisseur'], resource: 'Pouvoir astral' },
+  { id: 'ln_etoiles', name: 'Chute d\'étoiles', icon: '🌠', effect: 'megaCleave', mag: 7, cd: 20, type: 'arcane', scale: 'intelligence', tags: ['zone', 'direct', 'arcane', 'ultime'] },
+  // Ronce (TANK)
+  { id: 'ro_lacere', name: 'Lacération', icon: '🌿', effect: 'cleave', mag: 2.8, cd: 3, type: 'nature', scale: 'force', tags: ['zone', 'direct', 'nature'] },
+  { id: 'ro_ronces', name: 'Ronces acérées', icon: '🌵', effect: 'dot', mag: 2.4, cd: 4, type: 'nature', scale: 'force', tags: ['mono', 'dot', 'nature'] },
+  // Floraison (HEAL)
+  { id: 'fo_pousse', name: 'Pousse de vie', icon: '🌱', effect: 'hot', mag: 1.8, cd: 4, scale: 'intelligence', tags: ['soin'] },
+  { id: 'fo_floraison', name: 'Floraison', icon: '🌸', effect: 'heal', mag: 2.4, cd: 3, scale: 'intelligence', tags: ['soin'] },
+  { id: 'fo_eclosion', name: 'Éclosion', icon: '🌺', effect: 'bigHeal', mag: 12, cd: 24, scale: 'intelligence', tags: ['soin', 'ultime'] },
+]
+for (const s of DRUIDE_SPELLS) POWERS.push(specToPower(s))
+
+/* Sorts du PALADIN (Plaque, FOR). Croisé (DPS sacré) + Templier (TANK aura) + Aube (HEAL en frappant). */
+const PALADIN_SPELLS: SpellSpec[] = [
+  { id: 'pa_chatiment', name: 'Châtiment du croisé', icon: '⚜', effect: 'nuke', mag: 2.6, cd: 2.8, type: 'arcane', scale: 'force', tags: ['mono', 'direct', 'arcane'] },
+  // Croisé (DPS)
+  { id: 'cs_marteau', name: 'Marteau du juste', icon: '🔨', effect: 'builder', mag: 2.4, cd: 3.5, type: 'arcane', scale: 'force', tags: ['mono', 'direct', 'arcane', 'generateur'], resource: 'Pouvoir Sacré' },
+  { id: 'cs_jugement', name: 'Jugement', icon: '⚖', effect: 'finisher', mag: 1.6, cd: 3.5, type: 'arcane', scale: 'force', tags: ['mono', 'direct', 'arcane', 'finisseur'], resource: 'Pouvoir Sacré' },
+  { id: 'cs_croisade', name: 'Croisade', icon: '🕊️', effect: 'frenzy', mag: 1.8, cd: 20, duration: 8, scale: 'force', tags: ['arcane'] },
+  { id: 'cs_zele', name: 'Zèle vengeur', icon: '🌟', effect: 'nuke', mag: 5.4, cd: 6, type: 'arcane', scale: 'force', tags: ['mono', 'direct', 'arcane'] },
+  { id: 'cs_aile', name: 'Aile de l\'aurore', icon: '👼', effect: 'megaCleave', mag: 7, cd: 20, type: 'arcane', scale: 'force', tags: ['zone', 'direct', 'arcane', 'ultime'] },
+  // Templier (TANK)
+  { id: 'tp_consecration', name: 'Consécration', icon: '✨', effect: 'cleave', mag: 2.6, cd: 3, type: 'arcane', scale: 'force', tags: ['zone', 'direct', 'arcane'] },
+  { id: 'tp_bouclier', name: 'Bouclier du juste', icon: '🛡️', effect: 'finisher', mag: 1.4, cd: 3.5, type: 'arcane', scale: 'force', tags: ['mono', 'direct', 'finisseur', 'protection'], resource: 'Pouvoir Sacré' },
+  // Aube (HEAL — soigne en frappant via damageToHeal)
+  { id: 'au_verdict', name: 'Verdict sacré', icon: '🌅', effect: 'nuke', mag: 3.0, cd: 3, type: 'arcane', scale: 'force', tags: ['mono', 'direct', 'arcane'] },
+  { id: 'au_lumiere', name: 'Flash de lumière', icon: '💗', effect: 'heal', mag: 2.4, cd: 3.5, scale: 'force', tags: ['soin'] },
+  { id: 'au_imposition', name: 'Imposition des mains', icon: '🙌', effect: 'buffParty', mag: 1.8, cd: 6, scale: 'force', tags: ['soin'] },
+  { id: 'au_aurore', name: 'Aurore', icon: '🌄', effect: 'bigHeal', mag: 12, cd: 24, scale: 'force', tags: ['soin', 'ultime'] },
+]
+for (const s of PALADIN_SPELLS) POWERS.push(specToPower(s))
+
 const BY_ID = new Map(POWERS.map((p) => [p.id, p]))
 
 export function getPower(id: string): PowerDef | undefined {
