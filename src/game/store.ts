@@ -4087,7 +4087,7 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
       if (repeatLeft > 0) {
         const credited = applyChestRewards(base, chest)
         if (credited.sceaux >= def.sceauCost) {
-          const ndun = generateDungeon(d.dungeonId, lv, d.wing)
+          const ndun = generateDungeon(d.dungeonId, lv, d.bestStage ?? s.bestStage, d.wing)
           ndun.repeatLeft = repeatLeft - 1
           const log3 = pushLog(log, `🔁 Auto-farm : run encaissé · ${repeatLeft} relance${repeatLeft > 1 ? 's' : ''} restante${repeatLeft > 1 ? 's' : ''}.`, 'info')
           const next = { ...base, ...credited, characters: healed, dungeonProgress, sceaux: credited.sceaux - def.sceauCost, dungeon: ndun, log: log3 }
@@ -4109,7 +4109,7 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
     const nd: ActiveDungeon = {
       ...d,
       current: nextIndex,
-      enemies: makeDungeonPack(def, d.level, nextIndex, d.totalFights, d.modifiers, nextIndex === d.championAt),
+      enemies: makeDungeonPack(def, d.level, nextIndex, d.totalFights, d.modifiers, d.bestStage ?? s.bestStage, nextIndex === d.championAt),
       fightTime: 0,
       runTime,
       earned,
@@ -6233,7 +6233,7 @@ export const useGame = create<GameState>((set, get) => {
       if (!def || s.bestStage < def.unlockStage) return
       if (s.sceaux < def.sceauCost) return
       if (level < 1 || level > (s.dungeonProgress[dungeonId] ?? 0) + 1) return
-      const dungeon = generateDungeon(dungeonId, level, wing)
+      const dungeon = generateDungeon(dungeonId, level, s.bestStage, wing)
       dungeon.repeatLeft = Math.max(0, Math.round(repeat) - 1)
       // ⚗️ Potions de contenu ARMÉES (Officine v0.26) : consommées à l'entrée.
       let log = s.log

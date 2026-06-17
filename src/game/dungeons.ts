@@ -2,7 +2,7 @@ import type { DamageType, Enemy } from './types'
 import { DAMAGE_TYPES } from './damage'
 import type { GemFamily } from './condGems'
 import { dungeonReq } from './resist'
-import { enemyHp, enemyDmg, enemyArmor, ilvlDungeon, ilvlFarm, dungeonDifficultyIlvl } from './progression'
+import { enemyHp, enemyDmg, enemyArmor, lootFarmIlvl, frontierIlvl } from './progression'
 
 /**
  * DONJONS « par RESSOURCE » (refonte v0.17).
@@ -72,25 +72,25 @@ export const DUNGEONS: Record<DungeonId, DungeonDef> = {
     id: 'eclats', name: 'Faille Arcanique', icon: '♦', color: '#22d3ee', reward: 'eclats',
     lore: 'Une déchirure dans la réalité d\'où jaillissent des éclats d\'arcane vivants qui se scindent sans cesse.',
     trait: 'pack', traitLabel: 'Cristaux qui se multiplient : nuées denses → privilégie le cleave.',
-    element: 'arcane', unlockStage: 13, sceauCost: 1,
+    element: 'arcane', unlockStage: 8, sceauCost: 1,
   },
   noyau: {
     id: 'noyau', name: 'Forge du Noyau', icon: '💠', color: '#f783ac', reward: 'noyau',
     lore: 'Au cœur d\'un volcan, des golems de fonte gardent les Noyaux primordiaux — désormais l\'UNIQUE source de ce matériau de craft.',
     trait: 'armure', traitLabel: 'Golems blindés : sans Pénétration, ton DPS s\'effondre.',
-    element: 'feu', unlockStage: 18, sceauCost: 1,
+    element: 'feu', unlockStage: 12, sceauCost: 1,
   },
   butin: {
     id: 'butin', name: 'Cache du Pilleur', icon: '🎒', color: '#a78bfa', reward: 'stuff',
     lore: 'Le repaire d\'un seigneur-voleur, gardé par ses lieutenants d\'élite. Le butin monte en rareté avec le niveau, jusqu\'à Artefact — au-delà, seul un tirage infime perce le voile (Éternel max). Les raretés cosmiques sont l\'apanage des raids.',
     trait: 'elite', traitLabel: 'Lieutenants d\'élite coriaces → DPS soutenu et Dégâts vs Boss.',
-    element: 'ombre', unlockStage: 40, sceauCost: 1,
+    element: 'ombre', unlockStage: 12, sceauCost: 1,
   },
   geode: {
     id: 'geode', name: 'La Géode', icon: '🔹', color: '#38bdf8', reward: 'gemmes',
     lore: 'Une caverne aux mille facettes, divisée en trois ailes cristallines — une par famille de gemme. Choisis ton aile : la poussière est garantie, la gemme se mérite.',
     trait: 'armure', traitLabel: 'Golems cristallins blindés : sans Pénétration, ton DPS s\'effondre.',
-    element: 'froid', unlockStage: 50, sceauCost: 2,
+    element: 'froid', unlockStage: 20, sceauCost: 2,
   },
   orbes: {
     id: 'orbes', name: 'Vortex des Orbes', icon: '🔮', color: '#e599f7', reward: 'orbes',
@@ -255,6 +255,8 @@ export interface ActiveDungeon {
   xpPotion?: number
   dungeonId: DungeonId
   level: number
+  /** Record de farm au lancement (v0.35) : cale la difficulté ET le loot du donjon sur TA tranche. */
+  bestStage: number
   name: string
   trait: DungeonTrait
   reward: DungeonReward
@@ -308,11 +310,11 @@ export function dungeonFights(level: number): number {
  * crachait de l'ilvl 466 quand le farm en donnait 180 — boule de neige stuff → niveau suivant.
  * Monter le PALIER redevient le moteur ; le donjon garde une longueur d'avance, pas une galaxie.
  */
-export function dungeonIlvl(level: number, bestStage: number): number {
-  // v0.30 : loot du donjon = ilvlDungeon (cap 250), borné par le record de farm (×1,25 + marge) →
-  // le donjon garde une avance ciblée sur le farm, jamais une galaxie. Monter reste le moteur.
-  const cap = Math.round(ilvlFarm(bestStage) * 1.25 + 20)
-  return Math.min(ilvlDungeon(level), Math.max(20, cap))
+export function dungeonIlvl(_level: number, bestStage: number): number {
+  // v0.35 — le donjon ne donne PLUS d'ilvl : son loot sort à TA TRANCHE (= ilvl du loot de farm).
+  // Sa valeur = une MEILLEURE RARETÉ dans ta tranche (cacheRarityWindow) + des mats. Le niveau de
+  // donjon est un PUSH (difficulté + rareté/rendement), pas un escalier d'ilvl.
+  return lootFarmIlvl(bestStage)
 }
 
 /**
@@ -364,6 +366,14 @@ const DUNGEON_FIGHT_RAMP_ILVL = 2 // +ilvl de difficulté par combat DANS un run
 const DUNGEON_BOSS_HP_MULT = 5    // boss (dernier combat) : pic de PV (~15 s, pacing donjon court)
 const DUNGEON_ELITE_HP_MULT = 2.7 // élites coriaces (Cache)
 
+// v0.35 — DIFFICULTÉ RELATIVE AU JOUEUR : le donjon est calé sur TA frontière (bestStage), pas sur un
+// ilvl absolu (fini « donjon 1 = ilvl 54 »). Niveau 1 = ta frontière (toujours pertinent) ; chaque
+// niveau au-dessus = un PUSH (+DUNGEON_PUSH_STEP ilvl) pour plus de difficulté ET de rareté/rendement.
+const DUNGEON_PUSH_STEP = 5
+export function dungeonContentIlvl(level: number, bestStage: number): number {
+  return Math.max(1, frontierIlvl(bestStage) + Math.max(0, level - 1) * DUNGEON_PUSH_STEP)
+}
+
 /** Régénération des ennemis (fraction des PV max/s) imposée par l'identité du donjon. */
 export function dungeonRegen(trait: DungeonTrait): number {
   return TRAIT_CFG[trait].regen ?? 0
@@ -382,6 +392,7 @@ export function makeDungeonEnemy(
   fightIndex: number,
   totalFights: number,
   modifiers: DungeonModifier[],
+  bestStage: number,
 ): Enemy {
   const cfg = TRAIT_CFG[def.trait]
   const isBoss = fightIndex === totalFights - 1
@@ -397,7 +408,7 @@ export function makeDungeonEnemy(
 
   // v0.30 — base UNIFIÉE b^ilvl à l'ilvl de difficulté du donjon (+ rampe douce par combat) ;
   // l'identité (cfg.hp/dmg/armor) et la classe (boss/élite) restent des multiplicateurs.
-  const diffIlvl = dungeonDifficultyIlvl(level) + fightIndex * DUNGEON_FIGHT_RAMP_ILVL
+  const diffIlvl = dungeonContentIlvl(level, bestStage) + fightIndex * DUNGEON_FIGHT_RAMP_ILVL
   const classHp = isBoss ? DUNGEON_BOSS_HP_MULT : isElite ? DUNGEON_ELITE_HP_MULT : 1
   const maxHp = Math.round(enemyHp(diffIlvl, 'trash') * classHp * cfg.hp * hpMods)
   const effStage = level * EFF_STAGE_PER_LEVEL + fightIndex // récompenses (xp) — économie inchangée
@@ -433,15 +444,16 @@ export function makeDungeonPack(
   fightIndex: number,
   totalFights: number,
   modifiers: DungeonModifier[],
+  bestStage: number,
   champion = false,
 ): Enemy[] {
   const size = dungeonPackSize(def.trait, fightIndex, totalFights)
   const pack: Enemy[] = []
   if (size <= 1) {
-    pack.push(makeDungeonEnemy(def, level, fightIndex, totalFights, modifiers))
+    pack.push(makeDungeonEnemy(def, level, fightIndex, totalFights, modifiers, bestStage))
   } else {
     for (let i = 0; i < size; i++) {
-      const e = makeDungeonEnemy(def, level, fightIndex, totalFights, modifiers)
+      const e = makeDungeonEnemy(def, level, fightIndex, totalFights, modifiers, bestStage)
       e.maxHp = Math.max(1, Math.round(e.maxHp * 0.72))
       e.hp = e.maxHp
       e.name = `${e.name} ${PACK_TAGS[i] ?? i + 1}`
@@ -468,7 +480,7 @@ export function presseTimer(level: number, totalFights: number): number {
 }
 
 /** Génère un donjon prêt à jouer. `wing` (La Géode) : aile choisie → famille farmée + élément. */
-export function generateDungeon(dungeonId: DungeonId, level: number, wing?: GemFamily): ActiveDungeon {
+export function generateDungeon(dungeonId: DungeonId, level: number, bestStage: number, wing?: GemFamily): ActiveDungeon {
   const def = dungeonId === 'geode' && wing
     ? { ...DUNGEONS.geode, element: GEODE_WING_ELEMENT[wing] }
     : DUNGEONS[dungeonId]
@@ -499,6 +511,7 @@ export function generateDungeon(dungeonId: DungeonId, level: number, wing?: GemF
   return {
     dungeonId,
     level,
+    bestStage,
     name: `${def.icon} ${def.name} · Niv. ${level}`,
     trait: def.trait,
     reward: def.reward,
@@ -507,7 +520,7 @@ export function generateDungeon(dungeonId: DungeonId, level: number, wing?: GemF
     modifiers,
     totalFights,
     current: 0,
-    enemies: makeDungeonPack(def, level, 0, totalFights, modifiers, championAt === 0),
+    enemies: makeDungeonPack(def, level, 0, totalFights, modifiers, bestStage, championAt === 0),
     fightTime: 0,
     runTime: 0,
     ...(championAt !== undefined ? { championAt } : {}),
