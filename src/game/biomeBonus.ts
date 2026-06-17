@@ -36,10 +36,11 @@ export function maitriseSum(biomeBest: Record<BiomeId, number>): number {
   return sum
 }
 
-/** Bonus de dégâts global (0 → MAITRISE_CAP) — ~5% quand les 7 biomes sont au palier 150. */
-export function maitriseBonus(biomeBest: Record<BiomeId, number>): number {
-  const ref = BIOME_IDS.length * MAITRISE_REF_STAGE // 7 × 150 = 1050
-  return Math.min(MAITRISE_CAP, maitriseSum(biomeBest) * (MAITRISE_TARGET / ref))
+/** Bonus de dégâts global (0 → MAITRISE_CAP). v0.35 — UNE seule zone : indexé sur ton record GLOBAL
+ *  (bestStage), réf = UN biome (MAITRISE_REF_STAGE) → ~5% au palier 150 (au lieu de la somme des 7
+ *  biomes, qui donnait un % minuscule avec un seul biome actif). */
+export function maitriseBonus(globalBest: number): number {
+  return Math.min(MAITRISE_CAP, Math.max(0, globalBest) * (MAITRISE_TARGET / MAITRISE_REF_STAGE))
 }
 
 // ---- 2) Surcharge élémentaire (rotation horaire réelle) ----

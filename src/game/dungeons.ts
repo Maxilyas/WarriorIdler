@@ -327,7 +327,7 @@ export function dungeonIlvl(_level: number, bestStage: number): number {
  * restent STABLES sur toute la progression (le coût scale, le rendement aussi). Couplé à l'over-content
  * (×4/cran), un craft-contenu ≈ 10 runs ⇒ +1 cran au-dessus = dizaines, +2 = centaines de runs.
  */
-const DUNGEON_RUN_REF_LEVEL = 5   // niveau de farm « confortable » de référence
+const DUNGEON_RUN_REF_LEVEL = 3   // niveau de farm « confortable » de référence (v0.35.1 : 5→3, là où on est réellement)
 const DUNGEON_LEVEL_GROWTH = 1.18 // +rendement par niveau au-dessus du REF (le PUSH paie)
 const CRAFT_RUNS_TARGET = 10      // craft à la rareté du contenu ≈ 10 runs au niveau REF
 const GOLD_BUYS_PER_RUN = 3       // l'or = dump marché : ~3 achats par run (généreux)
@@ -380,8 +380,12 @@ const DUNGEON_ELITE_HP_MULT = 2.7 // élites coriaces (Cache)
 // de puissance/niveau → +1 niveau ≈ 1 cran d'optimisation, fini d'enjamber 5 niveaux d'un coup).
 // Ton niveau-plafond = ton niveau d'optimisation ; les récompenses (rareté/rendement) suivent.
 const DUNGEON_PUSH_STEP = 10
+// v0.35.1 — ENTRÉE CONFORTABLE : niveau 1 = ta tranche − OFFSET (income facile) → on atteint des
+// niveaux plus HAUTS avant le mur d'optimisation (retour joueur : « bloqué niv 2-3 au palier 80, le
+// contenu paraît statique »). Le PUSH (×1,2/niveau) garde le « 1 cran d'optim = 1 niveau ».
+const DUNGEON_BASE_OFFSET = 20
 export function dungeonContentIlvl(level: number, bestStage: number): number {
-  return Math.max(1, lootFarmIlvl(bestStage) + Math.max(0, level - 1) * DUNGEON_PUSH_STEP)
+  return Math.max(1, lootFarmIlvl(bestStage) - DUNGEON_BASE_OFFSET + Math.max(0, level - 1) * DUNGEON_PUSH_STEP)
 }
 
 /** Régénération des ennemis (fraction des PV max/s) imposée par l'identité du donjon.
@@ -389,7 +393,10 @@ export function dungeonContentIlvl(level: number, bestStage: number): number {
  *  franchissable d'emblée pour ouvrir la boucle des donjons), pleine au niveau 5+ (le check de burst
  *  revient pour le défi et les clés). Évite que le donjon-passerelle soit un mur de burst infranchissable. */
 export function dungeonRegen(trait: DungeonTrait, level = 1): number {
-  return (TRAIT_CFG[trait].regen ?? 0) * Math.max(0, Math.min(1, (level - 1) / 4))
+  // v0.35.1 — rampe BIEN plus douce : NULLE jusqu'au niveau 3 (l'Antre des Failles est le donjon
+  // d'ENTRÉE, il doit être le plus facile — retour joueur), pleine vers le niveau 9. Le check de burst
+  // (regen) est un défi de PUSH, jamais une barrière à l'entrée de la boucle.
+  return (TRAIT_CFG[trait].regen ?? 0) * Math.max(0, Math.min(1, (level - 3) / 6))
 }
 
 /** Taille du pack d'un combat (le boss final est seul). */

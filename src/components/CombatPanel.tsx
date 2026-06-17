@@ -20,7 +20,7 @@ import { getPower, powerIcon } from '../game/powers'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from '../game/damage'
 import { RAID_MECHANIC_META } from '../game/raids'
 import { BIOME_LIST, biomeUnlocked, biomeUnlockHint, getBiomeDef } from '../game/biomes'
-import { maitriseBonus, maitriseSum, surgeBiome, surgeRemainingMs } from '../game/biomeBonus'
+import { maitriseBonus, surgeBiome, surgeRemainingMs } from '../game/biomeBonus'
 import type { Character, DamageType, Enemy, EnemyAbility, PowerDef } from '../game/types'
 
 /** Filtres du journal plein écran (catégories de LogKind). */
@@ -106,7 +106,7 @@ export function CombatPanel() {
   const activeBiomeBest = Math.max(1, bestStage)
   // Bonus de biome : surcharge tournante + Maîtrise des Zones (v0.25 : Élan supprimé).
   const surge = surgeBiome()
-  const maitrise = maitriseBonus(biomeBest)
+  const maitrise = maitriseBonus(bestStage)
 
   // Donjons/raids = combat à PLUSIEURS adversaires. En combat classique, un seul ennemi.
   const enemies: Enemy[] = raid ? raid.enemies : dungeon ? dungeon.enemies : [normalEnemy]
@@ -374,7 +374,7 @@ export function CombatPanel() {
             </div>
             <div className="text-violet-300">
               🗺️ Maîtrise des Zones : <span className="font-semibold">+{(maitrise * 100).toFixed(1)}% dégâts</span>
-              <span className="text-slate-400"> partout (somme des records : {maitriseSum(biomeBest)} / {7 * 150} — monte TOUS les biomes, ~5% à fond)</span>
+              <span className="text-slate-400"> partout (record global : {bestStage} / 150 — ~5% au palier 150)</span>
             </div>
           </div>
           <div className="mt-4 flex items-center justify-between gap-2">

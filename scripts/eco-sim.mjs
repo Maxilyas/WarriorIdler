@@ -23,7 +23,7 @@ const shopRefreshCost = (bestStage) => Math.round(500 + bestStage * 60)
 const xpForLevel = (level) => { const x = level - 1; return Math.round(560 * Math.exp(0.105 * x + 0.00055 * x * x)) }
 
 const fmt = (n) => n >= 1e9 ? (n / 1e9).toFixed(1) + 'Md' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : Math.round(n).toString()
-const REF_LEVEL = 5 // niveau de donjon « de farm » représentatif (≈ plafond confortable). Knob d'affichage.
+const REF_LEVEL = 3 // niveau de donjon « de farm » représentatif (v0.35.1 : aligné sur DUNGEON_RUN_REF_LEVEL=3).
 const TIME_RUNE = M.ENCHANTS.find((e) => e.time) // rune la moins chère à graver/forger
 // « actions par run » : combien d'optimisations un run finance. Bande saine ≈ 0,3 à 8.
 const ratio = (yield_, cost) => cost > 0 ? yield_ / cost : Infinity

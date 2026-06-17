@@ -3909,7 +3909,7 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
   const dBuffs = activeBrewBuffs(s)
   const dPact = teamPactMods(s, dCraft, dBuffs)
   // 🗝️ Pierre de sceau (v0.26) : +X% de dégâts par modificateur actif · ⚗️ élixir/🛢️ huile d'Officine.
-  const dHeroMult = (1 + maitriseBonus(s.biomeBest)) * (1 + crescendoBonus(dCond.crescendoCap))
+  const dHeroMult = (1 + maitriseBonus(s.bestStage)) * (1 + crescendoBonus(dCond.crescendoCap))
     * (dCond.sceauPct ? 1 + dCond.sceauPct * d.modifiers.length : 1)
     * dBuffs.dmgMult
     * (dBuffs.oil && dBuffs.oil.type === def.element ? 1 + dBuffs.oil.pct : 1)
@@ -4185,7 +4185,7 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
   const rRunes = timeRuneMods(equippedTimeRunes(s.characters), rCraft.runisteTempo)
   const rBuffs = activeBrewBuffs(s)
   const rPact = teamPactMods(s, rCraft, rBuffs)
-  const rHeroMult = (1 + maitriseBonus(s.biomeBest)) * (1 + crescendoBonus(rCond.crescendoCap))
+  const rHeroMult = (1 + maitriseBonus(s.bestStage)) * (1 + crescendoBonus(rCond.crescendoCap))
     * rBuffs.dmgMult
     * (rBuffs.oil && rBuffs.oil.type === r.element ? 1 + rBuffs.oil.pct : 1)
   const res = partyCombatStepMulti(s.characters, r.enemies, dt, {
@@ -4553,7 +4553,7 @@ export const useGame = create<GameState>((set, get) => {
       const surgedNow = surgeBiome() === s.activeBiome
       // 🧗 Pied du mur (v0.26) : à ≤ 2 paliers du record, le push frappe plus fort.
       const nearRecord = s.stage >= s.bestStage - 2
-      const heroMult = (1 + maitriseBonus(s.biomeBest))
+      const heroMult = (1 + maitriseBonus(s.bestStage))
         * (1 + crescendoBonus(cond.crescendoCap))
         * (surgedNow && cond.orage ? 1 + cond.orage : 1)
         * (nearRecord && cond.piedDuMurPct ? 1 + cond.piedDuMurPct : 1)
