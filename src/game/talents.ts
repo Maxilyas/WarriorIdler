@@ -24,7 +24,7 @@ import type { KeystoneEffect } from './classData'
  */
 
 export type ConstellationId =
-  | 'coeur' | 'pantheon' | 'voleur' | 'assassin' | 'ombrelame'
+  | 'coeur' | 'pantheon' | 'voleur' | 'assassin' | 'ombrelame' | 'lamevenin'
   | 'mage' | 'pyromancien' | 'cryomancien' | 'arcaniste'
   | 'chasseur' | 'meute' | 'faucon'
   | 'guerrier' | 'sentence' | 'rempart'
@@ -206,6 +206,43 @@ minor('om_lame', 'ombrelame', 1, 'Fil du rasoir', 3, { critique: 16 }, { require
 ks('om_jum', 'ombrelame', 2, 'Lames jumelles', 'LAMES : +18% de chance de Multifrappe.', { ks: { multistrike: 0.18 } }, { requires: ['om_lame'] })
 ks('om_fren', 'ombrelame', 3, 'Frénésie', 'CHOIX : +26 Hâte.', { stat: { hate: 26 } }, { requires: ['om_jum'], exclusive: 'om_lames' })
 ks('om_precis', 'ombrelame', 3, 'Précision létale', 'CHOIX : +24 Critique, +24 Dégâts crit.', { stat: { critique: 24, degatsCrit: 24 } }, { requires: ['om_jum'], exclusive: 'om_lames' })
+
+/* ================================================================== */
+/* LAME VÉNÉNEUSE (v0.34) — SECTION SYNERGIE Assassin × Ombrelame.
+ * Pont entre les deux voies : le combo ARME la rampe de venin, le venin NOURRIT le combo.
+ * Calibré par scripts/sim-voleur-hybride.mjs (≈ ×1,45 PLAT en endgame ; hybride ≤ ×1,17 vs build pur).
+ * Identité : rampe → détone → re-rampe, exigeant Critique ET Altération ENSEMBLE (double-stat forcé).
+ * Aucun bonus de stat « sec » : chaque keystone porte une CONDITION (venin présent, PC plein, seuil de
+ * crit, overcap…) ; les 2 minors sont des ⛓ tampons de gating (double-stat) façon arbre existant. */
+/* ================================================================== */
+// ENTRÉE — convergence : exige un ampli de VENIN (Assassin) ET un nœud de COMBO (Ombrelame).
+ks('lv_pivot', 'lamevenin', 0, 'Lame Vénéneuse', 'PIVOT : tes FINISSEURS appliquent ⌈PC/2⌉ stacks de venin ET comptent comme [dot] (gagnent tes bonus de DoT). Exige Venin mortel ET Saignée preste.',
+  { stat: { penetration: 12 }, ks: { finisherToPoison: 0.5, finisherIsDot: true } }, { requiresAll: ['as_venmort', 'om_saig'] })
+
+// --- GÉNÉRATION : le venin nourrit la ressource de combo ---
+ks('lv_suint', 'lamevenin', 1, 'Lames suintantes', 'GÉNÉRATION : tes générateurs de Points de Combo appliquent aussi 1 stack de venin (boucle venin↔combo).', { stat: { critique: 12 }, ks: { builderPoison: true } }, { requires: ['lv_pivot'] })
+ks('lv_cycle', 'lamevenin', 2, 'Cycle venimeux', 'GÉNÉRATION : +1 Point de Combo par générateur — la rampe de venin auto-entretient ton combo.', { stat: { hate: 16 }, ks: { comboGen: 1 } }, { requires: ['lv_suint'] })
+ks('lv_danse', 'lamevenin', 3, 'Danse vénéneuse', 'COMBO : +1 au plafond de Points de Combo ; un finisseur REGÉNÈRE 1 PC si la cible est au venin MAX. Gaté : 6 pts.', { stat: { critique: 16 }, ks: { comboCap: 1, venomFinisherGen: true } }, { requires: ['lv_cycle'], minSpent: 6 })
+
+// --- FINITION : le combo arme / détone le venin ---
+ks('lv_verdict', 'lamevenin', 1, 'Verdict toxique', 'FINITION : +12% de dégâts de finisseur SI la cible porte du venin (sinon rien → force à ouvrir au venin).', { stat: { degatsCrit: 12 }, ks: { finisherVsVenom: 0.12 } }, { requires: ['lv_pivot'] })
+ks('lv_entaille', 'lamevenin', 2, 'Entaille septique', 'ENTRETIEN : un finisseur RAFRAÎCHIT la durée du venin (le combo entretient la rampe au lieu de la consumer).', { stat: { alteration: 12 }, ks: { finisherRefreshPoison: true } }, { requires: ['lv_verdict'] })
+ks('lv_explosive', 'lamevenin', 3, 'Toxine explosive', 'CHOIX : un finisseur à PC PLEIN DÉTONE 30% des stacks de venin (consommés) — build spike. Gaté : 6 pts.', { stat: { degatsCrit: 14 }, ks: { finisherDetonate: 0.3 } }, { requires: ['lv_entaille'], exclusive: 'lv_finstyle', minSpent: 6 })
+ks('lv_remanente', 'lamevenin', 3, 'Toxine rémanente', 'CHOIX : un finisseur PROLONGE le venin (+2,5 s) et le booste (+3%/PC), sans le consommer — build rampe. Gaté : 6 pts.', { stat: { alteration: 14 }, ks: { finisherProlongsDot: { seconds: 2.5, perCombo: 0.03 } } }, { requires: ['lv_entaille'], exclusive: 'lv_finstyle', minSpent: 6 })
+ks('lv_chaine', 'lamevenin', 4, 'Réaction en chaîne toxique', 'AOE : tes altérations ET la détonation se propagent à 100% au pack (payoff farm/idle). Profond : 8 pts.', { stat: { penetration: 14 }, ks: { dotAoe: 1 } }, { requires: ['lv_explosive', 'lv_remanente'], minSpent: 8 })
+
+// --- HYBRIDE : itémisation double-stat OBLIGATOIRE (Crit ET Altération) ---
+ks('lv_seve', 'lamevenin', 1, 'Sève et acier', 'OVERCAP : +25% de ton Critique AU-DELÀ de 50% reversé en Altération (pousser le crit déborde sur le venin).', { ks: { critToAlteration: 0.25 } }, { requires: ['lv_pivot'] })
+minor('lv_fiel', 'lamevenin', 2, 'Lames enduites de fiel', 5, { alteration: 8 }, { requires: ['lv_seve'] }) // ⛓ tampon Altération
+ks('lv_concentr', 'lamevenin', 3, 'Concentration de toxines', 'VENIN : +2 au plafond de stacks de venin. Exige Lames enduites de fiel au max (5).', { stat: { alteration: 14 }, ks: { poison: { perStack: 0, maxStacks: 2 } } }, { requires: ['lv_fiel'], requiresRank: { id: 'lv_fiel', rank: 5 } })
+ks('lv_symbiose', 'lamevenin', 4, 'Symbiose', 'CROSS-SCALING : tes finisseurs gagnent +30% × (multiplicateur d\'Altération − 1) — BORNÉ par le soft-cap d\'Altération. Profond : 10 pts.', { stat: { penetration: 14 }, ks: { finisherFromAlteration: 0.3 } }, { requires: ['lv_concentr'], minSpent: 10 })
+minor('lv_tranchant', 'lamevenin', 2, 'Tranchant mortel', 5, { critique: 8 }, { requires: ['lv_seve'] }) // ⛓ tampon Critique → Lame critique
+ks('lv_critique', 'lamevenin', 4, 'Lame critique', 'BUILD-AROUND : si ton Critique ≥ 60%, ton VENIN peut CRITER (hérite des Dégâts crit.). Exige Tranchant mortel au max (5) + 12 pts.', { stat: { degatsCrit: 16 }, ks: { poisonCanCrit: 0.6 } }, { requires: ['lv_tranchant'], requiresRank: { id: 'lv_tranchant', rank: 5 }, minSpent: 12 })
+
+// --- CONTREPARTIE + CAPSTONE ---
+ks('lv_pacte', 'lamevenin', 3, 'Pacte de la toxine', 'CONTREPARTIE : tes DoT ne te soignent PLUS ; en échange +4% de dégâts de finisseur PAR stack de venin (max +40%).', { stat: { degatsBoss: 12 }, ks: { finisherVenomBonus: 0.04, noDotLeech: true } }, { requires: ['lv_verdict'] })
+ks('lv_marque', 'lamevenin', 5, 'Marque de l\'assassin', 'EXÉCUTION : tes finisseurs exécutent les ennemis sous 25% de PV (×2,4).', { stat: { degatsBoss: 16 }, ks: { executeBonus: { threshold: 0.25, mult: 2.4 } } }, { requires: ['lv_chaine'] })
+ks('lv_apotheose', 'lamevenin', 6, 'Apothéose du fléau', 'CAPSTONE : ta détonation RÉ-APPLIQUE 40% des stacks consommés (détonation soutenue) ET +3 au plafond de venin. Tout au fond : 14 pts.', { stat: { penetration: 18 }, ks: { detonateReapply: 0.4, poison: { perStack: 0, maxStacks: 3 } } }, { requiresAll: ['lv_symbiose', 'lv_chaine'], minSpent: 14 })
 
 /* ================================================================== */
 /* MAGE (Tissu) — Pyromancien · Cryomancien · Arcaniste.               */
@@ -628,6 +665,7 @@ export const CONSTELLATIONS: Record<ConstellationId, ConstellationMeta> = {
   voleur: { id: 'voleur', name: 'Voleur', role: 'Cuir · classe', color: '#a18152', icon: '🗡' },
   assassin: { id: 'assassin', name: 'Assassin', role: 'Voleur · afflictions', color: '#51cf66', icon: '☠', archetype: true },
   ombrelame: { id: 'ombrelame', name: 'Ombrelame', role: 'Voleur · combo & ombre', color: '#b197fc', icon: '🌑', archetype: true },
+  lamevenin: { id: 'lamevenin', name: 'Lame Vénéneuse', role: 'Voleur · venin × combo (synergie)', color: '#a3e635', icon: '🐍', archetype: true },
   mage: { id: 'mage', name: 'Mage', role: 'Tissu · classe', color: '#74c0fc', icon: '✨' },
   pyromancien: { id: 'pyromancien', name: 'Pyromancien', role: 'Mage · feu & embrasement', color: '#ff6b6b', icon: '🔥', archetype: true },
   cryomancien: { id: 'cryomancien', name: 'Cryomancien', role: 'Mage · givre & contrôle', color: '#3bc9db', icon: '❄️', archetype: true },
@@ -660,7 +698,7 @@ export const CONSTELLATIONS: Record<ConstellationId, ConstellationMeta> = {
   aube: { id: 'aube', name: 'Aube', role: 'Paladin · HEAL (frappe)', color: '#ffec99', icon: '🌅', archetype: true, tree: 'pantheon' },
 }
 export const CONSTELLATION_LIST: ConstellationId[] = [
-  'coeur', 'pantheon', 'voleur', 'assassin', 'ombrelame',
+  'coeur', 'pantheon', 'voleur', 'assassin', 'ombrelame', 'lamevenin',
   'mage', 'pyromancien', 'cryomancien', 'arcaniste',
   'chasseur', 'meute', 'faucon',
   'guerrier', 'sentence', 'rempart',

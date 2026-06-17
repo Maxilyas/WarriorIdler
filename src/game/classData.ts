@@ -96,6 +96,36 @@ export interface KeystoneEffect {
   /** PALADIN AUBE : une fraction de TES DÉGÂTS soigne l'allié le plus blessé (inverse de `healToDamage`).
    *  → un healer qui soigne en TAPANT (scale FORCE). Somme entre keystones. */
   damageToHeal?: number
+
+  /* ---- v0.34 : VOLEUR « Lame Vénéneuse » (synergie Assassin × Ombrelame, calibré par sim) ---- */
+  /** LAME VÉNÉNEUSE : un FINISSEUR applique ⌈PC × frac⌉ stacks de venin (combo → affliction). Somme. */
+  finisherToPoison?: number
+  /** LAME VÉNÉNEUSE : le finisseur bénéficie du tagBonus['dot'] (il « compte comme » un DoT). */
+  finisherIsDot?: boolean
+  /** ENTAILLE SEPTIQUE : un finisseur RAFRAÎCHIT la durée du venin (le combo entretient la rampe). */
+  finisherRefreshPoison?: boolean
+  /** VERDICT TOXIQUE : +frac de dégâts au finisseur SI la cible porte du venin (somme). */
+  finisherVsVenom?: number
+  /** SYMBIOSE : le finisseur ×(1 + frac×(alterationMult−1)) — cross-scaling BORNÉ (alt cap ×6,5). Somme. */
+  finisherFromAlteration?: number
+  /** PACTE DE LA TOXINE : +frac de dégâts au finisseur PAR stack de venin (capé 40 %). Somme. */
+  finisherVenomBonus?: number
+  /** PACTE DE LA TOXINE : désactive le soin par DoT (dotLeech) — contrepartie du keystone. */
+  noDotLeech?: boolean
+  /** LAME CRITIQUE : le venin peut CRITER si critChance ≥ ce seuil (hérite des Dégâts crit.). Max. */
+  poisonCanCrit?: number
+  /** TOXINE EXPLOSIVE : un finisseur à PC plein DÉTONE `frac` des stacks de venin (consommés). Max. */
+  finisherDetonate?: number
+  /** TOXINE RÉMANENTE : un finisseur PROLONGE le venin (+seconds) et le booste (+perCombo×PC). */
+  finisherProlongsDot?: { seconds: number; perCombo: number }
+  /** APOTHÉOSE DU FLÉAU : la détonation RÉ-APPLIQUE `frac` des stacks consommés (détonation soutenue). Max. */
+  detonateReapply?: number
+  /** SÈVE ET ACIER : overcap — +frac du Critique AU-DELÀ de 50 % reversé en Altération (somme). */
+  critToAlteration?: number
+  /** LAMES SUINTANTES : les générateurs appliquent aussi un stack de venin. */
+  builderPoison?: boolean
+  /** DANSE VÉNÉNEUSE : le finisseur génère +1 PC si la cible est au venin MAX. */
+  venomFinisherGen?: boolean
 }
 
 /** Vocabulaire des TAGS de comportement (12) — les 7 types de dégâts servent aussi de tags. */

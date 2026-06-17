@@ -2479,6 +2479,18 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
   // l'Endurance obtient un énorme bouclier (levier de survie qui suit l'Endurance).
   const shieldBase = (p.magnitude ?? 1) * Math.max(abilityPower(derived, powerScale(p)), derived.endurancePower)
   const vm = enemyVuln(enemy)
+  // v0.34 « Lame Vénéneuse » : facteur crit du venin (gaté au seuil de Critique, BORNÉ) + application
+  // de venin par un finisseur/générateur (référence = coup NORMAL non amplifié).
+  const venCrit = cm.poisonCanCrit > 0 && derived.critChance >= cm.poisonCanCrit
+    ? 1 + derived.critChance * (derived.critMult - 1) : 1
+  const venomRef = base * profileDamageMult(profile) * dmgMult
+  const applyVenom = (n: number) => {
+    if (n <= 0) return
+    const stacks = Math.min(cm.poison.maxStacks, (enemy.venomStacks ?? 0) + n)
+    enemy.venomStacks = stacks
+    const dps = stacks * cm.poison.perStack * venomRef * derived.alterationMult * venCrit
+    enemy.dot = { dps: Math.max(dps, enemy.dot?.dps ?? 0), remaining: 8 }
+  }
   const hit = (dmg: number): number => {
     const before = enemy.hp; enemy.hp = Math.max(0, enemy.hp - dmg); const done = before - enemy.hp
     // PALADIN AUBE : une fraction de TES DÉGÂTS soigne l'allié le plus blessé (« soigne en frappant »).
@@ -2561,23 +2573,34 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
       // ASSASSIN : empile un STACK de venin ; le DoT (enemy.dot) monte avec les stacks.
       const stacks = Math.min(cm.poison.maxStacks, (enemy.venomStacks ?? 0) + 1)
       enemy.venomStacks = stacks
-      const dps = stacks * cm.poison.perStack * magDmg * derived.alterationMult
+      // v0.34 « Lame critique » : le venin hérite du critique (venCrit, borné, gaté au seuil).
+      const dps = stacks * cm.poison.perStack * magDmg * derived.alterationMult * venCrit
       enemy.dot = { dps: Math.max(dps, enemy.dot?.dps ?? 0), remaining: 8 }
       return 0
     }
     case 'detonate': {
       // ASSASSIN : consomme tous les stacks → pic = stacks × magnitude. Catalyse double avant détonation.
-      const stacks = (enemy.venomStacks ?? 0) * (cm.detonateDouble ? 2 : 1)
+      const before = enemy.venomStacks ?? 0
+      const stacks = before * (cm.detonateDouble ? 2 : 1)
       if (stacks <= 0) return hit(magDmg * vm)
       const done = hit(magDmg * stacks * vm)
-      enemy.venomStacks = 0
-      enemy.dot = undefined
+      // v0.34 « Apothéose du fléau » : ré-applique une fraction des stacks consommés (détonation soutenue).
+      if (cm.detonateReapply > 0) {
+        enemy.venomStacks = 0
+        enemy.dot = undefined
+        applyVenom(Math.floor(before * cm.detonateReapply))
+      } else {
+        enemy.venomStacks = 0
+        enemy.dot = undefined
+      }
       return done
     }
     case 'builder': {
       // OMBRELAME : +`gen` Point(s) de Combo (défaut 1 ; un générateur INT lent peut en donner +2) (+ petit coup).
       const cap = 5 + cm.comboCap
       caster.combo = Math.min(cap, (caster.combo ?? 0) + (p.gen ?? 1) + cm.comboGen)
+      // v0.34 « Lames suintantes » : les générateurs appliquent aussi du venin (boucle venin↔combo).
+      if (cm.builderPoison) applyVenom(1)
       // ARCANISTE « Surcharge instable » : au PLEIN de Charges, déclenche la fenêtre (et CONSOMME les Charges).
       if (cm.overload && (caster.overload ?? 0) <= 0 && (caster.combo ?? 0) >= cap) {
         caster.overload = cm.overload.window
@@ -2588,8 +2611,34 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
     case 'finisher': {
       // OMBRELAME : consomme les Points de Combo → dégâts × points. comboRefund en rend une partie (spam).
       const pts = Math.max(1, caster.combo ?? 0)
-      const done = hit(magDmg * pts * 0.55 * (1 + cm.finisherMult) * vm)
+      const cap = 5 + cm.comboCap
+      const venoms = enemy.venomStacks ?? 0
+      // v0.34 « Lame Vénéneuse » : amplis de finisseur conditionnels (tous BORNÉS / gatés par une condition).
+      let finMult = 1 + cm.finisherMult
+      if (cm.finisherIsDot) finMult *= (cm.tagBonus['dot'] ?? 1)                 // compte comme [dot]
+      if (cm.finisherVsVenom > 0 && venoms > 0) finMult *= 1 + cm.finisherVsVenom // Verdict toxique
+      if (cm.finisherFromAlteration > 0) finMult *= 1 + cm.finisherFromAlteration * (derived.alterationMult - 1) // Symbiose (borné)
+      if (cm.finisherVenomBonus > 0) finMult *= 1 + Math.min(0.4, cm.finisherVenomBonus * venoms) // Pacte (capé 40 %)
+      const done = hit(magDmg * pts * 0.55 * finMult * vm)
+      // Lame Vénéneuse : le finisseur applique du venin (⌈PC × frac⌉). Entaille septique : rafraîchit.
+      if (cm.finisherToPoison > 0) applyVenom(Math.ceil(pts * cm.finisherToPoison))
+      else if (cm.finisherRefreshPoison && enemy.dot && venoms > 0) enemy.dot.remaining = 8
+      // Toxine explosive : à PC plein, détone une fraction des stacks (consommés).
+      if (cm.finisherDetonate > 0 && pts >= cap && venoms > 0) {
+        const blown = Math.floor(venoms * cm.finisherDetonate) * (cm.detonateDouble ? 2 : 1)
+        if (blown > 0) {
+          hit(venomRef * blown * derived.alterationMult * venCrit * vm)
+          enemy.venomStacks = Math.max(0, venoms - Math.floor(venoms * cm.finisherDetonate))
+        }
+      }
+      // Toxine rémanente : prolonge le venin + le booste (par PC), sans le consommer.
+      if (cm.finisherProlongsDot && enemy.dot) {
+        enemy.dot.remaining = Math.min(15, enemy.dot.remaining + cm.finisherProlongsDot.seconds)
+        enemy.dot.dps *= 1 + Math.min(0.6, cm.finisherProlongsDot.perCombo * pts)
+      }
       caster.combo = cm.comboRefund
+      // Danse vénéneuse : le finisseur regénère 1 PC si la cible est au venin MAX.
+      if (cm.venomFinisherGen && venoms >= cm.poison.maxStacks) caster.combo = Math.min(cap, caster.combo + 1)
       // REMPART : convertit la dépense de Rage en bouclier — MAIS (1) au plus une fois / 30 s (cooldown
       // interne, sinon bouclier permanent = trop fort), (2) borné aux PV : au plus 50% des PV max par
       // déclenchement, total ≤ PV max. Le bouclier suit la SURVIE (PV), pas le dégât brut (milliards endgame).

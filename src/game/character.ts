@@ -123,6 +123,9 @@ export function charKeystones(char: Character): KeystoneEffect[] {
 /** Applique les conversions de stat (« la Force compte comme Agi », « Endurance comme Force »…). */
 function applyStatConversions(total: StatBlock, keystones: KeystoneEffect[]): StatBlock {
   const out = { ...total }
+  // SÈVE ET ACIER (v0.34) : overcap — le Critique AU-DELÀ de 50 % (rating 2250) déborde en Altération.
+  // Borné par construction : ne convertit QUE le surplus, et l'Altération reste soft-capée en aval.
+  let critToAlt = 0
   for (const k of keystones) {
     if (k.statAsOther) {
       const from = total[k.statAsOther.from] ?? 0 // basé sur la valeur d'origine (pas de double-dip)
@@ -132,6 +135,12 @@ function applyStatConversions(total: StatBlock, keystones: KeystoneEffect[]): St
       const end = total.endurance ?? 0
       out[k.enduranceAs.to] = (out[k.enduranceAs.to] ?? 0) + Math.round(end * k.enduranceAs.frac)
     }
+    if (k.critToAlteration) critToAlt += k.critToAlteration
+  }
+  if (critToAlt > 0) {
+    const CRIT_50_RATING = 2250 // 0,05 + 2250/5000 = 50 % de chance de critique
+    const surplus = Math.max(0, (total.critique ?? 0) - CRIT_50_RATING)
+    out.alteration = (out.alteration ?? 0) + Math.round(surplus * critToAlt)
   }
   return out
 }
@@ -489,6 +498,21 @@ export interface CombatMods {
   overload?: { window: number; mult: number }
   /** PALADIN AUBE : fraction de tes dégâts reversée en soin à l'allié le plus blessé (somme). */
   damageToHeal: number
+  // --- v0.34 : VOLEUR « Lame Vénéneuse » ---
+  finisherToPoison: number
+  finisherIsDot: boolean
+  finisherRefreshPoison: boolean
+  finisherVsVenom: number
+  finisherFromAlteration: number
+  finisherVenomBonus: number
+  noDotLeech: boolean
+  poisonCanCrit: number
+  finisherDetonate: number
+  finisherProlongsDot?: { seconds: number; perCombo: number }
+  detonateReapply: number
+  critToAlteration: number
+  builderPoison: boolean
+  venomFinisherGen: boolean
 }
 
 export function charCombatMods(char: Character): CombatMods {
@@ -498,6 +522,10 @@ export function charCombatMods(char: Character): CombatMods {
     spellMult: 1, cdrOnCast: 0, reqReduction: 0, surplusToDamage: 0, shareResist: 0, surplusRegen: 0,
     poison: { perStack: 0.08, maxStacks: 4 }, comboCap: 0, comboGen: 0, finisherMult: 0,
     tagBonus: {}, detonateDouble: false, comboRefund: 0, petDps: 0, shatter: 0, finisherShield: 0, damageToHeal: 0,
+    // v0.34 : Lame Vénéneuse
+    finisherToPoison: 0, finisherIsDot: false, finisherRefreshPoison: false, finisherVsVenom: 0,
+    finisherFromAlteration: 0, finisherVenomBonus: 0, noDotLeech: false, poisonCanCrit: 0, finisherDetonate: 0,
+    detonateReapply: 0, critToAlteration: 0, builderPoison: false, venomFinisherGen: false,
   }
   // Multiplicateur de dégâts des bonus de SET (s'applique aux auto-attaques ET aux sorts,
   // et donc au DPS affiché via charDps — même chemin que les keystones).
@@ -565,6 +593,21 @@ export function charCombatMods(char: Character): CombatMods {
     }
     if (k.finisherShield) out.finisherShield += k.finisherShield
     if (k.damageToHeal) out.damageToHeal += k.damageToHeal
+    // --- v0.34 : VOLEUR « Lame Vénéneuse » ---
+    if (k.finisherToPoison) out.finisherToPoison += k.finisherToPoison
+    if (k.finisherIsDot) out.finisherIsDot = true
+    if (k.finisherRefreshPoison) out.finisherRefreshPoison = true
+    if (k.finisherVsVenom) out.finisherVsVenom += k.finisherVsVenom
+    if (k.finisherFromAlteration) out.finisherFromAlteration += k.finisherFromAlteration
+    if (k.finisherVenomBonus) out.finisherVenomBonus += k.finisherVenomBonus
+    if (k.noDotLeech) out.noDotLeech = true
+    if (k.poisonCanCrit) out.poisonCanCrit = Math.max(out.poisonCanCrit, k.poisonCanCrit)
+    if (k.finisherDetonate) out.finisherDetonate = Math.max(out.finisherDetonate, k.finisherDetonate)
+    if (k.finisherProlongsDot) out.finisherProlongsDot = k.finisherProlongsDot
+    if (k.detonateReapply) out.detonateReapply = Math.max(out.detonateReapply, k.detonateReapply)
+    if (k.critToAlteration) out.critToAlteration += k.critToAlteration
+    if (k.builderPoison) out.builderPoison = true
+    if (k.venomFinisherGen) out.venomFinisherGen = true
     if (k.hotStreak) out.hotStreak = out.hotStreak ? { cap: Math.min(out.hotStreak.cap, k.hotStreak.cap), mult: Math.max(out.hotStreak.mult, k.hotStreak.mult) } : { ...k.hotStreak }
     if (k.overload) out.overload = out.overload ? { window: Math.max(out.overload.window, k.overload.window), mult: Math.max(out.overload.mult, k.overload.mult) } : { ...k.overload }
     if (k.multiTypeBonus) {
@@ -573,6 +616,8 @@ export function charCombatMods(char: Character): CombatMods {
         : { ...k.multiTypeBonus }
     }
   }
+  // PACTE DE LA TOXINE : la contrepartie coupe le soin par DoT.
+  if (out.noDotLeech) out.dotLeech = 0
   // Élémentaliste « Réaction élémentaire » : +per de dégâts par type ≥ threshold du profil
   // (au-delà du premier) — replié dans damageMult (affiché dans « Talents & sets »).
   if (multiType) {
