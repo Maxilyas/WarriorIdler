@@ -48,9 +48,12 @@ const AFFIX_PROFILE_SHARE = 0.7
  * d'identité le plus fort À L'UNITÉ (~2-3× une secondaire), mais l'empilement plafonne (~×2).
  */
 const AFFIX_BONUS_SHARE = 0.5
-/** Soft cap du bonus multiplicatif CUMULÉ par type (plein rendement → 60%, asymptote 120%). */
-const TYPE_BONUS_SOFT = 0.6
-const TYPE_BONUS_HARD = 1.2
+/** Soft cap du bonus multiplicatif CUMULÉ par type. v0.35 : 0,6/1,2 → 0,4/0,8 (retour joueur : un
+ *  ilvl 10 maxé-%type battait un ilvl 40 sur ~3 tranches → l'ossature ilvl était diluée). Plein
+ *  rendement → +40%, asymptote +80% : le %type reste le levier le plus fort à l'unité (~2× une
+ *  secondaire), mais l'inversion d'ilvl est bornée à ~1 tranche (l'ilvl reste l'ossature de v0.35). */
+const TYPE_BONUS_SOFT = 0.4
+const TYPE_BONUS_HARD = 0.8
 
 /**
  * Calcule le profil de dégâts à partir de TOUT l'équipement (plus seulement l'arme) + des keystones.
