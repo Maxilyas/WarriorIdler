@@ -56,7 +56,7 @@ import {
   DAILY_TRANSMUTE_COST, PHILOSOPHALE_COST, PHILOSOPHALE_MULT,
   type BrewQuality,
 } from './alchimie'
-import { makeEnemy, isBossStage, stageIlvl, stageLuckTier } from './enemies'
+import { makeEnemy, isBossStage, stageIlvl } from './enemies'
 import {
   BIOME_IDS, biomeUnlocked, getBiomeDef,
   BIOME_ROTATE_MS, BIOME_LOCK_MS, BIOME_LOCK_FRAGMENTS, type BiomeId,
@@ -2384,7 +2384,10 @@ export function shopRefreshCost(bestStage: number): number {
 function generateShop(bestStage: number, raidProgress: Record<string, number>, dungeonProgress: Record<string, number>, luckBonus: number): Item[] {
   // B1 — le marché suit la référence du compte (raids/donjons compris), plus seulement le farm.
   const ilvl = Math.max(1, referenceIlvl(bestStage, raidProgress, dungeonProgress))
-  const luck = stageLuckTier(bestStage) + 1 + luckBonus
+  // v0.35 — le marché est un DUMP D'OR à BASSE rareté : objets à TON ilvl (slot-filling) mais rareté
+  // FAIBLE (plus de montée auto par stageLuckTier) → jamais la source principale de stuff. La rareté
+  // se chasse au drop / donjon poussé / raid. Seul l'investissement marchand (luckBonus) nudge un peu.
+  const luck = Math.min(2, luckBonus)
   const out: Item[] = []
   for (let i = 0; i < SHOP_SIZE; i++) out.push(generateItem({ ilvl, luckTier: luck }))
   return out
