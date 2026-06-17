@@ -142,7 +142,7 @@ console.log(`  ${ok(survFlat < 1.25)} survie ENDGAME plate (ci≥400, ratio ${su
 // ---- (6) RAIDS : bande d'ilvl linéaire + TTK boss à stuff calé (le contenu ex-snowball) ----
 console.log('\n=== (6) Raids : ilvl par tier + TTK boss à stuff calé ===')
 console.log('  raid          T1   T5   T10  | TTK boss T1/T5/T10 (cible ~40s) | enrage T1/T10')
-const RB = 200 // bestStage représentatif (v0.35 : raids = outils de qualité à TA tranche)
+const RB = 200 // (v0.35.1 : raidIlvl est FIXE par tier mondial — RB n'est plus lu, gardé pour la signature)
 let raidOk = true
 for (const def of M.RAID_LIST) {
   const il = (t) => M.raidIlvl(def, t, RB)
@@ -152,9 +152,11 @@ for (const def of M.RAID_LIST) {
   if (Math.max(il(1), il(5), il(10)) > ILVL_MAX) raidOk = false
   console.log(`  ${def.id.padEnd(12)} ${String(il(1)).padStart(3)}  ${String(il(5)).padStart(3)}  ${String(il(10)).padStart(3)}  | ${t1.toFixed(0).padStart(3)}s ${t5.toFixed(0).padStart(3)}s ${t10.toFixed(0).padStart(3)}s            | ${enr1.toFixed(0)}s ${enr10.toFixed(0)}s`)
 }
-// Le step entre tiers ne doit jamais dépasser +20 ilvl (anti-trivialisation locale).
-const maxStep = Math.max(...M.RAID_LIST.map((def) => M.raidIlvl(def, 2, RB) - M.raidIlvl(def, 1, RB)))
-console.log(`  ${ok(maxStep <= 20)} step max entre tiers = +${maxStep} ilvl (seuil +20)`)
+// v0.35.1 — difficulté FIXE par tier (ancrée palier 50→400) : le step vaut ~+35 ilvl/tier (≈ ×1,9 de
+// puissance, la pente raid d'origine), plus +5. On vérifie le RATIO de puissance/tier, pas l'ilvl brut.
+const stepPow = Math.max(...M.RAID_LIST.map((def) => P.powerAt(M.raidIlvl(def, 2, RB)) / P.powerAt(M.raidIlvl(def, 1, RB))))
+const stepIlvl = Math.max(...M.RAID_LIST.map((def) => M.raidIlvl(def, 2, RB) - M.raidIlvl(def, 1, RB)))
+console.log(`  ${ok(stepPow <= 2.3)} puissance/tier = ×${stepPow.toFixed(2)} (+${stepIlvl} ilvl · cible ~×1,9, seuil ×2,3)`)
 const raidBossTtkOk = M.RAID_LIST.every((def) => { const t = (P.enemyHp(M.raidIlvl(def, 5, RB), 'raidboss')) / repDps(M.raidIlvl(def, 5, RB), 'legendaire'); return t > 18 && t < 70 })
 console.log(`  ${ok(raidBossTtkOk)} TTK boss de raid dans une bande saine (~30-55s à stuff calé)`)
 // L'enrage doit laisser une MARGE au-dessus du TTK à stuff calé (le calé clear, le sous-stuffé échoue).
@@ -177,5 +179,5 @@ for (const il of [10, 26, 100, 300, 700]) {
 }
 console.log(`  ${ok(propOk)} le primaire reste le plus gros nombre de l'objet (sec/prim ≤ 1)`)
 
-const pass = egDpsFlat < 1.2 && survFlat < 1.25 && allUnder && windowSpread <= 1.8 && raidOk && maxStep <= 20 && raidBossTtkOk && enrageOk && propOk
+const pass = egDpsFlat < 1.2 && survFlat < 1.25 && allUnder && windowSpread <= 1.8 && raidOk && stepPow <= 2.3 && raidBossTtkOk && enrageOk && propOk
 console.log(`\n=== VERDICT : ${pass ? '✅ MODÈLE VALIDE — snowball neutralisé sur toute la progression' : '❌ à recaler'} ===`)

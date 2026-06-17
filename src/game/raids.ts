@@ -159,10 +159,16 @@ export function raidUnlocked(def: RaidDef, bestStage: number, progress: Record<R
  * de +15 ilvl/tier → un rung ne saute jamais > +20 (jamais de trivialisation du tier précédent).
  * Les 4 raids de base se chevauchent (loot par type, faits en parallèle) en montant vers 700.
  */
-// v0.35 — le raid n'est PLUS un escalier d'ilvl : raidIlvl = TA tranche + un PUSH léger par tier. Les
-// 4 raids de base sont à la MÊME difficulté (elle vient de la MÉCANIQUE du boss + de l'exigence de
-// résist, pas de l'ilvl). Le tier monte surtout la RARETÉ et la RÉSIST exigée.
-const RAID_TIER_PUSH = 5  // +ilvl de difficulté/loot par tier (push léger)
+// v0.35.1 — DIFFICULTÉ FIXE par tier (ne scale PLUS avec bestStage — retour joueur : « le T1 scale
+// avec la puissance de mon palier »). Le tier MONDIAL est ancré à un PALIER de farm ABSOLU : T1 ≈
+// palier 50 (déblocage des raids) … T10 ≈ palier 400 (≈ prestige), soit ~+39 paliers/tier (≈ ×1,9 de
+// puissance/tier, la pente raid d'origine « +4 paliers/tier »). Un joueur SUR-palier out-gear les bas
+// tiers (voulu : il revient les farmer pour la rareté/les mats) ; un joueur calé trouve son tier.
+// L'Abîme (tierOffset +6) extrapole au-delà de 400 → contenu post-prestige. La rareté et l'exigence de
+// résist montent toujours avec le tier mondial. raidIlvl = gear d'époque du palier ancre (lootFarmIlvl).
+const RAID_ANCHOR_LOW = 50    // palier de farm ancre du Tier 1 MONDIAL
+const RAID_ANCHOR_HIGH = 400  // palier de farm ancre du Tier 10 MONDIAL (≈ prestige)
+const RAID_ANCHOR_SPAN = 10   // nb de tiers mondiaux entre LOW et HIGH (= la pente)
 const FORTRESS_ARMOR_MULT = 3.2   // 'fortress' : armure colossale
 const FORTRESS_RESIST_BONUS = 0.2 // 'fortress' : +résistance au thème
 
@@ -221,20 +227,28 @@ export function raidPartyHpMult(partySize: number): number {
   return 1 + 0.55 * Math.max(0, partySize - 1)
 }
 
-/** Délai d'enrage dur (s). v0.30 : recalé AU-DESSUS du TTK boss à stuff calé (~37 s) avec marge →
- *  le stuff calé clear, le sous-stuffé (DPS plus lent) tape l'enrage et échoue (LE check de DPS). */
+/** Délai d'enrage dur (s). v0.35.1 : recalé pour la difficulté FIXE par tier. Aux BAS tiers (ilvl
+ *  faible), le DPS est dans sa rampe d'allumage → le pool du raidboss (×13,3 PV) est lent à fondre :
+ *  l'enrage doit laisser plus d'air (T1 ~75 s) puis se resserrer quand l'ilvl monte (T10+ → plancher
+ *  40 s). Marge ~×1,2–1,5 sur le TTK à stuff calé → le calé clear, le sous-stuffé tape l'enrage. */
 export function raidBerserkTime(def: RaidDef, tier: number): number {
-  return Math.max(45, 62 - globalTier(def, tier) * 1.2)
+  return Math.max(40, 80 - globalTier(def, tier) * 5)
+}
+
+/** Palier de farm ANCRE d'un tier MONDIAL (T1→LOW … T_SPAN→HIGH ; extrapolé au-delà pour l'Abîme). */
+export function raidAnchorPalier(globalTierN: number): number {
+  const t = Math.max(1, globalTierN)
+  return RAID_ANCHOR_LOW + (t - 1) * (RAID_ANCHOR_HIGH - RAID_ANCHOR_LOW) / (RAID_ANCHOR_SPAN - 1)
 }
 
 /**
- * iLvl du butin = ilvl de DIFFICULTÉ (contenu calé sur le stuff qu'il rend → TTK constant).
- * v0.30 : BANDE LINÉAIRE `plancher(raid) + (tier-1)×15` (fini le ×1,22/tier exponentiel qui faisait
- * le snowball). Avec le budget d'objet exponentiel (b^ilvl), +15 ilvl = ×1,55 de puissance par tier,
- * et le boss monte de la MÊME base b → un tier de plus paie toujours, mais sans jamais s'emballer.
+ * iLvl de DIFFICULTÉ/butin d'un tier — v0.35.1 : FIXE, ancré à un palier de farm absolu (via le tier
+ * MONDIAL), indépendant de bestStage. On GARDE l'argument `bestStage` (signature stable, ~8 appelants
+ * + harnais) mais il N'EST PLUS LU : la difficulté ne suit plus le joueur. raidIlvl = gear d'époque du
+ * palier ancre (lootFarmIlvl) → un joueur calé sur ce palier livre un TTK ~40 s ; un sur-palier out-gear.
  */
-export function raidIlvl(_def: RaidDef, tier: number, bestStage: number): number {
-  return clampIlvl(lootFarmIlvl(bestStage) + (tier - 1) * RAID_TIER_PUSH)
+export function raidIlvl(def: RaidDef, tier: number, _bestStage = 0): number {
+  return clampIlvl(lootFarmIlvl(Math.round(raidAnchorPalier(globalTier(def, tier)))))
 }
 
 /**
