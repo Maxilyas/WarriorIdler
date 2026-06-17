@@ -99,13 +99,51 @@ export function enemyArmor(ilvl: number, mult = 1): number {
   return ENEMY_ARMOR0 * powerAt(ilvl) * mult
 }
 
-/**
- * Difficulté du FARM en ilvl, NON capée (le loot, lui, plafonne à 200 via ilvlFarm) : au-delà du
- * palier ~80 la pression continue de monter alors que le loot stagne → mur de farm NATUREL qui
- * pousse vers donjons/raids (ce n'est plus l'écart exponentiel PV/DPS qui fait le mur).
- */
+// ---- PALIERS, VAGUES & RETARD DE GEAR (refonte v0.35 — DESIGN_v0.35 §1-4) ----
+// Un seul axe d'ilvl, porté par le farm. Le `stage` du code = une VAGUE ; un PALIER = bloc de 10
+// vagues fermé par un boss-MUR (vague 10). La FRONTIÈRE (difficulté du contenu) monte de PENTE_VAGUE
+// par vague (~10 ilvl/Palier) ; le LOOT, lui, sort en RETARD permanent (frontière − LAG) → le joueur
+// est toujours sous-stuffé, et seule l'OPTIMISATION (secondaires/gemmes/runes/pacte/alch/talents)
+// comble l'écart. On NE PEUT PAS out-ilvl un mur : l'ilvl manquant est gaté par le mur lui-même.
+
+/** Pente d'ilvl par vague (1 pas de farm). ~10 ilvl/Palier → plafond ~400 au Palier 40. */
+export const PENTE_VAGUE = 1.0
+/** Vagues par Palier (boss-mur à la dernière). */
+export const PALIER_SIZE = 10
+/** Retard de gear : LAG0 + K_LAG·palier (≈ +5 ilvl au Palier 1 → +40 au Palier 40). Knob central. */
+export const LAG0 = 4
+export const K_LAG = 0.9
+
+/** Numéro de Palier d'une vague (stage). Palier 1 = vagues 1-10. */
+export function palierOf(stage: number): number {
+  return Math.max(1, Math.ceil(stage / PALIER_SIZE))
+}
+/** Position de la vague dans son Palier (1..PALIER_SIZE). */
+export function vagueOf(stage: number): number {
+  return ((Math.max(1, stage) - 1) % PALIER_SIZE) + 1
+}
+/** Une vague est-elle un MUR (boss de fin de Palier) ? */
+export function isMur(stage: number): boolean {
+  return stage % PALIER_SIZE === 0
+}
+
+/** FRONTIÈRE : difficulté en ilvl du contenu d'une vague (courbe unifiée, NON capée). */
+export function frontierIlvl(stage: number): number {
+  return Math.max(1, Math.round(stage * PENTE_VAGUE))
+}
+/** Retard de gear (en ilvl) au Palier donné. */
+export function lagAt(palier: number): number {
+  return LAG0 + K_LAG * palier
+}
+/** ilvl du LOOT de farm = frontière − LAG (ce que le joueur peut réellement équiper). */
+export function lootFarmIlvl(stage: number): number {
+  return Math.max(1, Math.round(frontierIlvl(stage) - lagAt(palierOf(stage))))
+}
+
+/** Difficulté du FARM en ilvl = la FRONTIÈRE (v0.35 : courbe unifiée douce, ex-`stage·2.5`).
+ *  Les ennemis sont calés ici ; le loot sort en retard (lootFarmIlvl) → le LAG est permanent. */
 export function farmDifficultyIlvl(stage: number): number {
-  return stage * 2.5
+  return frontierIlvl(stage)
 }
 
 // ---- Cibles d'équilibrage (knobs centraux) ----
@@ -119,9 +157,10 @@ export const SURVIVE_SECONDS = 8
 // Bornes = calibration de départ (faciles à nudger). Le gear-up (farm+donjons) plafonne ; les raids
 // portent la frontière jusqu'à 700.
 
-/** Farm : ilvl du palier, PLAFONNÉ à 200 (au-delà, difficulté monte mais loot capé → pousse au raid). */
-export function ilvlFarm(palier: number): number {
-  return Math.min(200, Math.max(1, Math.round(palier * 2.5)))
+/** Farm : ilvl du LOOT (v0.35 — = frontière − LAG, courbe unifiée, plus de cap 200). C'est l'ilvl du
+ *  stuff qui drop à ce stage ; il reste en RETARD permanent sur la difficulté (farmDifficultyIlvl). */
+export function ilvlFarm(stage: number): number {
+  return lootFarmIlvl(stage)
 }
 /** Donjon : difficulté en ilvl (NON capée — comme le farm, la pression continue au-delà du loot). */
 export function dungeonDifficultyIlvl(level: number): number {

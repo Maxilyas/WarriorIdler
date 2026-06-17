@@ -196,8 +196,8 @@ export function isBossStage(stage: number): boolean {
   return stage % 10 === 0
 }
 
-/** ilvl de loot attendu pour un palier (v0.30 : PLAFONNÉ à 200 via ilvlFarm — au-delà, la difficulté
- *  monte encore mais le loot stagne → on passe aux donjons/raids). */
+/** ilvl de loot attendu pour une vague (v0.35 : = ilvlFarm = frontière − LAG, courbe unifiée, plus de
+ *  cap — le loot reste en retard permanent sur la difficulté de la vague). */
 export function stageIlvl(stage: number): number {
   return ilvlFarm(stage)
 }
