@@ -90,6 +90,9 @@ export function CombatPanel() {
   // Biome + palier + verrou fusionnés en une ligne « zone » : le détail s'ouvre en feuille
   // (libère un tiers d'écran pour le journal sur mobile).
   const [zoneOpen, setZoneOpen] = useState(false)
+  // v0.36 (lot 8) — Contrôle (défaut) = barres de sorts visibles ; Veille = vitaux seuls (idle épuré,
+  // fait tenir 3 persos sans scroll).
+  const [controlMode, setControlMode] = useState(true)
   const [journalOpen, setJournalOpen] = useState(false)
   const [questsOpen, setQuestsOpen] = useState(false)
   const [inboxOpen, setInboxOpen] = useState(false)
@@ -539,6 +542,16 @@ export function CombatPanel() {
           altérations) → tap pour piloter ce héros ; ses sorts s'affichent juste en dessous.
           Posée bas d'écran : PV + sorts sous le pouce, à côté du journal (ergonomie mobile). */}
       <div className="rounded-xl border border-slate-800 bg-gradient-to-br from-[#141a26] to-[#0d111a] p-2.5">
+        <div className="mb-2 flex items-center justify-between">
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">⚔️ Équipe</span>
+          <button
+            onClick={() => setControlMode((v) => !v)}
+            title="Veille : vitaux seuls (idle) · Contrôle : toutes les barres de sorts"
+            className={'rounded-full px-2.5 py-1 text-[10px] font-semibold ' + (controlMode ? 'bg-amber-600/30 text-amber-200' : 'bg-slate-800 text-slate-400')}
+          >
+            {controlMode ? '⚔ Contrôle' : '👁 Veille'}
+          </button>
+        </div>
         <div className="space-y-2">
           {characters.map((c, i) => {
             const mh = charMaxHp(c)
@@ -595,7 +608,7 @@ export function CombatPanel() {
                     ))}
                   </div>
                 )}
-                {slots.length > 0 && (
+                {controlMode && slots.length > 0 && (
                   <div className="mt-2 grid grid-cols-5 gap-1">
                     {slots.map(({ slot, p }) => {
                       const cd = cds[p.id] ?? 0
