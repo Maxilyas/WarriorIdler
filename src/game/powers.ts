@@ -175,17 +175,17 @@ export const POWERS: PowerDef[] = [
   {
     id: 'verdict', name: 'Verdict', kind: 'active',
     description: 'Une sentence dévastatrice : +250% de dégâts selon les PV MANQUANTS de la cible (finisher anti-boss). Scale FOR/AGI.',
-    unlockLevel: 1, cooldown: 12, effect: 'executeNuke', magnitude: 4, scaleStats: ['force', 'agilite'],
+    unlockLevel: 1, cooldown: 12, effect: 'executeNuke', magnitude: 16, scaleStats: ['force', 'agilite'],
   },
   {
     id: 'soif_du_neant', name: 'Soif du néant', kind: 'active',
     description: 'Une frappe d\'ombre colossale qui te rend 60% des dégâts en vie (build solo). Scale FOR/AGI.',
-    unlockLevel: 1, cooldown: 14, effect: 'lifeNuke', magnitude: 6, scaleStats: ['force', 'agilite'], damageType: 'ombre',
+    unlockLevel: 1, cooldown: 14, effect: 'lifeNuke', magnitude: 18, scaleStats: ['force', 'agilite'], damageType: 'ombre',
   },
   {
     id: 'deluge_stellaire', name: 'Déluge stellaire', kind: 'active',
     description: 'Un cataclysme d\'arcane qui pulvérise TOUT le pack d\'un coup énorme. Scale INT.',
-    unlockLevel: 1, cooldown: 20, effect: 'megaCleave', magnitude: 7, scaleStat: 'intelligence', damageType: 'arcane',
+    unlockLevel: 1, cooldown: 20, effect: 'megaCleave', magnitude: 22, scaleStat: 'intelligence', damageType: 'arcane',
   },
   {
     id: 'aube_salvatrice', name: 'Aube salvatrice', kind: 'active',
@@ -195,7 +195,7 @@ export const POWERS: PowerDef[] = [
   {
     id: 'hemorragie_cosmique', name: 'Hémorragie cosmique', kind: 'active',
     description: 'Ouvre une plaie béante : BRISE la régénération ennemie 8 s et inflige un DoT massif (amplifié par l\'Altération). Scale INT.',
-    unlockLevel: 1, cooldown: 16, effect: 'rupture', magnitude: 8, duration: 8, scaleStat: 'intelligence', damageType: 'ombre',
+    unlockLevel: 1, cooldown: 16, effect: 'rupture', magnitude: 16, duration: 8, scaleStat: 'intelligence', damageType: 'ombre',
   },
   {
     id: 'egide_titanesque', name: 'Égide titanesque', kind: 'active',
