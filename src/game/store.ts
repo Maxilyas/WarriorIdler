@@ -4594,6 +4594,8 @@ export const useGame = create<GameState>((set, get) => {
         * (buffs.oil && buffs.oil.type === s.activeBiome ? 1 + buffs.oil.pct : 1)
       const res = partyCombatStep(s.characters, s.enemy, dt, {
         heroMult, cond, runes, pact,
+        // v0.36 — régén des murs Ch.6+ (sustain check) ; le tick l'applique à l'ennemi (mods.regen).
+        regen: s.enemy.mur?.regen,
         content: { surge: surgedNow, biomeType: s.activeBiome, nearRecord, antidote: buffs.antidote ?? undefined },
       })
       let chars = res.chars

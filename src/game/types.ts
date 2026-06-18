@@ -503,5 +503,5 @@ export interface Enemy {
   age?: number
   /** MUR (v0.35) : boss de fin de Palier. `mechanic` = dominante (berserk/nova/fortress/leech/rotate),
    *  `enrageAt` = délai (s) avant l'enrage dur. Métadonnée pour la fiche + l'enrage (appliqué au tick). */
-  mur?: { mechanic: string; palier: number; enrageAt: number }
+  mur?: { mechanic: string; palier: number; enrageAt: number; regen?: number }
 }

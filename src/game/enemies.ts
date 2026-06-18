@@ -130,6 +130,18 @@ const MUR_DOMINANTS = ['berserk', 'nova', 'fortress', 'leech', 'rotate'] as cons
 export function murMechanic(palier: number): string {
   return MUR_DOMINANTS[(Math.max(1, palier) - 1) % MUR_DOMINANTS.length]
 }
+// v0.36 — INTENSITÉ post-Prologue : les Chapitres 1-5 (tuto) restent CHILL ; à partir du Chapitre 6 (les
+// vrais Chapitres, où les persos se débloquent), les murs montent en PV et gagnent une RÉGÉN de vie →
+// vrai combat DPS / survie / heal (la « dynamique reine » multi-perso). Knobs à éprouver au playtest.
+/** Multiplicateur de PV d'un mur selon son Chapitre (×1 jusqu'à Ch.5, puis +10 %/Chapitre → ×2 au Ch.15). */
+export function murHpRamp(chapitre: number): number {
+  return chapitre <= 5 ? 1 : 1 + 0.10 * (chapitre - 5)
+}
+/** Régén de vie d'un mur (fraction des PV max/s) : 0 jusqu'à Ch.5, puis 0,8 %/s par Chapitre, capé 4 %/s
+ *  → force le BURST/sustain (et un heal d'appoint d'un 2e/3e héros). */
+export function murRegenAt(chapitre: number): number {
+  return chapitre <= 5 ? 0 : Math.min(0.04, 0.008 * (chapitre - 5))
+}
 /** Atténuation d'un MUR : rampe douce les tout premiers (jamais infranchissable d'emblée) puis PLEINE
  *  puissance (un mur ne doit pas être bridé par le plateau de farm — il est calé sur la frontière). */
 export function murSoftness(stage: number): number {
@@ -159,7 +171,7 @@ export function makeEnemy(stage: number, biome: BiomeId = 'physique', championMu
   // Atténuation : rampe d'onboarding pour le farm normal ; pour un MUR, rampe douce les tout premiers
   // paliers puis pleine puissance (murSoftness).
   const soft = isBoss ? murSoftness(stage) : onboardingMult(stage)
-  const maxHp = Math.round((isBoss ? enemyHp(diffIlvl, 'boss') : enemyHp(diffIlvl, 'trash') * farmHpMult) * traitHp * soft)
+  const maxHp = Math.round((isBoss ? enemyHp(diffIlvl, 'boss') * murHpRamp(stage / 10) : enemyHp(diffIlvl, 'trash') * farmHpMult) * traitHp * soft)
   const pool = BIOME_ENEMIES[biome]
   const baseName = pool[(stage - 1) % pool.length]
   const bosses = BIOME_BOSSES[biome]
@@ -209,7 +221,7 @@ export function makeEnemy(stage: number, biome: BiomeId = 'physique', championMu
     // MUR (v0.35) : métadonnée de dominante + enrage (fiche + tick), au Palier = stage / 10.
     ...(isBoss ? {
       boss: true, dodge: 0.15, ccDur: 1.5, ccCd: 7,
-      mur: { mechanic: murMechanic(stage / 10), palier: stage / 10, enrageAt: murEnrage(stage / 10) },
+      mur: { mechanic: murMechanic(stage / 10), palier: stage / 10, enrageAt: murEnrage(stage / 10), regen: murRegenAt(stage / 10) },
     } : {}),
   }
 }
