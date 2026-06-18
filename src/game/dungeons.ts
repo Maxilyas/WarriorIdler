@@ -108,8 +108,12 @@ export const DUNGEONS: Record<DungeonId, DungeonDef> = {
   },
 }
 
+// v0.36 — l'OR et l'XP ne viennent QUE du farm classique (idle). Les donjons « Chambre du Trésor » (or)
+// et « Sanctuaire du Savoir » (xp) sont RETIRÉS du jeu (sortis de la liste jouable) → plus aucun donjon
+// ne donne or/XP (tue le snowball de donjon). Leurs défs restent dans DUNGEONS (type-safety) mais sont
+// injouables. (Nettoyage des types 'or'/'savoir'/'gold'/'xp' = passe cosmétique.)
 export const DUNGEON_LIST: DungeonDef[] = [
-  DUNGEONS.sceaux, DUNGEONS.or, DUNGEONS.savoir, DUNGEONS.eclats, DUNGEONS.noyau, DUNGEONS.butin, DUNGEONS.geode, DUNGEONS.orbes, DUNGEONS.poussiere,
+  DUNGEONS.sceaux, DUNGEONS.eclats, DUNGEONS.noyau, DUNGEONS.butin, DUNGEONS.geode, DUNGEONS.orbes, DUNGEONS.poussiere,
 ]
 
 // ---- La Géode : ailes (famille de gemme) + rendements ----

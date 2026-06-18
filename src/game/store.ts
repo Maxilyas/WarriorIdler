@@ -301,9 +301,10 @@ function quintTierMult(stage: number): number {
 const DUNGEON_FIGHT_XP_MULT = 24
 /** Boost de l'XP du combat CLASSIQUE : recale le ratio donjon/classique (~×80 → ~×10). */
 const CLASSIC_XP_MULT = 8
-/** Or par kill en combat CLASSIQUE (fraction de l'XP du mob). Relevé 0.12 → 0.8 : farmer les paliers
- *  rapporte enfin un vrai revenu d'or (avant : « pratiquement rien »). */
-const CLASSIC_GOLD_MULT = 0.8
+/** Or par kill en combat CLASSIQUE (fraction de l'XP du mob). v0.36 : 0.8 → 5.0 — le farm devient la
+ *  SEULE source d'or (donjons retirés de l'or) ; il doit couler franchement pour dépenser souvent au
+ *  Marché (coffres + améliorations). KNOB à affiner après une grosse session de tests (cf. DESIGN_v0.36 §2.2). */
+const CLASSIC_GOLD_MULT = 5.0
 
 interface SaveData {
   characters: Character[]

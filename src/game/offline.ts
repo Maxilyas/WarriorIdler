@@ -52,8 +52,8 @@ export function simulateOffline(
   if (kills <= 0) return null
 
   const eco = computeGlobalMods(upgrades, maitrise, achv)
-  // Même filet d'or que le combat classique en ligne (la richesse vient des donjons/raids).
-  const gold = Math.round(kills * enemy.xp * 0.8 * eco.goldGain) // aligné sur CLASSIC_GOLD_MULT (store)
+  // v0.36 — le farm (online ET offline idle) est la SEULE source d'or → aligné sur CLASSIC_GOLD_MULT = 5.0.
+  const gold = Math.round(kills * enemy.xp * 5.0 * eco.goldGain) // aligné sur CLASSIC_GOLD_MULT (store, v0.36)
   // Même boost d'XP que le combat classique en ligne (CLASSIC_XP_MULT = 8 dans le store).
   const xp = Math.round(kills * enemy.xp * eco.xpGain * 8)
 
