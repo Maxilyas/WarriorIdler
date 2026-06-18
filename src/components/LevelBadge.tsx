@@ -74,7 +74,7 @@ function BorderRing({ border, cx, cy, rad, w }: { border: AvatarBorder; cx: numb
   }
 }
 
-export function LevelBadge({ char, size = 64 }: { char: Character; size?: number }) {
+export function LevelBadge({ char, size = 64, showLevel = true }: { char: Character; size?: number; showLevel?: boolean }) {
   const lvl = char.level
   const tier = levelTier(lvl)
   const need = xpForLevel(lvl)
@@ -97,9 +97,12 @@ export function LevelBadge({ char, size = 64 }: { char: Character; size?: number
   const borderRad = ringR - ringW - 1
   const borderW = Math.max(1.5, size * 0.028)
   const auraSize = size * 1.18
+  // v0.36 — `showLevel=false` : portrait NU (sans écusson de niveau ni anneau d'XP). Le niveau étant
+  // désormais un NIVEAU DE COMPTE unique, on ne le répète plus sur chaque héros (cf. lot 8).
+  const badgeH = showLevel ? totalH : size
 
   return (
-    <div className="relative shrink-0" style={{ width: size, height: totalH }} title={`Niveau ${lvl} · écusson ${tier.name} · XP ${Math.round(char.xp)}/${need}`}>
+    <div className="relative shrink-0" style={{ width: size, height: badgeH }} title={showLevel ? `Niveau ${lvl} · écusson ${tier.name} · XP ${Math.round(char.xp)}/${need}` : char.name}>
       {/* Aura de prestige (halo derrière le médaillon) */}
       {aura && (
         <div
@@ -117,15 +120,18 @@ export function LevelBadge({ char, size = 64 }: { char: Character; size?: number
         </defs>
         <circle cx={r} cy={r} r={ringR} fill={`url(#av${uid})`} stroke={tier.c2} strokeWidth={1.5} />
         <circle cx={r} cy={r} r={ringR} fill="none" stroke="#1e293b" strokeWidth={ringW} />
-        <circle
-          cx={r} cy={r} r={ringR} fill="none" stroke={tier.c2} strokeWidth={ringW} strokeLinecap="round"
-          strokeDasharray={circ} strokeDashoffset={circ * (1 - progress)} transform={`rotate(-90 ${r} ${r})`}
-        />
+        {showLevel && (
+          <circle
+            cx={r} cy={r} r={ringR} fill="none" stroke={tier.c2} strokeWidth={ringW} strokeLinecap="round"
+            strokeDasharray={circ} strokeDashoffset={circ * (1 - progress)} transform={`rotate(-90 ${r} ${r})`}
+          />
+        )}
         {border && <BorderRing border={border} cx={r} cy={r} rad={borderRad} w={borderW} />}
       </svg>
       {/* Glyphe d'avatar (portrait de substitution) */}
       <div className="absolute left-0 top-0 flex items-center justify-center" style={{ width: size, height: size, fontSize: size * 0.38, paddingBottom: size * 0.04 }}>{glyph}</div>
-      {/* Écusson de niveau (étoile + hexagone), évolue avec le palier */}
+      {/* Écusson de niveau (étoile + hexagone), évolue avec le palier — masqué si showLevel=false */}
+      {showLevel && (
       <svg width={size} height={emblemH} className="absolute left-0" style={{ top: size - emblemH * 0.45, filter: tier.glow ? `drop-shadow(0 0 ${tier.glow}px ${tier.c2})` : undefined }}>
         <defs>
           <linearGradient id={`em${uid}`} x1="0" y1="0" x2="0" y2="1">
@@ -137,6 +143,7 @@ export function LevelBadge({ char, size = 64 }: { char: Character; size?: number
         <polygon points={hexPoints(ecx, ecy, emblemH * 0.36)} fill={`url(#em${uid})`} stroke="#0a0e16" strokeWidth={1.5} />
         <text x={ecx} y={ecy} textAnchor="middle" dominantBaseline="central" fontSize={emblemH * 0.36} fontWeight={800} fill="#0a0e16">{lvl}</text>
       </svg>
+      )}
     </div>
   )
 }

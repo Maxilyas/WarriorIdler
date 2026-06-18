@@ -615,9 +615,10 @@ interface GameState extends SaveData {
   /** Équipe un GÉNÉRATEUR (sort builder) dans l'un des 3 slots dédiés (auto-cast). */
   setGenerator: (slot: number, powerId: string | null) => void
   /** Bascule un emplacement de capacité entre AUTO et MANUEL (perso actif). */
-  togglePowerAuto: (slot: number) => void
-  /** Lance MANUELLEMENT la capacité d'un emplacement (perso actif) — strict : ne part qu'au prochain tick si prête. */
-  castPower: (slot: number) => void
+  togglePowerAuto: (slot: number, charIndex?: number) => void
+  /** Lance MANUELLEMENT la capacité d'un emplacement — strict : ne part qu'au prochain tick si prête.
+   *  `charIndex` (v0.36) : cible N'IMPORTE QUEL héros, pas seulement l'actif (UI combat multi-perso). */
+  castPower: (slot: number, charIndex?: number) => void
   allocateTalent: (nodeId: string) => void
   respecTalents: () => void
   /** v0.33 — alloue un nœud du PANTHÉON (2e arbre) avec le budget de Points d'Éveil (perso actif). */
@@ -6572,21 +6573,22 @@ export const useGame = create<GameState>((set, get) => {
       set(next)
     },
 
-    togglePowerAuto: (slot) => {
+    togglePowerAuto: (slot, charIndex) => {
       const s = get()
-      const char = s.characters[s.activeChar]
+      const idx = charIndex ?? s.activeChar
+      const char = s.characters[idx]
       if (!char || slot < 0 || slot >= char.powers.length) return
       const powerAuto = char.powers.map((_, i) => (i === slot ? char.powerAuto?.[i] === false : char.powerAuto?.[i] !== false))
       const nc = { ...char, powerAuto }
-      const characters = s.characters.map((c, i) => (i === s.activeChar ? nc : c))
+      const characters = s.characters.map((c, i) => (i === idx ? nc : c))
       const next = { ...s, characters }
       persist(next)
       set(next)
     },
 
-    castPower: (slot) => {
+    castPower: (slot, charIndex) => {
       const s = get()
-      const char = s.characters[s.activeChar]
+      const char = s.characters[charIndex ?? s.activeChar]
       if (!char) return
       const pid = char.powers[slot]
       if (!pid || char.powerAuto?.[slot] !== false) return // doit être en MANUEL

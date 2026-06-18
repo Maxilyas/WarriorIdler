@@ -99,9 +99,8 @@ export function CombatPanel() {
   const [logFilter, setLogFilter] = useState('tout')
 
   const me = characters[activeChar] ?? characters[0]
-  // Recharges courantes du perso actif (re-render à chaque tick → barre de cooldown vivante).
-  const pcd = me ? powerCooldowns(me) : {}
-  const castSlots = me ? me.powers.map((pid, slot) => ({ slot, p: pid ? getPower(pid) : null })).filter((x): x is { slot: number; p: PowerDef } => !!x.p && x.p.kind === 'active') : []
+  // v0.36 (lot 8) — un seul NIVEAU DE COMPTE (les héros partagent le niveau) : un badge, plus un par perso.
+  const accountLevel = characters.reduce((m, c) => Math.max(m, c.level), 1)
 
   const biomeDef = getBiomeDef(activeBiome)
   const physiqueBest = biomeBest.physique ?? 0
@@ -414,7 +413,7 @@ export function CombatPanel() {
               {boss && <span className="ml-2 text-rose-400">🧱 MUR</span>}
             </span>
           )}
-          <span>Record : Ch.{chapitreOf(bestStage)}</span>
+          <span><span className="rounded bg-slate-800 px-1.5 py-px text-slate-200" title="Niveau de compte (partagé par tous les héros)">Niv {accountLevel}</span> · Record Ch.{chapitreOf(bestStage)}</span>
         </div>
 
         {gateLocked && (
@@ -610,7 +609,7 @@ export function CombatPanel() {
           altérations) → tap pour piloter ce héros ; ses sorts s'affichent juste en dessous.
           Posée bas d'écran : PV + sorts sous le pouce, à côté du journal (ergonomie mobile). */}
       <div className="rounded-xl border border-slate-800 bg-gradient-to-br from-[#141a26] to-[#0d111a] p-2.5">
-        <div className="space-y-1.5">
+        <div className="space-y-2">
           {characters.map((c, i) => {
             const mh = charMaxHp(c)
             const pct = Math.max(0, Math.min(100, (c.hp / mh) * 100))
@@ -618,120 +617,82 @@ export function CombatPanel() {
             const active = i === activeChar
             const single = characters.length === 1
             const chips = statusChips(c)
-            // Bouclier d'absorption : segment cyan posé À LA SUITE des PV (visible sans encombrer).
             const shieldPct = (c.absorb ?? 0) > 0 ? Math.max(0, Math.min(100 - pct, ((c.absorb ?? 0) / mh) * 100)) : 0
+            // v0.36 (lot 8) — chaque héros a SA barre de sorts : on lance n'importe quel sort de n'importe
+            // quel héros d'un tap (jeu manuel multi-perso). AUTO/MAN par SORT.
+            const cds = powerCooldowns(c)
+            const slots = c.powers
+              .map((pid, slot) => ({ slot, p: pid ? getPower(pid) : null }))
+              .filter((x): x is { slot: number; p: PowerDef } => !!x.p && x.p.kind === 'active')
             return (
-              <button
-                key={c.id}
-                onClick={() => setActiveChar(i)}
-                disabled={single}
-                title={single ? undefined : `Piloter ${c.name} (sorts manuels)`}
-                className={
-                  'flex w-full items-center gap-2.5 rounded-lg border px-2 py-1.5 text-left transition-colors ' +
-                  (active && !single
-                    ? 'border-orange-500/50 bg-orange-500/10'
-                    : 'border-transparent bg-black/20 ' + (single ? '' : 'hover:border-slate-600'))
-                }
-              >
-                <LevelBadge char={c} size={40} />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-baseline justify-between gap-2 text-[11px]">
-                    <span className={'truncate font-semibold ' + (dead ? 'text-red-500/70 line-through' : 'text-slate-100')}>
-                      {c.name}
-                      {c.title && getAchievement(c.title)?.title && (
-                        <span className="ml-1 text-[8.5px] font-normal italic text-amber-300/80">🎖 {getAchievement(c.title)!.title}</span>
-                      )}
-                      {active && !single && <span className="ml-1 text-[8.5px] font-normal text-orange-400">● actif</span>}
-                    </span>
-                    <span className="shrink-0 tabular-nums text-slate-400">
-                      {dead ? (
-                        <span className="text-red-400">{(c.rez ?? 0) > 0 ? `↻ ${Math.ceil(c.rez!)} s` : 'K.O.'}</span>
-                      ) : (
-                        <>
-                          {Math.ceil(Math.max(0, c.hp)).toLocaleString('fr-FR')} <span className="text-slate-600">/ {Math.round(mh).toLocaleString('fr-FR')}</span>
-                          {(c.absorb ?? 0) > 0 && (
-                            <span className="ml-1 font-semibold text-sky-300" title={`Bouclier d'absorption : ${Math.round(c.absorb!).toLocaleString('fr-FR')} PV encaissés avant la vie`}>🛡 {fmtShield(c.absorb!)}</span>
-                          )}
-                        </>
-                      )}
-                    </span>
-                  </div>
-                  <div className="relative mt-1 h-2.5 w-full overflow-hidden rounded-full bg-slate-800">
-                    <div
-                      className={'absolute inset-y-0 left-0 transition-all duration-200 ' + (dead ? 'bg-red-900' : 'bg-gradient-to-r from-emerald-600 to-emerald-400')}
-                      style={{ width: `${pct}%` }}
-                    />
-                    {shieldPct > 0 && (
-                      <div className="absolute inset-y-0 bg-sky-400/70" style={{ left: `${pct}%`, width: `${shieldPct}%` }} />
-                    )}
-                  </div>
-                  {chips.length > 0 && (
-                    <div className="mt-1 flex flex-wrap gap-1">
-                      {chips.map((s) => (
-                        <span key={s.label} title={s.title} className={'rounded px-1 py-px text-[9px] leading-tight ' + s.cls}>
-                          {s.icon} {s.label}
-                        </span>
-                      ))}
+              <div key={c.id} className={'rounded-lg border p-2 ' + (active && !single ? 'border-orange-500/50 bg-orange-500/[0.06]' : 'border-slate-800 bg-black/20')}>
+                <button onClick={() => setActiveChar(i)} disabled={single} title={single ? undefined : `Piloter ${c.name}`} className="flex w-full items-center gap-2.5 text-left">
+                  <LevelBadge char={c} size={34} showLevel={false} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-baseline justify-between gap-2 text-[11px]">
+                      <span className={'truncate font-semibold ' + (dead ? 'text-red-500/70 line-through' : 'text-slate-100')}>
+                        {c.name}
+                        {c.title && getAchievement(c.title)?.title && (
+                          <span className="ml-1 text-[8.5px] font-normal italic text-amber-300/80">🎖 {getAchievement(c.title)!.title}</span>
+                        )}
+                        {active && !single && <span className="ml-1 text-[8.5px] font-normal text-orange-400">● actif</span>}
+                      </span>
+                      <span className="shrink-0 tabular-nums text-slate-400">
+                        {dead ? (
+                          <span className="text-red-400">{(c.rez ?? 0) > 0 ? `↻ ${Math.ceil(c.rez!)} s` : 'K.O.'}</span>
+                        ) : (
+                          <>
+                            {Math.ceil(Math.max(0, c.hp)).toLocaleString('fr-FR')} <span className="text-slate-600">/ {Math.round(mh).toLocaleString('fr-FR')}</span>
+                            {(c.absorb ?? 0) > 0 && (
+                              <span className="ml-1 font-semibold text-sky-300" title={`Bouclier : ${Math.round(c.absorb!).toLocaleString('fr-FR')} PV`}>🛡 {fmtShield(c.absorb!)}</span>
+                            )}
+                          </>
+                        )}
+                      </span>
                     </div>
-                  )}
-                </div>
-              </button>
+                    <div className="relative mt-1 h-2.5 w-full overflow-hidden rounded-full bg-slate-800">
+                      <div className={'absolute inset-y-0 left-0 transition-all duration-200 ' + (dead ? 'bg-red-900' : 'bg-gradient-to-r from-emerald-600 to-emerald-400')} style={{ width: `${pct}%` }} />
+                      {shieldPct > 0 && <div className="absolute inset-y-0 bg-sky-400/70" style={{ left: `${pct}%`, width: `${shieldPct}%` }} />}
+                    </div>
+                  </div>
+                </button>
+                {chips.length > 0 && (
+                  <div className="mt-1.5 flex flex-wrap gap-1">
+                    {chips.map((s) => (
+                      <span key={s.label} title={s.title} className={'rounded px-1 py-px text-[9px] leading-tight ' + s.cls}>{s.icon} {s.label}</span>
+                    ))}
+                  </div>
+                )}
+                {slots.length > 0 && (
+                  <div className="mt-2 flex gap-1.5 overflow-x-auto pb-1">
+                    {slots.map(({ slot, p }) => {
+                      const cd = cds[p.id] ?? 0
+                      const ready = cd <= 0
+                      const auto = c.powerAuto?.[slot] !== false
+                      const total = p.cooldown ?? 3
+                      const frac = ready ? 1 : Math.max(0, 1 - cd / total)
+                      const canTap = !auto && ready
+                      return (
+                        <div key={slot} className={'relative w-[60px] shrink-0 overflow-hidden rounded-lg border ' + (auto ? 'border-cyan-700/50 bg-cyan-950/20' : canTap ? 'border-amber-500 bg-amber-900/20' : 'border-slate-700 bg-black/20')}>
+                          <button onClick={() => togglePowerAuto(slot, i)} title="Auto / manuel (ce sort)" className={'absolute right-0.5 top-0.5 z-10 rounded px-1 py-0.5 text-[7.5px] font-bold ' + (auto ? 'bg-cyan-600/40 text-cyan-100' : 'bg-amber-600/40 text-amber-100')}>{auto ? 'AUTO' : 'MAN'}</button>
+                          <button disabled={!canTap} onClick={() => castPower(slot, i)} title={auto ? `${p.name} — auto` : ready ? `Lancer ${p.name}` : `${p.name} — ${cd.toFixed(1)} s`} className="flex w-full flex-col items-center gap-0.5 px-1 pb-1.5 pt-2">
+                            <span className="text-lg leading-none">{powerIcon(p)}</span>
+                            <span className="w-full truncate text-center text-[8px] font-medium text-slate-300">{p.name}</span>
+                            <span className={'text-[8px] font-semibold leading-none ' + (canTap ? 'text-amber-200' : 'text-slate-500')}>{auto ? '⟳ auto' : ready ? '▶' : `${cd.toFixed(1)}s`}</span>
+                          </button>
+                          {!ready && <div className="absolute bottom-0 left-0 h-0.5 bg-cyan-500" style={{ width: `${frac * 100}%` }} />}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
             )
           })}
         </div>
 
-        {/* Sorts du héros piloté (AUTO = lancé seul · MANUEL = au tap) */}
-        {castSlots.length > 0 && (
-          <div className="mt-2 border-t border-slate-800 pt-2">
-            <div className="mb-1.5 flex items-center justify-between gap-2">
-              <span className="min-w-0 truncate text-[10px] font-semibold uppercase tracking-wide text-slate-400">⚔️ Sorts — {me!.name}</span>
-              <span className="shrink-0 text-[8.5px] text-slate-600">AUTO = seul · MAN = au tap</span>
-            </div>
-            {/* Mobile : rangée horizontale scrollable (1 ligne) · Desktop : grille 3 colonnes */}
-            <div className="flex gap-1.5 overflow-x-auto pb-1 sm:grid sm:grid-cols-3 sm:overflow-visible sm:pb-0">
-              {castSlots.map(({ slot, p }) => {
-                const cd = pcd[p.id] ?? 0
-                const ready = cd <= 0
-                const auto = me!.powerAuto?.[slot] !== false
-                const total = p.cooldown ?? 3
-                const frac = ready ? 1 : Math.max(0, 1 - cd / total)
-                const canTap = !auto && ready
-                return (
-                  <div
-                    key={slot}
-                    className={
-                      'relative w-[68px] shrink-0 overflow-hidden rounded-lg border sm:w-auto ' +
-                      (auto ? 'border-cyan-700/50 bg-cyan-950/20' : canTap ? 'border-amber-500 bg-amber-900/20' : 'border-slate-700 bg-black/20')
-                    }
-                  >
-                    {/* Bascule AUTO/MANUEL (coin) */}
-                    <button
-                      onClick={() => togglePowerAuto(slot)}
-                      title="Activer / désactiver le lancement automatique"
-                      className={'absolute right-0.5 top-0.5 z-10 rounded px-1.5 py-1 text-[8px] font-bold ' + (auto ? 'bg-cyan-600/40 text-cyan-100' : 'bg-amber-600/40 text-amber-100')}
-                    >
-                      {auto ? 'AUTO' : 'MAN'}
-                    </button>
-                    {/* Zone de lancement (active uniquement en MANUEL & prête) */}
-                    <button
-                      disabled={!canTap}
-                      onClick={() => castPower(slot)}
-                      title={auto ? `${p.name} — lancement automatique` : ready ? `Lancer ${p.name}` : `${p.name} — ${cd.toFixed(1)} s`}
-                      className="flex w-full flex-col items-center gap-0.5 px-1 pb-1.5 pt-2"
-                    >
-                      <span className="text-xl leading-none">{powerIcon(p)}</span>
-                      <span className="w-full truncate text-center text-[8px] font-medium text-slate-300">{p.name}</span>
-                      <span className={'text-[8px] font-semibold leading-none ' + (canTap ? 'text-amber-200' : 'text-slate-500')}>
-                        {auto ? '⟳ auto' : ready ? '▶ lancer' : `${cd.toFixed(1)}s`}
-                      </span>
-                    </button>
-                    {!ready && <div className="absolute bottom-0 left-0 h-0.5 bg-cyan-500" style={{ width: `${frac * 100}%` }} />}
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        )}
+        {/* (v0.36 lot 8) — les barres de sorts vivent désormais DANS chaque carte de héros ci-dessus :
+            on lance n'importe quel sort de n'importe quel héros sans changer de perso actif. */}
       </div>
 
       {/* Journal — zone réelle (min-height garanti) + plein écran filtrable au tap */}
