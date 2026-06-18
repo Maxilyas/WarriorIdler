@@ -2184,7 +2184,9 @@ function highestLevel(chars: Character[]): number {
 
 /** Soin complet + purge des statuts de combat transitoires (mort, repli, fin de donjon/raid). */
 function fullHeal(c: Character): Character {
-  return { ...c, hp: charMaxHp(c), rez: undefined, stun: 0, dots: undefined, weaken: undefined }
+  // v0.36 — la remise à neuf (mort / checkpoint de Chapitre) RAZ aussi le bouclier d'absorption :
+  // pas de report d'un combat à l'autre (« reset dur hors combat »).
+  return { ...c, hp: charMaxHp(c), absorb: undefined, rez: undefined, stun: 0, dots: undefined, weaken: undefined }
 }
 
 /** Met à jour les multiplicateurs globaux (combat, régén) — améliorations + 🏛️ Maîtrise (v0.25). */
@@ -2653,13 +2655,14 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
       return done
     }
     case 'shield':
-      // Bouclier runique : absorption sur le porteur (scale stat principale OU Endurance).
-      caster.absorb = (caster.absorb ?? 0) + shieldBase
+      // Bouclier runique (v0.36) : REMPLACE (max, pas +) et borné aux PV max → relancer ne cumule pas,
+      // impossible d'empiler du bouclier à l'infini sur du trash avant le boss.
+      caster.absorb = Math.min(charMaxHp(caster), Math.max(caster.absorb ?? 0, shieldBase))
       return 0
     case 'bigShield':
-      // Énorme bouclier d'absorption (soaké avant les PV) + 40% à l'équipe.
-      caster.absorb = (caster.absorb ?? 0) + shieldBase
-      for (const a of chars) if (a.hp > 0 && a !== caster) a.absorb = (a.absorb ?? 0) + shieldBase * 0.4
+      // Énorme bouclier d'absorption (soaké avant les PV) + 40% à l'équipe — REMPLACE (max) + cap PV.
+      caster.absorb = Math.min(charMaxHp(caster), Math.max(caster.absorb ?? 0, shieldBase))
+      for (const a of chars) if (a.hp > 0 && a !== caster) a.absorb = Math.min(charMaxHp(a), Math.max(a.absorb ?? 0, shieldBase * 0.4))
       return 0
     case 'invuln':
       caster.invuln = Math.max(caster.invuln ?? 0, p.duration ?? 2)
