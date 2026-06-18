@@ -57,7 +57,7 @@ import {
   type BrewQuality,
 } from './alchimie'
 import { makeEnemy, isBossStage, stageIlvl } from './enemies'
-import { chapitreOf, vagueOf } from './progression'
+import { chapitreOf, vagueOf, raidGateForStage } from './progression'
 import {
   BIOME_IDS, biomeUnlocked, getBiomeDef,
   BIOME_ROTATE_MS, BIOME_LOCK_MS, BIOME_LOCK_FRAGMENTS, type BiomeId,
@@ -4793,12 +4793,16 @@ export const useGame = create<GameState>((set, get) => {
           if (boss) log = pushLog(log, '🏆 Fragment de Conquête : recharges réinitialisées !', 'info')
         }
 
-        // Le verrou de farm fige la progression au palier courant.
+        // Le verrou de farm fige la progression. GATE DE RAID (v0.36) : franchir le mur d'un vrai
+        // Chapitre (5→14) exige le Raid T(c−4) ; tant qu'il n'est pas vaincu, on reste au mur (Prologue
+        // 1-5 et Chapitre++ ≥ 16 libres). Le mur reste farmable, mais n'avance plus.
+        const gateTier = raidGateForStage(stage)
+        const gateLocked = gateTier > 0 && bestRaidTier(s.raidProgress) < gateTier
         let characters = chars
         let biomeBest = s.biomeBest
         let conseil = s.conseil
         let maitrisePoints = s.maitrisePoints
-        if (!s.farmLock) {
+        if (!s.farmLock && !gateLocked) {
           stage += 1
           biomeBest = { ...biomeBest, [s.activeBiome]: Math.max(biomeBest[s.activeBiome] ?? 0, stage) }
           bestStage = Math.max(bestStage, stage)

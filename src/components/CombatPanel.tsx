@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useGame, powerCooldowns, tutContext } from '../game/store'
+import { useGame, powerCooldowns, tutContext, bestRaidTier } from '../game/store'
 import type { LogKind } from '../game/store'
 import { TUT_QUESTS, tutDone, tutAllClaimed, tutClaimableCount, type TutCtx } from '../game/tutorial'
 import { hasReward, formatInboxReward, inboxAttentionCount, type InboxMessage } from '../game/inbox'
@@ -16,7 +16,7 @@ import { LevelBadge } from './LevelBadge'
 import { charMaxHp, charDps, charResist, charCombatMods, TALENT_START_LEVEL } from '../game/character'
 import { getAchievement } from '../game/achievements'
 import { isBossStage } from '../game/enemies'
-import { chapitreOf, vagueOf } from '../game/progression'
+import { chapitreOf, vagueOf, raidGateForStage } from '../game/progression'
 import { getPower, powerIcon } from '../game/powers'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from '../game/damage'
 import { RAID_MECHANIC_META } from '../game/raids'
@@ -85,6 +85,8 @@ export function CombatPanel() {
   const event = useGame((s) => s.event)
   const eventCosmetics = useGame((s) => s.eventCosmetics)
   const claimEventMilestone = useGame((s) => s.claimEventMilestone)
+  // v0.36 — GATE DE RAID : franchir le mur d'un vrai Chapitre exige un tier de raid.
+  const raidProgress = useGame((s) => s.raidProgress)
 
   // Biome + palier + verrou fusionnés en une ligne « zone » : le détail s'ouvre en feuille
   // (libère un tiers d'écran pour le journal sur mobile).
@@ -151,6 +153,9 @@ export function CombatPanel() {
   }
   const enemyPct = (enemy.hp / enemy.maxHp) * 100
   const boss = raid ? true : dungeon ? dungeon.current === dungeon.totalFights - 1 : isBossStage(stage)
+  // v0.36 — GATE DE RAID (farm uniquement) : au mur d'un vrai Chapitre, il faut le Raid T(c−4).
+  const gateTier = !raid && !dungeon ? raidGateForStage(stage) : 0
+  const gateLocked = gateTier > 0 && bestRaidTier(raidProgress) < gateTier
 
   return (
     <div className="flex h-full flex-col gap-3">
@@ -411,6 +416,12 @@ export function CombatPanel() {
           )}
           <span>Record : Ch.{chapitreOf(bestStage)}</span>
         </div>
+
+        {gateLocked && (
+          <div className="mt-2 rounded-lg border border-rose-700/60 bg-rose-950/40 px-2 py-1.5 text-center text-[11px] font-medium leading-snug text-rose-200">
+            🔒 Mur du Chapitre {chapitreOf(stage)} — bats le <b className="text-rose-100">Raid Tier {gateTier}</b> (☠️ Expéditions) pour ouvrir le <b className="text-rose-100">Chapitre {chapitreOf(stage) + 1}</b>.
+          </div>
+        )}
 
         <div className="mt-2 text-center">
           {multi ? (

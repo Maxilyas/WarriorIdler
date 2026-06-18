@@ -134,6 +134,19 @@ export function chapitreLabel(stage: number): string {
   return `Chapitre ${chapitreOf(stage)} · Vague ${vagueOf(stage)}/${CHAPITRE_SIZE}`
 }
 
+// ---- GATE DE RAID (refonte v0.36 — DESIGN_v0.36 §1) ----
+// Structure : Prologue (Chapitres 1-5) LIBRE, puis 10 vrais Chapitres (6-15) dont le franchissement
+// est gaté par un tier de raid. Battre le Raid T(k) ouvre l'accès au Chapitre (5+k) : on franchit le
+// MUR du Chapitre (4+k) — soit, en stage, le mur du Chapitre `c` (5≤c≤14) exige le Raid T(c−4).
+// Au-delà du Chapitre 15 (Chapitre++, ≥ 16) : libre (plus de tiers de raid).
+
+/** Tier de raid requis pour franchir le MUR du Chapitre où se trouve ce stage (0 = aucun gate). */
+export function raidGateForStage(stage: number): number {
+  if (!isMur(stage)) return 0
+  const c = chapitreOf(stage)
+  return c >= 5 && c <= 14 ? c - 4 : 0
+}
+
 /** FRONTIÈRE : difficulté en ilvl du contenu d'une vague (courbe unifiée, NON capée). */
 export function frontierIlvl(stage: number): number {
   return Math.max(1, Math.round(stage * PENTE_VAGUE))
