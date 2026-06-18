@@ -313,10 +313,12 @@ export function rollFarmRarity(stage: number, shift = 0): RarityId {
 // → crafter ce qu'on peut atteindre ≈ 10-30 runs ; seul AU-DELÀ de l'atteignable explose (le vrai chase).
 export function contentRarityTier(bestStage: number, bestRaidTier = 0): number {
   const chapter = Math.max(1, Math.ceil(bestStage / CHAPITRE_SIZE))
-  // Farm + Cache : Inhabituel (Ch.1) → Artefact t7 (Ch.5+). C'est l'ancre des DONJONS (raid-agnostiques).
+  // Cache du Pilleur : Artefact (t7) accessible DÈS le Chapitre 1, juste de plus en plus FACILE à crafter
+  // sur les 5 premiers (la rampe = le coût qui baisse). C'est l'ancre des DONJONS (raid-agnostiques).
   const cacheReach = Math.min(7, 2 + chapter)
-  // Raids (Ch.6+) : chaque tier MONDIAL vaincu repousse le plafond — Patrimoine t8 … Céleste t11 … Transcendant t16.
-  const raidReach = bestRaidTier > 0 ? Math.min(16, 7 + bestRaidTier) : 0
+  // Raids : +1 rareté TOUS LES 2 TIERS, ancré T3→Éternel(t12), T5→Cosmique(t13), T7→Abyssal(t14).
+  // PLAFOND = Abyssal (t14) : Primordial(t15) & Transcendant(t16) restent le CHASE (over-content = centaines de runs).
+  const raidReach = bestRaidTier > 0 ? Math.min(14, 11 + Math.floor((bestRaidTier - 1) / 2)) : 0
   return Math.max(3, cacheReach, raidReach)
 }
 /** Multiplicateur de coût « AU-DESSUS DU CONTENU » : ×OVER_CONTENT_STEEP par cran de rareté au-dessus
