@@ -115,7 +115,7 @@ export function CharacterPanel({ view = 'apercu' }: { view?: CharacterView }) {
           <div className="rounded-xl border border-slate-800 bg-gradient-to-br from-[#161c2a] to-[#0d111a] p-4">
             <div className="flex items-center justify-between gap-2">
               <div className="flex min-w-0 items-center gap-3">
-                <LevelBadge char={char} size={58} />
+                <LevelBadge char={characters[0]} size={58} />
                 <div className="min-w-0">
                 {editName !== null ? (
                   <form

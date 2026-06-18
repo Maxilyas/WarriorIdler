@@ -160,7 +160,7 @@ export function HerosHub({ talentsUnlocked }: { talentsUnlocked: boolean }) {
         )}
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2.5">
-            <LevelBadge char={char} />
+            <LevelBadge char={characters[0]} />
             <div className="min-w-0">
               <div className="truncate text-base font-bold text-slate-100">{char.name}</div>
               {char.title && getAchievement(char.title)?.title && (

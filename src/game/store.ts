@@ -642,7 +642,9 @@ interface GameState extends SaveData {
   /** 🏆 (v0.28) Choisit le TITRE affiché d'un héros (id de haut fait débloqué, ou null). */
   selectTitle: (charId: string, achId: string | null) => void
   /** 🎨 (v0.28) Personnalise le portrait d'un héros (palette / emblème). */
-  setAvatar: (charId: string, sel: { palette?: string; emblem?: string; border?: string; aura?: string }) => void
+  /** v0.36 (lot 8) — l'apparence est désormais au niveau du COMPTE (un seul badge). On l'édite via le
+   *  perso-ancre characters[0] ; plus de charId. */
+  setAvatar: (sel: { palette?: string; emblem?: string; border?: string; aura?: string }) => void
   /** 🎨 (v0.28 B2) Débloque un cosmétique premium contre de la Poussière d'étoile 🌌. */
   unlockCosmetic: (id: string) => void
   /** Coffre du Destin : garde l'objet à cet index, recycle les autres. */
@@ -7042,9 +7044,12 @@ export const useGame = create<GameState>((set, get) => {
       set(next)
     },
 
-    setAvatar: (charId, sel) => {
+    setAvatar: (sel) => {
       const s = get()
-      const characters = s.characters.map((c) => (c.id === charId ? { ...c, avatar: { ...c.avatar, ...sel } } : c))
+      if (!s.characters.length) return
+      // Apparence de COMPTE : éditée sur l'ancre characters[0] (badge unique). Les autres persos n'ont
+      // plus d'apparence cosmétique propre (juste leur classe).
+      const characters = s.characters.map((c, i) => (i === 0 ? { ...c, avatar: { ...c.avatar, ...sel } } : c))
       const next = { ...s, characters }
       persist(next)
       set(next)

@@ -10,9 +10,8 @@ import {
 import {
   eventPoints, eventClaimableCount, msUntilEventEnd, invasionAuraId, EVENT_MILESTONES, INVASION_ELEMENTS, type EventState,
 } from '../game/event'
-import { getAura } from '../game/avatar'
+import { getAura, resolveAvatar } from '../game/avatar'
 import { Sheet } from './ui'
-import { LevelBadge } from './LevelBadge'
 import { charMaxHp, charDps, charCombatMods, TALENT_START_LEVEL } from '../game/character'
 import { getAchievement } from '../game/achievements'
 import { isBossStage } from '../game/enemies'
@@ -558,7 +557,9 @@ export function CombatPanel() {
             return (
               <div key={c.id} className={'rounded-lg border p-2 ' + (active && !single ? 'border-orange-500/50 bg-orange-500/[0.06]' : 'border-slate-800 bg-black/20')}>
                 <button onClick={() => setActiveChar(i)} disabled={single} title={single ? undefined : `Piloter ${c.name}`} className="flex w-full items-center gap-2.5 text-left">
-                  <LevelBadge char={c} size={34} showLevel={false} />
+                  {(() => { const cg = resolveAvatar(c.primaryBias); return (
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-base" style={{ background: `linear-gradient(160deg, ${cg.pal.c1}, ${cg.pal.c2})` }} aria-hidden="true">{cg.emb.glyph}</span>
+                  ) })()}
                   <div className="min-w-0 flex-1">
                     <div className="flex items-baseline justify-between gap-2 text-[11px]">
                       <span className={'truncate font-semibold ' + (dead ? 'text-red-500/70 line-through' : 'text-slate-100')}>
