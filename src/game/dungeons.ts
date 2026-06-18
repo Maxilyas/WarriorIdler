@@ -298,7 +298,7 @@ interface TraitCfg { hp: number; dmg: number; armor: number; pack: number; elite
 const TRAIT_CFG: Record<DungeonTrait, TraitCfg> = {
   rapide: { hp: 0.8, dmg: 1.5, armor: 1, pack: 2 },
   pack: { hp: 0.55, dmg: 0.9, armor: 1, pack: 4 },
-  colosse: { hp: 2.6, dmg: 1.25, armor: 1.3, pack: 1 },
+  colosse: { hp: 1.6, dmg: 1.25, armor: 1.3, pack: 1 }, // v0.36 : 2.6→1.6 (le colosse était ×1,5 le mur précédent → faisable, mais reste la plus grosse barre de PV des donjons)
   armure: { hp: 1.0, dmg: 1.0, armor: 3.4, pack: 2 },
   // v0.22 : durcis pour la qualité du butin. v0.35 : hp 2,1→1,5 — couplé au boss ×5 ça faisait
   // ~×10,5 PV (≈ le mur lui-même) → niveau 1 infranchissable. Reste le donjon le plus exigeant, mais
@@ -344,8 +344,10 @@ export function dungeonRunYield(reward: DungeonReward, level: number, _bestStage
     return Math.max(1, Math.round(marketBuy * GOLD_BUYS_PER_RUN))
   }
   // Ancre = coût d'un craft à la rareté du contenu (poussière d'étoile : à partir de Légendaire t6).
+  // v0.36 — planchers de tier : les Noyaux n'existent qu'à partir de t4, la Poussière à partir de t6.
+  // Sans ça, la Forge du Noyau lâchait 0 noyau aux bas niveaux (ct=t3). max(plancher, ct) → toujours > 0.
   const anchor = reward === 'eclats' ? createCost(ct, ilvl, ct).eclats
-    : reward === 'noyau' ? createCost(ct, ilvl, ct).noyau
+    : reward === 'noyau' ? (createCost(Math.max(4, ct), ilvl).noyau ?? 0)
     : reward === 'poussiere' ? (createCost(Math.max(6, ct), ilvl).poussiere ?? 0)
     : 0
   if (anchor <= 0) return 0
