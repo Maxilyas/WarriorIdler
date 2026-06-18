@@ -380,7 +380,7 @@ function ForgeronWorkshop() {
   const signCost = activeSignature ? signatureLingotCost(tier) : 0
   const mwReady = forge.masterwork && lastMasterwork < currentWeek()
   const mwOn = masterwork && mwReady
-  const raw = createCost(tier, ilvl, contentRarityTier(bestStage))
+  const raw = createCost(tier, ilvl, contentRarityTier(bestStage, raidTier))
   const cm = mods.costMult * (mwOn ? 1.5 : 1)
   const cost = { eclats: Math.round(raw.eclats * cm), noyau: Math.round(raw.noyau * cm), fragments: Math.round((raw.fragments ?? 0) * cm), poussiere: Math.round((raw.poussiere ?? 0) * cm), cosmic: Math.round((raw.cosmic ?? 0) * cm) }
   const lingotNeed = signCost + (mwOn ? MASTERWORK_LINGOTS : 0)

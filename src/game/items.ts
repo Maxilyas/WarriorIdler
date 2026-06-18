@@ -5,7 +5,7 @@ import { ITEM_TYPES } from './slots'
 import { rollUnique, instanceMods } from './uniques'
 import { rollSockets } from './gems'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from './damage'
-import { itemBudget, effItemIlvl, clampIlvl, powerAt, RARITY_ILVL_PER_TIER } from './progression'
+import { itemBudget, effItemIlvl, clampIlvl, powerAt, RARITY_ILVL_PER_TIER, CHAPITRE_SIZE } from './progression'
 
 /** v0.30.1 — lignes de stat secondaire : PROPORTIONNELLES au budget exponentiel (poids SECONDARY_FRAC)
  *  → même échelle que le primaire à bas ilvl (fini « primaire 2 vs crit 66 »), MAIS plafonnées à
@@ -307,10 +307,17 @@ export function rollFarmRarity(stage: number, shift = 0): RarityId {
   return rollWindowRarity(Math.max(1, peak - 2), peak, Math.min(FARM_RARITY_CAP, peak + 2))
 }
 
-// v0.35 — RARETÉ « DU CONTENU » à un Palier : ce que le farm donne SANS payer (le baseline). Monter
-// une rareté AU-DESSUS = le CHASE de puissance (la pièce-signature). Climbe puis plateau à Légendaire. KNOB.
-export function contentRarityTier(bestStage: number): number {
-  return Math.max(3, Math.min(FARM_RARITY_CAP, 3 + Math.floor(bestStage / 25)))
+// v0.36 — RARETÉ « DU CONTENU » = la rareté ATTEIGNABLE (tout contenu confondu), pas seulement le farm.
+// C'est l'ancre de l'over-content (×4/cran AU-DESSUS d'elle) ET du rendement des donjons. Plus de cap à
+// Légendaire : la Cache du Pilleur pousse à Artefact (~Ch.5), puis les raids montent vers Céleste+ (Ch.6+).
+// → crafter ce qu'on peut atteindre ≈ 10-30 runs ; seul AU-DELÀ de l'atteignable explose (le vrai chase).
+export function contentRarityTier(bestStage: number, bestRaidTier = 0): number {
+  const chapter = Math.max(1, Math.ceil(bestStage / CHAPITRE_SIZE))
+  // Farm + Cache : Inhabituel (Ch.1) → Artefact t7 (Ch.5+). C'est l'ancre des DONJONS (raid-agnostiques).
+  const cacheReach = Math.min(7, 2 + chapter)
+  // Raids (Ch.6+) : chaque tier MONDIAL vaincu repousse le plafond — Patrimoine t8 … Céleste t11 … Transcendant t16.
+  const raidReach = bestRaidTier > 0 ? Math.min(16, 7 + bestRaidTier) : 0
+  return Math.max(3, cacheReach, raidReach)
 }
 /** Multiplicateur de coût « AU-DESSUS DU CONTENU » : ×OVER_CONTENT_STEEP par cran de rareté au-dessus
  *  de ce que le farm donne au Palier. +1 = ×4 (dizaines de runs), +2 = ×16 (centaines), +3 = ×64. */

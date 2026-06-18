@@ -5235,7 +5235,7 @@ export const useGame = create<GameState>((set, get) => {
       if (craftRaidGate(RARITIES[item.rarity].tier + 1) > bestRaidTier(s.raidProgress)) return
       const patch = ascendItem(item)
       if (!patch) return
-      const c = ascendCost(item, contentRarityTier(s.bestStage))
+      const c = ascendCost(item, contentRarityTier(s.bestStage, bestRaidTier(s.raidProgress)))
       const m = mods.costMult
       const cost = { eclats: Math.round(c.eclats * m), noyau: Math.round(c.noyau * m), fragments: Math.round((c.fragments ?? 0) * m), poussiere: Math.round((c.poussiere ?? 0) * m), cosmic: Math.round((c.cosmic ?? 0) * m) }
       if (s.essence < cost.eclats || s.noyau < cost.noyau || s.fragments < cost.fragments || s.poussiere < cost.poussiere || s.cosmic < cost.cosmic) return
@@ -5976,7 +5976,7 @@ export const useGame = create<GameState>((set, get) => {
       const signCost = signature ? signatureLingotCost(tier) : 0
       if (signature && s.lingots < signCost + (masterwork ? MASTERWORK_LINGOTS : 0)) return
       // Coût : rareté choisie × métier (Économe) × chef-d'œuvre (×1,5).
-      const c = createCost(tier, ilvl, contentRarityTier(s.bestStage))
+      const c = createCost(tier, ilvl, contentRarityTier(s.bestStage, bestRaidTier(s.raidProgress)))
       const m = mods.costMult * (masterwork ? 1.5 : 1)
       const cost = { eclats: Math.round(c.eclats * m), noyau: Math.round(c.noyau * m), fragments: Math.round((c.fragments ?? 0) * m), poussiere: Math.round((c.poussiere ?? 0) * m), cosmic: Math.round((c.cosmic ?? 0) * m) }
       if (s.essence < cost.eclats || s.noyau < cost.noyau || s.fragments < cost.fragments || s.poussiere < cost.poussiere || s.cosmic < cost.cosmic) return
