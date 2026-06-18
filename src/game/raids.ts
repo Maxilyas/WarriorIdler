@@ -1,6 +1,6 @@
 import type { DamageType, Enemy, EnemyAbility, ItemType } from './types'
 import { DAMAGE_TYPE_LIST } from './damage'
-import { enemyHp, enemyDmg, enemyArmor, clampIlvl, lootFarmIlvl } from './progression'
+import { enemyHp, enemyDmg, enemyArmor, clampIlvl, lootFarmIlvl, ILVL_CAP_BASE, ILVL_CAP_ENDGAME } from './progression'
 
 /**
  * RAIDS — refonte v0.23 « un boss, dix tiers ».
@@ -166,9 +166,13 @@ export function raidUnlocked(def: RaidDef, bestStage: number, progress: Record<R
 // tiers (voulu : il revient les farmer pour la rareté/les mats) ; un joueur calé trouve son tier.
 // L'Abîme (tierOffset +6) extrapole au-delà de 400 → contenu post-prestige. La rareté et l'exigence de
 // résist montent toujours avec le tier mondial. raidIlvl = gear d'époque du palier ancre (lootFarmIlvl).
-const RAID_ANCHOR_LOW = 50    // palier de farm ancre du Tier 1 MONDIAL
-const RAID_ANCHOR_HIGH = 400  // palier de farm ancre du Tier 10 MONDIAL (≈ prestige)
-const RAID_ANCHOR_SPAN = 10   // nb de tiers mondiaux entre LOW et HIGH (= la pente)
+// v0.36 — l'ancre des raids suit les CHAPITRES qu'ils gatent (gate-raid §1) : le Raid T(k) ouvre le
+// mur du Chapitre 4+k ≈ stage 40+10k → T1 ancré au Chapitre 5 (stage 50), T10 au Chapitre 14 (stage 140).
+// raidIlvl = gear d'époque du palier ancre (lootFarmIlvl, capé 200) → un build calé sur le Chapitre rend
+// un TTK ~40 s. Fini l'ancre 50→400 du monde ilvl-700.
+const RAID_ANCHOR_LOW = 50    // stage ancre du Tier 1 MONDIAL (mur du Chapitre 5)
+const RAID_ANCHOR_HIGH = 140  // stage ancre du Tier 10 MONDIAL (mur du Chapitre 14)
+const RAID_ANCHOR_SPAN = 10   // nb de tiers mondiaux entre LOW et HIGH (= la pente : +10 stages/tier)
 const FORTRESS_ARMOR_MULT = 3.2   // 'fortress' : armure colossale
 const FORTRESS_RESIST_BONUS = 0.2 // 'fortress' : +résistance au thème
 
@@ -227,12 +231,12 @@ export function raidPartyHpMult(partySize: number): number {
   return 1 + 0.55 * Math.max(0, partySize - 1)
 }
 
-/** Délai d'enrage dur (s). v0.35.1 : recalé pour la difficulté FIXE par tier. Aux BAS tiers (ilvl
- *  faible), le DPS est dans sa rampe d'allumage → le pool du raidboss (×13,3 PV) est lent à fondre :
- *  l'enrage doit laisser plus d'air (T1 ~75 s) puis se resserrer quand l'ilvl monte (T10+ → plancher
- *  40 s). Marge ~×1,2–1,5 sur le TTK à stuff calé → le calé clear, le sous-stuffé tape l'enrage. */
+/** Délai d'enrage dur (s). v0.36 : recalé pour le cap ilvl 200 (raids T1-T10 ∈ ~[65,186]). Aux ilvls
+ *  plus bas qu'avant, les secondaires sont moins mûrs → le TTK à stuff CALÉ remonte (~62 s à T1 →
+ *  ~45 s à T10) : l'enrage doit rester AU-DESSUS de cette courbe (sinon même le calé tape l'enrage).
+ *  Pente douce 78 → plancher 56 → marge de clear positive à tous les tiers (le sous-optimisé échoue). */
 export function raidBerserkTime(def: RaidDef, tier: number): number {
-  return Math.max(40, 80 - globalTier(def, tier) * 5)
+  return Math.max(56, 78 - globalTier(def, tier) * 2.2)
 }
 
 /** Palier de farm ANCRE d'un tier MONDIAL (T1→LOW … T_SPAN→HIGH ; extrapolé au-delà pour l'Abîme). */
@@ -248,6 +252,10 @@ export function raidAnchorPalier(globalTierN: number): number {
  * palier ancre (lootFarmIlvl) → un joueur calé sur ce palier livre un TTK ~40 s ; un sur-palier out-gear.
  */
 export function raidIlvl(def: RaidDef, tier: number, _bestStage = 0): number {
+  // v0.36 — l'Abîme (endgame) est la SEULE source d'ilvl > base : un poil au-dessus de 200, le grind
+  // ultime (T1 = 204 … plafonné à ILVL_CAP_ENDGAME = 240). Les futurs raids endgame suivront ce patron.
+  if (def.id === 'abysse') return Math.min(ILVL_CAP_ENDGAME, ILVL_CAP_BASE + tier * 4)
+  // Base raids : ancrés sur le Chapitre gaté (lootFarmIlvl est déjà capé à ILVL_CAP_BASE = 200).
   return clampIlvl(lootFarmIlvl(Math.round(raidAnchorPalier(globalTier(def, tier)))))
 }
 

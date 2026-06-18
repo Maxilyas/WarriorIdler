@@ -109,13 +109,21 @@ export function enemyArmor(ilvl: number, mult = 1): number {
 // est toujours sous-stuffé, et seule l'OPTIMISATION (secondaires/gemmes/runes/pacte/alch/talents)
 // comble l'écart. On NE PEUT PAS out-ilvl un mur : l'ilvl manquant est gaté par le mur lui-même.
 
-/** Pente d'ilvl par vague (1 pas de farm). ~10 ilvl/Chapitre. */
-export const PENTE_VAGUE = 1.0
+/** Pente d'ilvl par vague (1 pas de farm). v0.36 : 1.0 → 1.45 pour que le LOOT atteigne ~200 au mur
+ *  du Chapitre 15 (stage 150) — le plafond du contenu de base. La pente NE change PAS le TTK (le LAG,
+ *  donc le ratio gear/contenu, est inchangé) : elle ne fait que fixer l'échelle absolue d'ilvl. */
+export const PENTE_VAGUE = 1.45
 /** Vagues par Chapitre (boss-mur à la dernière). */
 export const CHAPITRE_SIZE = 10
 /** Retard de gear : LAG0 + K_LAG·chapitre. Knob central. */
 export const LAG0 = 4
 export const K_LAG = 0.9
+/** v0.36 — PLAFOND d'ilvl du LOOT de CONTENU DE BASE (farm / donjons / raids T1-T10). Gear capé à 200 :
+ *  l'endgame devient HORIZONTAL (optimisation + rareté). La DIFFICULTÉ (frontière) continue de monter
+ *  au-delà (Chapitre++ = boss plus durs), mais le gear plafonne → l'écart se comble par le build. */
+export const ILVL_CAP_BASE = 200
+/** Plafond d'ilvl de l'ENDGAME (Abîme & futurs raids endgame) : SEULE source d'ilvl > base, le grind ultime. */
+export const ILVL_CAP_ENDGAME = 240
 
 /** Numéro de CHAPITRE d'une vague (stage). Chapitre 1 = vagues 1-10. */
 export function chapitreOf(stage: number): number {
@@ -155,9 +163,10 @@ export function frontierIlvl(stage: number): number {
 export function lagAt(chapitre: number): number {
   return LAG0 + K_LAG * chapitre
 }
-/** ilvl du LOOT de farm = frontière − LAG (ce que le joueur peut réellement équiper). */
+/** ilvl du LOOT de farm = frontière − LAG, CAPÉ à ILVL_CAP_BASE (200). Au-delà du Chapitre 15, la
+ *  difficulté (frontière) monte encore mais le gear plafonne → l'écart se comble par l'optimisation. */
 export function lootFarmIlvl(stage: number): number {
-  return Math.max(1, Math.round(frontierIlvl(stage) - lagAt(chapitreOf(stage))))
+  return Math.min(ILVL_CAP_BASE, Math.max(1, Math.round(frontierIlvl(stage) - lagAt(chapitreOf(stage)))))
 }
 
 /** Difficulté du FARM en ilvl = la FRONTIÈRE (v0.35 : courbe unifiée douce, ex-`stage·2.5`).

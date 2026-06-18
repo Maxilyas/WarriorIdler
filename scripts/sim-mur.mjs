@@ -31,7 +31,10 @@ setGlobalCombatMods({ power: 1, attackSpeed: 1, vitality: 1 })
 // ---- KNOBS ----
 // Les knobs de MUR (TTK cible, margeMur, nova) viennent de progression.ts (source de vérité — le
 // harnais teste le VRAI code, pas une copie). Restent locaux ici : τ et le nb de dimensions testées.
-const PALIERS = [1, 5, 10, 15, 20, 25, 30, 35, 40]
+// v0.36 — on teste le CONTENU DE BASE (Chapitres 1-15, gear-scaling jusqu'au cap ilvl 200). Au-delà,
+// le Chapitre++ a un gear CAPÉ 200 mais une difficulté qui monte encore → soft-wall d'optimisation
+// (« jusqu'où peux-tu pousser »), HORS du modèle discriminant « le build CIBLE clear chaque mur ».
+const PALIERS = [1, 3, 5, 8, 10, 12, 14, 15]
 const TARGET_BOSS_TTK = P.MUR_TARGET_TTK      // ~35 s : clear visé du Build CIBLE
 const SURVIVE = P.SURVIVE_SECONDS             // ~8 s : secondes de boss encaissables minimum
 
