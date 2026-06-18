@@ -43,7 +43,7 @@ export function PrestigePanel() {
           <div className="text-xs text-slate-400">Éveils : <b className="text-fuchsia-300">{prestigeRank}</b></div>
         </div>
         <div className="mt-1 text-[11px] leading-snug text-slate-400">
-          Un reset <b className="text-rose-300">DUR</b> (stuff, niveau, paliers, tiers de raid) contre des <b className="text-fuchsia-300">Échos primordiaux 💠</b>,
+          Un reset <b className="text-rose-300">DUR</b> (stuff, niveau, Chapitres, tiers de raid) contre des <b className="text-fuchsia-300">Échos primordiaux 💠</b>,
           investis dans la <b className="text-fuchsia-200">Constellation</b> (bonus permanents). Tu gardes <b className="text-amber-300">1 Relique</b>,
           tes <b className="text-slate-300">Échos</b>, ta <b className="text-slate-300">Constellation</b>, ton <b className="text-slate-300">record</b> et l'<b className="text-slate-300">XP métiers</b>.
         </div>
@@ -92,7 +92,7 @@ export function PrestigePanel() {
           <>
             <div className="text-[11px] text-slate-300">
               Gain à l'Éveil : <b className="text-fuchsia-300">+{gain} Échos 💠</b>
-              <span className="text-slate-500"> (selon ton meilleur tier de raid × palier × diversité).</span>
+              <span className="text-slate-500"> (selon ton meilleur tier de raid × Chapitre × diversité).</span>
             </div>
 
             {/* Choix de la Relique */}
@@ -130,7 +130,7 @@ export function PrestigePanel() {
               ✨ S'ÉVEILLER — reset DUR (+{gain} Échos)
             </ConfirmButton>
             <div className="mt-1 text-[9px] leading-snug text-slate-600">
-              Irréversible : ton stuff (sauf la Relique), ton niveau, tes paliers et tes tiers de raid tentables sont remis à zéro.
+              Irréversible : ton stuff (sauf la Relique), ton niveau, tes Chapitres et tes tiers de raid tentables sont remis à zéro.
             </div>
           </>
         )}

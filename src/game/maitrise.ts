@@ -51,7 +51,7 @@ export interface ContractDef {
 export const CONTRACTS: ContractDef[] = [
   { id: 'donjons', icon: '🏰', name: 'Expéditionnaire', label: 'Termine 5 donjons', need: 5 },
   { id: 'raids', icon: '☠️', name: 'Pourfendeur', label: 'Vaincs 3 raids', need: 3 },
-  { id: 'paliers', icon: '⚔️', name: 'Conquérant', label: 'Gagne 15 paliers de farm', need: 15 },
+  { id: 'paliers', icon: '⚔️', name: 'Conquérant', label: 'Gagne 15 vagues de farm', need: 15 },
 ]
 
 export function getContract(id: ContractId): ContractDef {

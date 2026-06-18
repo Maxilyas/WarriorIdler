@@ -5,6 +5,7 @@ import { setBonuses } from './sets'
 import { UNIQUE_EFFECTS } from './uniques'
 import { CONSTELLATION } from './prestige'
 import { AVATAR_PALETTES, AVATAR_EMBLEMS } from './avatar'
+import { chapitreOf } from './progression'
 
 /**
  * 🏆 HAUTS FAITS (v0.28, Lot D) — objectifs débloqués en jouant. Récompense : un TITRE (par héros)
@@ -162,11 +163,11 @@ function fullEquipAchv(id: string, rarityId: keyof typeof RARITIES, reward: Part
 
 export const ACHIEVEMENTS: AchievementDef[] = [
   // ---- Progression ----
-  { id: 'palier25', category: 'progression', icon: '⚔️', name: 'Aventurier', desc: 'Atteins le palier 25.', check: (c) => c.bestStage >= 25, reward: { frappe: 1 } },
-  { id: 'palier50', category: 'progression', icon: '⚔️', name: 'Vétéran', desc: 'Atteins le palier 50.', check: (c) => c.bestStage >= 50, reward: { frappe: 1, vigueur: 1 }, title: 'Vétéran' },
-  { id: 'palier100', category: 'progression', icon: '⚔️', name: 'Conquérant', desc: 'Atteins le palier 100.', check: (c) => c.bestStage >= 100, reward: { frappe: 2, vigueur: 1 }, title: 'le Conquérant' },
-  { id: 'palier150', category: 'progression', icon: '⚔️', name: 'Légende', desc: 'Atteins le palier 150.', check: (c) => c.bestStage >= 150, reward: { frappe: 2, vigueur: 2 }, title: 'la Légende' },
-  { id: 'palier200', category: 'progression', icon: '⚔️', name: 'Mythe vivant', desc: 'Atteins le palier 200.', check: (c) => c.bestStage >= 200, reward: { frappe: 3, vigueur: 2 }, title: 'le Mythe' },
+  { id: 'palier25', category: 'progression', icon: '⚔️', name: 'Aventurier', desc: 'Atteins le Chapitre 3.', check: (c) => c.bestStage >= 25, reward: { frappe: 1 } },
+  { id: 'palier50', category: 'progression', icon: '⚔️', name: 'Vétéran', desc: 'Atteins le Chapitre 5.', check: (c) => c.bestStage >= 50, reward: { frappe: 1, vigueur: 1 }, title: 'Vétéran' },
+  { id: 'palier100', category: 'progression', icon: '⚔️', name: 'Conquérant', desc: 'Atteins le Chapitre 10.', check: (c) => c.bestStage >= 100, reward: { frappe: 2, vigueur: 1 }, title: 'le Conquérant' },
+  { id: 'palier150', category: 'progression', icon: '⚔️', name: 'Légende', desc: 'Atteins le Chapitre 15.', check: (c) => c.bestStage >= 150, reward: { frappe: 2, vigueur: 2 }, title: 'la Légende' },
+  { id: 'palier200', category: 'progression', icon: '⚔️', name: 'Mythe vivant', desc: 'Atteins le Chapitre 20.', check: (c) => c.bestStage >= 200, reward: { frappe: 3, vigueur: 2 }, title: 'le Mythe' },
   { id: 'niveau25', category: 'progression', icon: '🌟', name: 'Aguerri', desc: 'Monte un héros au niveau 25.', check: (c) => c.maxLevel >= 25, reward: { savoir: 1 } },
   { id: 'niveau50', category: 'progression', icon: '🌟', name: 'Maître de soi', desc: 'Monte un héros au niveau 50.', check: (c) => c.maxLevel >= 50, reward: { savoir: 2 } },
   { id: 'prestige1', category: 'progression', icon: '✨', name: 'Renaissance', desc: 'Accomplis un premier Éveil Primordial.', check: (c) => c.prestigeRank >= 1, reward: { frappe: 1, savoir: 1 }, title: "l'Éveillé" },
@@ -220,8 +221,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     reward: {}, title: 'le Souverain', border: 'couronne',
   },
   {
-    id: 'finPaliers', category: 'legende', icon: '🗻', name: 'La Fin des Paliers',
-    desc: 'Atteins le palier 800.',
+    id: 'finPaliers', category: 'legende', icon: '🗻', name: 'La Fin des Chapitres',
+    desc: 'Atteins le Chapitre 80.',
     check: (c) => c.bestStage >= 800, reward: {}, title: "l'Éternel", aura: 'doree',
   },
   {
@@ -283,7 +284,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   },
   {
     id: 'renaissanceFulgurante', category: 'legende', icon: '🔥', name: 'Renaissance Fulgurante',
-    desc: `Après un Éveil, re-atteins le palier ${FAST_RETURN_STAGE} en moins de 20 minutes.`,
+    desc: `Après un Éveil, re-atteins le Chapitre ${chapitreOf(FAST_RETURN_STAGE)} en moins de 20 minutes.`,
     check: (c) => c.prestigeRank >= 1 && c.curStage >= FAST_RETURN_STAGE && c.msSincePrestige <= FAST_RETURN_MS,
     reward: {}, title: 'le Phénix', aura: 'flamme',
   },

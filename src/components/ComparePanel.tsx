@@ -395,7 +395,7 @@ function CraftSection({ item }: { item: Item }) {
             surCapped ? (
               <div className="rounded border border-amber-900/40 bg-black/20 px-2 py-1.5 text-center text-[10px] leading-snug text-amber-200/60">
                 ⛔ Surillvl plafonné à <b className="text-amber-200">iLvl {contentIlvl + SURILLVL_OVER_MARGIN}</b> — iLvl max
-                de ton contenu ({contentIlvl}) +{SURILLVL_OVER_MARGIN}. Monte des paliers ou des tiers de raid pour repousser le mur.
+                de ton contenu ({contentIlvl}) +{SURILLVL_OVER_MARGIN}. Monte des Chapitres ou des tiers de raid pour repousser le mur.
               </div>
             ) : (
               <button
@@ -462,7 +462,7 @@ function CraftSection({ item }: { item: Item }) {
           {/* Synthèse d'uniques (Alchimiste) : 3 crans de précision, de l'aléatoire au choix exact */}
           {mods.synth2 ? <InsertEffectSection item={item} /> : null}
 
-          {mods.synth3 ? <ChooseUniqueSection item={item} /> : <Locked label="Synthèse III — Invocation au choix" metier="Alchimiste (palier 100)" />}
+          {mods.synth3 ? <ChooseUniqueSection item={item} /> : <Locked label="Synthèse III — Invocation au choix" metier="Alchimiste (Chapitre 10)" />}
 
           {/* Synthèse I : infuser un Fragment d'éternité (effet aléatoire) */}
           {mods.synth1 ? (
@@ -507,7 +507,7 @@ function QuintessenceSection({ item }: { item: Item }) {
       {open && (
         <div className="mt-1.5">
           <div className="mb-1 text-[9.5px] leading-snug text-emerald-200/60">
-            Ajoute ou renforce une ligne typée. Coût exponentiel par palier · {qMods.quintRefundFull ? '◈ 100%' : '75%'} remboursé au recyclage.
+            Ajoute ou renforce une ligne typée. Coût exponentiel par cran · {qMods.quintRefundFull ? '◈ 100%' : '75%'} remboursé au recyclage.
             {qMods.quintCostMult < 1 && <span className="text-emerald-300"> ◈ Catalyseur : −25%.</span>}
           </div>
           {types.length === 0 ? (
@@ -534,7 +534,7 @@ function QuintessenceSection({ item }: { item: Item }) {
                             disabled={!can}
                             onClick={() => enhanceTyped(item.id, t, kind)}
                             title={aff
-                              ? `+${QUINT_GAIN[kind]}${kind === 'resist' ? ' pts' : '%'} (palier ${level} → ${level + 1})`
+                              ? `+${QUINT_GAIN[kind]}${kind === 'resist' ? ' pts' : '%'} (cran ${level} → ${level + 1})`
                               : `Ajoute +${kind === 'resist' ? '4 pts' : '8%'} ${label}`}
                             className="flex-1 rounded border border-emerald-700/40 px-1 py-1 text-[9.5px] font-medium text-emerald-100 enabled:hover:bg-emerald-900/30 disabled:opacity-40"
                           >

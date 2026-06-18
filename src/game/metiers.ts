@@ -16,6 +16,7 @@
  */
 
 import type { SecondaryStat } from './types'
+import { chapitreOf } from './progression'
 
 export type MetierId = 'forgeron' | 'joaillier' | 'runiste' | 'alchimiste'
 
@@ -402,7 +403,7 @@ export function canLearnNode(
   const def = getMetierNode(metier, nodeId)
   if (!def) return { ok: false, reason: 'Nœud inconnu.' }
   const state = metiers[metier]
-  if (bestStage < METIERS[metier].unlockStage) return { ok: false, reason: `Métier verrouillé (palier ${METIERS[metier].unlockStage}).` }
+  if (bestStage < METIERS[metier].unlockStage) return { ok: false, reason: `Métier verrouillé (Chapitre ${chapitreOf(METIERS[metier].unlockStage)}).` }
   const rank = state.nodes[nodeId] ?? 0
   if (rank >= def.maxRank) return { ok: false, reason: 'Rang maximal.' }
   // v0.28 — changer de spé exclusive est GRATUIT (no-regret) : les rangs de la rivale sont remboursés.
@@ -413,7 +414,7 @@ export function canLearnNode(
   }
   if (pointsAvailable(state) + exclusiveRefund < 1) return { ok: false, reason: 'Aucun point disponible — pratique ton métier.' }
   if (def.minLevel && levelFromXp(state.xp) < def.minLevel) return { ok: false, reason: `Niveau de métier ${def.minLevel} requis.` }
-  if (def.minStage && bestStage < def.minStage) return { ok: false, reason: `Palier ${def.minStage} requis.` }
+  if (def.minStage && bestStage < def.minStage) return { ok: false, reason: `Chapitre ${chapitreOf(def.minStage)} requis.` }
   const needRank = def.requiresRank ?? 1
   if (def.requires && (state.nodes[def.requires] ?? 0) < needRank) {
     const parent = getMetierNode(metier, def.requires)

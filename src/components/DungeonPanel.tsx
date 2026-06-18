@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useGame, SCEAU_COST } from '../game/store'
 import { DUNGEON_LIST, dungeonFights, dungeonIlvl, butinMinTier, butinMaxTier, GEODE_WING_ELEMENT, type DungeonDef, type DungeonReward } from '../game/dungeons'
+import { chapitreOf } from '../game/progression'
 import { DAMAGE_TYPES } from '../game/damage'
 import { dungeonReq, resistMult } from '../game/resist'
 import { charResist } from '../game/character'
@@ -118,7 +119,7 @@ function DungeonCard({ def, cleared, sceaux, bestStage, characters, busy, onEnte
         <div className="font-medium" style={{ color: def.color }}>
           {def.icon} {def.name}
         </div>
-        <div className="text-[10px] text-slate-500">{locked ? `🔒 palier ${def.unlockStage}` : `Record : niv. ${cleared}`}</div>
+        <div className="text-[10px] text-slate-500">{locked ? `🔒 Chapitre ${chapitreOf(def.unlockStage)}` : `Record : niv. ${cleared}`}</div>
       </div>
       <div className="mt-0.5 text-[11px]">
         <span className="text-slate-500">Récompense : </span>
@@ -160,7 +161,7 @@ function DungeonCard({ def, cleared, sceaux, bestStage, characters, busy, onEnte
       })()}
       {locked ? (
         <div className="mt-2 rounded-lg bg-slate-800/60 py-1.5 text-center text-[11px] text-slate-500">
-          🔒 Atteins le palier {def.unlockStage} pour débloquer
+          🔒 Atteins le Chapitre {chapitreOf(def.unlockStage)} pour débloquer
         </div>
       ) : (
         <>

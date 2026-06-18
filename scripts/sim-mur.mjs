@@ -129,7 +129,7 @@ console.log('Pal | loot LAG  τ chk | TTK nu/sous/cible (enrage)   | EHP-survie 
 
 let allOk = true
 for (const p of PALIERS) {
-  const stage = p * P.PALIER_SIZE
+  const stage = p * P.CHAPITRE_SIZE
   const front = P.frontierIlvl(stage)
   const loot = P.lootFarmIlvl(stage)
   const lag = Math.round(P.lagAt(p))

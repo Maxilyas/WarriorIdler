@@ -1,5 +1,6 @@
 import type { DamageType } from './types'
 import { DAMAGE_TYPES } from './damage'
+import { chapitreOf } from './progression'
 
 /**
  * BIOMES (refonte v0.18) — 7 biomes = les 7 types de dégâts.
@@ -91,7 +92,7 @@ export function randomUnlockedBiome(current: BiomeId, physiqueBest: number, glob
 /** Texte d'aide expliquant comment débloquer un biome encore verrouillé. */
 export function biomeUnlockHint(id: BiomeId): string {
   const tier = BIOMES[id].tier
-  if (tier === 'common') return `Atteins le palier ${BIOME_COMMON_UNLOCK} aux Champs de Bataille`
-  if (tier === 'rare') return `Atteins le palier ${BIOME_RARE_UNLOCK} (n'importe quel biome)`
+  if (tier === 'common') return `Atteins le Chapitre ${chapitreOf(BIOME_COMMON_UNLOCK)} aux Champs de Bataille`
+  if (tier === 'rare') return `Atteins le Chapitre ${chapitreOf(BIOME_RARE_UNLOCK)} (n'importe quel biome)`
   return ''
 }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useGame } from './game/store'
+import { chapitreOf } from './game/progression'
 import { useMediaQuery } from './useMediaQuery'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from './game/damage'
 import { TALENT_START_LEVEL } from './game/character'
@@ -358,7 +359,7 @@ export default function App() {
         <Sheet title="⚙ Réglages" onClose={() => setSheet(null)}>
           <div className="space-y-2">
             <div className="text-[11px] text-slate-500">
-              Record de palier : <span className="text-slate-300">{bestStage}</span> · Niveau max : <span className="text-slate-300">{maxLevel}</span>
+              Record : <span className="text-slate-300">Chapitre {chapitreOf(bestStage)}</span> · Niveau max : <span className="text-slate-300">{maxLevel}</span>
             </div>
             {/* F1 — empêcher la mise en veille de l'écran (consomme plus de batterie). */}
             <label className="flex cursor-pointer items-center justify-between rounded-lg bg-slate-800/40 px-3 py-2 text-xs text-slate-300">

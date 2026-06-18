@@ -58,7 +58,7 @@ export const DAILY_QUESTS: DailyQuest[] = [
   { id: 'kills1', icon: '⚔️', title: 'Pourfendeur', desc: 'Tue 250 ennemis.', metric: 'kills', target: 250, reward: { poussiere: 30, eclats: 100 }, available: () => true },
   { id: 'kills2', icon: '💀', title: 'Massacre', desc: 'Tue 600 ennemis.', metric: 'kills', target: 600, reward: { poussiere: 50, noyau: 8 }, available: () => true },
   { id: 'kills3', icon: '🔥', title: 'Carnage', desc: 'Tue 1 200 ennemis.', metric: 'kills', target: 1200, reward: { poussiere: 80, fragments: 1 }, available: () => true },
-  { id: 'stage', icon: '🧭', title: 'Conquérant', desc: 'Progresse de 3 paliers.', metric: 'bestStage', target: 3, reward: { poussiere: 40, eclats: 150 }, available: (c) => c.bestStage < 690 },
+  { id: 'stage', icon: '🧭', title: 'Conquérant', desc: 'Progresse de 3 vagues.', metric: 'bestStage', target: 3, reward: { poussiere: 40, eclats: 150 }, available: (c) => c.bestStage < 690 },
   { id: 'metier', icon: '🔨', title: 'Artisan', desc: 'Gagne 800 XP de métier.', metric: 'metierXp', target: 800, reward: { eclats: 200, noyau: 6 }, available: (c) => c.bestStage >= 6 },
   { id: 'dungeon', icon: '🏰', title: 'Explorateur', desc: 'Termine 2 donjons.', metric: 'dungeons', target: 2, reward: { poussiere: 60, noyau: 10 }, available: (c) => c.bestStage >= 12 },
 ]

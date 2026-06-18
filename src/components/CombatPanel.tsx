@@ -16,6 +16,7 @@ import { LevelBadge } from './LevelBadge'
 import { charMaxHp, charDps, charResist, charCombatMods, TALENT_START_LEVEL } from '../game/character'
 import { getAchievement } from '../game/achievements'
 import { isBossStage } from '../game/enemies'
+import { chapitreOf, vagueOf } from '../game/progression'
 import { getPower, powerIcon } from '../game/powers'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from '../game/damage'
 import { RAID_MECHANIC_META } from '../game/raids'
@@ -209,7 +210,7 @@ export function CombatPanel() {
               {eventUnlocked && (
                 <button
                   onClick={() => setEventOpen(true)}
-                  aria-label={`Invasion élémentaire — ${eventClaim} palier${eventClaim > 1 ? 's' : ''} à réclamer`}
+                  aria-label={`Invasion élémentaire — ${eventClaim} jalon${eventClaim > 1 ? 's' : ''} à réclamer`}
                   className="relative flex h-10 w-10 items-center justify-center rounded-full border text-xl active:scale-95"
                   style={{ borderColor: DAMAGE_TYPES[event.element].color + '80', background: '#160d14' }}
                 >
@@ -298,25 +299,25 @@ export function CombatPanel() {
           <button
             onClick={() => setStage(stage - 1)}
             disabled={stage <= 1}
-            aria-label="Palier précédent"
+            aria-label="Vague précédente"
             className="shrink-0 rounded-lg border border-slate-700 px-2.5 py-1.5 text-sm text-slate-300 hover:bg-white/5 disabled:opacity-30"
           >
             −
           </button>
           <span className="shrink-0 px-0.5 tabular-nums text-slate-400">
-            <b className="text-slate-100">{stage}</b><span className="text-slate-600">/{activeBiomeBest}</span>
+            <b className="text-slate-100">Ch.{chapitreOf(stage)}·V{vagueOf(stage)}</b>
           </span>
           <button
             onClick={() => setStage(stage + 1)}
             disabled={stage >= activeBiomeBest}
-            aria-label="Palier suivant"
+            aria-label="Vague suivante"
             className="shrink-0 rounded-lg border border-slate-700 px-2.5 py-1.5 text-sm text-slate-300 hover:bg-white/5 disabled:opacity-30"
           >
             +
           </button>
           <button
             onClick={toggleFarmLock}
-            title={farmLock ? 'Verrouillé — le combat reste à ce palier' : 'Libre — progression normale au fil des victoires'}
+            title={farmLock ? 'Verrouillé — le combat reste à cette vague' : 'Libre — progression normale au fil des victoires'}
             aria-label="Verrou de farm"
             className={'shrink-0 rounded-lg px-2 py-1.5 text-sm ' + (farmLock ? 'bg-amber-600/30 text-amber-300' : 'text-slate-500 hover:bg-white/5')}
           >
@@ -325,13 +326,13 @@ export function CombatPanel() {
         </div>
       )}
 
-      {/* Feuille zone : choix du biome, palier, verrou de farm */}
+      {/* Feuille zone : choix du biome, chapitre/vague, verrou de farm */}
       {zoneOpen && (
         <Sheet title="🧭 Zone de chasse" onClose={() => setZoneOpen(false)}>
           {/* v0.35 — UNE seule zone : le biome = canal d'élément/résistance, choix LIBRE (plus de rotation
-              ni de coût en Fragments). Le Palier est GLOBAL : on le garde en changeant de zone. */}
+              ni de coût en Fragments). Le Chapitre est GLOBAL : on le garde en changeant de zone. */}
           <p className="mb-2 text-[10.5px] leading-snug text-slate-400">
-            Une seule zone : choisis ton <b className="text-slate-200">élément</b> de chasse — le butin et la résistance du biome suivent (prépare l'élément du prochain mur). Ton Palier est <b className="text-slate-200">global</b>, conservé d'une zone à l'autre.
+            Une seule zone : choisis ton <b className="text-slate-200">élément</b> de chasse — le butin et la résistance du biome suivent (prépare l'élément du prochain mur). Ton <b className="text-slate-200">Chapitre</b> est <b className="text-slate-200">global</b>, conservé d'une zone à l'autre.
           </p>
           <div className="grid grid-cols-4 gap-1.5">
             {BIOME_LIST.map((b) => {
@@ -374,23 +375,23 @@ export function CombatPanel() {
             </div>
             <div className="text-violet-300">
               🗺️ Maîtrise des Zones : <span className="font-semibold">+{(maitrise * 100).toFixed(1)}% dégâts</span>
-              <span className="text-slate-400"> partout (record global : {bestStage} / 150 — ~5% au palier 150)</span>
+              <span className="text-slate-400"> partout (record global : Chapitre {chapitreOf(bestStage)} / 15 — ~5% au Chapitre 15)</span>
             </div>
           </div>
           <div className="mt-4 flex items-center justify-between gap-2">
-            <span className="text-xs text-slate-400">Palier</span>
+            <span className="text-xs text-slate-400">Chapitre · Vague</span>
             <div className="flex items-center rounded-lg border border-slate-700">
               <button onClick={() => setStage(stage - 1)} disabled={stage <= 1} className="px-4 py-2 text-base text-slate-300 hover:bg-white/5 disabled:opacity-30">−</button>
-              <span className="w-12 text-center text-sm tabular-nums text-slate-100">{stage}</span>
+              <span className="w-20 text-center text-sm tabular-nums text-slate-100">Ch.{chapitreOf(stage)}·V{vagueOf(stage)}</span>
               <button onClick={() => setStage(stage + 1)} disabled={stage >= activeBiomeBest} className="px-4 py-2 text-base text-slate-300 hover:bg-white/5 disabled:opacity-30">+</button>
             </div>
-            <span className="text-xs text-slate-500">record : {activeBiomeBest}</span>
+            <span className="text-xs text-slate-500">record : Ch.{chapitreOf(activeBiomeBest)}</span>
           </div>
           <button
             onClick={toggleFarmLock}
             className={'mt-3 w-full rounded-lg py-2.5 text-xs font-medium ' + (farmLock ? 'bg-amber-600 text-slate-950' : 'bg-slate-700 text-slate-300 hover:bg-slate-600')}
           >
-            {farmLock ? '🔒 Verrouillé — le combat reste à ce palier' : '🔓 Libre — progression normale au fil des victoires'}
+            {farmLock ? '🔒 Verrouillé — le combat reste à cette vague' : '🔓 Libre — progression normale au fil des victoires'}
           </button>
         </Sheet>
       )}
@@ -404,11 +405,11 @@ export function CombatPanel() {
             <span className="text-amber-300">Donjon niv. {dungeon.level}</span>
           ) : (
             <span>
-              Palier <span className="font-semibold text-slate-200">{stage}</span>
-              {boss && <span className="ml-2 text-rose-400">⚔ BOSS</span>}
+              Chapitre <span className="font-semibold text-slate-200">{chapitreOf(stage)}</span> · Vague <span className="font-semibold text-slate-200">{vagueOf(stage)}</span>
+              {boss && <span className="ml-2 text-rose-400">🧱 MUR</span>}
             </span>
           )}
-          <span>Record : {bestStage}</span>
+          <span>Record : Ch.{chapitreOf(bestStage)}</span>
         </div>
 
         <div className="mt-2 text-center">
@@ -446,7 +447,7 @@ export function CombatPanel() {
               <div className={'text-lg font-bold ' + (boss ? 'text-rose-300' : 'text-slate-100')}>{enemy.name}</div>
               {enemy.mur ? (
                 <div className="mt-1 flex flex-wrap items-center justify-center gap-1.5 text-[11px]">
-                  <span className="rounded bg-rose-500/20 px-1.5 py-px font-semibold text-rose-200" title="Boss de fin de Palier : optimise ton build (stuff, gemmes, runes, talents) pour le franchir.">
+                  <span className="rounded bg-rose-500/20 px-1.5 py-px font-semibold text-rose-200" title="Mur de fin de Chapitre : optimise ton build (stuff, gemmes, runes, talents) pour le franchir.">
                     🧱 MUR · {(({ berserk: '⚔ Course au DPS', nova: '☄ Survie', fortress: '🛡 Pénétration', leech: '🩸 Burst', rotate: '🌈 Résistances' } as Record<string, string>)[enemy.mur.mechanic]) ?? enemy.mur.mechanic}
                   </span>
                   {enemy.mur.enrageAt - (enemy.age ?? 0) > 0 ? (
@@ -868,11 +869,11 @@ function abilityHint(a: EnemyAbility): string {
 /** Prochain objectif du joueur — sert de fil conducteur et annonce les déblocages (intro progressive). */
 function nextObjective(bestStage: number, maxLevel: number, physiqueBest: number): string | null {
   if (bestStage < 3) return 'Frappe ! Tue des ennemis pour ramasser du butin, puis équipe tes meilleures pièces dans l\'onglet 🎒 Stuff.'
-  if (bestStage < 10) return 'Les ennemis frappent de plus en plus fort : équipe-toi (Endurance, résistances). Le palier 10 débloque le 🏪 Marché — un boss t\'y attend.'
-  if (bestStage < 12) return 'Palier 12 : l\'onglet 🔨 Atelier ouvre (forge, métiers). Recycle ton butin pour des ♦ éclats en attendant.'
+  if (bestStage < 10) return 'Les ennemis frappent de plus en plus fort : équipe-toi (Endurance, résistances). Le boss du Chapitre 1 (vague 10) débloque le 🏪 Marché.'
+  if (bestStage < 12) return 'Chapitre 2 : l\'onglet 🔨 Atelier ouvre (forge, métiers). Recycle ton butin pour des ♦ éclats en attendant.'
   if (maxLevel <= TALENT_START_LEVEL) return `Monte un personnage au niveau ${TALENT_START_LEVEL + 1} (hub 🛡 Héros) pour débloquer l'arbre de 🌌 Talents.`
-  if (physiqueBest < 20) return 'Atteins le palier 20 aux Champs de Bataille pour débloquer 4 nouveaux 🧭 biomes (Feu, Froid, Foudre, Nature) et les 🏰 Expéditions (donjons).'
-  if (bestStage < 50) return 'Atteins le palier 50 (n\'importe quel biome) pour débloquer les ☠️ Raids (hub Expéditions) et les biomes Arcane & Ombre.'
+  if (physiqueBest < 20) return 'Atteins le boss du Chapitre 2 aux Champs de Bataille pour débloquer 4 nouveaux 🧭 biomes (Feu, Froid, Foudre, Nature) et les 🏰 Expéditions (donjons).'
+  if (bestStage < 50) return 'Atteins le boss du Chapitre 5 (n\'importe quel biome) pour débloquer les ☠️ Raids (hub Expéditions) et les biomes Arcane & Ombre.'
   if (maxLevel < 100) return `Vise le niveau 100 — le soft cap (3-5 h de jeu) qui débloque des builds complets. Farme le 📚 Sanctuaire du Savoir pour l'XP. (Niv. actuel max : ${maxLevel})`
   return null
 }
@@ -1056,7 +1057,7 @@ function EventPanel({ event, totalKills, collected, onClaim }: { event: EventSta
           return (
             <li key={i} className={'rounded-lg px-2.5 py-2 ' + (claimed ? 'opacity-45' : claimable ? 'bg-emerald-900/25 ring-1 ring-emerald-500/30' : 'bg-slate-900/40')}>
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[12px] font-medium text-slate-100">{claimed ? '✅' : reached ? '🟡' : '⬜'} Palier {i + 1} — {m.points.toLocaleString('fr-FR')} pts</span>
+                <span className="text-[12px] font-medium text-slate-100">{claimed ? '✅' : reached ? '🟡' : '⬜'} Jalon {i + 1} — {m.points.toLocaleString('fr-FR')} pts</span>
                 {claimable && (
                   <button onClick={() => onClaim(i)} className="shrink-0 rounded bg-emerald-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-emerald-500 active:scale-95">
                     Réclamer 🎁

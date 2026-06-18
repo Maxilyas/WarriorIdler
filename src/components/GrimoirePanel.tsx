@@ -116,7 +116,7 @@ function StatsCodex() {
         <ul className="space-y-1 text-[10.5px] leading-snug text-slate-300">
           <li>• <b className="text-sky-300">Résistances par type</b> (points, sans plafond) : les boss <b>EXIGENT</b> des points de résistance. Au cap de l'exigence → dégâts normaux (×1) ; à zéro résist → jusqu'à <b>×5</b>. ≈0 en farm, modéré en donjon, décisif en raid : prépare ton stuff selon la fiche du boss.</li>
           <li>• <b className="text-amber-300">Atténuation générique</b> (esquive / réduction / maîtrise / polyvalence) : <b>plafonnée à {Math.round(EFFECTIVE_DR_CAP * 100)} %</b>. Tu encaisses TOUJOURS une part — impossible d'être invincible.</li>
-          <li>• Conséquence : empiler la tankiness ne suffit pas. Il faut un mélange de <b>résistances</b>, de <b>soin/régén/vol de vie</b> et de <b>dégâts</b> pour passer les paliers.</li>
+          <li>• Conséquence : empiler la tankiness ne suffit pas. Il faut un mélange de <b>résistances</b>, de <b>soin/régén/vol de vie</b> et de <b>dégâts</b> pour passer les Chapitres.</li>
         </ul>
       </Card>
     </div>

@@ -102,45 +102,49 @@ export function enemyArmor(ilvl: number, mult = 1): number {
   return ENEMY_ARMOR0 * powerAt(ilvl) * mult
 }
 
-// ---- PALIERS, VAGUES & RETARD DE GEAR (refonte v0.35 — DESIGN_v0.35 §1-4) ----
-// Un seul axe d'ilvl, porté par le farm. Le `stage` du code = une VAGUE ; un PALIER = bloc de 10
+// ---- CHAPITRES, VAGUES & RETARD DE GEAR (refonte v0.35/v0.36 — DESIGN_v0.36 §1) ----
+// Un seul axe d'ilvl, porté par le farm. Le `stage` du code = une VAGUE ; un CHAPITRE = bloc de 10
 // vagues fermé par un boss-MUR (vague 10). La FRONTIÈRE (difficulté du contenu) monte de PENTE_VAGUE
-// par vague (~10 ilvl/Palier) ; le LOOT, lui, sort en RETARD permanent (frontière − LAG) → le joueur
+// par vague (~10 ilvl/Chapitre) ; le LOOT, lui, sort en RETARD permanent (frontière − LAG) → le joueur
 // est toujours sous-stuffé, et seule l'OPTIMISATION (secondaires/gemmes/runes/pacte/alch/talents)
 // comble l'écart. On NE PEUT PAS out-ilvl un mur : l'ilvl manquant est gaté par le mur lui-même.
 
-/** Pente d'ilvl par vague (1 pas de farm). ~10 ilvl/Palier → plafond ~400 au Palier 40. */
+/** Pente d'ilvl par vague (1 pas de farm). ~10 ilvl/Chapitre. */
 export const PENTE_VAGUE = 1.0
-/** Vagues par Palier (boss-mur à la dernière). */
-export const PALIER_SIZE = 10
-/** Retard de gear : LAG0 + K_LAG·palier (≈ +5 ilvl au Palier 1 → +40 au Palier 40). Knob central. */
+/** Vagues par Chapitre (boss-mur à la dernière). */
+export const CHAPITRE_SIZE = 10
+/** Retard de gear : LAG0 + K_LAG·chapitre. Knob central. */
 export const LAG0 = 4
 export const K_LAG = 0.9
 
-/** Numéro de Palier d'une vague (stage). Palier 1 = vagues 1-10. */
-export function palierOf(stage: number): number {
-  return Math.max(1, Math.ceil(stage / PALIER_SIZE))
+/** Numéro de CHAPITRE d'une vague (stage). Chapitre 1 = vagues 1-10. */
+export function chapitreOf(stage: number): number {
+  return Math.max(1, Math.ceil(stage / CHAPITRE_SIZE))
 }
-/** Position de la vague dans son Palier (1..PALIER_SIZE). */
+/** Position de la VAGUE dans son Chapitre (1..CHAPITRE_SIZE). */
 export function vagueOf(stage: number): number {
-  return ((Math.max(1, stage) - 1) % PALIER_SIZE) + 1
+  return ((Math.max(1, stage) - 1) % CHAPITRE_SIZE) + 1
 }
-/** Une vague est-elle un MUR (boss de fin de Palier) ? */
+/** Une vague est-elle un MUR (boss de fin de Chapitre) ? */
 export function isMur(stage: number): boolean {
-  return stage % PALIER_SIZE === 0
+  return stage % CHAPITRE_SIZE === 0
+}
+/** Libellé joueur d'un stage : « Chapitre C · Vague V/10 ». */
+export function chapitreLabel(stage: number): string {
+  return `Chapitre ${chapitreOf(stage)} · Vague ${vagueOf(stage)}/${CHAPITRE_SIZE}`
 }
 
 /** FRONTIÈRE : difficulté en ilvl du contenu d'une vague (courbe unifiée, NON capée). */
 export function frontierIlvl(stage: number): number {
   return Math.max(1, Math.round(stage * PENTE_VAGUE))
 }
-/** Retard de gear (en ilvl) au Palier donné. */
-export function lagAt(palier: number): number {
-  return LAG0 + K_LAG * palier
+/** Retard de gear (en ilvl) au Chapitre donné. */
+export function lagAt(chapitre: number): number {
+  return LAG0 + K_LAG * chapitre
 }
 /** ilvl du LOOT de farm = frontière − LAG (ce que le joueur peut réellement équiper). */
 export function lootFarmIlvl(stage: number): number {
-  return Math.max(1, Math.round(frontierIlvl(stage) - lagAt(palierOf(stage))))
+  return Math.max(1, Math.round(frontierIlvl(stage) - lagAt(chapitreOf(stage))))
 }
 
 /** Difficulté du FARM en ilvl = la FRONTIÈRE (v0.35 : courbe unifiée douce, ex-`stage·2.5`).

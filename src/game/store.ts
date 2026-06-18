@@ -57,6 +57,7 @@ import {
   type BrewQuality,
 } from './alchimie'
 import { makeEnemy, isBossStage, stageIlvl } from './enemies'
+import { chapitreOf, vagueOf } from './progression'
 import {
   BIOME_IDS, biomeUnlocked, getBiomeDef,
   BIOME_ROTATE_MS, BIOME_LOCK_MS, BIOME_LOCK_FRAGMENTS, type BiomeId,
@@ -4591,7 +4592,7 @@ export const useGame = create<GameState>((set, get) => {
         const palierFloor = Math.floor((s.stage - 1) / 10) * 10 + 1
         const stage = Math.max(1, palierFloor, s.stage - RETREAT_STAGES)
         const healed = chars.map(fullHeal)
-        log = pushLog(log, `💀 Équipe vaincue ! Repli au palier ${stage}.`, 'death')
+        log = pushLog(log, `💀 Équipe vaincue ! Repli au Chapitre ${chapitreOf(stage)} · Vague ${vagueOf(stage)}.`, 'death')
         const next = { ...s, characters: healed, stage, enemy: makeEnemy(stage, s.activeBiome), log }
         persist(next)
         set(next)
@@ -6928,7 +6929,7 @@ export const useGame = create<GameState>((set, get) => {
       if (eventPoints(s.event, s.totalKills) < m.points) return
       const r = m.reward
       let eventCosmetics = s.eventCosmetics
-      let log = pushLog(s.log, `🎉 Invasion — palier ${index + 1} réclamé !`, 'level')
+      let log = pushLog(s.log, `🎉 Invasion — jalon ${index + 1} réclamé !`, 'level')
       if (m.aura) {
         const auraId = invasionAuraId(s.event.element)
         if (!eventCosmetics.includes(auraId)) eventCosmetics = [...eventCosmetics, auraId]

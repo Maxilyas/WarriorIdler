@@ -52,7 +52,7 @@ export interface TutQuest {
 export const TUT_QUESTS: TutQuest[] = [
   {
     id: 'combat', icon: '⚔️', title: 'Le combat', teaches: 'Frappe & butin',
-    desc: 'Vaincs des ennemis jusqu\'au palier 3. Le butin tombe au sol — tes emplacements vides s\'équipent tout seuls.',
+    desc: 'Vaincs des ennemis jusqu\'à la vague 3. Le butin tombe au sol — tes emplacements vides s\'équipent tout seuls.',
     done: (c) => c.bestStage >= 3,
     reward: { gold: 250 }, rewardText: '+250 or',
   },

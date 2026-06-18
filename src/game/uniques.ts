@@ -64,13 +64,13 @@ export const UNIQUE_EFFECTS: UniqueEffect[] = [
   // ================================================================
 
   // ---------------- DPS (38) ----------------
-  { id: 'u_fracas_sismique', name: 'Fracas sismique', role: 'dps', description: 'Chaque pas fissure la terre.', mods: { force: 80, maitrise: 40 }, active: 'Onde de choc à chaque palier de rage atteint.' },
+  { id: 'u_fracas_sismique', name: 'Fracas sismique', role: 'dps', description: 'Chaque pas fissure la terre.', mods: { force: 80, maitrise: 40 }, active: 'Onde de choc à chaque cran de rage atteint.' },
   { id: 'u_morsure_du_loup', name: 'Morsure du loup', role: 'dps', description: 'Vous traquez la moindre faille.', mods: { critique: 55, agilite: 40 }, active: 'Les crits sur une cible saignante les achèvent.' },
   { id: 'u_cendre_ardente', name: 'Cendre ardente', role: 'dps', description: 'Vos coups laissent des braises.', mods: { maitrise: 55, degatsCrit: 35 }, active: 'Pose un brasier qui ronge l\'ennemi.' },
   { id: 'u_eclair_jumeau', name: 'Éclair jumeau', role: 'dps', description: 'La foudre frappe deux fois.', mods: { hate: 45, multifrappe: 18 }, active: 'Vos frappes se dédoublent par éclairs.' },
   { id: 'u_croc_venimeux', name: 'Croc venimeux', role: 'dps', description: 'Un venin paralyse vos proies.', mods: { agilite: 55, penetration: 35 }, active: 'Le venin empile et ignore l\'armure.' },
   { id: 'u_main_du_bourreau', name: 'Main du bourreau', role: 'dps', description: 'Vous achevez sans pitié.', mods: { degatsCrit: 80, force: 25 }, active: 'Dégâts massifs sous 25% de vie ennemie.' },
-  { id: 'u_furie_sanguine', name: 'Furie sanguine', role: 'dps', description: 'Le sang versé décuple votre rage.', mods: { force: 60, volDeVie: 25 }, active: 'Chaque kill octroie un palier de furie.' },
+  { id: 'u_furie_sanguine', name: 'Furie sanguine', role: 'dps', description: 'Le sang versé décuple votre rage.', mods: { force: 60, volDeVie: 25 }, active: 'Chaque kill octroie un cran de furie.' },
   { id: 'u_oeil_du_cyclone', name: 'Œil du cyclone', role: 'dps', description: 'Vous êtes le centre de la tempête.', mods: { hate: 70, critique: 20 }, active: 'Tourbillon qui touche tous les ennemis proches.' },
   { id: 'u_lame_runique', name: 'Lame runique', role: 'dps', description: 'Des runes gravées guident l\'acier.', mods: { intelligence: 50, maitrise: 45 }, active: 'Les runes s\'embrasent à pleine charge.' },
   { id: 'u_traque_silencieuse', name: 'Traque silencieuse', role: 'dps', description: 'Nul ne vous entend venir.', mods: { agilite: 70, critique: 25 }, active: 'Premier coup hors combat toujours critique.' },

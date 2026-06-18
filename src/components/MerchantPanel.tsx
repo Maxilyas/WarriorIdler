@@ -8,6 +8,7 @@ import {
 import { UPGRADES, UPGRADE_CATEGORIES, upgradeCost, upgradePoussiere, upgradeEclats, isMaxed, type UpgradeCategory } from '../game/upgrades'
 import { CONTRACTS, MAITRISE_NODES, MAITRISE_TOTAL_POINTS, conseilFresh, weekRemainingMs } from '../game/maitrise'
 import { RAID_UNLOCK_STAGE } from '../game/raids'
+import { chapitreOf } from '../game/progression'
 import { RARITY_LIST } from '../game/rarities'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from '../game/damage'
 import type { DamageType } from '../game/types'
@@ -183,7 +184,7 @@ export function MerchantPanel() {
                     <div className="mt-1 h-1.5 overflow-hidden rounded bg-slate-800">
                       <div className={'h-full transition-all ' + (done ? 'bg-emerald-500' : 'bg-amber-500')} style={{ width: `${(done ? 1 : count / c.need) * 100}%` }} />
                     </div>
-                    {raidLocked && <div className="mt-0.5 text-[9px] text-slate-600">🔒 Les raids se débloquent au palier {RAID_UNLOCK_STAGE} — ce contrat attendra.</div>}
+                    {raidLocked && <div className="mt-0.5 text-[9px] text-slate-600">🔒 Les raids se débloquent au Chapitre {chapitreOf(RAID_UNLOCK_STAGE)} — ce contrat attendra.</div>}
                   </div>
                 )
               })}

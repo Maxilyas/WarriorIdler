@@ -6,6 +6,7 @@ import {
   raidMinTier, raidMaxTier, raidReqs, raidTierUnlockCost, recommendedDps, recommendedEhp, raidPartyHpMult, type RaidDef,
 } from '../game/raids'
 import { charDps, charMaxHp, charResist } from '../game/character'
+import { chapitreOf } from '../game/progression'
 import { resistMult } from '../game/resist'
 import { ConfirmButton } from './ui'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from '../game/damage'
@@ -104,8 +105,8 @@ export function RaidPanel() {
 
       {!anyUnlocked ? (
         <div className="mt-6 rounded-xl border border-dashed border-slate-800 p-6 text-center text-sm text-slate-500">
-          Les raids se débloquent au <span className="text-rose-300">palier {RAID_UNLOCK_STAGE}</span>.
-          <br />Record actuel : {bestStage}.
+          Les raids se débloquent au <span className="text-rose-300">Chapitre {chapitreOf(RAID_UNLOCK_STAGE)}</span>.
+          <br />Record actuel : Chapitre {chapitreOf(bestStage)}.
         </div>
       ) : (
         <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
@@ -231,8 +232,8 @@ function RaidCard({ def, unlocked, progress, cleared, maxTier, trophies, bestSta
           </div>
         ) : (
           <div className="mt-1 text-[10.5px] text-slate-500">
-            Requiert le <span className="text-rose-300">palier {def.unlockStage}</span>
-            {bestStage < def.unlockStage ? ` (record ${bestStage})` : ' ✓'}
+            Requiert le <span className="text-rose-300">Chapitre {chapitreOf(def.unlockStage)}</span>
+            {bestStage < def.unlockStage ? ` (record Ch.${chapitreOf(bestStage)})` : ' ✓'}
             {reqRaid && <> · avoir vaincu <span style={{ color: reqRaid.color }}>{reqRaid.name}</span></>}
           </div>
         )}

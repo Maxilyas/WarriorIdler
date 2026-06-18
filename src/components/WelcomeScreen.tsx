@@ -24,10 +24,10 @@ const SPECS: { id: Spec; icon: string; tag: string; blurb: string }[] = [
 
 /** Le cœur de boucle, expliqué en une poignée de lignes (un nouveau joueur sait où il va). */
 const GOALS: { icon: string; title: string; text: string }[] = [
-  { icon: '⚔️', title: 'Combats automatiques', text: 'Ton héros enchaîne seul des paliers d’ennemis de plus en plus coriaces — même hors-ligne.' },
+  { icon: '⚔️', title: 'Combats automatiques', text: 'Ton héros enchaîne seul des vagues d’ennemis de plus en plus coriaces — même hors-ligne.' },
   { icon: '🎒', title: 'Loote & équipe-toi', text: 'Chaque pièce te rend plus fort. Ta spécialisation oriente le butin qui tombe.' },
   { icon: '🔓', title: 'Débloque des systèmes', text: 'Marché, Forge, Talents, Donjons puis Raids s’ouvrent au fil de ta progression.' },
-  { icon: '🎯', title: 'Objectif', text: 'Monter le plus haut possible en paliers et bâtir le build parfait.' },
+  { icon: '🎯', title: 'Objectif', text: 'Monter le plus haut possible en Chapitres et bâtir le build parfait.' },
 ]
 
 /**

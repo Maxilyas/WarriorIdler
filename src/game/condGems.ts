@@ -268,7 +268,7 @@ export const COND_GEMS: Record<CondGemId, CondGemDef> = {
   piedDuMur: {
     id: 'piedDuMur', family: 'environnement', name: 'Pied du mur', icon: '🧗', color: '#fdba74',
     values: [10, 14, 18, 21, 25],
-    desc: (v) => `En farm, à 2 paliers ou moins de ton RECORD : +${v}% de dégâts. La gemme du push.`,
+    desc: (v) => `En farm, à 2 vagues ou moins de ton RECORD : +${v}% de dégâts. La gemme du push.`,
   },
   veineMere: {
     id: 'veineMere', family: 'environnement', name: 'Veine mère', icon: '⛏️', color: '#a8a29e',

@@ -7,6 +7,7 @@ import { currentWeek } from '../game/maitrise'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from '../game/damage'
 import { RARITIES, RARITY_LIST } from '../game/rarities'
 import { maxCraftTier, createCost, contentRarityTier } from '../game/items'
+import { chapitreOf } from '../game/progression'
 import type { Item } from '../game/types'
 import { ComparePanel } from './ComparePanel'
 import { QualityStars } from './ItemRow'
@@ -85,7 +86,7 @@ export function AtelierPanel() {
               {pts > 0 && <span className="absolute -right-1 -top-1 rounded-full bg-amber-500 px-1 text-[9px] font-bold text-slate-950">{pts}</span>}
               <span className="text-xl leading-none">{open ? m.icon : '🔒'}</span>
               <span className="font-semibold">{m.name}</span>
-              <span className="text-[9px] text-slate-500">{open ? `niv. ${lvl}` : `palier ${m.unlockStage}`}</span>
+              <span className="text-[9px] text-slate-500">{open ? `niv. ${lvl}` : `Chapitre ${chapitreOf(m.unlockStage)}`}</span>
             </button>
           )
         })}
@@ -95,7 +96,7 @@ export function AtelierPanel() {
         <div className="rounded-xl border border-slate-800 bg-[#0d111a] p-4 text-center">
           <div className="text-2xl">🔒</div>
           <div className="mt-1 text-sm font-semibold text-slate-300">{def.icon} {def.name} — « {def.verb} »</div>
-          <div className="mt-1 text-[11px] text-slate-500">Atteins le palier {def.unlockStage} pour ouvrir ce métier.</div>
+          <div className="mt-1 text-[11px] text-slate-500">Atteins le Chapitre {chapitreOf(def.unlockStage)} pour ouvrir ce métier.</div>
         </div>
       ) : (
         (() => {
