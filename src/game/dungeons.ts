@@ -2,7 +2,7 @@ import type { DamageType, Enemy } from './types'
 import { DAMAGE_TYPES } from './damage'
 import type { GemFamily } from './condGems'
 import { dungeonReq } from './resist'
-import { enemyHp, enemyDmg, enemyArmor, lootFarmIlvl } from './progression'
+import { enemyHp, enemyDmg, enemyArmor, lootFarmIlvl, frontierIlvl, CHAPITRE_SIZE } from './progression'
 import { murSoftness } from './enemies'
 import { createCost, contentRarityTier } from './items'
 
@@ -314,33 +314,30 @@ export function dungeonFights(level: number): number {
  * crachait de l'ilvl 466 quand le farm en donnait 180 — boule de neige stuff → niveau suivant.
  * Monter le PALIER redevient le moteur ; le donjon garde une longueur d'avance, pas une galaxie.
  */
-export function dungeonIlvl(_level: number, bestStage: number): number {
-  // v0.35 — le donjon ne donne PLUS d'ilvl : son loot sort à TA TRANCHE (= ilvl du loot de farm).
-  // Sa valeur = une MEILLEURE RARETÉ dans ta tranche (cacheRarityWindow) + des mats. Le niveau de
-  // donjon est un PUSH (difficulté + rareté/rendement), pas un escalier d'ilvl.
-  return lootFarmIlvl(bestStage)
+export function dungeonIlvl(level: number, _bestStage = 0): number {
+  // v0.36 — donjon à difficulté FIXE par niveau : le loot du niveau N sort à la tranche du CHAPITRE N
+  // (lootFarmIlvl(N×10), capé 200), INDÉPENDANT du record du joueur → le niveau 1 reste à jamais le
+  // niveau 1 (on le dépasse en montant les niveaux, en parallèle des Chapitres). Sa valeur = rareté + mats.
+  return lootFarmIlvl(level * CHAPITRE_SIZE)
 }
 
 /**
- * RENDEMENT par run (v0.35, Part 2) — ∝ TA TRANCHE : ancré sur le coût d'un craft À LA RARETÉ DU
- * CONTENU à ton Palier. Un run au niveau REF ≈ 1/CRAFT_RUNS_TARGET d'un tel craft → les ratios
- * restent STABLES sur toute la progression (le coût scale, le rendement aussi). Couplé à l'over-content
- * (×4/cran), un craft-contenu ≈ 10 runs ⇒ +1 cran au-dessus = dizaines, +2 = centaines de runs.
+ * RENDEMENT par run (v0.36) — ∝ au NIVEAU du donjon (= tranche du Chapitre N), INDÉPENDANT du record :
+ * ancré sur le coût d'un craft à la rareté du contenu de CE niveau → un run ≈ 1/CRAFT_RUNS_TARGET d'un
+ * tel craft. Ratios stables, et farmer un BAS niveau trivial ne rapporte plus comme ton record (fini
+ * l'exploit). Pour plus de rendement : monter de niveau (= monter en Chapitre).
  */
-const DUNGEON_RUN_REF_LEVEL = 3   // niveau de farm « confortable » de référence (v0.35.1 : 5→3, là où on est réellement)
-const DUNGEON_LEVEL_GROWTH = 1.18 // +rendement par niveau au-dessus du REF (le PUSH paie)
-const CRAFT_RUNS_TARGET = 10      // craft à la rareté du contenu ≈ 10 runs au niveau REF
+const CRAFT_RUNS_TARGET = 10      // craft à la rareté du contenu ≈ 10 runs au niveau correspondant
 const GOLD_BUYS_PER_RUN = 3       // l'or = dump marché : ~3 achats par run (généreux)
 /** Part du rendement distribuée PAR COMBAT (le reste tombe dans le coffre de fin). */
 export const DUNGEON_YIELD_PERFIGHT_FRAC = 0.4
-/** Rendement TOTAL d'un run (par-combat + coffre) pour la ressource du donjon, à ta tranche. */
-export function dungeonRunYield(reward: DungeonReward, level: number, bestStage: number): number {
-  const lvlMult = Math.pow(DUNGEON_LEVEL_GROWTH, level - DUNGEON_RUN_REF_LEVEL)
-  const ilvl = lootFarmIlvl(bestStage)
-  const ct = contentRarityTier(bestStage)
+/** Rendement TOTAL d'un run (par-combat + coffre) pour la ressource du donjon, à la tranche du niveau. */
+export function dungeonRunYield(reward: DungeonReward, level: number, _bestStage = 0): number {
+  const ilvl = lootFarmIlvl(level * CHAPITRE_SIZE)
+  const ct = contentRarityTier(level * CHAPITRE_SIZE)
   if (reward === 'gold') {
     const marketBuy = ilvl * Math.pow(ct, 2.6) * 1.5 // ≈ shopBuyPrice à la tranche (dump d'or)
-    return Math.max(1, Math.round(marketBuy * GOLD_BUYS_PER_RUN * lvlMult))
+    return Math.max(1, Math.round(marketBuy * GOLD_BUYS_PER_RUN))
   }
   // Ancre = coût d'un craft à la rareté du contenu (poussière d'étoile : à partir de Légendaire t6).
   const anchor = reward === 'eclats' ? createCost(ct, ilvl, ct).eclats
@@ -348,7 +345,7 @@ export function dungeonRunYield(reward: DungeonReward, level: number, bestStage:
     : reward === 'poussiere' ? (createCost(Math.max(6, ct), ilvl).poussiere ?? 0)
     : 0
   if (anchor <= 0) return 0
-  return Math.max(1, Math.round((anchor / CRAFT_RUNS_TARGET) * lvlMult))
+  return Math.max(1, Math.round(anchor / CRAFT_RUNS_TARGET))
 }
 
 /**
@@ -375,17 +372,11 @@ const DUNGEON_FIGHT_RAMP_ILVL = 2 // +ilvl de difficulté par combat DANS un run
 const DUNGEON_BOSS_HP_MULT = 5    // boss (dernier combat) : pic de PV (~15 s, pacing donjon court)
 const DUNGEON_ELITE_HP_MULT = 2.7 // élites coriaces (Cache)
 
-// v0.35 — ÉCHELLE DE PUSH (façon Mythique+) relative au joueur. Niveau 1 = ton LOOT ilvl
-// (gear-matched, revenu régulier) ; chaque niveau = un PUSH RAIDE de +DUNGEON_PUSH_STEP ilvl (≈ ×1,2
-// de puissance/niveau → +1 niveau ≈ 1 cran d'optimisation, fini d'enjamber 5 niveaux d'un coup).
-// Ton niveau-plafond = ton niveau d'optimisation ; les récompenses (rareté/rendement) suivent.
-const DUNGEON_PUSH_STEP = 10
-// v0.35.1 — ENTRÉE CONFORTABLE : niveau 1 = ta tranche − OFFSET (income facile) → on atteint des
-// niveaux plus HAUTS avant le mur d'optimisation (retour joueur : « bloqué niv 2-3 au palier 80, le
-// contenu paraît statique »). Le PUSH (×1,2/niveau) garde le « 1 cran d'optim = 1 niveau ».
-const DUNGEON_BASE_OFFSET = 20
-export function dungeonContentIlvl(level: number, bestStage: number): number {
-  return Math.max(1, lootFarmIlvl(bestStage) - DUNGEON_BASE_OFFSET + Math.max(0, level - 1) * DUNGEON_PUSH_STEP)
+// v0.36 — DIFFICULTÉ FIXE par niveau : le niveau N est calé sur la FRONTIÈRE du Chapitre N (stage N×10),
+// INDÉPENDANT du record du joueur. On fait le donjon niveau N quand on est au Chapitre N ; le niveau 1
+// reste à jamais le niveau 1 (finit trivial = voulu — on monte les niveaux EN PARALLÈLE des Chapitres).
+export function dungeonContentIlvl(level: number, _bestStage = 0): number {
+  return Math.max(1, frontierIlvl(level * CHAPITRE_SIZE))
 }
 
 /** Régénération des ennemis (fraction des PV max/s) imposée par l'identité du donjon.
@@ -412,7 +403,7 @@ export function makeDungeonEnemy(
   fightIndex: number,
   totalFights: number,
   modifiers: DungeonModifier[],
-  bestStage: number,
+  _bestStage = 0,
 ): Enemy {
   const cfg = TRAIT_CFG[def.trait]
   const isBoss = fightIndex === totalFights - 1
@@ -428,11 +419,10 @@ export function makeDungeonEnemy(
 
   // v0.30 — base UNIFIÉE b^ilvl à l'ilvl de difficulté du donjon (+ rampe douce par combat) ;
   // l'identité (cfg.hp/dmg/armor) et la classe (boss/élite) restent des multiplicateurs.
-  const diffIlvl = dungeonContentIlvl(level, bestStage) + fightIndex * DUNGEON_FIGHT_RAMP_ILVL
-  // v0.35 — atténuation = murSoftness(bestStage) : rampe douce les tout premiers Paliers (intro
-  // franchissable d'emblée) PUIS PLEINE puissance (pas le plateau 0,55 du farm → les donjons mid/late
-  // ne sont plus « trop faciles »). Le niveau 1 reste gear-matched ; la difficulté vient du PUSH.
-  const soft = murSoftness(bestStage)
+  const diffIlvl = dungeonContentIlvl(level) + fightIndex * DUNGEON_FIGHT_RAMP_ILVL
+  // v0.36 — atténuation par NIVEAU (murSoftness sur la tranche du Chapitre N) : les bas niveaux sont
+  // adoucis (intro franchissable d'emblée), pleine puissance ensuite. Fixe par niveau, plus par record.
+  const soft = murSoftness(level * CHAPITRE_SIZE)
   const classHp = isBoss ? DUNGEON_BOSS_HP_MULT : isElite ? DUNGEON_ELITE_HP_MULT : 1
   const maxHp = Math.round(enemyHp(diffIlvl, 'trash') * classHp * cfg.hp * hpMods * soft)
   const effStage = level * EFF_STAGE_PER_LEVEL + fightIndex // récompenses (xp) — économie inchangée
