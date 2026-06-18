@@ -13,12 +13,12 @@ import {
 import { getAura } from '../game/avatar'
 import { Sheet } from './ui'
 import { LevelBadge } from './LevelBadge'
-import { charMaxHp, charDps, charResist, charCombatMods, TALENT_START_LEVEL } from '../game/character'
+import { charMaxHp, charDps, charCombatMods, TALENT_START_LEVEL } from '../game/character'
 import { getAchievement } from '../game/achievements'
 import { isBossStage } from '../game/enemies'
 import { chapitreOf, vagueOf, raidGateForStage } from '../game/progression'
 import { getPower, powerIcon } from '../game/powers'
-import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from '../game/damage'
+import { DAMAGE_TYPES } from '../game/damage'
 import { RAID_MECHANIC_META } from '../game/raids'
 import { BIOME_LIST, biomeUnlocked, biomeUnlockHint, getBiomeDef } from '../game/biomes'
 import { maitriseBonus, surgeBiome, surgeRemainingMs } from '../game/biomeBonus'
@@ -98,7 +98,6 @@ export function CombatPanel() {
   const [eventOpen, setEventOpen] = useState(false)
   const [logFilter, setLogFilter] = useState('tout')
 
-  const me = characters[activeChar] ?? characters[0]
   // v0.36 (lot 8) — un seul NIVEAU DE COMPTE (les héros partagent le niveau) : un badge, plus un par perso.
   const accountLevel = characters.reduce((m, c) => Math.max(m, c.level), 1)
 
@@ -163,67 +162,31 @@ export function CombatPanel() {
           chaque icône porte un red-dot = gains à réclamer. Rangée en flux normal (zéro chevauchement
           avec les contrôles de zone). Conçu pour s'étendre (events…). Masqué en donjon/raid. */}
       {!dungeon && !raid && (objective || clusterVisible) && (
-        <div className="flex items-start justify-end gap-2">
-          {objective && (
-            <div className="min-w-0 flex-1 rounded-xl border border-orange-700/40 bg-orange-950/20 px-3 py-2 text-[11px] leading-snug text-orange-100">
-              <span className="font-semibold text-orange-300">🎯 Objectif&nbsp;:</span> {objective}
-            </div>
-          )}
+        <div className="flex items-center gap-1.5 rounded-lg border border-slate-800 bg-[#0d111a] px-2 py-1">
+          {objective ? (
+            <button onClick={() => { if (tutActive) setQuestsOpen(true) }} title={objective} className="flex min-w-0 flex-1 items-center gap-1 text-left">
+              <span className="shrink-0 text-[12px]">🎯</span>
+              <span className="truncate text-[10px] leading-tight text-orange-100/80">{objective}</span>
+            </button>
+          ) : <span className="min-w-0 flex-1" />}
           {clusterVisible && (
-            <div className="flex w-[88px] shrink-0 flex-wrap justify-end gap-2">
+            <div className="flex shrink-0 items-center gap-1">
               {tutActive && (
-                <button
-                  onClick={() => setQuestsOpen(true)}
-                  aria-label={`Premiers Pas — ${tutClaimable} récompense${tutClaimable > 1 ? 's' : ''} à réclamer`}
-                  className="relative flex h-10 w-10 items-center justify-center rounded-full border border-orange-700/50 bg-[#1a1320] text-xl active:scale-95"
-                >
-                  🎯
-                  {tutClaimable > 0 && (
-                    <span className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] animate-pulse items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white ring-2 ring-[#0d111a]">
-                      {tutClaimable}
-                    </span>
-                  )}
+                <button onClick={() => setQuestsOpen(true)} aria-label={`Premiers Pas — ${tutClaimable} à réclamer`} className="relative flex h-7 w-7 items-center justify-center rounded-full border border-orange-700/50 bg-[#1a1320] text-base active:scale-95">
+                  🎯{tutClaimable > 0 && <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[8px] font-bold text-white ring-2 ring-[#0d111a]">{tutClaimable}</span>}
                 </button>
               )}
               {inbox.length > 0 && (
-                <button
-                  onClick={() => { setInboxOpen(true); markInboxSeen() }}
-                  aria-label={`Boîte de réception — ${inboxAttention} à consulter`}
-                  className="relative flex h-10 w-10 items-center justify-center rounded-full border border-sky-700/50 bg-[#101a26] text-xl active:scale-95"
-                >
-                  ✉
-                  {inboxAttention > 0 && (
-                    <span className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] animate-pulse items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white ring-2 ring-[#0d111a]">
-                      {inboxAttention}
-                    </span>
-                  )}
+                <button onClick={() => { setInboxOpen(true); markInboxSeen() }} aria-label={`Boîte de réception — ${inboxAttention} à consulter`} className="relative flex h-7 w-7 items-center justify-center rounded-full border border-sky-700/50 bg-[#101a26] text-base active:scale-95">
+                  ✉{inboxAttention > 0 && <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[8px] font-bold text-white ring-2 ring-[#0d111a]">{inboxAttention}</span>}
                 </button>
               )}
-              <button
-                onClick={() => setDailyOpen(true)}
-                aria-label={`Quotidien — ${dailyClaim} récompense${dailyClaim > 1 ? 's' : ''} à réclamer`}
-                className="relative flex h-10 w-10 items-center justify-center rounded-full border border-emerald-700/50 bg-[#0d1a14] text-xl active:scale-95"
-              >
-                📅
-                {dailyClaim > 0 && (
-                  <span className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] animate-pulse items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white ring-2 ring-[#0d111a]">
-                    {dailyClaim}
-                  </span>
-                )}
+              <button onClick={() => setDailyOpen(true)} aria-label={`Quotidien — ${dailyClaim} à réclamer`} className="relative flex h-7 w-7 items-center justify-center rounded-full border border-emerald-700/50 bg-[#0d1a14] text-base active:scale-95">
+                📅{dailyClaim > 0 && <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[8px] font-bold text-white ring-2 ring-[#0d111a]">{dailyClaim}</span>}
               </button>
               {eventUnlocked && (
-                <button
-                  onClick={() => setEventOpen(true)}
-                  aria-label={`Invasion élémentaire — ${eventClaim} jalon${eventClaim > 1 ? 's' : ''} à réclamer`}
-                  className="relative flex h-10 w-10 items-center justify-center rounded-full border text-xl active:scale-95"
-                  style={{ borderColor: DAMAGE_TYPES[event.element].color + '80', background: '#160d14' }}
-                >
-                  🎉
-                  {eventClaim > 0 && (
-                    <span className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] animate-pulse items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white ring-2 ring-[#0d111a]">
-                      {eventClaim}
-                    </span>
-                  )}
+                <button onClick={() => setEventOpen(true)} aria-label={`Invasion — ${eventClaim} à réclamer`} className="relative flex h-7 w-7 items-center justify-center rounded-full border text-base active:scale-95" style={{ borderColor: DAMAGE_TYPES[event.element].color + '80', background: '#160d14' }}>
+                  🎉{eventClaim > 0 && <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[8px] font-bold text-white ring-2 ring-[#0d111a]">{eventClaim}</span>}
                 </button>
               )}
             </div>
@@ -569,40 +532,8 @@ export function CombatPanel() {
           <Metric label={multi ? 'Dégâts pack/s' : 'Dégâts ennemi/s'} value={Math.round(enemyDmgTotal).toLocaleString('fr-FR')} accent="text-red-300" />
         </div>
 
-        {/* A5 — récap PUISSANCE + RÉSISTANCES du héros piloté (lisible sans ouvrir le hub Héros).
-            Le type infligé PAR l'ennemi courant est mis en avant (anneau). */}
-        {me && (() => {
-          const meResist = charResist(me)
-          return (
-            <div className="mt-2 border-t border-slate-800 pt-2">
-              <div className="mb-1 flex items-center justify-between text-[10px]">
-                <span className="min-w-0 truncate font-semibold uppercase tracking-wide text-slate-400">🛡 {me.name}</span>
-                <span className="shrink-0 tabular-nums text-slate-300">
-                  <span className="text-emerald-300">⚔ {Math.round(charDps(me)).toLocaleString('fr-FR')}</span>
-                  {' · '}
-                  <span className="text-sky-300">❤ {Math.round(charMaxHp(me)).toLocaleString('fr-FR')}</span>
-                </span>
-              </div>
-              <div className="flex flex-wrap gap-1">
-                {DAMAGE_TYPE_LIST.map((t) => {
-                  const m = DAMAGE_TYPES[t]
-                  const v = Math.round(meResist[t] ?? 0)
-                  const incoming = enemy.damageType === t
-                  return (
-                    <span
-                      key={t}
-                      title={`Résistance ${m.name} : ${v} points${incoming ? ' — type infligé par l\'ennemi actuel' : ''}`}
-                      className={'inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] tabular-nums ' + (incoming ? 'bg-black/40 ring-1 ring-rose-400/70' : 'bg-black/25')}
-                      style={{ color: m.color }}
-                    >
-                      {m.icon} {v}
-                    </span>
-                  )
-                })}
-              </div>
-            </div>
-          )
-        })()}
+        {/* (v0.36 lot 8) — le récap des RÉSISTANCES du héros est RETIRÉ de l'écran de combat (il vit dans
+            le hub 🛡 Héros → onglet Résist). On garde le combat épuré ; seul l'essentiel reste à l'écran. */}
       </div>
 
       {/* ÉQUIPE + CAPACITÉS fusionnées : une carte par héros (badge de niveau, PV, bouclier,
@@ -664,7 +595,7 @@ export function CombatPanel() {
                   </div>
                 )}
                 {slots.length > 0 && (
-                  <div className="mt-2 flex gap-1.5 overflow-x-auto pb-1">
+                  <div className="mt-2 grid grid-cols-5 gap-1">
                     {slots.map(({ slot, p }) => {
                       const cd = cds[p.id] ?? 0
                       const ready = cd <= 0
@@ -673,7 +604,7 @@ export function CombatPanel() {
                       const frac = ready ? 1 : Math.max(0, 1 - cd / total)
                       const canTap = !auto && ready
                       return (
-                        <div key={slot} className={'relative w-[60px] shrink-0 overflow-hidden rounded-lg border ' + (auto ? 'border-cyan-700/50 bg-cyan-950/20' : canTap ? 'border-amber-500 bg-amber-900/20' : 'border-slate-700 bg-black/20')}>
+                        <div key={slot} className={'relative overflow-hidden rounded-lg border ' + (auto ? 'border-cyan-700/50 bg-cyan-950/20' : canTap ? 'border-amber-500 bg-amber-900/20' : 'border-slate-700 bg-black/20')}>
                           <button onClick={() => togglePowerAuto(slot, i)} title="Auto / manuel (ce sort)" className={'absolute right-0.5 top-0.5 z-10 rounded px-1 py-0.5 text-[7.5px] font-bold ' + (auto ? 'bg-cyan-600/40 text-cyan-100' : 'bg-amber-600/40 text-amber-100')}>{auto ? 'AUTO' : 'MAN'}</button>
                           <button disabled={!canTap} onClick={() => castPower(slot, i)} title={auto ? `${p.name} — auto` : ready ? `Lancer ${p.name}` : `${p.name} — ${cd.toFixed(1)} s`} className="flex w-full flex-col items-center gap-0.5 px-1 pb-1.5 pt-2">
                             <span className="text-lg leading-none">{powerIcon(p)}</span>
