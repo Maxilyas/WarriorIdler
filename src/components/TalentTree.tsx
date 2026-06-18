@@ -1,5 +1,6 @@
 import { useState, useRef, useLayoutEffect, useEffect, useMemo, useCallback } from 'react'
 import { useGame } from '../game/store'
+import { teamTalentPool } from '../game/character'
 import {
   CONSTELLATIONS, CONSTELLATION_LIST, TALENTS, talentsByConstellation, getTalent, canAllocate, isReachable,
   gateInfo, exclusiveBlocker, nodeTree, canAllocatePantheon, eveilBudget, spentInPantheon,
@@ -192,6 +193,7 @@ export function TalentTree() {
   const activeChar = useGame((s) => s.activeChar)
   const setActiveChar = useGame((s) => s.setActiveChar)
   const prestigeRank = useGame((s) => s.prestigeRank)
+  const upgrades = useGame((s) => s.upgrades)
   const char = characters[activeChar] ?? characters[0]
   const weaponType = charDamageProfile(char).mainType
   const [tree, setTree] = useState<TalentTreeId>('base')
@@ -314,7 +316,8 @@ export function TalentTree() {
   const isPantheon = tree === 'pantheon'
   const alloc = isPantheon ? (char.pantheon ?? { pa_start: 1 }) : char.talents
   const budget = eveilBudget(prestigeRank)
-  const points = isPantheon ? Math.max(0, budget - spentInPantheon(alloc)) : char.talentPoints
+  // v0.36 — arbre de DÉPART : pool de talents PARTAGÉ (compte), dérivé. Le Panthéon garde son budget propre.
+  const points = isPantheon ? Math.max(0, budget - spentInPantheon(alloc)) : teamTalentPool(characters, upgrades.talentBonus ?? 0)
   const classesUnlocked = pantheonClassesUnlocked(prestigeRank)
   const pantheonLocked = isPantheon && classesUnlocked === 0
   const selectedNode = selected ? TALENTS.find((n) => n.id === selected) ?? null : null
@@ -364,9 +367,9 @@ export function TalentTree() {
         ) : (
           <span
             className={'rounded-full px-2 py-0.5 text-xs font-semibold ' +
-              (char.talentPoints > 0 ? 'bg-amber-500/20 text-amber-300 ring-1 ring-amber-400/40' : 'bg-slate-800 text-slate-500')}
+              (points > 0 ? 'bg-amber-500/20 text-amber-300 ring-1 ring-amber-400/40' : 'bg-slate-800 text-slate-500')}
           >
-            {char.talentPoints} point{char.talentPoints > 1 ? 's' : ''}
+            {points} point{points > 1 ? 's' : ''}
           </span>
         )}
       </div>

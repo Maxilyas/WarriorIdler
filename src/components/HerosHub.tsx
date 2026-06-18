@@ -8,7 +8,7 @@ import { LevelBadge } from './LevelBadge'
 import { PrestigePanel } from './PrestigePanel'
 import { AchievementsPanel } from './AchievementsPanel'
 import { getAchievement } from '../game/achievements'
-import { charDps, charMaxHp, charResist } from '../game/character'
+import { charDps, charMaxHp, charResist, teamTalentPool } from '../game/character'
 import { getRaidDef, raidReqs, raidUnlocked } from '../game/raids'
 import { resistMult } from '../game/resist'
 import { DAMAGE_TYPE_LIST } from '../game/damage'
@@ -41,7 +41,9 @@ export function HerosHub({ talentsUnlocked }: { talentsUnlocked: boolean }) {
   const bestStage = useGame((s) => s.bestStage)
   const raidProgress = useGame((s) => s.raidProgress)
   const isDesktop = useMediaQuery('(min-width: 1024px)')
-  const talentPoints = characters.reduce((a, c) => a + c.talentPoints, 0)
+  // v0.36 — pool de talents PARTAGÉ (compte), dérivé : plus la somme des persos (qui doublait avec un alt).
+  const upgrades = useGame((s) => s.upgrades)
+  const talentPoints = teamTalentPool(characters, upgrades.talentBonus ?? 0)
   const prestigeUnlocked = prestigeRank > 0 || echos > 0 || raidUnlocked(getRaidDef('abysse'), bestStage, raidProgress)
   const [sub, setSub] = useState<HerosView>('apercu')
   const [card, setCard] = useState<HerosView | null>(null)

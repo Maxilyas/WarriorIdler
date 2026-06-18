@@ -8,7 +8,7 @@ import type { DerivedStats } from './stats'
 import {
   makeCharacter, charDerived, charMaxHp, charDamageProfile, charPassives,
   charResist, charCombatMods, abilityPower, powerScale, computeUnlockedPowers, setGlobalCombatMods, setGlobalPrestigeResist,
-  setPactDerivedMods, talentPointsForLevel, charDeck, isGenerator, GENERATOR_SLOTS, type CombatMods as CharCombatMods,
+  setPactDerivedMods, talentPointsForLevel, teamTalentPool, talentsSpent, charDeck, isGenerator, GENERATOR_SLOTS, type CombatMods as CharCombatMods,
 } from './character'
 import { getTalent, canAllocate, canAllocatePantheon, nodeTree, eveilBudget } from './talents'
 import { getPower } from './powers'
@@ -2432,19 +2432,29 @@ function pickBias(chars: Character[]): OffensiveStat {
 }
 
 /** Donne de l'XP à un perso, gère les montées de niveau (gains de base + points de talent). */
-function grantXp(char: Character, xp: number): Character {
-  let level = char.level
-  let curXp = char.xp + xp
-  const base = { ...char.base }
-  while (curXp >= xpForLevel(level)) {
-    curXp -= xpForLevel(level)
-    level++
-    base[char.primaryBias] = (base[char.primaryBias] ?? 0) + 1
-    base.endurance = (base.endurance ?? 0) + 1
-  }
-  // Points de talent : seulement au-delà de TALENT_START_LEVEL (l'arbre se débloque plus tard).
-  const gainedPoints = talentPointsForLevel(level) - talentPointsForLevel(char.level)
-  return { ...char, level, xp: curXp, base, talentPoints: char.talentPoints + gainedPoints }
+/**
+ * v0.36 — XP de COMPTE : level/xp sont PARTAGÉS par toute l'équipe (un seul niveau de compte). On avance
+ * le compte UNE fois (depuis le niveau le plus haut) et on synchronise TOUS les héros — chacun rattrape
+ * sa base (bias + endurance) jusqu'au niveau de compte. Un 2e/3e perso n'ajoute donc PAS de niveau, et
+ * le pool de talents (teamTalentPool, dérivé) n'enfle pas. Remplace l'ancien grantXp par-perso.
+ */
+function grantTeamXp(chars: Character[], xp: number): { chars: Character[]; leveled: boolean } {
+  if (!chars.length) return { chars, leveled: false }
+  const from = chars.reduce((m, c) => Math.max(m, c.level), 1)
+  let level = from
+  let curXp = (chars.find((c) => c.level === from)?.xp ?? 0) + xp
+  while (curXp >= xpForLevel(level)) { curXp -= xpForLevel(level); level++ }
+  const leveled = level > from
+  const out = chars.map((c) => {
+    const inc = level - c.level
+    const base = { ...c.base }
+    if (inc > 0) {
+      base[c.primaryBias] = (base[c.primaryBias] ?? 0) + inc
+      base.endurance = (base.endurance ?? 0) + inc
+    }
+    return { ...c, level, xp: curXp, base }
+  })
+  return { chars: out, leveled }
 }
 
 // ---- Combat d'équipe ----
@@ -4000,7 +4010,7 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
       case 'orbes': { const ob = accrue('orbes', dungeonKeyYield('orbes', lv) * DUNGEON_YIELD_PERFIGHT_FRAC * rwMult / Math.max(1, d.totalFights)); if (ob) { orbes += ob; logBit = `+${ob} 🔮` } } break
       case 'xp': {
         const xp = Math.round(packXp * DUNGEON_FIGHT_XP_MULT * eco.xpGain * rwMult * (1 + (d.xpPotion ?? 0)))
-        chars = chars.map((c) => { if (c.hp <= 0) return c; const nc = grantXp(c, xp); if (nc.level > c.level) leveled = true; return nc })
+        { const r = grantTeamXp(chars, xp); chars = r.chars; if (r.leveled) leveled = true }
         earned.xp = (earned.xp ?? 0) + xp
         logBit = `+${xp.toLocaleString('fr-FR')} XP`
         break
@@ -4059,7 +4069,7 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
         case 'orbes': cOrbes = Math.round(dungeonKeyYield('orbes', lv) * chestFrac); break
         case 'sceaux': cSceaux = Math.round(dungeonKeyYield('sceaux', lv) * chestFrac); break
         // (🔑 Clés en double appliquée après le switch — voir plus bas.)
-        case 'xp': { const bonus = Math.round(1200 * lv * Math.pow(1.12, lv) * chestMult * (1 + (d.xpPotion ?? 0))); chars = chars.map((c) => (c.hp > 0 ? grantXp(c, bonus) : c)); cXp += bonus; break }
+        case 'xp': { const bonus = Math.round(1200 * lv * Math.pow(1.12, lv) * chestMult * (1 + (d.xpPotion ?? 0))); chars = grantTeamXp(chars, bonus).chars; cXp += bonus; break }
         case 'stuff': {
           const ilvl = dungeonIlvl(lv, s.bestStage)
           const count = Math.max(1, Math.round((3 + Math.floor(lv / 2)) * chestMult))
@@ -4486,7 +4496,7 @@ export const useGame = create<GameState>((set, get) => {
       save.noyau += report.noyau
       save.sceaux += report.sceaux
       if (report.quint) save.quint = addQuint(save.quint, { [report.quint.type]: report.quint.amount })
-      save.characters = save.characters.map((c) => (c.hp > 0 ? grantXp(c, report.xp) : c))
+      save.characters = grantTeamXp(save.characters, report.xp).chars
       for (const it of report.items) save.inventory = [it, ...save.inventory].slice(0, invMax)
       save.inbox = [offlineMessage(report, Date.now()), ...save.inbox].slice(0, INBOX_CAP)
     }
@@ -4506,7 +4516,7 @@ export const useGame = create<GameState>((set, get) => {
     )
     if (ar) {
       Object.assign(save, ar.eco)
-      if (ar.xpEach > 0) save.characters = save.characters.map((c) => (c.hp > 0 ? grantXp(c, ar.xpEach) : c))
+      if (ar.xpEach > 0) save.characters = grantTeamXp(save.characters, ar.xpEach).chars
       autoLogLines.push(...ar.lines.map((l) => `(hors-ligne) ${l}`))
     }
   }
@@ -4549,7 +4559,7 @@ export const useGame = create<GameState>((set, get) => {
         let log = s.log
         for (const line of ar.lines) log = pushLog(log, line, 'craft')
         let characters = s.characters
-        if (ar.xpEach > 0) characters = characters.map((c) => (c.hp > 0 ? grantXp(c, ar.xpEach) : c))
+        if (ar.xpEach > 0) characters = grantTeamXp(characters, ar.xpEach).chars
         s = { ...s, ...ar.eco, characters, log }
         if (ar.completed) persist(s)
       }
@@ -4634,12 +4644,11 @@ export const useGame = create<GameState>((set, get) => {
         const xpGain = Math.round(enemy.xp * eco.xpGain * CLASSIC_XP_MULT * surgeMult * xpRuleMult)
         gold += goldGain
 
-        chars = chars.map((c) => {
-          if (c.hp <= 0) return c
-          const nc = grantXp(c, xpGain)
-          if (nc.level > c.level) log = pushLog(log, `⬆ ${nc.name} niveau ${nc.level} !`, 'level')
-          return nc
-        })
+        {
+          const r = grantTeamXp(chars, xpGain)
+          chars = r.chars
+          if (r.leveled) log = pushLog(log, `⬆ Niveau de compte ${chars[0].level} !`, 'level')
+        }
         log = pushLog(log, `${s.enemy.name} vaincu ! +${xpGain} XP, +${goldGain} or.`, 'kill')
 
         // v0.18 : les ressources rares (Noyaux 💠, Orbes 🔮, Poussière 🌌) ne tombent PLUS sur les
@@ -4952,7 +4961,7 @@ export const useGame = create<GameState>((set, get) => {
       next.noyau += report.noyau
       next.sceaux += report.sceaux
       if (report.quint) next.quint = addQuint(next.quint, { [report.quint.type]: report.quint.amount })
-      next.characters = next.characters.map((c) => (c.hp > 0 ? grantXp(c, report.xp) : c))
+      next.characters = grantTeamXp(next.characters, report.xp).chars
       for (const it of report.items) next.inventory = [it, ...next.inventory].slice(0, invMax)
       // v0.31.3 — récap dans la ✉ inbox (message « non lu ») au lieu du modal plein écran.
       next.inbox = [offlineMessage(report, Date.now()), ...next.inbox].slice(0, INBOX_CAP)
@@ -6592,10 +6601,13 @@ export const useGame = create<GameState>((set, get) => {
       const char = s.characters[s.activeChar]
       if (!char) return
       const node = getTalent(nodeId)
-      if (!node || !canAllocate(node, char.talents, char.talentPoints)) return
+      // v0.36 — budget = POOL PARTAGÉ (teamTalentPool), pas char.talentPoints. Dépenser baisse le pool
+      // (dérivé du total dépensé) → pas de champ à décrémenter, pas de désync.
+      const pool = teamTalentPool(s.characters, s.upgrades.talentBonus ?? 0)
+      if (!node || !canAllocate(node, char.talents, pool)) return
       const talents = { ...char.talents, [nodeId]: (char.talents[nodeId] ?? 0) + 1 }
       const unlockedPowers = computeUnlockedPowers({ ...talents, ...(char.pantheon ?? {}) })
-      const nc = { ...char, talents, talentPoints: char.talentPoints - 1, unlockedPowers }
+      const nc = { ...char, talents, unlockedPowers }
       nc.hp = Math.min(nc.hp, charMaxHp(nc))
       const characters = s.characters.map((c, i) => (i === s.activeChar ? nc : c))
       const next = { ...s, characters }
@@ -6619,7 +6631,8 @@ export const useGame = create<GameState>((set, get) => {
       const powers = char.powers.map((p) => (p && unlockedPowers.includes(p) ? p : null))
       const passives = (char.passives ?? []).map((p) => (p && unlockedPowers.includes(p) ? p : null))
       const generators = (char.generators ?? []).map((p) => (p && unlockedPowers.includes(p) ? p : null))
-      const nc = { ...char, talents, talentPoints: char.talentPoints + refundable, unlockedPowers, powers, passives, generators }
+      // v0.36 — pas de champ talentPoints à rembourser : le pool partagé remonte tout seul (moins dépensé).
+      const nc = { ...char, talents, unlockedPowers, powers, passives, generators }
       nc.hp = Math.min(nc.hp, charMaxHp(nc))
       const characters = s.characters.map((c, i) => (i === s.activeChar ? nc : c))
       const next = { ...s, gold: s.gold - cost, characters, log: pushLog(s.log, `Talents réinitialisés (-${cost} or).`, 'craft') }
@@ -6696,7 +6709,8 @@ export const useGame = create<GameState>((set, get) => {
       // un préset sauvegardé à plus haut niveau s'applique au mieux, jamais en triche.
       const target = preset.talents
       const talents: Record<string, number> = { co_start: 1 }
-      let points = talentPointsForLevel(char.level)
+      // v0.36 — budget = POOL PARTAGÉ + ce que CE perso avait dépensé (remboursé en repartant de zéro).
+      let points = teamTalentPool(s.characters, s.upgrades.talentBonus ?? 0) + talentsSpent(char)
       let progressed = true
       while (progressed) {
         progressed = false
@@ -6716,7 +6730,7 @@ export const useGame = create<GameState>((set, get) => {
       const powers = preset.powers.map((p) => (p && unlockedPowers.includes(p) ? p : null))
       const passives = (preset.passives ?? [null, null, null]).map((p) => (p && unlockedPowers.includes(p) ? p : null))
       const generators = (preset.generators ?? [null, null, null]).map((p) => (p && unlockedPowers.includes(p) ? p : null))
-      const nc = { ...char, talents, talentPoints: points, unlockedPowers, powers, passives, generators, primaryBias: preset.primaryBias }
+      const nc = { ...char, talents, unlockedPowers, powers, passives, generators, primaryBias: preset.primaryBias }
       nc.hp = Math.min(nc.hp, charMaxHp(nc))
       const characters = s.characters.map((c, i) => (i === s.activeChar ? nc : c))
       const next = {
@@ -6750,8 +6764,9 @@ export const useGame = create<GameState>((set, get) => {
       const ecl = upgradeEclats(def, level)
       if (s.gold < cost || s.poussiere < pous || s.essence < ecl) return
       const upgrades = { ...s.upgrades, [id]: level + 1 }
-      let characters = s.characters
-      if (id === 'talentBonus') characters = characters.map((c) => ({ ...c, talentPoints: c.talentPoints + 1 }))
+      // v0.36 — 'talentBonus' n'écrit plus de champ par-perso : le bonus est lu depuis upgrades.talentBonus
+      // par teamTalentPool (pool partagé), donc +1 au pool de COMPTE (pas +1 par perso).
+      const characters = s.characters
       refreshGlobals(upgrades, s.maitrise, s.constellation, s.achievements)
       const next = { ...s, gold: s.gold - cost, poussiere: s.poussiere - pous, essence: s.essence - ecl, upgrades, characters, log: pushLog(s.log, `Amélioration : ${def.name} niv. ${level + 1} (-${cost.toLocaleString('fr-FR')} or${ecl ? `, -${ecl} ♦` : ''}${pous ? `, -${pous} 🌌` : ''}).`, 'gold') }
       persist(next)
@@ -7238,7 +7253,7 @@ export const useGame = create<GameState>((set, get) => {
       // ✨ Première étincelle : coup de pouce de démarrage (or + ~3 niveaux).
       if (pm.etincelle) {
         const lvlXp = xpForLevel(1) + xpForLevel(2) + xpForLevel(3)
-        base = { ...base, gold: 5000 * base.prestigeRank, characters: base.characters.map((c) => grantXp(c, lvlXp)) }
+        base = { ...base, gold: 5000 * base.prestigeRank, characters: grantTeamXp(base.characters, lvlXp).chars }
       }
       cooldowns.clear()
       refreshGlobals(base.upgrades, base.maitrise, base.constellation, base.achievements)

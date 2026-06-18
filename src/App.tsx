@@ -3,7 +3,7 @@ import { useGame } from './game/store'
 import { chapitreOf } from './game/progression'
 import { useMediaQuery } from './useMediaQuery'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from './game/damage'
-import { TALENT_START_LEVEL } from './game/character'
+import { TALENT_START_LEVEL, teamTalentPool } from './game/character'
 import { METIER_LIST, pointsAvailable } from './game/metiers'
 import { CombatPanel } from './components/CombatPanel'
 import { StuffScreen } from './components/StuffScreen'
@@ -163,7 +163,7 @@ export default function App() {
   const maxLevel = characters.reduce((m, c) => Math.max(m, c.level), 1)
   const anyDungeon = Object.values(dungeonProgress).some((v) => v > 0)
   const anyUpgrade = Object.values(upgrades).some((v) => v > 0)
-  const talentsUnlocked = maxLevel >= TALENT_START_LEVEL || characters.some((c) => c.talentPoints > 0)
+  const talentsUnlocked = maxLevel >= TALENT_START_LEVEL || teamTalentPool(characters, upgrades.talentBonus ?? 0) > 0
   const raidsUnlocked = orbes > 0 || inRaid || bestStage >= RAID_STAGE
   const expedUnlocked = sceaux > 0 || anyDungeon || inDungeon || bestStage >= DONJON_STAGE || raidsUnlocked
   const marcheUnlocked = bestStage >= MARCHE_STAGE || anyUpgrade
@@ -174,7 +174,8 @@ export default function App() {
   const unlocked: Record<Tab, boolean> = { combat: true, stuff: true, atelier: atelierUnlocked, heros: true, exped: expedUnlocked, marche: marcheUnlocked }
   const mobileTabs = TABS.filter((t) => unlocked[t.id])
   const deskTabs = (['stuff', 'atelier', 'heros', 'exped', 'marche', 'grimoire'] as const).filter((t) => t === 'grimoire' || unlocked[t])
-  const talentPoints = characters.reduce((a, c) => a + c.talentPoints, 0)
+  // v0.36 — pool de talents PARTAGÉ (compte), dérivé : badge non gonflé par les alts.
+  const talentPoints = teamTalentPool(characters, upgrades.talentBonus ?? 0)
 
   // Monnaies : l'en-tête mobile n'en montre que 2 + un compteur ; le détail vit dans une feuille
   // (les info-bulles `title` n'existent pas au tactile).

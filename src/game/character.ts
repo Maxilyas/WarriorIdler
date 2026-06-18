@@ -35,6 +35,24 @@ export function talentPointsForLevel(level: number): number {
   return Math.max(0, level - TALENT_START_LEVEL)
 }
 
+/** Total dépensé dans l'arbre de DÉPART d'un perso (hors racine gratuite co_start). */
+export function talentsSpent(c: Character): number {
+  return Object.values(c.talents).reduce((a, b) => a + b, 0) - (c.talents.co_start ?? 0)
+}
+
+/**
+ * v0.36 — POOL DE TALENTS PARTAGÉ (niveau de COMPTE). Points gagnés au niveau de compte (le plus haut
+ * des persos, qui restent synchronisés) + bonus d'amélioration, MOINS le total dépensé sur TOUS les
+ * arbres. Une recrue (arbre vide) n'ajoute rien → zéro inflation ; développer 2 arbres SPLITTE le même
+ * budget (« budget partagé » = frein au multi-perso, la dynamique reine). Dérivé → aucune désync possible.
+ */
+export function teamTalentPool(chars: Character[], bonus = 0): number {
+  if (!chars.length) return 0
+  const level = chars.reduce((m, c) => Math.max(m, c.level), 1)
+  const spent = chars.reduce((a, c) => a + talentsSpent(c), 0)
+  return Math.max(0, talentPointsForLevel(level) + bonus - spent)
+}
+
 /** Identifiant de personnage UNIQUE et stable, jamais réutilisé — y compris après un reload.
  *  (Un compteur module-level se réinitialisait au chargement et entrait en collision avec les
  *  persos déjà en sauvegarde : la prochaine recrue récupérait `char-1` et « partageait » alors
