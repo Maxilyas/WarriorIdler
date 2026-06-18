@@ -35,7 +35,14 @@ export function talentPointsForLevel(level: number): number {
   return Math.max(0, level - TALENT_START_LEVEL)
 }
 
-let charSeq = 1
+/** Identifiant de personnage UNIQUE et stable, jamais réutilisé — y compris après un reload.
+ *  (Un compteur module-level se réinitialisait au chargement et entrait en collision avec les
+ *  persos déjà en sauvegarde : la prochaine recrue récupérait `char-1` et « partageait » alors
+ *  son apparence/titre/cooldowns avec le héros existant.) */
+function newCharId(): string {
+  const rnd = globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+  return `char-${rnd}`
+}
 
 /** Crée un personnage à un niveau donné (stats de base simulées pour ce niveau). */
 export function makeCharacter(name: string, level: number, bias: PrimaryStat): Character {
@@ -65,7 +72,7 @@ export function makeCharacter(name: string, level: number, bias: PrimaryStat): C
   }
 
   const c: Character = {
-    id: `char-${charSeq++}`,
+    id: newCharId(),
     name,
     level,
     xp: 0,

@@ -635,7 +635,12 @@ export function CombatPanel() {
                       {dead ? (
                         <span className="text-red-400">{(c.rez ?? 0) > 0 ? `↻ ${Math.ceil(c.rez!)} s` : 'K.O.'}</span>
                       ) : (
-                        <>{Math.ceil(Math.max(0, c.hp)).toLocaleString('fr-FR')} <span className="text-slate-600">/ {Math.round(mh).toLocaleString('fr-FR')}</span></>
+                        <>
+                          {Math.ceil(Math.max(0, c.hp)).toLocaleString('fr-FR')} <span className="text-slate-600">/ {Math.round(mh).toLocaleString('fr-FR')}</span>
+                          {(c.absorb ?? 0) > 0 && (
+                            <span className="ml-1 font-semibold text-sky-300" title={`Bouclier d'absorption : ${Math.round(c.absorb!).toLocaleString('fr-FR')} PV encaissés avant la vie`}>🛡 {fmtShield(c.absorb!)}</span>
+                          )}
+                        </>
                       )}
                     </span>
                   </div>
@@ -802,6 +807,11 @@ export function CombatPanel() {
 }
 
 /** Pastilles d'état d'un héros (altérations + buffs transitoires) — lecture rapide « comment va-t-il ? ». */
+/** Format compact d'un montant de bouclier (lisible sans encombrer la barre, mobile-friendly). */
+function fmtShield(n: number): string {
+  return n >= 1000 ? `${(n / 1000).toFixed(1).replace('.', ',')}k` : `${Math.round(n)}`
+}
+
 function statusChips(c: Character): { icon: string; label: string; cls: string; title: string }[] {
   const out: { icon: string; label: string; cls: string; title: string }[] = []
   if ((c.stun ?? 0) > 0) out.push({ icon: '💫', label: 'étourdi', cls: 'bg-yellow-500/20 text-yellow-300', title: "Étourdi : n'attaque pas tant que ça dure" })

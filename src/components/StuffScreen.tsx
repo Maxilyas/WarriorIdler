@@ -165,22 +165,10 @@ export function StuffScreen() {
     return arr
   }, [filtered, sort, deltas])
 
-  // L4 — par emplacement, combien d'objets en sac BATTENT l'équipé (par itemScore — intrinsèque à
-  // l'objet, donc ~gratuit : pas de swap/charDps, sûr même quand les drops affluent au tick). Un slot
-  // VIDE compte toute pièce compatible (toujours un gain). Le Δ DPS exact reste affiché par ligne.
-  const upgradeCounts = useMemo(() => {
-    const res: Partial<Record<EquipSlotId, number>> = {}
-    const scored = inventory.map((i) => ({ type: i.type, score: itemScore(i) }))
-    for (const slot of EQUIP_SLOTS) {
-      const equipped = equipment[slot.id]
-      const eqScore = equipped ? itemScore(equipped) : -Infinity
-      let n = 0
-      for (const s of scored) if (slotAccepts(slot.id, s.type) && s.score > eqScore) n++
-      if (n > 0) res[slot.id] = n
-    }
-    return res
-  }, [inventory, equipment])
-  const upgradeSlots = Object.keys(upgradeCounts).length
+  // (Retiré v0.36) — la pastille « N objets meilleurs » par emplacement reposait sur `itemScore` BRUT
+  // (somme de stats) : un verdict mono-dimension trompeur (un objet « moins bon » en score peut être
+  // meilleur pour la survie/résist). On garde les SEULS indicateurs honnêtes : les Δ DPS ⚔ / Δ Survie 🛡
+  // par ligne d'inventaire (factuels, bi-dimensionnels).
 
   // Barre héros (mobile) : DPS / Survie / iLvl moyen de l'équipement porté.
   const dps = active ? charDps(active) : 0
@@ -292,7 +280,6 @@ export function StuffScreen() {
       equipment={equipment}
       selectedSlot={selectedSlot}
       contentIlvl={contentIlvl}
-      upgradeCounts={upgradeCounts}
       onSlotTap={(id, it) => { onSlotTap(id, it); onAfterSelect() }}
       onUnequip={unequip}
       cols={cols}
@@ -303,7 +290,7 @@ export function StuffScreen() {
     <div className="flex h-full min-h-0 flex-col gap-2">
       {/* Barre héros — mobile uniquement : ouvre la feuille Équipement (paper-doll hors du flux). */}
       {active && !isDesktop && (
-        <HeroBar char={active} dps={dps} ehp={ehp} avgIlvl={avgIlvl} upgradeSlots={upgradeSlots} onOpen={() => setSheet('equip')} />
+        <HeroBar char={active} dps={dps} ehp={ehp} avgIlvl={avgIlvl} onOpen={() => setSheet('equip')} />
       )}
 
       <div className="flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[200px_minmax(0,1fr)] lg:gap-3 xl:grid-cols-[200px_minmax(0,1fr)_300px]">
@@ -514,8 +501,8 @@ function Chip({ color, onClear, children }: { color?: string; onClear: () => voi
 }
 
 /** Barre héros compacte (mobile) : avatar + DPS / Survie / iLvl ; tap → feuille Équipement. */
-function HeroBar({ char, dps, ehp, avgIlvl, upgradeSlots, onOpen }: {
-  char: Character; dps: number; ehp: number; avgIlvl: number; upgradeSlots: number; onOpen: () => void
+function HeroBar({ char, dps, ehp, avgIlvl, onOpen }: {
+  char: Character; dps: number; ehp: number; avgIlvl: number; onOpen: () => void
 }) {
   return (
     <button
@@ -524,11 +511,6 @@ function HeroBar({ char, dps, ehp, avgIlvl, upgradeSlots, onOpen }: {
     >
       <div className="relative shrink-0">
         <LevelBadge char={char} size={40} />
-        {upgradeSlots > 0 && (
-          <span className="absolute -right-1.5 -top-1.5 z-10 rounded-full bg-emerald-500 px-1.5 text-[10px] font-bold leading-tight text-emerald-950 ring-2 ring-[#0b0f18]">
-            {upgradeSlots > 9 ? '9+' : upgradeSlots}
-          </span>
-        )}
       </div>
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-semibold text-slate-100">
@@ -546,25 +528,19 @@ function HeroBar({ char, dps, ehp, avgIlvl, upgradeSlots, onOpen }: {
           </span>
         </div>
       </div>
-      {upgradeSlots > 0 && (
-        <span className="hidden shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold sm:flex" style={{ background: 'rgba(16,185,129,.15)', color: '#6ee7b7' }}>
-          ▲ {upgradeSlots} upgrade{upgradeSlots > 1 ? 's' : ''}
-        </span>
-      )}
       <span className="shrink-0 text-lg text-slate-600">›</span>
     </button>
   )
 }
 
 /** Paper-doll : sélecteur de perso + récap des sets + grille des 16 emplacements (avec pastilles d'upgrade). */
-function PaperDoll({ characters, activeChar, onSwitch, equipment, selectedSlot, contentIlvl, upgradeCounts, onSlotTap, onUnequip, cols }: {
+function PaperDoll({ characters, activeChar, onSwitch, equipment, selectedSlot, contentIlvl, onSlotTap, onUnequip, cols }: {
   characters: Character[]
   activeChar: number
   onSwitch: (i: number) => void
   equipment: Equipment
   selectedSlot: EquipSlotId | null
   contentIlvl: number
-  upgradeCounts: Partial<Record<EquipSlotId, number>>
   onSlotTap: (slotId: EquipSlotId, item: Item | undefined) => void
   onUnequip: (slot: EquipSlotId) => void
   cols: 1 | 2
@@ -622,7 +598,6 @@ function PaperDoll({ characters, activeChar, onSwitch, equipment, selectedSlot, 
           const item = equipment[slot.id]
           const rarity = item ? RARITIES[item.rarity] : null
           const isActive = selectedSlot === slot.id
-          const up = upgradeCounts[slot.id] ?? 0
           // Gemmes serties (NET AVANTAGE → halo) + châsses VIDES (◇ en pointillés) visibles d'un coup d'œil.
           const gems = item?.gems ?? []
           const sockets = item ? itemSockets(item) : 0
@@ -669,14 +644,10 @@ function PaperDoll({ characters, activeChar, onSwitch, equipment, selectedSlot, 
                   ))}
                 </span>
               )}
-              {/* En-tête : nom du slot + pastille d'upgrade (un meilleur objet attend en sac). */}
-              <div className="flex items-center justify-between gap-1">
+              {/* En-tête : nom du slot. (Pastille « ⬆N objets meilleurs » retirée v0.36 — verdict
+                  mono-dimension trompeur ; les Δ DPS/Survie par ligne restent l'arbitrage fiable.) */}
+              <div className="flex items-center gap-1">
                 <span className="text-[9px] uppercase tracking-wide text-slate-500">{slot.name}</span>
-                {up > 0 && (
-                  <span className="rounded bg-emerald-500 px-1 text-[9px] font-bold leading-tight text-emerald-950" title={`${up} objet(s) en sac améliorent cet emplacement`}>
-                    ⬆{up > 9 ? '9+' : up}
-                  </span>
-                )}
               </div>
               {item ? (
                 <>
