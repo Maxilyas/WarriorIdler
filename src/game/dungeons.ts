@@ -151,8 +151,13 @@ export const BUTIN_RARITY_CAP = 7 // Artefact — plafond pratique de la fenêtr
 // Artefact DÈS LE RANG 1 : la traîne à deux pentes de rollWindowRarity rend Légendaire (~4%) et
 // Artefact (~1%) possibles immédiatement — petits, mais meilleurs que le farm. Feeder du raid T1.
 export function cacheRarityWindow(level: number): { floor: number; peak: number; cap: number } {
-  const peak = Math.max(4, Math.min(7, 4 + Math.floor(level / 3)))
-  return { floor: Math.max(2, peak - 2), peak, cap: BUTIN_RARITY_CAP }
+  // v0.36 — la Cache sort à TA tranche (ilvl = lootFarmIlvl(bestStage), cf. store) ; le NIVEAU ne change
+  // QUE le PLANCHER de rareté et le nombre d'objets. Plancher : Commun (t2) → Épique (t5). Le PLAFOND est
+  // Artefact (t7) DÈS le niveau 1, mais c'est une TRAÎNE rare : peak = plancher → l'Artefact reste un
+  // jackpot (~5 % au sommet où le gros du butin est Épique, ~0,1 % en début), jamais le gros du loot.
+  // Corrige le « trop d'Artefact » des hauts niveaux (avant : peak=Artefact ⇒ ~72 % d'Artefact).
+  const floor = Math.max(2, Math.min(5, 2 + Math.floor((level - 1) / 3)))
+  return { floor, peak: floor, cap: BUTIN_RARITY_CAP }
 }
 /** Plancher / plafond pratiques (affichage + rendement des automates). */
 export function butinMinTier(level: number): number {
@@ -171,14 +176,12 @@ export function butinOverChance(level: number): number {
   return Math.min(0.015, 0.004 + level * 0.0002)
 }
 
-/** Répartition (quasi figée, quel que soit le niveau) du tirage au-delà d'Artefact.
- *  v0.24 : le voile de la Cache s'arrête à ÉTERNEL — Cosmique+ est l'apanage des raids. */
+/** Répartition du tirage « au-delà du voile » (au-dessus d'Artefact).
+ *  v0.36 : la Cache TOPE à Artefact (t7) — le voile ne lâche QUE du Patrimoine (t8), un seul cran
+ *  au-dessus, comme jackpot ultra-rare. Mythique+ (et tout Céleste+) est l'apanage EXCLUSIF des raids
+ *  (cf. re-ancrage v0.36 : Cache→Artefact, raids→Patrimoine/Céleste+). */
 const BUTIN_OVER_WEIGHTS: { tier: number; w: number }[] = [
-  { tier: 8, w: 50 },  // Patrimoine
-  { tier: 9, w: 26 },  // Mythique
-  { tier: 10, w: 13 }, // Ascendant
-  { tier: 11, w: 8 },  // Céleste
-  { tier: 12, w: 3 },  // Éternel
+  { tier: 8, w: 100 }, // Patrimoine (seul cran du voile)
 ]
 export function butinOverTier(): number {
   const total = BUTIN_OVER_WEIGHTS.reduce((a, x) => a + x.w, 0)

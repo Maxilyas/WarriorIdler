@@ -57,7 +57,7 @@ import {
   type BrewQuality,
 } from './alchimie'
 import { makeEnemy, isBossStage, stageIlvl } from './enemies'
-import { chapitreOf, vagueOf, raidGateForStage } from './progression'
+import { chapitreOf, vagueOf, raidGateForStage, lootFarmIlvl } from './progression'
 import {
   BIOME_IDS, biomeUnlocked, getBiomeDef,
   BIOME_ROTATE_MS, BIOME_LOCK_MS, BIOME_LOCK_FRAGMENTS, type BiomeId,
@@ -4018,14 +4018,15 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
         logBit = `+${xp.toLocaleString('fr-FR')} XP`
         break
       }
-      // Cache du Pilleur, drops PAR COMBAT : même fenêtre que le coffre (pic ≤ Légendaire, plafond Artefact).
-      case 'stuff': { if (Math.random() < 0.4) { const cw = cacheRarityWindow(lv); fightItems.push(generateItem({ ilvl: dungeonIlvl(lv, s.bestStage), rarity: rollWindowRarity(cw.floor, cw.peak, cw.cap), primaryBias: pickBias(s.characters) })); logBit = '+1 objet' } break }
+      // Cache du Pilleur (v0.36) : tout le butin tombe au COFFRE (count 1-3 → 5-8 selon le niveau), à TA
+      // tranche d'ilvl. Plus de drop par-combat → le nombre d'objets/run est piloté proprement par le niveau.
+      case 'stuff': break
       // La Géode : la poussière 🔹 coule à chaque combat (la gemme, elle, attend le coffre).
       case 'gemmes': { const gd = accrue('gemDust', geodeDustYield(lv) * DUNGEON_YIELD_PERFIGHT_FRAC * rwMult / Math.max(1, d.totalFights)); if (gd) { gemDust += gd; logBit = `+${gd} 🔹` } } break
     }
     // ✦ Hanté : le Champion du pack vient de tomber → objet de haute rareté (Légendaire garanti, mieux possible).
     if (enemies.some((e) => e.champion)) {
-      fightItems.push(generateItem({ ilvl: dungeonIlvl(lv, s.bestStage), luckTier: dungeonLuckTier(lv) + 4, minTier: 6, primaryBias: pickBias(s.characters) }))
+      fightItems.push(generateItem({ ilvl: lootFarmIlvl(s.bestStage), luckTier: dungeonLuckTier(lv) + 4, minTier: 6, primaryBias: pickBias(s.characters) }))
       log = pushLog(log, '✦ Champion abattu — son trésor tombe !', 'loot')
     }
     log = pushLog(log, `⚔️ ${def.icon} Combat ${d.current + 1}/${d.totalFights}${logBit ? ` · ${logBit}` : ''}.`, 'kill')
@@ -4074,8 +4075,10 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
         // (🔑 Clés en double appliquée après le switch — voir plus bas.)
         case 'xp': { const bonus = Math.round(1200 * lv * Math.pow(1.12, lv) * chestMult * (1 + (d.xpPotion ?? 0))); chars = grantTeamXp(chars, bonus).chars; cXp += bonus; break }
         case 'stuff': {
-          const ilvl = dungeonIlvl(lv, s.bestStage)
-          const count = Math.max(1, Math.round((3 + Math.floor(lv / 2)) * chestMult))
+          // v0.36 — ilvl du butin = TA tranche (record de palier), IDENTIQUE à tous les niveaux. Ce qui
+          // change avec le niveau : le NOMBRE d'objets (1-3 au début → 5-8 à la fin) et la rareté (cf. cw).
+          const ilvl = lootFarmIlvl(s.bestStage)
+          const count = Math.max(1, Math.round(Math.min(8, 1 + Math.floor((lv - 1) / 2)) * chestMult))
           // v0.24 : FENÊTRE de la Cache (pic ≤ Légendaire, plafond pratique Artefact — même
           // « Avare » ne le perce pas). Au-dessus, seul le « voile » (infime, → Éternel max).
           const cw = cacheRarityWindow(lv)

@@ -1,6 +1,6 @@
 import type { DamageType, Enemy, EnemyAbility, ItemType } from './types'
 import { DAMAGE_TYPE_LIST } from './damage'
-import { enemyHp, enemyDmg, enemyArmor, clampIlvl, lootFarmIlvl, ILVL_CAP_BASE, ILVL_CAP_ENDGAME } from './progression'
+import { enemyHp, enemyDmg, enemyArmor, clampIlvl, lootFarmIlvl, frontierIlvl, lagAt, chapitreOf, ILVL_CAP_BASE, ILVL_CAP_ENDGAME } from './progression'
 
 /**
  * RAIDS — refonte v0.23 « un boss, dix tiers ».
@@ -257,6 +257,16 @@ export function raidIlvl(def: RaidDef, tier: number, _bestStage = 0): number {
   if (def.id === 'abysse') return Math.min(ILVL_CAP_ENDGAME, ILVL_CAP_BASE + tier * 4)
   // Base raids : ancrés sur le Chapitre gaté (lootFarmIlvl est déjà capé à ILVL_CAP_BASE = 200).
   return clampIlvl(lootFarmIlvl(Math.round(raidAnchorPalier(globalTier(def, tier)))))
+}
+
+/**
+ * v0.36 — ilvl de DIFFICULTÉ d'un boss de raid (PV / dégâts / armure) : NON CAPÉ → les PV montent à
+ * CHAQUE tier indéfiniment (les raids sont l'endgame infini gaté par les Trophées). Le LOOT (raidIlvl)
+ * reste capé (200 base / 240 Abîme) ; seule la DIFFICULTÉ continue de grimper. Corrige le plateau de PV.
+ */
+export function raidDifficultyIlvl(def: RaidDef, tier: number): number {
+  const stage = Math.round(raidAnchorPalier(globalTier(def, tier)))
+  return clampIlvl(Math.round(frontierIlvl(stage) - lagAt(chapitreOf(stage))))
 }
 
 /**
@@ -706,15 +716,15 @@ export function raidReqs(def: RaidDef, tier: number): Partial<Record<DamageType,
   return out
 }
 
-function bossHp(def: RaidDef, tier: number, bestStage: number, partySize = 1): number {
-  // v0.35 — ilvl du raid = TA tranche (raidIlvl) ; classe 'raidboss' (×13,3) = pool d'un vrai boss.
+function bossHp(def: RaidDef, tier: number, _bestStage: number, partySize = 1): number {
+  // v0.36 — PV ancrés sur l'ilvl de DIFFICULTÉ (non capé) → montent à chaque tier, plus de plateau.
   const v = raidBossVariant(def, tier)
-  return Math.round(enemyHp(raidIlvl(def, tier, bestStage), 'raidboss') * v.hpMult * raidPartyHpMult(partySize))
+  return Math.round(enemyHp(raidDifficultyIlvl(def, tier), 'raidboss') * v.hpMult * raidPartyHpMult(partySize))
 }
 
-function bossDamage(def: RaidDef, tier: number, bestStage: number): number {
+function bossDamage(def: RaidDef, tier: number, _bestStage: number): number {
   const v = raidBossVariant(def, tier)
-  return Math.round(enemyDmg(raidIlvl(def, tier, bestStage), 'raidboss') * v.dmgMult)
+  return Math.round(enemyDmg(raidDifficultyIlvl(def, tier), 'raidboss') * v.dmgMult)
 }
 
 /** Construit le boss du tier. `element` = type d'attaque courant (pour les raids 'rotating'). */
@@ -736,7 +746,7 @@ export function makeRaidBoss(def: RaidDef, tier: number, element: DamageType, be
     maxHp,
     hp: maxHp,
     // v0.30 — armure unifiée (scale b^ilvl → Pénétration pertinente ; fortress ×3,2).
-    armor: Math.round(enemyArmor(raidIlvl(def, tier, bestStage), armorMult)),
+    armor: Math.round(enemyArmor(raidDifficultyIlvl(def, tier), armorMult)),
     damage: bossDamage(def, tier, bestStage),
     xp: Math.round(8 * Math.pow(1.12, eff - 1) * 6),
     resist,
@@ -800,7 +810,7 @@ export function raidMaxAdds(tier: number): number {
  * sa mort, plus d'expiration) qui frappe l'équipe. Le nombre simultané est plafonné (raidMaxAdds).
  */
 export function makeRaidAdd(def: RaidDef, tier: number, element: DamageType, bestStage: number, partySize = 1): Enemy {
-  const ilvl = raidIlvl(def, tier, bestStage)
+  const ilvl = raidDifficultyIlvl(def, tier)
   // v0.30 — renfort = ennemi de classe 'elite' à l'ilvl du raid (× scaling multi-perso) ; il frappe
   // ~45 % d'un boss (pression de groupe, pas un second mur).
   const hp = Math.round(enemyHp(ilvl, 'elite') * raidPartyHpMult(partySize))
