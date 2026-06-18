@@ -606,10 +606,9 @@ export function CombatPanel() {
                       return (
                         <div key={slot} className={'relative overflow-hidden rounded-lg border ' + (auto ? 'border-cyan-700/50 bg-cyan-950/20' : canTap ? 'border-amber-500 bg-amber-900/20' : 'border-slate-700 bg-black/20')}>
                           <button onClick={() => togglePowerAuto(slot, i)} title="Auto / manuel (ce sort)" className={'absolute right-0.5 top-0.5 z-10 rounded px-1 py-0.5 text-[7.5px] font-bold ' + (auto ? 'bg-cyan-600/40 text-cyan-100' : 'bg-amber-600/40 text-amber-100')}>{auto ? 'AUTO' : 'MAN'}</button>
-                          <button disabled={!canTap} onClick={() => castPower(slot, i)} title={auto ? `${p.name} — auto` : ready ? `Lancer ${p.name}` : `${p.name} — ${cd.toFixed(1)} s`} className="flex w-full flex-col items-center gap-0.5 px-1 pb-1.5 pt-2">
-                            <span className="text-lg leading-none">{powerIcon(p)}</span>
-                            <span className="w-full truncate text-center text-[8px] font-medium text-slate-300">{p.name}</span>
-                            <span className={'text-[8px] font-semibold leading-none ' + (canTap ? 'text-amber-200' : 'text-slate-500')}>{auto ? '⟳ auto' : ready ? '▶' : `${cd.toFixed(1)}s`}</span>
+                          <button disabled={!canTap} onClick={() => castPower(slot, i)} title={auto ? `${p.name} — auto` : ready ? `Lancer ${p.name}` : `${p.name} — ${cd.toFixed(1)} s`} className="flex w-full flex-col items-center gap-0.5 px-0.5 pb-1 pt-1.5">
+                            <span className="relative text-lg leading-none">{powerIcon(p)}{!ready && <span className="absolute inset-0 flex items-center justify-center rounded bg-black/60 text-[9px] font-bold text-slate-100">{Math.ceil(cd)}</span>}</span>
+                            <span className="w-full truncate text-center text-[8px] font-medium text-slate-400">{p.name}</span>
                           </button>
                           {!ready && <div className="absolute bottom-0 left-0 h-0.5 bg-cyan-500" style={{ width: `${frac * 100}%` }} />}
                         </div>
