@@ -149,15 +149,28 @@ export function murBossDmg(stage: number): number {
   return enemyDmg(farmDifficultyIlvl(stage), 'trash') * MUR_DMG_MULT * murSoftness(stage)
 }
 
-/** ESCALIER DES VAGUES (v0.40) : la difficulté d'une vague NORMALE (PV/DPS) monte LINÉAIREMENT du boss
- *  du Chapitre PRÉCÉDENT (0 %, « vague 0 ») au boss du Chapitre COURANT (100 %, vague 10) → la vague V
- *  est à V·10 % du chemin. Supprime le plateau farmable juste sous le boss (vague 9 ≈ 90 % du boss) :
- *  chaque vague devient une MARCHE vers le mur. `metric` = `murBossHp` (PV) ou `murBossDmg` (DPS). */
-export function waveStaircase(stage: number, metric: (s: number) => number): number {
+// ESCALIER DES VAGUES (v0.40.1 — ACCESSIBLE). Chaque Chapitre repart BAS et monte jusqu'à son boss :
+// vague V = V·10 % du boss DU CHAPITRE (vague 1 = 10 %, vague 9 ≈ 90 %, vague 10 = boss) → plus de
+// plateau farmable juste sous le boss. MAIS l'escalier « fond » progressivement pour rester ACCESSIBLE :
+// pendant le PROLOGUE (Ch ≤ STAIRCASE_PROLOGUE) les vagues gardent la courbe d'onboarding (un perso NU
+// tue la vague 1 ; ancrer au boss-classe ×11,7 d'emblée la rendrait imbattable sans stuff) ; l'escalier
+// monte ensuite jusqu'à PLEIN à STAIRCASE_FULL (le joueur a alors du stuff de raid). Entre : mélange.
+const STAIRCASE_PROLOGUE = 4   // dernier Chapitre 100 % accessible (courbe d'onboarding pure)
+const STAIRCASE_FULL = 8       // 1er Chapitre à escalier PLEIN (ancré au boss)
+/** Part d'escalier (0 = courbe accessible du prologue · 1 = escalier plein ancré au boss) selon le Chapitre. */
+export function staircaseBlend(chapitre: number): number {
+  return Math.max(0, Math.min(1, (chapitre - STAIRCASE_PROLOGUE) / (STAIRCASE_FULL - STAIRCASE_PROLOGUE)))
+}
+/**
+ * PV ou DPS d'une vague NORMALE : mélange (par `staircaseBlend`) de
+ *  - ACCESSIBLE (`accessible`) : la courbe trash×onboarding (prologue naked-friendly), et
+ *  - ESCALIER : `metricBoss(bossDuChapitre) × (vague/10)` (chaque Chapitre repart à 10 % du boss et monte).
+ * `metricBoss` = `murBossHp` (PV) ou `murBossDmg` (DPS).
+ */
+export function waveStat(stage: number, metricBoss: (s: number) => number, accessible: number): number {
   const c = chapitreOf(stage)
-  const prev = metric((c - 1) * CHAPITRE_SIZE)   // 0 % : boss du Chapitre précédent (c=1 → ~0)
-  const cur = metric(c * CHAPITRE_SIZE)          // 100 % : boss du Chapitre courant
-  return prev + (cur - prev) * (vagueOf(stage) / CHAPITRE_SIZE)
+  const stair = metricBoss(c * CHAPITRE_SIZE) * (vagueOf(stage) / CHAPITRE_SIZE)
+  return accessible + (stair - accessible) * staircaseBlend(c)
 }
 
 /** Crée l'ennemi correspondant à un palier (stage) dans un biome donné. Boss tous les 10 paliers.
@@ -169,11 +182,12 @@ export function makeEnemy(stage: number, biome: BiomeId = 'physique', championMu
   const isChampion = !isBoss && stage > 10 && Math.random() < CHAMPION_CHANCE * championMult
   const isElite = !isBoss && !isChampion && stage % ELITE_EVERY === 0 && stage > ELITE_EVERY
 
-  // v0.40 — ESCALIER : la difficulté (PV/DPS) d'une vague NORMALE = sa position dans l'escalier du
-  // Chapitre (boss précédent → boss courant), PUREMENT — plus de multiplicateurs élite/champion/trait
-  // (« fondus dans l'escalier »). Le boss (vague 10) = murBossHp/murBossDmg (porte murHpRamp + softness).
+  // v0.40.1 — ESCALIER ACCESSIBLE : la difficulté (PV/DPS) d'une vague NORMALE = waveStat (courbe
+  // d'onboarding du prologue → escalier ancré au boss, fondu progressif). Plus de multiplicateurs
+  // élite/champion/trait (« fondus dans l'escalier »). Le boss (vague 10) = murBossHp/murBossDmg.
   const diffIlvl = farmDifficultyIlvl(stage)
-  const maxHp = Math.round(isBoss ? murBossHp(stage) : waveStaircase(stage, murBossHp))
+  const trashHp = enemyHp(diffIlvl, 'trash') * onboardingMult(stage)
+  const maxHp = Math.round(isBoss ? murBossHp(stage) : waveStat(stage, murBossHp, trashHp))
   const pool = BIOME_ENEMIES[biome]
   const baseName = pool[(stage - 1) % pool.length]
   const bosses = BIOME_BOSSES[biome]
@@ -203,9 +217,9 @@ export function makeEnemy(stage: number, biome: BiomeId = 'physique', championMu
     maxHp,
     hp: maxHp,
     armor: Math.round(enemyArmor(diffIlvl)),
-    // Dégâts (DPS auto) : MÊME escalier que les PV → boss précédent → boss courant. La menace vient
-    // des techniques télégraphiées + du check de résistance (req), pas d'un mur sec.
-    damage: Math.round(isBoss ? murBossDmg(stage) : waveStaircase(stage, murBossDmg)),
+    // Dégâts (DPS auto) : MÊME escalier accessible que les PV (waveStat). La menace vient des
+    // techniques télégraphiées + du check de résistance (req), pas d'un mur sec.
+    damage: Math.round(isBoss ? murBossDmg(stage) : waveStat(stage, murBossDmg, enemyDmg(diffIlvl, 'trash') * onboardingMult(stage))),
     // XP rare (monter de niveau se mérite — levelling volontairement lent au début).
     xp: Math.round((isBoss ? 38 : isElite || isChampion ? 17 : 4) * Math.pow(1.115, stage - 1)),
     resist,
