@@ -3,7 +3,7 @@ import { elementAffinityResist } from './damage'
 import type { BiomeId } from './biomes'
 import { farmReq } from './resist'
 import { ENEMY_DODGE } from './stats'
-import { enemyHp, enemyDmg, enemyArmor, farmDifficultyIlvl, ilvlFarm, murEnrage } from './progression'
+import { enemyHp, enemyDmg, enemyArmor, farmDifficultyIlvl, ilvlFarm, murEnrage, chapitreOf, vagueOf, CHAPITRE_SIZE } from './progression'
 
 /**
  * Technique SIGNATURE par biome (l'« autre chose » qui s'ajoute aux frappes physiques de base).
@@ -69,24 +69,9 @@ const CHAMPION_TITLES = ['le Terrible', 'l\'Écorcheur', 'la Calamité', 'le Mau
 /** Chance qu'un ennemi normal (palier > 10) soit un champion. */
 const CHAMPION_CHANCE = 0.03
 
-/**
- * Traits déterministes (texture du combat classique, pas d'aléatoire d'un run à l'autre).
- * Apparaissent sur certains paliers et **cyclent** → on peut s'adapter (penetration vs Blindé…).
- */
-interface EnemyTrait {
-  id: string
-  name: string
-  hpMult?: number
-  dmgMult?: number
-  armorMult?: number
-}
-const TRAITS: EnemyTrait[] = [
-  { id: 'blinde', name: 'Blindé', armorMult: 2.6 }, // la Pénétration aide
-  { id: 'feroce', name: 'Féroce', dmgMult: 1.35 },
-  { id: 'massif', name: 'Massif', hpMult: 1.6 },
-  { id: 'coriace', name: 'Coriace', hpMult: 1.3, armorMult: 1.6 },
-  { id: 'enrage', name: 'Enragé', dmgMult: 1.2, hpMult: 1.2 },
-]
+// v0.40 — Les TRAITS déterministes (Blindé/Féroce/Massif…) ont été retirés : la difficulté d'une vague
+// est désormais PUREMENT sa position dans l'escalier du Chapitre (cf. waveStaircase). Plus de pics de
+// stats hors-escalier ; les pics de BUTIN restent via élite ◆ / champion ✦.
 
 /** Palier à partir duquel les ennemis gagnent une résistance globale croissante. */
 const RESIST_RAMP_FROM = 25
@@ -150,29 +135,45 @@ export function murSoftness(stage: number): number {
   return Math.max(0.02, onboardingMult(stage) / FARM_PLATEAU)
 }
 
+/** Multiplicateur de dégâts (DPS auto) d'un boss-mur vs le trash (= farmDmgMult du boss). */
+export const MUR_DMG_MULT = 1.8
+
+/** PV « nus » du boss-mur de fin de Chapitre (stage = chapitre·10), avant trait/multi-perso. SOURCE DE
+ *  VÉRITÉ partagée : `makeEnemy` (le mur lui-même) ET `raids.ts` (les raids se calent AU-DESSUS du mur
+ *  du Chapitre qu'ils gardent). `murSoftness` gère la rampe d'onboarding des tout premiers murs. */
+export function murBossHp(stage: number): number {
+  return enemyHp(farmDifficultyIlvl(stage), 'boss') * murHpRamp(chapitreOf(stage)) * murSoftness(stage)
+}
+/** Dégâts/s « nus » du boss-mur (auto-attaque) — même base que `makeEnemy`. */
+export function murBossDmg(stage: number): number {
+  return enemyDmg(farmDifficultyIlvl(stage), 'trash') * MUR_DMG_MULT * murSoftness(stage)
+}
+
+/** ESCALIER DES VAGUES (v0.40) : la difficulté d'une vague NORMALE (PV/DPS) monte LINÉAIREMENT du boss
+ *  du Chapitre PRÉCÉDENT (0 %, « vague 0 ») au boss du Chapitre COURANT (100 %, vague 10) → la vague V
+ *  est à V·10 % du chemin. Supprime le plateau farmable juste sous le boss (vague 9 ≈ 90 % du boss) :
+ *  chaque vague devient une MARCHE vers le mur. `metric` = `murBossHp` (PV) ou `murBossDmg` (DPS). */
+export function waveStaircase(stage: number, metric: (s: number) => number): number {
+  const c = chapitreOf(stage)
+  const prev = metric((c - 1) * CHAPITRE_SIZE)   // 0 % : boss du Chapitre précédent (c=1 → ~0)
+  const cur = metric(c * CHAPITRE_SIZE)          // 100 % : boss du Chapitre courant
+  return prev + (cur - prev) * (vagueOf(stage) / CHAPITRE_SIZE)
+}
+
 /** Crée l'ennemi correspondant à un palier (stage) dans un biome donné. Boss tous les 10 paliers.
  *  `championMult` (v0.26, 🍖 rune d'Appât) : multiplie la chance d'apparition des champions ✦. */
 export function makeEnemy(stage: number, biome: BiomeId = 'physique', championMult = 1): Enemy {
   const isBoss = stage % 10 === 0
-  // Champion ✦ : rencontre rare et ALÉATOIRE (l'imprévu qui casse la routine du farm).
+  // Champion ✦ : rencontre rare et ALÉATOIRE — désormais un pic de BUTIN (jackpot), plus un pic de
+  // difficulté. Élite ◆ tous les N paliers : marqueur de butin lui aussi.
   const isChampion = !isBoss && stage > 10 && Math.random() < CHAMPION_CHANCE * championMult
   const isElite = !isBoss && !isChampion && stage % ELITE_EVERY === 0 && stage > ELITE_EVERY
-  // Trait déterministe sur certains paliers (cycle), hors boss/élite/champion.
-  const trait = !isBoss && !isElite && !isChampion && stage % 3 === 0 ? TRAITS[Math.floor(stage / 3) % TRAITS.length] : undefined
 
-  // v0.35 — MUR : le boss de vague 10 devient un VRAI boss-classe (×11,7, ~35 s à stuff CIBLE), à
-  // PLEINE puissance (pas le plateau de farm). Les autres rangs gardent la classe 'trash' × multi de
-  // farm. Difficulté = STAGE (frontière, non capée).
-  const farmHpMult = isElite ? 2.7 : isChampion ? 4 : 1
-  const farmDmgMult = isBoss ? 1.8 : isElite ? 1.4 : isChampion ? 1.25 : 1
+  // v0.40 — ESCALIER : la difficulté (PV/DPS) d'une vague NORMALE = sa position dans l'escalier du
+  // Chapitre (boss précédent → boss courant), PUREMENT — plus de multiplicateurs élite/champion/trait
+  // (« fondus dans l'escalier »). Le boss (vague 10) = murBossHp/murBossDmg (porte murHpRamp + softness).
   const diffIlvl = farmDifficultyIlvl(stage)
-  const traitHp = trait?.hpMult ?? 1
-  const traitDmg = trait?.dmgMult ?? 1
-  const armorMult = trait?.armorMult ?? 1
-  // Atténuation : rampe d'onboarding pour le farm normal ; pour un MUR, rampe douce les tout premiers
-  // paliers puis pleine puissance (murSoftness).
-  const soft = isBoss ? murSoftness(stage) : onboardingMult(stage)
-  const maxHp = Math.round((isBoss ? enemyHp(diffIlvl, 'boss') * murHpRamp(stage / 10) : enemyHp(diffIlvl, 'trash') * farmHpMult) * traitHp * soft)
+  const maxHp = Math.round(isBoss ? murBossHp(stage) : waveStaircase(stage, murBossHp))
   const pool = BIOME_ENEMIES[biome]
   const baseName = pool[(stage - 1) % pool.length]
   const bosses = BIOME_BOSSES[biome]
@@ -182,11 +183,9 @@ export function makeEnemy(stage: number, biome: BiomeId = 'physique', championMu
       ? `✦ ${baseName} ${CHAMPION_TITLES[Math.floor(Math.random() * CHAMPION_TITLES.length)]}`
       : isElite
         ? `◆ ${baseName} d'élite`
-        : trait
-          ? `${baseName} ${trait.name.toLowerCase()}`
-          : stage % 2 === 1
-            ? `${baseName} ${EPITHETS[(stage * 3 + baseName.length) % EPITHETS.length]}`
-            : baseName
+        : stage % 2 === 1
+          ? `${baseName} ${EPITHETS[(stage * 3 + baseName.length) % EPITHETS.length]}`
+          : baseName
 
   // Résistance globale (rampe de palier, contrée par la Pénétration) + AFFINITÉ ÉLÉMENTAIRE (v0.37) :
   // l'ennemi RÉSISTE l'élément de son biome et est VULNÉRABLE à l'opposé (Physique neutre). Le tuyau
@@ -203,20 +202,22 @@ export function makeEnemy(stage: number, biome: BiomeId = 'physique', championMu
     name,
     maxHp,
     hp: maxHp,
-    armor: Math.round(enemyArmor(diffIlvl, armorMult)),
-    // Dégâts : MÊME base b que les PV (et que le joueur) → la pression suit la montée, fini le
-    // one-shot exponentiel ET le « trop mou ». La menace vient des techniques télégraphiées + du
-    // check de résistance (req), pas d'un mur sec. La classe encode le ratio (boss ×1,8 trash).
-    damage: Math.round(enemyDmg(diffIlvl, 'trash') * farmDmgMult * traitDmg * soft),
+    armor: Math.round(enemyArmor(diffIlvl)),
+    // Dégâts (DPS auto) : MÊME escalier que les PV → boss précédent → boss courant. La menace vient
+    // des techniques télégraphiées + du check de résistance (req), pas d'un mur sec.
+    damage: Math.round(isBoss ? murBossDmg(stage) : waveStaircase(stage, murBossDmg)),
     // XP rare (monter de niveau se mérite — levelling volontairement lent au début).
     xp: Math.round((isBoss ? 38 : isElite || isChampion ? 17 : 4) * Math.pow(1.115, stage - 1)),
     resist,
     damageType,
-    ...(trait ? { trait: trait.name } : isElite ? { trait: 'Élite' } : isChampion ? { trait: 'Champion ✦' } : {}),
+    ...(isElite ? { trait: 'Élite' } : isChampion ? { trait: 'Champion ✦' } : {}),
     // Exigence de résistance (v0.24) sur l'élément du biome — nulle avant le palier 45, douce après.
     ...(() => { const rq = farmReq(stage); return rq > 0 ? { reqs: { [biome]: rq } as Partial<Record<DamageType, number>> } : {} })(),
-    ...(() => { const a = biomeAbilities(biome, isBoss, isElite || isChampion); return a.length ? { abilities: a } : {} })(),
-    ...(isElite || isChampion ? { elite: true, dodge: ENEMY_DODGE.elite } : {}),
+    // v0.40 — l'élite/champion ne déclenche plus de capacité spéciale (fondu dans l'escalier) : seul
+    // le biome (signature) et le boss portent les techniques.
+    ...(() => { const a = biomeAbilities(biome, isBoss, false); return a.length ? { abilities: a } : {} })(),
+    // Élite/champion = marqueurs de BUTIN uniquement (pas de pic de difficulté : ni esquive, ni stats).
+    ...(isElite || isChampion ? { elite: true } : {}),
     ...(isChampion ? { champion: true } : {}),
     // Boss : reçoivent les « Dégâts vs Boss », esquivent (→ Précision, hit cap boss 1500) et étourdissent (→ Résilience).
     // MUR (v0.35) : métadonnée de dominante + enrage (fiche + tick), au Palier = stage / 10.

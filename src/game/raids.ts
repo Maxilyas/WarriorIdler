@@ -1,7 +1,8 @@
 import type { DamageType, Enemy, EnemyAbility, ItemType } from './types'
 import { DAMAGE_TYPE_LIST } from './damage'
-import { enemyHp, enemyDmg, enemyArmor, clampIlvl, lootFarmIlvl, frontierIlvl, lagAt, chapitreOf, ILVL_CAP_BASE, ILVL_CAP_ENDGAME } from './progression'
+import { enemyHp, enemyDmg, enemyArmor, clampIlvl, lootFarmIlvl, frontierIlvl, lagAt, chapitreOf, ILVL_CAP_BASE, ILVL_CAP_ENDGAME, CHAPITRE_SIZE } from './progression'
 import { materialYieldAtChapter } from './items'
+import { murBossHp, murBossDmg } from './enemies'
 import { ENEMY_DODGE } from './stats'
 
 /**
@@ -176,6 +177,19 @@ const RAID_ANCHOR_HIGH = 140  // stage ancre du Tier 10 MONDIAL (mur du Chapitre
 const RAID_ANCHOR_SPAN = 10   // nb de tiers mondiaux entre LOW et HIGH (= la pente : +10 stages/tier)
 const FORTRESS_ARMOR_MULT = 3.2   // 'fortress' : armure colossale
 const FORTRESS_RESIST_BONUS = 0.2 // 'fortress' : +résistance au thème
+
+// v0.40 — RAID = GARDIEN DU MUR. Le Raid T (mondial) garde le mur du Chapitre (T+4) : pour franchir ce
+// Chapitre il faut le clear. Le boss de raid doit donc être UN CRAN AU-DESSUS de ce mur — plus de PV
+// ET frappe plus fort — pour le feeling « je bats le mur, mais le raid me bloque » (il faut trouver
+// PLUS de dégâts/soin). Calé au FEELING, pas au TTK (assumé : le joueur trouvera des leviers non vus).
+// Knobs à nudger librement.
+const RAID_HP_VS_MUR = 1.8   // PV du boss de raid = 1,8× le mur du Chapitre gardé
+const RAID_DMG_VS_MUR = 1.4  // DPS (auto) du boss de raid = 1,4× ce mur
+
+/** Stage du mur de Chapitre gardé par un tier MONDIAL : Raid T ↔ mur du Chapitre (T+4) (gate v0.36). */
+function murStageForTier(globalTierN: number): number {
+  return (globalTierN + 4) * CHAPITRE_SIZE
+}
 
 const ELEMENTS: DamageType[] = DAMAGE_TYPE_LIST
 
@@ -738,14 +752,24 @@ export function raidReqs(def: RaidDef, tier: number): Partial<Record<DamageType,
 }
 
 function bossHp(def: RaidDef, tier: number, _bestStage: number, partySize = 1): number {
-  // v0.36 — PV ancrés sur l'ilvl de DIFFICULTÉ (non capé) → montent à chaque tier, plus de plateau.
+  // v0.40 — PV calés AU-DESSUS du mur de Chapitre gardé (× RAID_HP_VS_MUR) → le raid est toujours plus
+  // épais que le mur correspondant. L'Abîme (endgame, post-Ch15, plus de mur à garder) garde son
+  // ancrage ilvl propre (220/240, non capé).
   const v = raidBossVariant(def, tier)
-  return Math.round(enemyHp(raidDifficultyIlvl(def, tier), 'raidboss') * v.hpMult * raidPartyHpMult(partySize))
+  const base = def.id === 'abysse'
+    ? enemyHp(raidDifficultyIlvl(def, tier), 'raidboss')
+    : murBossHp(murStageForTier(globalTier(def, tier))) * RAID_HP_VS_MUR
+  return Math.round(base * v.hpMult * raidPartyHpMult(partySize))
 }
 
 function bossDamage(def: RaidDef, tier: number, _bestStage: number): number {
+  // v0.40 — dégâts (DPS auto) calés au-dessus du mur gardé (× RAID_DMG_VS_MUR) → le raid frappe
+  // toujours plus fort que le mur. Abîme : ancrage ilvl propre.
   const v = raidBossVariant(def, tier)
-  return Math.round(enemyDmg(raidDifficultyIlvl(def, tier), 'raidboss') * v.dmgMult)
+  const base = def.id === 'abysse'
+    ? enemyDmg(raidDifficultyIlvl(def, tier), 'raidboss')
+    : murBossDmg(murStageForTier(globalTier(def, tier))) * RAID_DMG_VS_MUR
+  return Math.round(base * v.dmgMult)
 }
 
 /** Construit le boss du tier. `element` = type d'attaque courant (pour les raids 'rotating'). */
