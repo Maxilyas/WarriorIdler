@@ -119,6 +119,9 @@ export interface UniqueEffect {
   mods?: StatBlock
   /** Bonus de résistances de base (rang 1), montés par le rang. */
   resistMods?: Partial<Record<DamageType, number>>
+  /** v0.38 — bonus de TAG : ×dégâts (ou ×soin pour [soin]) des sorts portant ce tag. `mult` = fraction
+   *  au rang 1 (0.30 = +30%), montée par le rang (comme resistMods). Alimente cm.tagBonus. */
+  tagMods?: { tag: string; mult: number }[]
   /** Capacité active (proc/sort) débloquée au rang actif — texte d'accroche. */
   active?: string
 }

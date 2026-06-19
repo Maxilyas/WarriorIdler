@@ -172,6 +172,21 @@ export const UNIQUE_EFFECTS: UniqueEffect[] = [
   { id: 'u_clef_des_songes', name: 'Clef des songes', role: 'utility', description: 'Ouvre des portes invisibles.', mods: { maitrise: 40, critique: 25 }, active: 'Améliore les récompenses de donjon et raid.' },
   { id: 'u_plume_de_phenix', name: 'Plume de phénix', role: 'utility', description: 'Une plume porte-bonheur.', mods: { regen: 35, maitrise: 30, hate: 15 }, active: 'Évite la mort une fois par combat.' },
   { id: 'u_dé_pipé', name: 'Dé pipé', role: 'utility', description: 'Le hasard vous obéit.', mods: { critique: 40, maitrise: 25 }, active: 'Force un résultat favorable périodiquement.' },
+
+  // ================= TAGS (v0.38) — uniques qui DÉFINISSENT un build en amplifiant un tag de sort =================
+  // Le bonus s'applique au tagMult des sorts portant ce tag (dégâts) ET au soin pour [soin]. Monte au rang.
+  { id: 'u_coeur_guerisseur', name: 'Cœur du guérisseur', role: 'heal', description: 'La vie déborde de tes mains : tes SOINS sont amplifiés (+30% au rang 1).', mods: { intelligence: 40 }, tagMods: [{ tag: 'soin', mult: 0.30 }], active: 'Tes soins critiques débordent en bouclier.' },
+  { id: 'u_fleau_persistant', name: 'Fléau persistant', role: 'dps', description: 'Tes afflictions rongent sans répit : dégâts SUR LA DURÉE [dot] +30% (rang 1).', mods: { alteration: 40 }, tagMods: [{ tag: 'dot', mult: 0.30 }], active: 'Tes DoT se propagent à un ennemi proche.' },
+  { id: 'u_lame_precise', name: 'Lame de précision', role: 'dps', description: 'Chaque frappe vise le point vital : sorts à FRAPPE DIRECTE [direct] +25% (rang 1).', mods: { critique: 30 }, tagMods: [{ tag: 'direct', mult: 0.25 }], active: 'Les frappes directes ont une chance de doubler.' },
+  { id: 'u_onde_devastatrice', name: 'Onde dévastatrice', role: 'dps', description: 'Ton souffle balaie tout : sorts de ZONE [zone] +28% (rang 1).', mods: { maitrise: 30 }, tagMods: [{ tag: 'zone', mult: 0.28 }], active: 'Tes sorts de zone étourdissent brièvement.' },
+  { id: 'u_ame_de_braise', name: 'Âme de braise', role: 'dps', description: 'Le brasier t\'habite : sorts de [feu] +25% (rang 1).', mods: { intelligence: 30 }, tagMods: [{ tag: 'feu', mult: 0.25 }], active: 'Tes sorts de feu embrasent la cible.' },
+  { id: 'u_coeur_de_glace', name: 'Cœur de glace', role: 'dps', description: 'Le froid absolu : sorts de [froid] +25% (rang 1).', mods: { intelligence: 30 }, tagMods: [{ tag: 'froid', mult: 0.25 }], active: 'Tes sorts de froid ralentissent davantage.' },
+  { id: 'u_fureur_orageuse', name: 'Fureur orageuse', role: 'dps', description: 'L\'orage gronde en toi : sorts de [foudre] +25% (rang 1).', mods: { intelligence: 30 }, tagMods: [{ tag: 'foudre', mult: 0.25 }], active: 'Tes sorts de foudre rebondissent.' },
+  { id: 'u_esprit_arcanique', name: 'Esprit arcanique', role: 'dps', description: 'La trame magique t\'obéit : sorts d\'[arcane] +25% (rang 1).', mods: { intelligence: 30 }, tagMods: [{ tag: 'arcane', mult: 0.25 }], active: 'Tes sorts arcaniques perforent la résistance.' },
+  { id: 'u_etreinte_ombre', name: 'Étreinte d\'ombre', role: 'dps', description: 'Les ténèbres te nourrissent : sorts d\'[ombre] +25% (rang 1).', mods: { intelligence: 30 }, tagMods: [{ tag: 'ombre', mult: 0.25 }], active: 'Tes sorts d\'ombre volent la vie.' },
+  { id: 'u_croissance_sauvage', name: 'Croissance sauvage', role: 'dps', description: 'La nature se déchaîne : sorts de [nature] +25% (rang 1).', mods: { intelligence: 30 }, tagMods: [{ tag: 'nature', mult: 0.25 }], active: 'Tes sorts de nature empoisonnent.' },
+  { id: 'u_coup_de_grace', name: 'Coup de grâce', role: 'dps', description: 'L\'achèvement parfait : FINISSEURS [finisseur] +35% (rang 1).', mods: { critique: 25, degatsCrit: 30 }, tagMods: [{ tag: 'finisseur', mult: 0.35 }], active: 'Tes finisseurs exécutent les ennemis affaiblis.' },
+  { id: 'u_apotheose', name: 'Apothéose', role: 'dps', description: 'Ton ultime devient cataclysme : ULTIMES [ultime] +45% (rang 1).', mods: { maitrise: 30 }, tagMods: [{ tag: 'ultime', mult: 0.45 }], active: 'Tes ultimes réduisent leurs propres recharges.' },
 ]
 
 export const UNIQUE_MAX_RANK = 10
@@ -256,6 +271,21 @@ export function instanceMods(inst: UniqueInstance, item?: { rarity: RarityId; il
 /** Résistances d'une instance d'unique (raccourci) — indépendantes de l'objet. */
 export function instanceResist(inst: UniqueInstance): Partial<Record<DamageType, number>> {
   return uniqueResistAtRank(inst.id, inst.rank)
+}
+
+/** v0.38 — bonus de TAG d'un effet à un rang donné (tag → fraction de bonus ; monte au rang seul). */
+export function uniqueTagModsAtRank(id: string, rank: number): Record<string, number> {
+  const def = BY_ID.get(id)
+  if (!def?.tagMods) return {}
+  const scale = 1 + (rank - 1) * RANK_GROWTH
+  const out: Record<string, number> = {}
+  for (const tm of def.tagMods) out[tm.tag] = (out[tm.tag] ?? 0) + tm.mult * scale
+  return out
+}
+
+/** Bonus de TAG d'une instance d'unique (raccourci). */
+export function instanceTagMods(inst: UniqueInstance): Record<string, number> {
+  return uniqueTagModsAtRank(inst.id, inst.rank)
 }
 
 /**

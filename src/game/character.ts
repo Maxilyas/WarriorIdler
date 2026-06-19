@@ -3,6 +3,7 @@ import { computeTotalStats, computeDerived, type DerivedStats } from './stats'
 import { computeDamageProfile, computeResistProfile, profileDamageMult, type DamageProfile } from './damage'
 import { DAMAGE_TYPE_LIST } from './damage'
 import { setBonuses } from './sets'
+import { instanceTagMods } from './uniques'
 import { getPower, POWER_SLOTS } from './powers'
 import { theoreticalDps, genericMitigation } from './combat'
 import {
@@ -723,6 +724,13 @@ export function charCombatMods(char: Character): CombatMods {
         ? { per: multiType.per + k.multiTypeBonus.per, threshold: Math.min(multiType.threshold, k.multiTypeBonus.threshold) }
         : { ...k.multiTypeBonus }
     }
+  }
+  // v0.38 — UNIQUES PAR TAG : leur bonus s'ajoute multiplicativement au tagBonus (×dégâts des sorts
+  // du tag, et ×soin pour [soin] via healTagMult) → un unique peut DÉFINIR un build (feu, dot, soin…).
+  for (const it of Object.values(char.equipment)) {
+    if (!it?.unique) continue
+    const tm = instanceTagMods(it.unique)
+    for (const tag in tm) out.tagBonus[tag] = (out.tagBonus[tag] ?? 1) * (1 + tm[tag])
   }
   // PACTE DE LA TOXINE : la contrepartie coupe le soin par DoT.
   if (out.noDotLeech) out.dotLeech = 0

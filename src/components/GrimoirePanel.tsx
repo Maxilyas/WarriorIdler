@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useGame } from '../game/store'
 import {
-  UNIQUE_EFFECTS, UNIQUE_ROLES, uniqueModsAtRank, uniqueResistAtRank,
+  UNIQUE_EFFECTS, UNIQUE_ROLES, uniqueModsAtRank, uniqueResistAtRank, uniqueTagModsAtRank,
   uniqueActiveText, UNIQUE_ACTIVE_RANK,
 } from '../game/uniques'
 import {
@@ -290,6 +290,7 @@ function UniquesCodex() {
           }
           const mods = uniqueModsAtRank(e.id, 1)
           const resist = uniqueResistAtRank(e.id, 1)
+          const tagMods = uniqueTagModsAtRank(e.id, 1)
           return (
             <div key={e.id} className="rounded-lg border p-2.5" style={{ borderColor: role.color + '33', background: role.color + '0c' }}>
               <div className="flex items-center justify-between gap-2">
@@ -308,6 +309,9 @@ function UniquesCodex() {
                   const dm = DAMAGE_TYPES[k as keyof typeof DAMAGE_TYPES]
                   return <span key={k} style={{ color: dm.color }}>+{Math.round((v as number) * 100)}% rés. {dm.name}</span>
                 })}
+                {Object.entries(tagMods).map(([tag, v]) => (
+                  <span key={tag} className="text-cyan-300">+{Math.round((v as number) * 100)}% sorts [{tag}]</span>
+                ))}
               </div>
               {uniqueActiveText(e.id) && (
                 <div className="mt-1 text-[10px] leading-snug text-emerald-300/80">

@@ -18,7 +18,7 @@ import type { OffensiveStat } from '../game/types'
 import { ITEM_TYPES, equipSlotsForType } from '../game/slots'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from '../game/damage'
 import {
-  getUnique, uniqueActiveText, isUniqueActive, instanceMods, instanceResist, upgradeCost, insertCost,
+  getUnique, uniqueActiveText, isUniqueActive, instanceMods, instanceResist, instanceTagMods, upgradeCost, insertCost,
   UNIQUE_EFFECTS, UNIQUE_ROLES, UNIQUE_MAX_RANK, UNIQUE_ACTIVE_RANK,
 } from '../game/uniques'
 import type { UniqueRole } from '../game/types'
@@ -891,6 +891,9 @@ function UniqueBlock({ item }: { item: Item }) {
             <span key={k} style={{ color: m.color }}>+{Math.round((v as number) * 100)} résist. {m.name}</span>
           )
         })}
+        {Object.entries(instanceTagMods(inst)).map(([tag, v]) => (
+          <span key={tag} className="text-cyan-300">+{Math.round((v as number) * 100)}% sorts [{tag}]</span>
+        ))}
       </div>
       <div className={'mt-1 text-[10px] leading-snug ' + (active ? 'text-emerald-300' : 'text-slate-500')}>
         {active ? '✓ Actif : ' : `🔒 Rang ${UNIQUE_ACTIVE_RANK} : `}

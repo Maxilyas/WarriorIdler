@@ -545,12 +545,12 @@ ability('lu_hub', 'lumiere', 0, 'Lumière', 'lu_soin', 'Entre dans la voie de la
 // SOIN : kit de soin pur.
 minor('lu_foi', 'lumiere', 1, 'Foi', 5, { regen: 10 }, { requires: ['lu_hub'] }) // ⛓ TAMPON soin (maxRank 5)
 ability('lu_renouveau', 'lumiere', 2, 'Renouveau', 'lu_renouveau', 'SOIN : débloque Renouveau (soin sur la durée).', { requires: ['lu_foi'] })
-ks('lu_hot', 'lumiere', 2, 'Grâce persistante', 'SOIN : un soin sur la durée constant sur l\'allié blessé (+régén d\'équipe).', { stat: { regen: 20 }, ks: { hot: 0.5 } }, { requires: ['lu_foi'] })
+ks('lu_hot', 'lumiere', 2, 'Grâce persistante', 'SOIN : un soin sur la durée constant sur l\'allié blessé. Tes sorts [soin] +15%.', { stat: { regen: 20 }, ks: { hot: 0.5, tagBonus: { tag: 'soin', damageMult: 1.15 } } }, { requires: ['lu_foi'] })
 ability('lu_benediction', 'lumiere', 3, 'Bénédiction', 'lu_benediction', 'Débloque Bénédiction (soin de tout le groupe). Gatée : Foi au max + 6 pts dans la voie.', { requires: ['lu_foi'], requiresRank: { id: 'lu_foi', rank: 5 }, minSpent: 6 })
 // ATONEMENT : healToDamage (tes soins frappent aussi).
 minor('lu_zele', 'lumiere', 1, 'Zèle', 5, { critique: 10 }, { requires: ['lu_hub'] }) // ⛓ TAMPON atonement (maxRank 5)
 ks('lu_chatiment', 'lumiere', 2, 'Châtiment', 'ATONEMENT : 40% de tes soins frappent AUSSI l\'ennemi (tu soignes en châtiant — solo viable). Exige Zèle au rang max (5).', { stat: { intelligence: 12 }, ks: { healToDamage: 0.4 } }, { requires: ['lu_zele'], requiresRank: { id: 'lu_zele', rank: 5 } })
-ks('lu_devotion', 'lumiere', 3, 'Dévotion', 'CHOIX : soins renforcés (+régén, +soin sur la durée).', { stat: { regen: 24 }, ks: { hot: 0.5 } }, { requires: ['lu_chatiment'], exclusive: 'lu_voie' })
+ks('lu_devotion', 'lumiere', 3, 'Dévotion', 'CHOIX : voie du soin pur — soin sur la durée renforcé ET tes sorts [soin] +20%.', { stat: { regen: 24 }, ks: { hot: 0.5, tagBonus: { tag: 'soin', damageMult: 1.20 } } }, { requires: ['lu_chatiment'], exclusive: 'lu_voie' })
 ks('lu_inquisition', 'lumiere', 3, 'Inquisition', 'CHOIX : +40% de châtiment (tes soins frappent bien plus fort).', { stat: { intelligence: 14 }, ks: { healToDamage: 0.4 } }, { requires: ['lu_chatiment'], exclusive: 'lu_voie' })
 ks('lu_ferveur', 'lumiere', 4, 'Ferveur', 'Tes sorts [soin] +15% et +12% de dégâts. Profond : 8 pts dans la voie.', { stat: { intelligence: 16 }, ks: { tagBonus: { tag: 'soin', damageMult: 1.15 }, damageMult: 1.12 } }, { requires: ['lu_chatiment'], minSpent: 8 })
 minor('lu_buf_aube', 'lumiere', 4, 'Sacerdoce', 5, { intelligence: 8 }, { requires: ['lu_ferveur'] }) // ⛓ TAMPON : max (5 pts) vers l'ultime
@@ -710,7 +710,7 @@ ks('el_protection', 'elementaire', 2, 'Bouclier élémentaire', 'SURVIE : -10% d
 ability('va_hub', 'vague', 0, 'Vague', 'va_soin', 'Débloque Vague de soin. +18 Intelligence.', { requires: ['cl_chaman'], statMods: { intelligence: 18 } })
 minor('va_eau', 'vague', 1, 'Source vive', 5, { regen: 10 }, { requires: ['va_hub'] })
 ability('va_totem', 'vague', 2, 'Totem de jouvence', 'va_totem', 'TOTEM : débloque Totem de jouvence (soin sur la durée).', { requires: ['va_eau'] })
-ks('va_totemks', 'vague', 2, 'Totem de soin', 'TOTEM : un soin sur la durée constant sur l\'allié blessé (+régén d\'équipe). Exige Source vive au max (5).', { stat: { regen: 20 }, ks: { hot: 0.5 } }, { requires: ['va_eau'], requiresRank: { id: 'va_eau', rank: 5 } })
+ks('va_totemks', 'vague', 2, 'Totem de soin', 'TOTEM : un soin sur la durée constant sur l\'allié blessé. Tes sorts [soin] +15%. Exige Source vive au max (5).', { stat: { regen: 20 }, ks: { hot: 0.5, tagBonus: { tag: 'soin', damageMult: 1.15 } } }, { requires: ['va_eau'], requiresRank: { id: 'va_eau', rank: 5 } })
 ability('va_chaine', 'vague', 3, 'Soin en chaîne', 'va_chaine', 'Débloque Soin en chaîne (groupe). Gaté : 6 pts dans la voie.', { requires: ['va_eau'], minSpent: 6 })
 minor('va_buf', 'vague', 1, 'Communion', 5, { intelligence: 8 }, { requires: ['va_hub'] })
 ks('va_chatiment', 'vague', 2, 'Courroux ancestral', 'ATONEMENT : 35% de tes soins frappent aussi l\'ennemi (solo viable). Exige Communion au max (5).', { stat: { intelligence: 12 }, ks: { healToDamage: 0.35 } }, { requires: ['va_buf'], requiresRank: { id: 'va_buf', rank: 5 } })
@@ -748,7 +748,7 @@ ability('ro_souffle', 'ronce', 2, 'Second souffle', 'second_souffle', 'SURVIE : 
 /* ---- FLORAISON (HEAL) — HoT empilés. ---- */
 ability('fo_hub', 'floraison', 0, 'Floraison', 'fo_pousse', 'Débloque Pousse de vie (soin sur la durée). +18 Intelligence.', { requires: ['cl_druide'], statMods: { intelligence: 18 } })
 minor('fo_seve', 'floraison', 1, 'Sève', 5, { regen: 10 }, { requires: ['fo_hub'] })
-ks('fo_hot', 'floraison', 2, 'Floraison persistante', 'SOIN : un soin sur la durée constant (+régén d\'équipe). Exige Sève au max (5).', { stat: { regen: 20 }, ks: { hot: 0.5 } }, { requires: ['fo_seve'], requiresRank: { id: 'fo_seve', rank: 5 } })
+ks('fo_hot', 'floraison', 2, 'Floraison persistante', 'SOIN : un soin sur la durée constant. Tes sorts [soin] +15%. Exige Sève au max (5).', { stat: { regen: 20 }, ks: { hot: 0.5, tagBonus: { tag: 'soin', damageMult: 1.15 } } }, { requires: ['fo_seve'], requiresRank: { id: 'fo_seve', rank: 5 } })
 ability('fo_floraison', 'floraison', 3, 'Floraison', 'fo_floraison', 'Débloque Floraison (soin direct). Gaté : 6 pts.', { requires: ['fo_seve'], minSpent: 6 })
 ability('fo_eclosion', 'floraison', 5, 'Éclosion', 'fo_eclosion', 'ULTIME — toutes les fleurs éclosent : énorme soin de groupe. Tout au fond : 20 pts.', { requires: ['fo_hot'], minSpent: 20 })
 minor('fo_buf', 'floraison', 1, 'Symbiose', 5, { intelligence: 8 }, { requires: ['fo_hub'] })
