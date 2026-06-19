@@ -4,16 +4,15 @@ import { describeStats, PRIMARY_META } from '../game/stats'
 import type { StatEffect } from '../game/stats'
 import type { PrimaryStat, DamageType, Character, PowerDef } from '../game/types'
 import type { DerivedStats } from '../game/stats'
-import { DAMAGE_TYPES, DAMAGE_TYPE_LIST, profileDamageMult, spellTypeMult, spellElementTypes } from '../game/damage'
+import { DAMAGE_TYPES, DAMAGE_TYPE_LIST, profileDamageMult, spellTypeMult, spellElementTypes, type DamageProfile } from '../game/damage'
 import { charTotalStats, charDerived, charMaxHp, charDamageProfile, charResist, abilityPower, powerScale, dpsBreakdown, isGenerator, spellDps } from '../game/character'
 import { setBonuses, getSet } from '../game/sets'
-import { getPower, POWER_EFFECT_META, scaleLabel, powerDamageType } from '../game/powers'
+import { getPower, POWER_EFFECT_META, scaleLabel, powerDamageType, powerHasDamageType } from '../game/powers'
 import { RAID_LIST, getRaidDef, raidUnlocked, raidReqs, type RaidId } from '../game/raids'
 import { resistMult } from '../game/resist'
 import { LevelBadge } from './LevelBadge'
 import { AvatarEditor } from './AvatarEditor'
 
-const DMG_EFFECTS: ReadonlySet<string> = new Set(['nuke', 'cleave', 'dot', 'executeNuke', 'megaCleave', 'lifeNuke', 'rupture'])
 // Effets dont la magnitude est une VALEUR affichable (dégâts/PV). Les autres (charge/marque/frénésie/
 // immunité) ont une magnitude = MULTIPLICATEUR/durée → on n'affiche pas de « ≈ X » trompeur.
 const VALUE_EFFECTS: ReadonlySet<string> = new Set([
@@ -25,10 +24,24 @@ const VALUE_EFFECTS: ReadonlySet<string> = new Set([
 function powerDetail(p: PowerDef, derived: DerivedStats, weaponType: DamageType) {
   const value = Math.round((p.magnitude ?? 0) * abilityPower(derived, powerScale(p)))
   const cd = (p.cooldown ?? 0) * (1 - derived.cdr)
-  const isDmg = DMG_EFFECTS.has(p.effect ?? '')
-  // Sans type explicite, un sort de dégâts prend le type de l'ARME équipée (Ombre, Feu…).
+  // v0.37 : TOUS les sorts à dégâts typés (nukes, mais aussi finisseurs/générateurs/détonations/venins/
+  // hybrides — cf. powerHasDamageType) portent un type. Sans type explicite → celui de l'ARME équipée.
+  const isDmg = powerHasDamageType(p)
   const type: DamageType | undefined = isDmg ? powerDamageType(p, weaponType) : p.damageType
   return { value, cd, type, dmg: isDmg, scale: scaleLabel(p), showValue: VALUE_EFFECTS.has(p.effect ?? '') }
+}
+
+/** Chip « type du sort + multiplicateur de matching RÉEL » (v0.37, Piste C). Texte VISIBLE (pas un
+ *  simple hover) → lisible aussi sur mobile : le joueur voit que stacker l'élément de ses sorts les
+ *  booste. Réutilisé par les actifs ET les générateurs. */
+function SpellTypeChip({ type, tags, profile }: { type: DamageType; tags?: string[]; profile: DamageProfile }) {
+  const meta = DAMAGE_TYPES[type]
+  const tm = spellTypeMult(profile, spellElementTypes(tags, type))
+  return (
+    <span style={{ color: meta.color }} title={`Sort de type ${meta.name}. Il profite surtout de ton bonus « +% ${meta.name} » (objets + talents) : actuellement ×${tm.toFixed(2)}. Empile cet élément pour le booster — un autre élément aide bien moins. (La résistance de l'ennemi s'applique en plus pendant le combat.)`}>
+      {meta.icon} {meta.name} <span className="font-semibold text-slate-200">×{tm.toFixed(2)}</span>
+    </span>
+  )
 }
 
 /** Infobulle de scaling : TOUT sort scale sur la MEILLEURE de (son affinité, ta stat dominante). */
@@ -486,19 +499,7 @@ function PowersSection({ char }: { char: Character }) {
                 </div>
                 {det && (
                   <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-slate-400">
-                    {det.type && (() => {
-                      // v0.37 : un sort scale sur le bonus de SON type (matching). On affiche le multiplicateur
-                      // RÉEL pour ce build → le joueur VOIT que stacker cet élément le booste. Visible en texte
-                      // (pas un simple hover) = lisible aussi sur mobile.
-                      const ty = det.type!
-                      const meta = DAMAGE_TYPES[ty]
-                      const tm = spellTypeMult(profile, spellElementTypes(p.tags, ty))
-                      return (
-                        <span style={{ color: meta.color }} title={`Sort de type ${meta.name}. Il profite surtout de ton bonus « +% ${meta.name} » (objets + talents) : actuellement ×${tm.toFixed(2)}. Empile cet élément pour le booster — un autre élément aide bien moins. (La résistance de l'ennemi s'applique en plus pendant le combat.)`}>
-                          {meta.icon} {meta.name} <span className="font-semibold text-slate-200">×{tm.toFixed(2)}</span>
-                        </span>
-                      )
-                    })()}
+                    {det.type && <SpellTypeChip type={det.type} tags={p.tags} profile={profile} />}
                     <span>{POWER_EFFECT_META[p.effect ?? 'nuke'].label}</span>
                     {det.scale && <span className="text-amber-300/80" title={scaleHint(det.scale)}>📈 {det.scale}</span>}
                     <span>CD {det.cd.toFixed(1)}s</span>
@@ -546,6 +547,7 @@ function PowersSection({ char }: { char: Character }) {
                   <button onClick={() => setGenerator(slot, null)} className="rounded px-2 py-1 text-sm text-slate-500 hover:text-red-400" title="Retirer">✕</button>
                 </div>
                 <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-slate-400">
+                  {det.type && <SpellTypeChip type={det.type} tags={p.tags} profile={profile} />}
                   {det.scale && <span className="text-amber-300/80" title={scaleHint(det.scale)}>📈 {det.scale}</span>}
                   <span>CD {det.cd.toFixed(1)}s</span>
                   {dps > 0 && <span className="font-semibold text-emerald-300" title={dpsHint(p)}>≈ {Math.round(dps).toLocaleString('fr-FR')} DPS</span>}

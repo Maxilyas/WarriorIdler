@@ -598,9 +598,12 @@ export function scaleLabel(p: PowerDef): string | null {
   return 'Stat principale'
 }
 
-/** Effets qui infligent des dégâts TYPÉS (les seuls qui portent un type de dégât affichable). */
+/** Effets qui infligent des dégâts TYPÉS (les seuls qui portent un type de dégât affichable).
+ *  v0.37 : les combos/venin/hybrides infligent aussi des dégâts typés (ils appellent hit()/posent un
+ *  DoT dans fireActive) et bénéficient du matching Piste C → ils affichent leur type comme les nukes. */
 const TYPED_DAMAGE_EFFECTS: ReadonlySet<PowerEffect> = new Set<PowerEffect>([
   'nuke', 'cleave', 'dot', 'executeNuke', 'megaCleave', 'lifeNuke', 'rupture',
+  'finisher', 'builder', 'detonate', 'poison', 'smiteHeal', 'eclipse', 'shift',
 ])
 
 /** Le sort inflige-t-il des dégâts typés (→ a un type de dégât affichable) ? */
