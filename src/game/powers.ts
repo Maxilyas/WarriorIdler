@@ -271,6 +271,11 @@ function spellDescription(s: SpellSpec): string {
 function specToPower(s: SpellSpec): PowerDef {
   const scaleStats = Array.isArray(s.scale) ? s.scale : undefined
   const scaleStat = !Array.isArray(s.scale) ? s.scale : undefined
+  // v0.37 « Piste C » : l'ÉLÉMENT du sort devient un tag de première classe → les nœuds « +% [feu] »
+  // (tagBonus) s'appliquent à TOUS les sorts de ce type, cross-classe, comme leur libellé l'annonce.
+  const tags = s.type
+    ? (s.tags?.includes(s.type) ? s.tags : [...(s.tags ?? []), s.type])
+    : s.tags
   return {
     id: s.id, name: s.name, kind: 'active', description: spellDescription(s),
     unlockLevel: 1, cooldown: s.cd, effect: s.effect, magnitude: s.mag,
@@ -279,7 +284,7 @@ function specToPower(s: SpellSpec): PowerDef {
     ...(scaleStat ? { scaleStat } : {}),
     ...(s.duration ? { duration: s.duration } : {}),
     ...(s.icon ? { icon: s.icon } : {}),
-    ...(s.tags ? { tags: s.tags } : {}),
+    ...(tags && tags.length ? { tags } : {}),
     ...(s.resource ? { resource: s.resource } : {}),
     ...(s.gen ? { gen: s.gen } : {}),
   }

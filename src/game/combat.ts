@@ -69,6 +69,20 @@ export function rollHit(derived: DerivedStats, profile: DamageProfile, enemy: En
   return { damage, crit, heal }
 }
 
+/**
+ * v0.37 « Piste C » — réduction des dégâts d'un SORT par la RÉSISTANCE de type de l'ennemi.
+ * Symétrique de rollHit côté résist : la Pénétration ampute la résist positive ; une vulnérabilité
+ * (résist < 0) amplifie (la Pénétration n'y change rien). L'ARMURE n'entre PAS ici (elle reste une
+ * défense d'auto-attaque physique) → les sorts physiques ne sont pas nerfés par l'armure.
+ * Aujourd'hui la résist ennemie est UNIFORME par type : c'est donc une atténuation égale sur tous les
+ * éléments, que la Pénétration contre (les casters cessent d'ignorer la résist comme avant v0.37).
+ */
+export function spellResistMult(enemy: Enemy, type: DamageType, penetration: number): number {
+  let res = enemy.resist?.[type] ?? 0
+  if (res > 0) res *= 1 - penetration
+  return Math.max(0, 1 - res)
+}
+
 /** DPS théorique (affichage) : inclut le bonus de type, ignore armure/résistances. */
 export function theoreticalDps(derived: DerivedStats, profile: DamageProfile, bonusMult = 1): number {
   const avgCrit = 1 + derived.critChance * (derived.critMult - 1)

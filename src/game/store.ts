@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import type {
   Equipment, Item, Affix, PrimaryStat, OffensiveStat, SecondaryStat, EquipSlotId, ItemType, Enemy, DamageType, RarityId, Character, PowerDef, EnemyAbility,
 } from './types'
-import { rollHit, incomingDps, genericMitigation, theoreticalDps } from './combat'
+import { rollHit, incomingDps, genericMitigation, theoreticalDps, spellResistMult } from './combat'
 import { resistMult, enemyReq, resistSurplus, RESIST_DSCALE } from './resist'
 import type { DerivedStats } from './stats'
 import {
@@ -68,7 +68,7 @@ import {
 } from './biomeBonus'
 import { RARITIES, RARITY_LIST } from './rarities'
 import { SECONDARY_STATS } from './stats'
-import { DAMAGE_TYPE_LIST, DAMAGE_TYPES, profileDamageMult, type DamageProfile } from './damage'
+import { DAMAGE_TYPE_LIST, DAMAGE_TYPES, spellTypeMult, spellElementTypes, type DamageProfile } from './damage'
 import { equipSlotsForType, slotAccepts, EQUIP_SLOTS } from './slots'
 import { TUT_QUESTS, TUT_QUEST_IDS, type TutCtx } from './tutorial'
 import { welcomeMessage, offlineMessage, hasReward as inboxHasReward, INBOX_CAP, type InboxMessage } from './inbox'
@@ -2515,13 +2515,22 @@ function autoSpenderReady(p: PowerDef, c: Character, enemy: Enemy | undefined, i
 
 /**
  * Lance une capacité active. Renvoie les DÉGÂTS infligés à l'ennemi (pour la « Vengeance différée »).
- * Les dégâts des sorts scalent sur le PROFIL DE DÉGÂTS de l'arme/du stuff (profileDamageMult) — comme
- * les auto-attaques — pour qu'un build qui empile un type booste aussi ses sorts.
+ * v0.37 « Piste C » : les dégâts d'un sort scalent sur le bonus de SON TYPE (matching — spellTypeMult,
+ * et non plus la moyenne type-agnostique profileDamageMult) et subissent la résist ennemie de ce type
+ * (spellResistMult). Donc empiler l'élément de tes sorts les booste, et la Pénétration sert aux casters.
  */
 function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profile: DamageProfile, chars: Character[], enemy: Enemy, hotBonus: number, dmgMult = 1, healToDamage = 0, cond?: CondMods, pact?: PactMods): number {
   const base = (p.magnitude ?? 1) * abilityPower(derived, powerScale(p)) // soins (sans profil ni keystones)
   // v0.29.4 : bonus par TAG (cross-classe) — un nœud « tes [dot] +12% » booste TOUT sort taggé dot.
   const cm = charCombatMods(caster)
+  // v0.37 « Piste C » — TYPE DU SORT. Un sort scale sur le bonus de SON type (matching : stacker l'élément
+  // de tes sorts les booste), avec une part résiduelle de la moyenne du profil (multi-élément protégé),
+  // PUIS subit la résist ennemie de ce type (comme les auto-attaques ; uniforme aujourd'hui → contrée par
+  // la Pénétration). Remplace l'ancienne moyenne type-agnostique (profileDamageMult) pour les sorts.
+  const weaponMainType: DamageType = caster.equipment.armePrincipale?.damageType ?? 'physique'
+  const spellType: DamageType = p.damageType ?? weaponMainType
+  const profMult = spellTypeMult(profile, spellElementTypes(p.tags, spellType))
+    * spellResistMult(enemy, spellType, derived.penetration)
   let tagMult = 1
   if (p.tags) for (const t of p.tags) tagMult *= (cm.tagBonus[t] ?? 1)
   // CONTRÔLE (v0.29.6) : un sort [controle] gèle/ralentit ; SHATTER : +dégâts aux ennemis contrôlés.
@@ -2549,7 +2558,7 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
     ? (enemy.dot ? 1 : 0) + ((enemy.controlled ?? 0) > 0 ? 1 : 0) + ((caster.overload ?? 0) > 0 ? 1 : 0)
     : 0
   const trinityMult = 1 + cm.elementalStates * elemStates
-  const magDmg = base * profileDamageMult(profile) * dmgMult * tagMult * shatterMult * hotMult * trinityMult * formDamageMult(caster, cm) // profil + keystones + tags + shatter + Hot Streak + Trinité + Forme
+  const magDmg = base * profMult * dmgMult * tagMult * shatterMult * hotMult * trinityMult * formDamageMult(caster, cm) // type du sort (matching + résist) + keystones + tags + shatter + Hot Streak + Trinité + Forme
   // Boucliers : scalent sur la MEILLEURE de (stat principale, Endurance) → un tank qui empile
   // l'Endurance obtient un énorme bouclier (levier de survie qui suit l'Endurance).
   const shieldBase = (p.magnitude ?? 1) * Math.max(abilityPower(derived, powerScale(p)), derived.endurancePower)
@@ -2558,7 +2567,7 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
   // de venin par un finisseur/générateur (référence = coup NORMAL non amplifié).
   const venCrit = cm.poisonCanCrit > 0 && derived.critChance >= cm.poisonCanCrit
     ? 1 + derived.critChance * (derived.critMult - 1) : 1
-  const venomRef = base * profileDamageMult(profile) * dmgMult
+  const venomRef = base * profMult * dmgMult
   const applyVenom = (n: number) => {
     if (n <= 0) return
     const stacks = Math.min(cm.poison.maxStacks, (enemy.venomStacks ?? 0) + n)
@@ -2590,7 +2599,7 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
   // DISSONANCE : un soin pose aussi un DoT d'ombre sur l'ennemi (scale comme un sort d'ombre).
   const applyHealDot = (healed: number) => {
     if (cm.healAppliesDot <= 0 || enemy.hp <= 0) return
-    const dps = healed * profileDamageMult(profile) * 0.4 * derived.alterationMult * (cm.tagBonus['ombre'] ?? 1) * dmgMult * cm.healAppliesDot * folieDotMult
+    const dps = healed * spellTypeMult(profile, ['ombre']) * spellResistMult(enemy, 'ombre', derived.penetration) * 0.4 * derived.alterationMult * (cm.tagBonus['ombre'] ?? 1) * dmgMult * cm.healAppliesDot * folieDotMult
     enemy.dot = { dps: Math.max(dps, enemy.dot?.dps ?? 0), remaining: 6 }
   }
   // ORACLE SANGLANT / CHÂTIMENT : une fraction du SOIN est aussi infligée en dégâts à l'ennemi focus.

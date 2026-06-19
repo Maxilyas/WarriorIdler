@@ -175,12 +175,45 @@ export function effectiveTypeMult(p: DamageProfile): number {
 }
 
 /**
- * Multiplicateur de dégâts pondéré par TOUT le profil (répartition × bonus de type). C'est le même
- * facteur que les auto-attaques : utilisé pour que les SORTS scalent sur le profil de l'arme/du
- * stuff (un build qui empile du +% Feu booste aussi ses sorts).
+ * Multiplicateur de dégâts pondéré par TOUT le profil (répartition × bonus de type). C'est le
+ * facteur des AUTO-ATTAQUES (rollHit). v0.37 : ce n'est PLUS le facteur des sorts — voir spellTypeMult.
  */
 export function profileDamageMult(p: DamageProfile): number {
   let m = 0
   for (const t in p.profile) m += (p.profile[t as DamageType] ?? 0) * (1 + (p.bonus[t as DamageType] ?? 0))
   return m || 1
+}
+
+/**
+ * v0.37 « Piste C » — part du multiplicateur d'un SORT qui suit le TYPE du sort (vs la moyenne du
+ * profil, type-agnostique). 1 = matching pur (le hors-élément n'aide plus du tout) ; 0 = ancien
+ * comportement (profileDamageMult). 0,7 : matcher l'élément de tes sorts est nettement payant, mais
+ * un kit MULTI-ÉLÉMENT garde ~30 % de son investissement hors-type en valeur générique (multi-classe
+ * protégé). Recalibrable via `npm run ttk`.
+ */
+export const SPELL_TYPE_MATCH = 0.7
+
+/**
+ * Types élémentaires « portés » par un sort : ses tags d'élément (un sort tri-élément les prend tous
+ * → on retient le mieux stacké), sinon son type canonique (`damageType`, ou le type de l'arme).
+ */
+export function spellElementTypes(tags: string[] | undefined, canonical: DamageType): DamageType[] {
+  if (tags) {
+    const els = tags.filter((t): t is DamageType => (DAMAGE_TYPES as Record<string, unknown>)[t] !== undefined)
+    if (els.length) return els
+  }
+  return [canonical]
+}
+
+/**
+ * v0.37 « Piste C » — multiplicateur de TYPE pour un SORT. Blend entre la moyenne du profil (ancien,
+ * type-agnostique) et le bonus du PROPRE type du sort (matching). Un sort multi-élément prend le bonus
+ * du type le mieux stacké → stacker n'importe lequel de ses éléments le récompense. C'est ce qui donne
+ * du SENS à matcher ton stuff à tes sorts : un sort feu profite de ton +% Feu, plus que d'un +% Givre.
+ */
+export function spellTypeMult(p: DamageProfile, spellTypes: DamageType[]): number {
+  const avg = profileDamageMult(p)
+  let matched = 0
+  for (const t of spellTypes) matched = Math.max(matched, p.bonus[t] ?? 0)
+  return (1 - SPELL_TYPE_MATCH) * avg + SPELL_TYPE_MATCH * (1 + matched)
 }
