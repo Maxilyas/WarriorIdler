@@ -2,6 +2,7 @@ import type { DamageType, Enemy, EnemyAbility, ItemType } from './types'
 import { DAMAGE_TYPE_LIST } from './damage'
 import { enemyHp, enemyDmg, enemyArmor, clampIlvl, lootFarmIlvl, frontierIlvl, lagAt, chapitreOf, ILVL_CAP_BASE, ILVL_CAP_ENDGAME } from './progression'
 import { materialYieldAtChapter } from './items'
+import { ENEMY_DODGE } from './stats'
 
 /**
  * RAIDS — refonte v0.23 « un boss, dix tiers ».
@@ -774,9 +775,9 @@ export function makeRaidBoss(def: RaidDef, tier: number, element: DamageType, be
     // Exigences de résistance du tier (v0.24) : LE check de stuff — affichées en fiche de boss.
     reqs: raidReqs(def, tier),
     elite: true,
-    // Boss de raid : esquive marquée (→ Précision) + étourdissement régulier (→ Ténacité).
+    // Boss de raid : esquive marquée (→ Précision, hit cap raid 2000) + étourdissement régulier (→ Résilience).
     boss: true,
-    dodge: 0.2,
+    dodge: ENEMY_DODGE.raidboss,
     ccDur: 2,
     ccCd: 6,
     // Kit signature TÉLÉGRAPHIÉ du boss du tier — à contrer (bouclier/immunité/Ténacité/Purge…).

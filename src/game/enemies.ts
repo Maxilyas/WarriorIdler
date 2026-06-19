@@ -2,6 +2,7 @@ import type { Enemy, DamageType, EnemyAbility } from './types'
 import { elementAffinityResist } from './damage'
 import type { BiomeId } from './biomes'
 import { farmReq } from './resist'
+import { ENEMY_DODGE } from './stats'
 import { enemyHp, enemyDmg, enemyArmor, farmDifficultyIlvl, ilvlFarm, murEnrage } from './progression'
 
 /**
@@ -215,12 +216,12 @@ export function makeEnemy(stage: number, biome: BiomeId = 'physique', championMu
     // Exigence de résistance (v0.24) sur l'élément du biome — nulle avant le palier 45, douce après.
     ...(() => { const rq = farmReq(stage); return rq > 0 ? { reqs: { [biome]: rq } as Partial<Record<DamageType, number>> } : {} })(),
     ...(() => { const a = biomeAbilities(biome, isBoss, isElite || isChampion); return a.length ? { abilities: a } : {} })(),
-    ...(isElite || isChampion ? { elite: true, dodge: 0.1 } : {}),
+    ...(isElite || isChampion ? { elite: true, dodge: ENEMY_DODGE.elite } : {}),
     ...(isChampion ? { champion: true } : {}),
-    // Boss : reçoivent les « Dégâts vs Boss », esquivent (→ Précision) et étourdissent (→ Ténacité).
+    // Boss : reçoivent les « Dégâts vs Boss », esquivent (→ Précision, hit cap boss 1500) et étourdissent (→ Résilience).
     // MUR (v0.35) : métadonnée de dominante + enrage (fiche + tick), au Palier = stage / 10.
     ...(isBoss ? {
-      boss: true, dodge: 0.15, ccDur: 1.5, ccCd: 7,
+      boss: true, dodge: ENEMY_DODGE.boss, ccDur: 1.5, ccCd: 7,
       mur: { mechanic: murMechanic(stage / 10), palier: stage / 10, enrageAt: murEnrage(stage / 10), regen: murRegenAt(stage / 10) },
     } : {}),
   }

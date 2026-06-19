@@ -27,7 +27,7 @@ export const SECONDARY_META: Record<SecondaryStat, StatMeta> = {
   hate: { key: 'hate', name: 'Hâte', short: 'HÂTE', color: '#22d3ee', desc: 'Augmente la vitesse d\'attaque et d\'incantation.' },
   maitrise: { key: 'maitrise', name: 'Maîtrise', short: 'MAÎT', color: '#c084fc', desc: 'Effet propre à ton archétype : Force = réduction (bruiser), Agilité = dégâts crit., Intelligence = dégâts bruts.' },
   penetration: { key: 'penetration', name: 'Pénétration', short: 'PÉN', color: '#fab005', desc: 'Ignore une partie des résistances et de l\'armure ennemies (anti-tank).' },
-  precision: { key: 'precision', name: 'Précision', short: 'PRÉC', color: '#fcc419', desc: 'Annule l\'esquive des ennemis : indispensable contre les boss fuyants.' },
+  precision: { key: 'precision', name: 'Précision', short: 'PRÉC', color: '#fcc419', desc: 'Annule l\'esquive des ennemis sur tes AUTO-ATTAQUES (les sorts ne ratent jamais). HIT CAP pour 0 raté : élite 1000 · boss 1500 · boss de raid 2000 rating.' },
   alteration: { key: 'alteration', name: 'Altération', short: 'ALT', color: '#e8590c', desc: 'Amplifie tes dégâts sur la durée (saignement, poison, feu). Cœur des builds DoT.' },
   degatsBoss: { key: 'degatsBoss', name: 'Dégâts aux boss', short: 'BOSS', color: '#f03e3e', desc: 'Augmente les dégâts infligés aux boss et aux élites (farm de donjons/raids).' },
   // Défensif
@@ -134,6 +134,16 @@ export interface DerivedStats {
 
 export const RATING_PER_PERCENT = 25 // v0.35 : 50→25 (les secondaires comptaient ~1/50 d'une ligne %type)
 const PER_PCT = RATING_PER_PERCENT * 100 // ratings pour +1.0 (100%)
+
+/** v0.38 — ESQUIVE des ennemis (SOURCE UNIQUE, contrée par la Précision sur les AUTO-ATTAQUES seulement).
+ *  Élite/champion 10% · boss 15% · boss de raid 20%. enemies/dungeons/raids importent ces valeurs. */
+export const ENEMY_DODGE = { elite: 0.10, boss: 0.15, raidboss: 0.20 } as const
+/** Précision : rating pour 100% d'esquive annulée (v0.38 : 100 rating/1%, abaissé de 200). C'est le « hit cap ». */
+export const PRECISION_DIVISOR = 10000
+/** Rating de Précision nécessaire pour annuler ENTIÈREMENT une esquive donnée (le hit cap exact). */
+export function precisionRatingToCancel(dodge: number): number {
+  return Math.round(dodge * PRECISION_DIVISOR)
+}
 /** v0.27 (C5) — part de la 2e stat offensive reversée dans la puissance (knob d'équilibrage). */
 export const SECOND_STAT_SHARE = 0.2
 
@@ -238,7 +248,7 @@ export function computeDerived(total: StatBlock): DerivedStats {
     damageTakenMult,
     leech: softCap((total.volDeVie ?? 0) / 20000, 0.5, 0.72), // 1% par 200 rating
     penetration: softCap((total.penetration ?? 0) / 20000, 0.70, 0.85), // 1% par 200 rating, pas de base
-    precision: softCap((total.precision ?? 0) / 20000, 0.90, 0.99), // 1% par 200 rating, pas de base
+    precision: softCap((total.precision ?? 0) / PRECISION_DIVISOR, 0.90, 0.99), // v0.38 : 100 rating/1% (abaissé de 200), pas de base
     alterationMult: 1 + (total.alteration ?? 0) / 4000, // +1% par 40 rating, linéaire (DoT-only)
     bossDamageMult: 1 + (total.degatsBoss ?? 0) / 5000, // +1% par 50 rating, linéaire
     resilience: softCap(resilienceRating / 2000, 0.85, 0.96),
@@ -298,7 +308,11 @@ export function describeStats(total: StatBlock): { primary: StatEffect[]; second
         : d.mainStat === 'force' ? `-${pct(d.masteryDr)} subis · ${pct(d.riposteChance)} de riposte (contre-attaque)`
         : `+${pct(d.masteryMult - 1)} de dégâts · +${pct(d.damageTakenMult - 1)} subis (Surcharge)`; break
       case 'penetration': effect = `ignore ${pct(d.penetration)} des résistances/armure`; break
-      case 'precision': effect = `annule ${pct(d.precision)} de l'esquive ennemie`; break
+      case 'precision': {
+        const cap = (dodge: number) => { const n = precisionRatingToCancel(dodge); return `${n}${rating >= n ? '✓' : '✗'}` }
+        effect = `annule ${pct(d.precision)} d'esquive · 0 raté à : élite ${cap(ENEMY_DODGE.elite)} · boss ${cap(ENEMY_DODGE.boss)} · raid ${cap(ENEMY_DODGE.raidboss)}`
+        break
+      }
       case 'alteration': effect = `+${pct(d.alterationMult - 1)} de dégâts sur la durée`; break
       case 'degatsBoss': effect = `+${pct(d.bossDamageMult - 1)} de dégâts aux boss/élites`; break
       case 'reductionDegats': effect = `-${pct(d.flatDr)} de dégâts subis`; break

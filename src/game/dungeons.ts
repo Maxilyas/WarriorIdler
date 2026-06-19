@@ -4,6 +4,7 @@ import type { GemFamily } from './condGems'
 import { dungeonReq } from './resist'
 import { enemyHp, enemyDmg, enemyArmor, lootFarmIlvl, frontierIlvl, CHAPITRE_SIZE } from './progression'
 import { murSoftness } from './enemies'
+import { ENEMY_DODGE } from './stats'
 import { accessibleRarityTier, materialYieldAtChapter } from './items'
 
 /**
@@ -446,8 +447,8 @@ export function makeDungeonEnemy(
     damageType: def.element,
     // Exigence de résistance (v0.24) sur l'élément du donjon — modérée (cap ×2.1 à zéro résist).
     reqs: { [def.element]: dungeonReq(level) },
-    ...(isElite ? { elite: true, dodge: 0.1 } : {}),
-    ...(isBoss ? { boss: true, dodge: 0.15, ccDur: 1.6, ccCd: 7 } : {}),
+    ...(isElite ? { elite: true, dodge: ENEMY_DODGE.elite } : {}),
+    ...(isBoss ? { boss: true, dodge: ENEMY_DODGE.boss, ccDur: 1.6, ccCd: 7 } : {}),
   }
 }
 
@@ -486,7 +487,7 @@ export function makeDungeonPack(
     c.name = `✦ ${c.name.replace(/^[★◆] /, '')} ${pick(HAUNT_TITLES)}`
     c.elite = true
     c.champion = true
-    c.dodge = Math.max(c.dodge ?? 0, 0.1)
+    c.dodge = Math.max(c.dodge ?? 0, ENEMY_DODGE.elite)
     c.trait = 'Champion ✦'
   }
   return pack
