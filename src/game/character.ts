@@ -353,7 +353,7 @@ export function charDps(char: Character): number {
   const cm = charCombatMods(char)
   const dmgMult = cm.damageMult
   const gen = comboGenPerSec(char, derived, cm.comboGen)
-  const auto = theoreticalDps(derived, profile, dmgMult)
+  const auto = theoreticalDps(derived, profile, dmgMult * cm.autoTagMult)
   let dps = auto + auto * cm.petDps // INVOCATION : le familier inflige une fraction de ton DPS d'auto.
   dps += igniteDps(cm, derived, auto) // PYROMANCIEN : DoT d'Embrasement (crits).
   for (const pid of charDeck(char)) { // actifs + générateurs (les builders frappent aussi un peu)
@@ -399,7 +399,7 @@ export function dpsBreakdown(char: Character): DpsBreakdown {
   const cm = charCombatMods(char)
   const dmgMult = cm.damageMult
   const gen = comboGenPerSec(char, derived, cm.comboGen)
-  const auto = theoreticalDps(derived, profile, dmgMult)
+  const auto = theoreticalDps(derived, profile, dmgMult * cm.autoTagMult)
   const spells: { name: string; dps: number }[] = []
   for (const pid of charDeck(char)) { // actifs + générateurs
     if (!pid) continue
@@ -421,6 +421,7 @@ export function dpsBreakdown(char: Character): DpsBreakdown {
     { label: 'Profil de dégâts', value: `×${pm.toFixed(2)}` },
     { label: 'Multifrappe', value: `×${(1 + derived.multistrike).toFixed(2)}` },
     { label: 'Talents & sets', value: `×${dmgMult.toFixed(2)}` },
+    ...(cm.autoTagMult > 1.001 ? [{ label: 'Tags (élément/direct)', value: `×${cm.autoTagMult.toFixed(2)}` }] : []),
   ]
   const hasConversions = charKeystones(char).some((k) => k.statAsOther || k.enduranceAs)
   return { total: auto + spells.reduce((a, s) => a + s.dps, 0), auto, spells, factors, hasConversions }
@@ -506,6 +507,8 @@ export interface CombatMods {
   finisherMult: number
   /** v0.29.4 : bonus de dégâts par TAG (produit des keystones du même tag). */
   tagBonus: Record<string, number>
+  /** v0.38 : multiplicateur de tag appliqué à l'AUTO-ATTAQUE (élément de l'arme × [direct] × [mono]/[zone]). */
+  autoTagMult: number
   /** ASSASSIN « Catalyse » : la détonation double le venin. */
   detonateDouble: boolean
   /** OMBRELAME : Points de Combo rendus par un finisseur (max des keystones). */
@@ -582,7 +585,7 @@ export function charCombatMods(char: Character): CombatMods {
     healToDamage: 0, cleaveAuto: 0, perEnemyBonus: 0, dotLeech: 0, dotAoe: 0,
     spellMult: 1, cdrOnCast: 0, reqReduction: 0, surplusToDamage: 0, shareResist: 0, surplusRegen: 0,
     poison: { perStack: 0.08, maxStacks: 4 }, comboCap: 0, comboGen: 0, finisherMult: 0,
-    tagBonus: {}, detonateDouble: false, comboRefund: 0, petDps: 0, shatter: 0, finisherShield: 0, damageToHeal: 0,
+    tagBonus: {}, autoTagMult: 1, detonateDouble: false, comboRefund: 0, petDps: 0, shatter: 0, finisherShield: 0, damageToHeal: 0,
     // v0.34 : Lame Vénéneuse
     finisherToPoison: 0, finisherIsDot: false, finisherRefreshPoison: false, finisherVsVenom: 0,
     finisherFromAlteration: 0, finisherVenomBonus: 0, noDotLeech: false, poisonCanCrit: 0, finisherDetonate: 0,
@@ -732,6 +735,10 @@ export function charCombatMods(char: Character): CombatMods {
     const tm = instanceTagMods(it.unique)
     for (const tag in tm) out.tagBonus[tag] = (out.tagBonus[tag] ?? 1) * (1 + tm[tag])
   }
+  // v0.38 — l'AUTO-ATTAQUE profite des bonus de tag : son élément (type de l'arme) × [direct] × [mono]/[zone].
+  // (les sorts, eux, prennent leur tagMult propre dans fireActive). → un unique [feu] ou [direct] booste aussi l'auto.
+  const autoElem = char.equipment.armePrincipale?.damageType ?? 'physique'
+  out.autoTagMult = (out.tagBonus[autoElem] ?? 1) * (out.tagBonus['direct'] ?? 1) * (out.tagBonus[out.cleaveAuto > 0 ? 'zone' : 'mono'] ?? 1)
   // PACTE DE LA TOXINE : la contrepartie coupe le soin par DoT.
   if (out.noDotLeech) out.dotLeech = 0
   // Élémentaliste « Réaction élémentaire » : +per de dégâts par type ≥ threshold du profil

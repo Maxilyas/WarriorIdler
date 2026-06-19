@@ -1251,7 +1251,7 @@ function gemRiposte(
   let dealt = 0
   while (acc >= cond.riposteSec && enemy.hp > 0) {
     acc -= cond.riposteSec
-    const hit = rollHit(d.derived, d.profile, enemy, { bonusMult: d.cmods.damageMult })
+    const hit = rollHit(d.derived, d.profile, enemy, { bonusMult: d.cmods.damageMult * d.cmods.autoTagMult })
     enemy.hp = Math.max(0, enemy.hp - hit.damage)
     dealt += hit.damage
   }
@@ -1277,7 +1277,7 @@ function masteryRiposte(
   let dealt = 0
   while (acc >= interval && enemy.hp > 0) {
     acc -= interval
-    const hit = rollHit(d.derived, d.profile, enemy, { bonusMult: d.cmods.damageMult })
+    const hit = rollHit(d.derived, d.profile, enemy, { bonusMult: d.cmods.damageMult * d.cmods.autoTagMult })
     enemy.hp = Math.max(0, enemy.hp - hit.damage)
     dealt += hit.damage
   }
@@ -3175,7 +3175,7 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
       // Multifrappe : chance de déclencher un coup supplémentaire.
       const strikes = 1 + (forceMulti || Math.random() < multistrikeChance ? 1 : 0)
       for (let s = 0; s < strikes && enemy.hp > 0; s++) {
-        const hit = rollHit(d.derived, d.profile, enemy, { bonusMult, execute: d.cmods.execute, forceCrit: forceCrit && s === 0, bonusCrit })
+        const hit = rollHit(d.derived, d.profile, enemy, { bonusMult: bonusMult * d.cmods.autoTagMult, execute: d.cmods.execute, forceCrit: forceCrit && s === 0, bonusCrit })
         if (mods?.cond?.ostinatoPer && s === 0) gemCounters.set(ostK, hit.crit ? 0 : (gemCounters.get(ostK) ?? 0) + cStep)
         // 🩸 Hémorragie cadencée : tous les N critiques, une plaie s'ouvre.
         if (hit.crit && mods?.cond?.hemorragieN) {
@@ -3598,7 +3598,7 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
       for (let st = 0; st < strikes; st++) {
         const t2 = focus()
         if (!t2) break
-        const hit = rollHit(d.derived, d.profile, t2, { bonusMult, execute: d.cmods.execute, forceCrit: forceCrit && st === 0, bonusCrit })
+        const hit = rollHit(d.derived, d.profile, t2, { bonusMult: bonusMult * d.cmods.autoTagMult, execute: d.cmods.execute, forceCrit: forceCrit && st === 0, bonusCrit })
         if (mods?.cond?.ostinatoPer && st === 0) gemCounters.set(ostK, hit.crit ? 0 : (gemCounters.get(ostK) ?? 0) + cStep)
         // 🩸 Hémorragie cadencée : tous les N critiques, une plaie s'ouvre.
         if (hit.crit && mods?.cond?.hemorragieN) {
