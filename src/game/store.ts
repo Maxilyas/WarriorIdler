@@ -2564,6 +2564,9 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
     * spellResistMult(enemy, spellType, derived.penetration)
   let tagMult = 1
   if (p.tags) for (const t of p.tags) tagMult *= (cm.tagBonus[t] ?? 1)
+  // v0.38 — le bonus de tag [soin] (ex : Ferveur « sorts [soin] +15% ») booste enfin les SOINS eux-mêmes
+  // (avant : tagMult n'était appliqué qu'aux DÉGÂTS → le levier de soin par tag était mort).
+  const healTagMult = cm.tagBonus['soin'] ?? 1
   // CONTRÔLE (v0.29.6) : un sort [controle] gèle/ralentit ; SHATTER : +dégâts aux ennemis contrôlés.
   if (p.tags?.includes('controle')) enemy.controlled = Math.max(enemy.controlled ?? 0, p.duration ?? 4)
   // SHATTER : +dégâts vs gelé/contrôlé. v0.34 « Équilibre des sphères » : shatter +frac×(altMult−1), BORNÉ.
@@ -2671,7 +2674,7 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
       return 0
     case 'heal':
     case 'hot': {
-      const healed = base * (1 + hotBonus)
+      const healed = base * (1 + hotBonus) * healTagMult
       const allies = chars.filter((c) => c.hp > 0)
       if (allies.length && canHeal) {
         let low = allies[0]
@@ -2681,14 +2684,18 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
       applyHealDot(healed) // DISSONANCE
       return bleedHeal(healed)
     }
-    case 'bigHeal':
-      if (canHeal) for (const a of chars) if (a.hp > 0) gemAbilityHeal(a, base * (1 + hotBonus), cond, chars, false)
-      applyHealDot(base * (1 + hotBonus))
-      return bleedHeal(base * (1 + hotBonus))
-    case 'buffParty':
-      if (canHeal) for (const a of chars) if (a.hp > 0) gemAbilityHeal(a, base * 0.5 * (1 + hotBonus), cond, chars, false)
-      applyHealDot(base * 0.5 * (1 + hotBonus))
-      return bleedHeal(base * 0.5 * (1 + hotBonus))
+    case 'bigHeal': {
+      const healed = base * (1 + hotBonus) * healTagMult
+      if (canHeal) for (const a of chars) if (a.hp > 0) gemAbilityHeal(a, healed, cond, chars, false)
+      applyHealDot(healed)
+      return bleedHeal(healed)
+    }
+    case 'buffParty': {
+      const healed = base * 0.5 * (1 + hotBonus) * healTagMult
+      if (canHeal) for (const a of chars) if (a.hp > 0) gemAbilityHeal(a, healed, cond, chars, false)
+      applyHealDot(healed)
+      return bleedHeal(healed)
+    }
     // v0.34 « Crépuscule » — sorts hybrides : frappe d'ombre QUI SOIGNE.
     case 'smiteHeal': {
       const done = hit(magDmg * vm)
@@ -2697,7 +2704,7 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
         if (allies.length) {
           let low = allies[0]
           for (const a of allies) if (a.hp / charMaxHp(a) < low.hp / charMaxHp(low)) low = a
-          gemAbilityHeal(low, done * 0.5, cond, chars) // soigne l'allié blessé = 50% des dégâts
+          gemAbilityHeal(low, done * 0.5 * healTagMult, cond, chars) // soigne l'allié blessé = 50% des dégâts (× bonus [soin])
         }
       }
       return done
@@ -2705,7 +2712,7 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
     case 'eclipse': {
       // ULTIME : cataclysme d'ombre (zone) + restaure TOUT le groupe (40% des dégâts chacun).
       const done = hit(magDmg * vm)
-      if (canHeal && done > 0) for (const a of chars) if (a.hp > 0) gemAbilityHeal(a, done * 0.4, cond, chars, false)
+      if (canHeal && done > 0) for (const a of chars) if (a.hp > 0) gemAbilityHeal(a, done * 0.4 * healTagMult, cond, chars, false)
       return done
     }
     case 'shield':
