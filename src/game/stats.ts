@@ -27,7 +27,7 @@ export const SECONDARY_META: Record<SecondaryStat, StatMeta> = {
   hate: { key: 'hate', name: 'Hâte', short: 'HÂTE', color: '#22d3ee', desc: 'Augmente la vitesse d\'attaque et d\'incantation.' },
   maitrise: { key: 'maitrise', name: 'Maîtrise', short: 'MAÎT', color: '#c084fc', desc: 'Effet propre à ton archétype : Force = réduction (bruiser), Agilité = dégâts crit., Intelligence = dégâts bruts.' },
   penetration: { key: 'penetration', name: 'Pénétration', short: 'PÉN', color: '#fab005', desc: 'Ignore une partie des résistances et de l\'armure ennemies (anti-tank).' },
-  precision: { key: 'precision', name: 'Précision', short: 'PRÉC', color: '#fcc419', desc: 'Annule l\'esquive des ennemis sur tes AUTO-ATTAQUES (les sorts ne ratent jamais). HIT CAP pour 0 raté : élite 1000 · boss 1500 · boss de raid 2000 rating.' },
+  precision: { key: 'precision', name: 'Précision', short: 'PRÉC', color: '#fcc419', desc: 'Augmente ta CHANCE DE TOUCHER en auto-attaque (les sorts touchent toujours). Les ennemis esquivent : élite 10% · boss 15% · boss de raid 20%. Pour 0 raté (100% de touche) : 1000 · 1500 · 2000 rating de Précision.' },
   alteration: { key: 'alteration', name: 'Altération', short: 'ALT', color: '#e8590c', desc: 'Amplifie tes dégâts sur la durée (saignement, poison, feu). Cœur des builds DoT.' },
   degatsBoss: { key: 'degatsBoss', name: 'Dégâts aux boss', short: 'BOSS', color: '#f03e3e', desc: 'Augmente les dégâts infligés aux boss et aux élites (farm de donjons/raids).' },
   // Défensif
@@ -309,8 +309,11 @@ export function describeStats(total: StatBlock): { primary: StatEffect[]; second
         : `+${pct(d.masteryMult - 1)} de dégâts · +${pct(d.damageTakenMult - 1)} subis (Surcharge)`; break
       case 'penetration': effect = `ignore ${pct(d.penetration)} des résistances/armure`; break
       case 'precision': {
-        const cap = (dodge: number) => { const n = precisionRatingToCancel(dodge); return `${n}${rating >= n ? '✓' : '✗'}` }
-        effect = `annule ${pct(d.precision)} d'esquive · 0 raté à : élite ${cap(ENEMY_DODGE.elite)} · boss ${cap(ENEMY_DODGE.boss)} · raid ${cap(ENEMY_DODGE.raidboss)}`
+        // v0.38 — exprimé en CHANCE DE TOUCHER (auto-attaque) : lisible sans connaître l'esquive ennemie
+        // (90% = 10% d'esquive). Monte vers 100% avec la Précision ; rating exact pour 0 raté en suffixe.
+        const hit = (dodge: number) => Math.round(Math.min(1, 1 - dodge + d.precision) * 100)
+        const caps = `${precisionRatingToCancel(ENEMY_DODGE.elite)}/${precisionRatingToCancel(ENEMY_DODGE.boss)}/${precisionRatingToCancel(ENEMY_DODGE.raidboss)}`
+        effect = `toucher (auto) : élite ${hit(ENEMY_DODGE.elite)}% · boss ${hit(ENEMY_DODGE.boss)}% · raid ${hit(ENEMY_DODGE.raidboss)}% · 0 raté à ${caps}`
         break
       }
       case 'alteration': effect = `+${pct(d.alterationMult - 1)} de dégâts sur la durée`; break
