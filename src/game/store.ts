@@ -1962,7 +1962,7 @@ function sanitize(save: SaveData): SaveData {
     c.pantheon = pantheon
     // Points restants = gagnés (au-delà du niveau de départ des talents) − dépensés (hors racine gratuite).
     c.talentPoints = Math.max(0, talentPointsForLevel(c.level) - spent)
-    c.unlockedPowers = computeUnlockedPowers({ ...talents, ...pantheon })
+    c.unlockedPowers = computeUnlockedPowers({ ...talents, ...pantheon }, c.level)
     // v0.30 : RÉPARTITION actifs (5) / GÉNÉRATEURS (3) / passifs (3). Migration : on relit les anciens
     // `powers` (qui mélangeaient builders & actifs) + `generators` + `passives`, on valide, on range par
     // genre — les builders QUITTENT la barre des actifs et atterrissent dans leurs slots dédiés.
@@ -2485,6 +2485,9 @@ function grantTeamXp(chars: Character[], xp: number): { chars: Character[]; leve
     if (inc > 0) {
       base[c.primaryBias] = (base[c.primaryBias] ?? 0) + inc
       base.endurance = (base.endurance ?? 0) + inc
+      // v0.39 : un palier de niveau peut débloquer un passif-conversion du SOCLE → recalcul.
+      const unlockedPowers = computeUnlockedPowers({ ...c.talents, ...(c.pantheon ?? {}) }, level)
+      return { ...c, level, xp: curXp, base, unlockedPowers }
     }
     return { ...c, level, xp: curXp, base }
   })
@@ -6670,7 +6673,7 @@ export const useGame = create<GameState>((set, get) => {
       const pool = teamTalentPool(s.characters, s.upgrades.talentBonus ?? 0)
       if (!node || !canAllocate(node, char.talents, pool)) return
       const talents = { ...char.talents, [nodeId]: (char.talents[nodeId] ?? 0) + 1 }
-      const unlockedPowers = computeUnlockedPowers({ ...talents, ...(char.pantheon ?? {}) })
+      const unlockedPowers = computeUnlockedPowers({ ...talents, ...(char.pantheon ?? {}) }, char.level)
       const nc = { ...char, talents, unlockedPowers }
       nc.hp = Math.min(nc.hp, charMaxHp(nc))
       const characters = s.characters.map((c, i) => (i === s.activeChar ? nc : c))
@@ -6691,7 +6694,7 @@ export const useGame = create<GameState>((set, get) => {
       if (s.gold < cost) return
       const talents = { co_start: 1 }
       // Le respec de base NE touche PAS au Panthéon (pool & arbre séparés) : on conserve `char.pantheon`.
-      const unlockedPowers = computeUnlockedPowers({ ...talents, ...(char.pantheon ?? {}) })
+      const unlockedPowers = computeUnlockedPowers({ ...talents, ...(char.pantheon ?? {}) }, char.level)
       const powers = char.powers.map((p) => (p && unlockedPowers.includes(p) ? p : null))
       const passives = (char.passives ?? []).map((p) => (p && unlockedPowers.includes(p) ? p : null))
       const generators = (char.generators ?? []).map((p) => (p && unlockedPowers.includes(p) ? p : null))
@@ -6714,7 +6717,7 @@ export const useGame = create<GameState>((set, get) => {
       const pantheon = char.pantheon ?? { pa_start: 1 }
       if (!node || !canAllocatePantheon(node, pantheon, eveilBudget(s.prestigeRank), s.prestigeRank)) return
       const next2 = { ...pantheon, [nodeId]: (pantheon[nodeId] ?? 0) + 1 }
-      const unlockedPowers = computeUnlockedPowers({ ...char.talents, ...next2 })
+      const unlockedPowers = computeUnlockedPowers({ ...char.talents, ...next2 }, char.level)
       const nc = { ...char, pantheon: next2, unlockedPowers }
       nc.hp = Math.min(nc.hp, charMaxHp(nc))
       const characters = s.characters.map((c, i) => (i === s.activeChar ? nc : c))
@@ -6729,7 +6732,7 @@ export const useGame = create<GameState>((set, get) => {
       const char = s.characters[s.activeChar]
       if (!char) return
       const pantheon = { pa_start: 1 }
-      const unlockedPowers = computeUnlockedPowers({ ...char.talents, ...pantheon })
+      const unlockedPowers = computeUnlockedPowers({ ...char.talents, ...pantheon }, char.level)
       const powers = char.powers.map((p) => (p && unlockedPowers.includes(p) ? p : null))
       const passives = (char.passives ?? []).map((p) => (p && unlockedPowers.includes(p) ? p : null))
       const generators = (char.generators ?? []).map((p) => (p && unlockedPowers.includes(p) ? p : null))
@@ -6790,7 +6793,7 @@ export const useGame = create<GameState>((set, get) => {
           }
         }
       }
-      const unlockedPowers = computeUnlockedPowers({ ...talents, ...(char.pantheon ?? {}) })
+      const unlockedPowers = computeUnlockedPowers({ ...talents, ...(char.pantheon ?? {}) }, char.level)
       const powers = preset.powers.map((p) => (p && unlockedPowers.includes(p) ? p : null))
       const passives = (preset.passives ?? [null, null, null]).map((p) => (p && unlockedPowers.includes(p) ? p : null))
       const generators = (preset.generators ?? [null, null, null]).map((p) => (p && unlockedPowers.includes(p) ? p : null))

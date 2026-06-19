@@ -816,6 +816,21 @@ ability('au_imposition', 'aube', 3, 'Imposition des mains', 'au_imposition', 'D�
 minor('au_buf3', 'aube', 1, 'Plaque sacrée', 5, { reductionDegats: 10 }, { requires: ['au_hub'] })
 ks('au_resist', 'aube', 2, 'Grâce protectrice', 'SURVIE : -10% de dégâts subis. Exige Plaque sacrée au max (5).', { stat: { endurance: 16 }, ks: { flatDr: 0.1 } }, { requires: ['au_buf3'], requiresRank: { id: 'au_buf3', rank: 5 } })
 
+/* ================= v0.39 : SIGNATURES de classe (passifs-conversion) =================
+ * Un passif-conversion SIGNATURE par classe, branché sur la racine de classe (tier 1, non exclusif,
+ * sans minSpent) → accessible à TOUT build de la classe, quel que soit l'archétype. Le socle de
+ * conversions UNIVERSELLES, lui, se débloque par niveau (hors arbre — voir powers.ts SOCLE_PASSIVES). */
+ability('gu_sig_colere', 'guerrier', 1, 'Colère incarnée', 'sig_gu_colere', 'SIGNATURE : 18% de ton Endurance compte comme Force (transfert). Le colosse frappe avec sa masse.', { requires: ['cl_guerrier'] })
+ability('pa_sig_foi', 'paladin', 1, 'Foi inébranlable', 'sig_pa_foi', 'SIGNATURE : ajoute 40% de ta puissance de soin en Barrière. Ta foi devient un mur.', { requires: ['cl_paladin'] })
+ability('dk_sig_sang', 'dk', 1, 'Pacte de sang', 'sig_dk_sang', 'SIGNATURE : 30% de ton Vol de vie compte comme Force (transfert).', { requires: ['cl_dk'] })
+ability('ma_sig_mana', 'mage', 1, 'Manabouclier', 'sig_ma_mana', 'SIGNATURE : 20% de ton Intelligence compte comme Barrière (transfert). L\'arcane protège.', { requires: ['cl_mage'] })
+ability('sh_sig_ancrage', 'chaman', 1, 'Ancrage tellurique', 'sig_sh_ancrage', 'SIGNATURE : 15% de ton Endurance compte comme Intelligence (transfert).', { requires: ['cl_chaman'] })
+ability('pr_sig_verbe', 'pretre', 1, 'Verbe guerrier', 'sig_pr_verbe', 'SIGNATURE : ajoute 35% de ta puissance de soin en Surpuissance. Soigne en frappant.', { requires: ['cl_pretre'] })
+ability('vo_sig_sangfroid', 'voleur', 1, 'Sang-froid', 'sig_vo_sangfroid', 'SIGNATURE : 25% de ta Maîtrise compte comme Dégâts de Crit (transfert).', { requires: ['cl_voleur'] })
+ability('ch_sig_lien', 'chasseur', 1, 'Lien bestial', 'sig_ch_lien', 'SIGNATURE : 15% de ton Agilité compte comme Endurance (transfert).', { requires: ['cl_chasseur'] })
+ability('dd_sig_equilibre', 'druide', 1, 'Équilibre primordial', 'sig_dd_equilibre', 'SIGNATURE : 25% de ton Altération compte comme Réduction de dégâts (transfert).', { requires: ['cl_druide'] })
+ability('de_sig_sacrifice', 'demoniste', 1, 'Sacrifice', 'sig_de_sacrifice', 'SIGNATURE : 35% de ta Barrière compte comme Surpuissance (transfert).', { requires: ['cl_demoniste'] })
+
 /* ------------------------------------------------------------------ */
 /* Méta de constellation.                                             */
 /* ------------------------------------------------------------------ */

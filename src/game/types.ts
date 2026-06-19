@@ -275,6 +275,26 @@ export type PowerEffect =
   | 'shift'        // BOND SAUVAGE : métamorphose-éclair (forme suivante + Instinct) puis frappe
   | 'chimera'      // FORME CHIMÈRE : les 3 formes (Fauve+Ours+Hibou) actives à la fois pendant une fenêtre
 
+/**
+ * v0.39 — CONVERSION de capacité PASSIVE (toujours active, niveau FICHE).
+ * Niche non couverte par les gemmes (déclencheurs) ni les runes (horloges/pactes) :
+ * transforme la feuille de stats. `from` = une stat OU une grandeur dérivée
+ * (`healPower` ≈ Intelligence depuis v0.38, puisque le soin scale INT).
+ */
+export type ConvSource = StatKey | 'healPower'
+export interface PassiveConversion {
+  from: ConvSource
+  to: StatKey
+  /** Fraction de la source (0.25 = 25%). */
+  frac: number
+  /**
+   * `transfer` (défaut) : RETIRE `frac × from` de la source et l'ajoute à la cible → vrai sidegrade
+   * (préserve l'invariance TTK). `add` : ajoute sans retirer — réservé aux sources DÉRIVÉES (healPower),
+   * qu'on ne peut pas soustraire ; calibré modestement car c'est du gain réel.
+   */
+  mode?: 'transfer' | 'add'
+}
+
 /** Définition d'une capacité dans le registre (valeurs de base, montées par le rang plus tard). */
 export interface PowerDef {
   id: string
@@ -292,6 +312,8 @@ export interface PowerDef {
   damageReduction?: number
   /** Bonus de stats permanents. */
   mods?: StatBlock
+  /** v0.39 — Conversions de stat (passifs « moteur de conversions »). Appliquées au calcul de la fiche. */
+  convert?: PassiveConversion[]
   // --- Actives (auto-cast) ---
   cooldown?: number // secondes entre deux déclenchements
   effect?: PowerEffect

@@ -1,10 +1,10 @@
-import type { Character, StatBlock, StatKey, PrimaryStat, OffensiveStat, PowerDef, DamageType, Item, EquipSlotId } from './types'
+import type { Character, StatBlock, StatKey, PrimaryStat, OffensiveStat, PowerDef, PassiveConversion, DamageType, Item, EquipSlotId } from './types'
 import { computeTotalStats, computeDerived, type DerivedStats } from './stats'
 import { computeDamageProfile, computeResistProfile, profileDamageMult, type DamageProfile } from './damage'
 import { DAMAGE_TYPE_LIST } from './damage'
 import { setBonuses } from './sets'
 import { instanceTagMods } from './uniques'
-import { getPower, POWER_SLOTS } from './powers'
+import { getPower, POWER_SLOTS, SOCLE_PASSIVE_IDS } from './powers'
 import { theoreticalDps, genericMitigation } from './combat'
 import {
   talentStatMods, talentResistMods, talentUnlockedPowers, talentKeystones, type KeystoneEffect,
@@ -76,7 +76,7 @@ export function makeCharacter(name: string, level: number, bias: PrimaryStat): C
   // v0.33 : racine du Panthéon (2e arbre) seedée d'office — ancrage gratuit (0 stat), rend les
   // classes avancées atteignables une fois débloquées par l'Éveil.
   const pantheon: Record<string, number> = { pa_start: 1 }
-  const unlocked = computeUnlockedPowers({ ...talents, ...pantheon })
+  const unlocked = computeUnlockedPowers({ ...talents, ...pantheon }, level)
   // v0.30 : on répartit les capacités débloquées entre ACTIFS (5), GÉNÉRATEURS (3) et PASSIFS (3).
   const powers: (string | null)[] = Array(POWER_SLOTS).fill(null)
   const passives: (string | null)[] = Array(PASSIVE_SLOTS).fill(null)
@@ -112,9 +112,13 @@ export function makeCharacter(name: string, level: number, bias: PrimaryStat): C
   return c
 }
 
-/** Capacités débloquées = celles des nœuds `ability` alloués dans l'arbre. */
-export function computeUnlockedPowers(talents: Record<string, number>): string[] {
-  return [...new Set(talentUnlockedPowers(talents))]
+/**
+ * Capacités débloquées = nœuds `ability` alloués dans l'arbre + SOCLE de passifs-conversion
+ * universels débloqués par NIVEAU (v0.39 : accessibles à tous, hors arbre, pour l'équité).
+ */
+export function computeUnlockedPowers(talents: Record<string, number>, level = 0): string[] {
+  const socle = SOCLE_PASSIVE_IDS.filter((id) => (getPower(id)?.unlockLevel ?? 999) <= level)
+  return [...new Set([...talentUnlockedPowers(talents), ...socle])]
 }
 
 /** v0.33 : allocations TOTALES d'un perso = arbre de base (`talents`) + Panthéon (`pantheon`).
@@ -125,11 +129,12 @@ export function charAllocations(char: Character): Record<string, number> {
   return p && Object.keys(p).length > 0 ? { ...char.talents, ...p } : (char.talents ?? {})
 }
 
-/** Agrège les effets des capacités PASSIVES équipées. */
-export function charPassives(char: Character): { threatMult: number; damageReduction: number; mods: StatBlock } {
+/** Agrège les effets des capacités PASSIVES équipées (menace, réduction, mods, conversions v0.39). */
+export function charPassives(char: Character): { threatMult: number; damageReduction: number; mods: StatBlock; conversions: PassiveConversion[] } {
   let threatMult = 1
   let damageReduction = 0
   const mods: StatBlock = {}
+  const conversions: PassiveConversion[] = []
   for (const pid of char.passives ?? []) {
     if (!pid) continue
     const p = getPower(pid)
@@ -137,8 +142,9 @@ export function charPassives(char: Character): { threatMult: number; damageReduc
     if (p.threatMult) threatMult *= p.threatMult
     if (p.damageReduction) damageReduction = 1 - (1 - damageReduction) * (1 - p.damageReduction)
     if (p.mods) for (const k in p.mods) mods[k as StatKey] = (mods[k as StatKey] ?? 0) + (p.mods[k as StatKey] ?? 0)
+    if (p.convert) for (const cv of p.convert) conversions.push(cv)
   }
-  return { threatMult, damageReduction, mods }
+  return { threatMult, damageReduction, mods, conversions }
 }
 
 /** Keystones alloués dans l'arbre de ce perso (base + Panthéon). */
@@ -146,8 +152,9 @@ export function charKeystones(char: Character): KeystoneEffect[] {
   return talentKeystones(charAllocations(char))
 }
 
-/** Applique les conversions de stat (« la Force compte comme Agi », « Endurance comme Force »…). */
-function applyStatConversions(total: StatBlock, keystones: KeystoneEffect[]): StatBlock {
+/** Applique les conversions de stat : keystones (additif, verrouillés à l'arbre) PUIS passifs v0.39
+ *  (transfert par défaut = sidegrade). Toutes lisent la valeur d'ORIGINE (`total`) → pas de double-dip. */
+function applyStatConversions(total: StatBlock, keystones: KeystoneEffect[], conversions: PassiveConversion[] = []): StatBlock {
   const out = { ...total }
   // SÈVE ET ACIER (v0.34) : overcap — le Critique AU-DELÀ de 50 % (rating 2250) déborde en Altération.
   // Borné par construction : ne convertit QUE le surplus, et l'Altération reste soft-capée en aval.
@@ -168,18 +175,29 @@ function applyStatConversions(total: StatBlock, keystones: KeystoneEffect[]): St
     const surplus = Math.max(0, (total.critique ?? 0) - CRIT_50_RATING)
     out.alteration = (out.alteration ?? 0) + Math.round(surplus * critToAlt)
   }
+  // v0.39 — CONVERSIONS de passifs. Source lue sur `total` (origine) ; transfert = retire de la source.
+  // `healPower` (puissance de soin) = proxy Intelligence (le soin scale INT depuis v0.38).
+  for (const cv of conversions) {
+    const src = cv.from === 'healPower' ? (total.intelligence ?? 0) : (total[cv.from] ?? 0)
+    const moved = Math.round(src * cv.frac)
+    if (moved <= 0) continue
+    out[cv.to] = (out[cv.to] ?? 0) + moved
+    if ((cv.mode ?? 'transfer') === 'transfer' && cv.from !== 'healPower') {
+      out[cv.from] = Math.max(0, (out[cv.from] ?? 0) - moved)
+    }
+  }
   return out
 }
 
-/** Stats totales : base + talents + mods de capacités passives + équipement, puis conversions. */
+/** Stats totales : base + talents + mods de capacités passives + équipement, puis conversions (keystones + passifs). */
 export function charTotalStats(char: Character): StatBlock {
-  const { mods } = charPassives(char)
+  const { mods, conversions } = charPassives(char)
   const talentMods = talentStatMods(charAllocations(char))
   const base: StatBlock = { ...char.base }
   for (const k in mods) base[k as StatKey] = (base[k as StatKey] ?? 0) + (mods[k as StatKey] ?? 0)
   for (const k in talentMods) base[k as StatKey] = (base[k as StatKey] ?? 0) + (talentMods[k as StatKey] ?? 0)
   const total = computeTotalStats(base, char.equipment)
-  return applyStatConversions(total, charKeystones(char))
+  return applyStatConversions(total, charKeystones(char), conversions)
 }
 
 // Multiplicateurs globaux issus des améliorations marchand (mis à jour par le store).
