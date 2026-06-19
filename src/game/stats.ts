@@ -115,10 +115,9 @@ export interface DerivedStats {
   alterationMult: number // ≥1 multiplicateur des dégâts sur la durée (DoT)
   bossDamageMult: number // ≥1 multiplicateur de dégâts contre les boss/élites
   resilience: number // 0..1 réduction durée CC + durée/intensité altérations (v0.38, ex-Ténacité+Purge fusionnées)
-  regenBonus: number // v0.38 : DÉPRÉCIÉ (hors fiche/loot) mais gardé FONCTIONNEL — l'archétype soigneur (uniques + talents) en dépend
   flatDr: number // 0..1 réduction plate supplémentaire
-  /** Dégâts PLATS ajoutés par la Maîtrise du bruiser Force (v0.38 — la tankiness nourrit l'offense). */
-  masteryFlat: number
+  /** 🤺 Chance de RIPOSTE du bruiser Force (v0.38) : % de contre-attaquer (frappe complète) quand on est touché. */
+  riposteChance: number
   /** Multiplicateur de dégâts SUBIS (Surcharge de l'Int glass cannon ; 1 = neutre). */
   damageTakenMult: number
   /** Fraction de PV effectifs issue de la Barrière (v0.26 : sert à la Doctrine du bouclier). */
@@ -193,12 +192,13 @@ export function computeDerived(total: StatBlock): DerivedStats {
   const masteryFrac = softCap((total.maitrise ?? 0) / PER_PCT, 0.8, 1.5)
   let masteryMult = 1
   let masteryDr = 0
-  let masteryFlat = 0
+  let riposteChance = 0
   let damageTakenMult = 1
   if (mainStat === 'force') {
     masteryDr = softCap((total.maitrise ?? 0) / 5000, 0.25, 0.40)
-    // « Riposte » : ta tankiness (Endurance) se convertit en dégâts PLATS ajoutés à la puissance.
-    masteryFlat = masteryFrac * statPower(endurance) * 0.5
+    // « Riposte » : quand tu es touché, % de chance de renvoyer une FRAPPE COMPLÈTE (scale sur ta puissance).
+    // Plus on te tape / t'entoure, plus tu rends → fantasme bruiser, scale avec les adds & raids.
+    riposteChance = softCap((total.maitrise ?? 0) / 3500, 0.5, 0.8)
   } else if (mainStat === 'agilite') {
     masteryMult = 1 + masteryFrac * 0.3 // petit flat pour ne pas être nul sans crit
     // « Débordement » : la chance de crit AU-DESSUS du cap se reverse en multiplicateur de crit.
@@ -218,7 +218,7 @@ export function computeDerived(total: StatBlock): DerivedStats {
 
   return {
     mainStat,
-    power: statPower(effMainValue) + masteryFlat,
+    power: statPower(effMainValue),
     forcePower,
     agiPower,
     intPower,
@@ -230,7 +230,7 @@ export function computeDerived(total: StatBlock): DerivedStats {
     attacksPerSecond: 1 + softCap((total.hate ?? 0) / 5000, 0.9, 1.4),
     masteryMult,
     masteryDr,
-    masteryFlat,
+    riposteChance,
     damageTakenMult,
     leech: softCap((total.volDeVie ?? 0) / 20000, 0.5, 0.72), // 1% par 200 rating
     penetration: softCap((total.penetration ?? 0) / 20000, 0.70, 0.85), // 1% par 200 rating, pas de base
@@ -238,7 +238,6 @@ export function computeDerived(total: StatBlock): DerivedStats {
     alterationMult: 1 + (total.alteration ?? 0) / 4000, // +1% par 40 rating, linéaire (DoT-only)
     bossDamageMult: 1 + (total.degatsBoss ?? 0) / 5000, // +1% par 50 rating, linéaire
     resilience: softCap(resilienceRating / 2000, 0.85, 0.96),
-    regenBonus: (total.regen ?? 0) / PER_PCT, // déprécié (hors fiche/loot) mais gardé pour les soigneurs
     shieldPct,
     flatDr: softCap(flatDrRating / 5000, 0.40, 0.60),
     // stats rares (divisor plus généreux → impact fort malgré la rareté)
@@ -292,7 +291,7 @@ export function describeStats(total: StatBlock): { primary: StatEffect[]; second
       case 'degatsCrit': effect = `coups critiques ×${d.critMult.toFixed(2)}`; break
       case 'hate': effect = `+${pct(d.attacksPerSecond - 1)} vitesse · ${d.attacksPerSecond.toFixed(2)} att/s`; break
       case 'maitrise': effect = d.mainStat === 'agilite' ? `coups critiques ×${d.critMult.toFixed(2)} (Débordement)`
-        : d.mainStat === 'force' ? `-${pct(d.masteryDr)} subis · +${Math.round(d.masteryFlat).toLocaleString('fr-FR')} dégâts plats (Riposte)`
+        : d.mainStat === 'force' ? `-${pct(d.masteryDr)} subis · ${pct(d.riposteChance)} de riposte (contre-attaque)`
         : `+${pct(d.masteryMult - 1)} de dégâts · +${pct(d.damageTakenMult - 1)} subis (Surcharge)`; break
       case 'penetration': effect = `ignore ${pct(d.penetration)} des résistances/armure`; break
       case 'precision': effect = `annule ${pct(d.precision)} de l'esquive ennemie`; break

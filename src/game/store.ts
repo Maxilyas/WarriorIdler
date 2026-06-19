@@ -105,7 +105,7 @@ const MAX_LOG = 40
 const INV_BASE = 100000
 let invMax = INV_BASE
 let regenMult = 1 // ajusté par l'amélioration "Régénération"
-const REGEN_RATE = 0.05
+const REGEN_RATE = 0 // v0.38 — plus de DRIP passif en combat (soin = sorts/vol de vie/barrière). Voir choix design.
 /** v0.27 (F3) — horodatage de la mise en arrière-plan (0 = au premier plan). */
 let awaySince = 0
 
@@ -1256,6 +1256,32 @@ function gemRiposte(
     dealt += hit.damage
   }
   riposteAcc.set(c.id, acc)
+  return dealt
+}
+
+// 🤺 RIPOSTE de MAÎTRISE (v0.38, bruiser Force) : tant que tu es au combat, % de chance (riposteChance)
+// de renvoyer une FRAPPE COMPLÈTE. Modélisé en continu = un contre toutes les (RIPOSTE_INTERVAL / chance)
+// secondes → DPS ∝ chance × dégât d'une frappe. Zéro hors Force (riposteChance = 0).
+const mRiposteAcc = new Map<string, number>()
+const RIPOSTE_INTERVAL = 1.0
+function masteryRiposte(
+  c: Character,
+  d: { derived: DerivedStats; profile: DamageProfile; cmods: CharCombatMods },
+  enemy: Enemy,
+  dt: number,
+): number {
+  const chance = d.derived.riposteChance
+  if (chance <= 0 || c.hp <= 0 || enemy.hp <= 0) return 0
+  const interval = RIPOSTE_INTERVAL / chance
+  let acc = (mRiposteAcc.get(c.id) ?? 0) + dt
+  let dealt = 0
+  while (acc >= interval && enemy.hp > 0) {
+    acc -= interval
+    const hit = rollHit(d.derived, d.profile, enemy, { bonusMult: d.cmods.damageMult })
+    enemy.hp = Math.max(0, enemy.hp - hit.damage)
+    dealt += hit.damage
+  }
+  mRiposteAcc.set(c.id, acc)
   return dealt
 }
 
@@ -3356,6 +3382,7 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
     }
     // 🤺 Riposte mesurée : le temps sous le feu se mue en contre-attaques.
     totalDealt += gemRiposte(t, td, enemy, dt, mods?.cond)
+    totalDealt += masteryRiposte(t, td, enemy, dt) // 🤺 Riposte de Maîtrise (bruiser Force)
   }
 
   // 4b) Techniques signature de l'ennemi (DoT/burst/CC/debuff/drain) sur la plus haute menace.
@@ -3395,7 +3422,7 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
     const d = info[i]
     if (c.hp > 0 && d) {
       const mh = charMaxHp(c)
-      let regen = mh * REGEN_RATE * (1 + d.derived.regenBonus) * regenMult // v0.38 — Régén hors fiche/loot mais gardée fonctionnelle (soigneurs)
+      let regen = mh * REGEN_RATE * regenMult // v0.38 — base = 0 (REGEN_RATE) ; ne reste que les sources additives (métaboliseur…)
       // 🛡️ ÉGIDE « Métaboliseur » : le surplus de résist face aux exigences devient du soin/s.
       if (d.cmods.surplusRegen > 0) {
         regen += mh * Math.min(d.cmods.surplusRegen, (resistSurplus(enemy, d.resist) / RESIST_DSCALE) * d.cmods.surplusRegen)
@@ -3863,6 +3890,7 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
         if (score > best2) { best2 = score; ti2 = i }
       }
       totalDealt += gemRiposte(chars[ti2], info[ti2]!, ft, dt, mods?.cond)
+      totalDealt += masteryRiposte(chars[ti2], info[ti2]!, ft, dt) // 🤺 Riposte de Maîtrise (bruiser Force)
     }
   }
 
@@ -3881,7 +3909,7 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
       const mh = charMaxHp(c)
       // v0.27 (Lot 3) « Mal de l'abîme » : la régén de base est BRIDÉE en raid (content.regenMult)
       // → la vie redevient une ressource, fini le tank qui out-régène tout sans bouger.
-      let regen = mh * REGEN_RATE * (1 + d.derived.regenBonus) * regenMult * (mods?.content?.regenMult ?? 1) // v0.38 — Régén gardée fonctionnelle (soigneurs)
+      let regen = mh * REGEN_RATE * regenMult * (mods?.content?.regenMult ?? 1) // v0.38 — base = 0 (REGEN_RATE) ; sources additives uniquement
       const ft = focus()
       if (d.cmods.surplusRegen > 0 && ft) {
         regen += mh * Math.min(d.cmods.surplusRegen, (resistSurplus(ft, d.resist) / RESIST_DSCALE) * d.cmods.surplusRegen)
