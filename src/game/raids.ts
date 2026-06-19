@@ -838,6 +838,10 @@ export function makeRaidAdd(def: RaidDef, tier: number, element: DamageType, bes
   const reqs: Partial<Record<DamageType, number>> = {}
   const br = raidReqs(def, tier)
   for (const t in br) reqs[t as DamageType] = Math.round((br[t as DamageType] ?? 0) * 0.5)
+  // v0.37 — les renforts portent une version LÉGÈRE du thème du boss (résiste son élément, vulnérable à
+  // l'opposé) : nettoyables hors-élément, mais amener le contre les fait fondre. Mêmes paires que le boss.
+  const home: DamageType = def.element === 'rotating' ? 'arcane' : def.element
+  const resist: Partial<Record<DamageType, number>> = { [home]: 0.3, [VULN[home]]: -0.2 }
   return {
     name: `${def.icon} Rejeton`,
     maxHp: hp,
@@ -845,7 +849,7 @@ export function makeRaidAdd(def: RaidDef, tier: number, element: DamageType, bes
     armor: Math.round(enemyArmor(ilvl)),
     damage: Math.round(bossDamage(def, tier, bestStage) * 0.45),
     xp: 0,
-    resist: {},
+    resist,
     damageType: element,
     reqs,
     add: true,

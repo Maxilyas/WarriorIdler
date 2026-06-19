@@ -39,6 +39,24 @@ export const ELEM_SELF_RESIST = 0.15
 export const ELEM_VULN = 0.20
 
 /**
+ * Construit la résistance d'un ennemi : base uniforme (rampe de difficulté) + AFFINITÉ ÉLÉMENTAIRE —
+ * résiste son propre `element` (+ELEM_SELF_RESIST), vulnérable à l'opposé (−ELEM_VULN, <0 = vrai bonus).
+ * Physique = neutre (pas d'opposé dans ELEMENT_COUNTER). Partagé par le FARM et les DONJONS. (Les RAIDS
+ * ont leur propre check, plus fort et couvrant le Physique — voir VULN dans raids.ts.) `base` ≤ 0 → on
+ * ne pose QUE les 2 cases d'affinité (pas de bruit de zéros).
+ */
+export function elementAffinityResist(element: DamageType, base: number): Partial<Record<DamageType, number>> {
+  const counter = ELEMENT_COUNTER[element]
+  const resist: Partial<Record<DamageType, number>> = {}
+  if (base > 0) for (const t of DAMAGE_TYPE_LIST) resist[t] = base
+  if (counter) {
+    resist[element] = Math.min(0.85, base + ELEM_SELF_RESIST)
+    resist[counter] = Math.max(-0.5, base - ELEM_VULN)
+  }
+  return resist
+}
+
+/**
  * v0.24 : la résistance du héros est en POINTS, NON PLAFONNÉE (modèle relatif — voir resist.ts).
  * L'ancien cap dur de 75 % est supprimé ; 1 ancien % = 1 point.
  */

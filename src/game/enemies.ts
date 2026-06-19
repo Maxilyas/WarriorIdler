@@ -1,5 +1,5 @@
 import type { Enemy, DamageType, EnemyAbility } from './types'
-import { DAMAGE_TYPE_LIST, ELEMENT_COUNTER, ELEM_SELF_RESIST, ELEM_VULN } from './damage'
+import { elementAffinityResist } from './damage'
 import type { BiomeId } from './biomes'
 import { farmReq } from './resist'
 import { enemyHp, enemyDmg, enemyArmor, farmDifficultyIlvl, ilvlFarm, murEnrage } from './progression'
@@ -188,19 +188,10 @@ export function makeEnemy(stage: number, biome: BiomeId = 'physique', championMu
             : baseName
 
   // Résistance globale (rampe de palier, contrée par la Pénétration) + AFFINITÉ ÉLÉMENTAIRE (v0.37) :
-  // l'ennemi RÉSISTE l'élément de son biome et est VULNÉRABLE à l'opposé (ELEMENT_COUNTER). Le Physique
-  // est neutre (pas d'opposé). Le tuyau v0.37 (rollHit pour les autos, spellResistMult pour les sorts)
-  // applique déjà résist/vuln PAR TYPE → amener le bon élément (ou le multi-classe) devient un levier.
-  const ramp = stageResistRamp(stage)
-  const resist: Partial<Record<DamageType, number>> = {}
-  const counter = ELEMENT_COUNTER[biome]
-  if (ramp > 0 || counter) {
-    for (const t of DAMAGE_TYPE_LIST) resist[t] = ramp
-    if (counter) {
-      resist[biome] = Math.min(0.85, ramp + ELEM_SELF_RESIST)       // résiste son propre élément
-      resist[counter] = Math.max(-0.5, ramp - ELEM_VULN)            // vulnérable à l'opposé (<0 = bonus)
-    }
-  }
+  // l'ennemi RÉSISTE l'élément de son biome et est VULNÉRABLE à l'opposé (Physique neutre). Le tuyau
+  // v0.37 (rollHit autos, spellResistMult sorts) applique déjà résist/vuln par type → amener le bon
+  // élément (ou le multi-classe) devient un levier. (Donjons et raids partagent ce modèle.)
+  const resist = elementAffinityResist(biome, stageResistRamp(stage))
 
   // Auto-attaques TOUJOURS PHYSIQUES (la base). L'élément du biome arrive en plus, via la technique
   // signature (DoT/burst/CC… typé) → « physique + autre chose ». Donc en biome Feu : frappes physiques

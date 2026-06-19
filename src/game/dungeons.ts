@@ -1,5 +1,5 @@
 import type { DamageType, Enemy } from './types'
-import { DAMAGE_TYPES } from './damage'
+import { DAMAGE_TYPES, elementAffinityResist } from './damage'
 import type { GemFamily } from './condGems'
 import { dungeonReq } from './resist'
 import { enemyHp, enemyDmg, enemyArmor, lootFarmIlvl, frontierIlvl, CHAPITRE_SIZE } from './progression'
@@ -440,7 +440,9 @@ export function makeDungeonEnemy(
     // Dégâts : MÊME base b que les PV ; identité (cfg.dmg) + boss ×1,8 en multiplicateurs.
     damage: Math.round(enemyDmg(diffIlvl, 'trash') * cfg.dmg * (isBoss ? 1.8 : 1) * soft),
     xp: Math.round(8 * Math.pow(1.12, effStage - 1) * (isBoss ? 5 : 1) * xpMult),
-    resist: {},
+    // v0.37 — AFFINITÉ ÉLÉMENTAIRE (pas de rampe en donjon → base 0) : résiste l'élément du donjon,
+    // vulnérable à l'opposé. Amener le contre (ou le bon héros multi-classe) = un vrai levier de clear.
+    resist: elementAffinityResist(def.element, 0),
     damageType: def.element,
     // Exigence de résistance (v0.24) sur l'élément du donjon — modérée (cap ×2.1 à zéro résist).
     reqs: { [def.element]: dungeonReq(level) },
