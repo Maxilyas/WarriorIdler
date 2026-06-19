@@ -753,7 +753,10 @@ function statusChips(c: Character): { icon: string; label: string; cls: string; 
       .map((pw) => pw?.resource ?? 'Combo'),
   )]
   if (resNames.length) {
-    const combo = c.combo ?? 0
+    // Affichage ENTIER : la Rage/Combo peut être fractionnaire (Vengeance génère ∝ aux PV perdus) → on
+    // plancher pour la lisibilité (même parti pris que la Chaleur ci-dessous). La valeur exacte reste
+    // utilisée par les finisseurs en interne.
+    const combo = Math.floor(c.combo ?? 0)
     const cap = 5 + cmods.comboCap
     out.push({ icon: '🗡', label: `${resNames.join(' / ')} ${combo}/${cap}`, cls: 'bg-violet-500/25 text-violet-200 font-semibold', title: 'Réserve UNIQUE partagée : tous tes générateurs la remplissent, tous tes finisseurs la dépensent — même entre classes.' })
   }

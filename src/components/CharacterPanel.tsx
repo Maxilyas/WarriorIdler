@@ -4,7 +4,7 @@ import { describeStats, PRIMARY_META } from '../game/stats'
 import type { StatEffect } from '../game/stats'
 import type { PrimaryStat, DamageType, Character, PowerDef } from '../game/types'
 import type { DerivedStats } from '../game/stats'
-import { DAMAGE_TYPES, DAMAGE_TYPE_LIST, profileDamageMult } from '../game/damage'
+import { DAMAGE_TYPES, DAMAGE_TYPE_LIST, profileDamageMult, spellTypeMult, spellElementTypes } from '../game/damage'
 import { charTotalStats, charDerived, charMaxHp, charDamageProfile, charResist, abilityPower, powerScale, dpsBreakdown, isGenerator, spellDps } from '../game/character'
 import { setBonuses, getSet } from '../game/sets'
 import { getPower, POWER_EFFECT_META, scaleLabel, powerDamageType } from '../game/powers'
@@ -278,7 +278,7 @@ export function CharacterPanel({ view = 'apercu' }: { view?: CharacterView }) {
             <div className="mb-2 text-[12px] text-slate-300">
               Multiplicateur de dégâts :{' '}
               <span className="font-bold text-emerald-300">×{profileDamageMult(dmg).toFixed(2)}</span>
-              <span className="text-slate-500"> · sur toutes tes attaques & sorts</span>
+              <span className="text-slate-500"> · sur tes auto-attaques</span>
             </div>
             <div className="space-y-1">
               {dmgTypes.map((t) => {
@@ -297,7 +297,7 @@ export function CharacterPanel({ view = 'apercu' }: { view?: CharacterView }) {
               })}
             </div>
             <p className="mt-2 text-[10px] leading-snug text-slate-500">
-              Empile des affixes « +% {DAMAGE_TYPES[dmg.mainType].name} » (ton type principal) pour faire monter le multiplicateur. Investir dans un type minoritaire rapporte peu : sa part du profil est faible.
+              Auto-attaques : empile des affixes « +% {DAMAGE_TYPES[dmg.mainType].name} » (ton type principal) pour monter ce multiplicateur. Tes <span className="text-slate-400">sorts</span>, eux, suivent LEUR propre type — un sort feu profite surtout de ton « +% Feu » (voir le multiplicateur ×… sur chaque sort, onglet Capacités). Matche tes affixes à l'élément de tes sorts.
             </p>
           </div>
 
@@ -451,7 +451,8 @@ function PowersSection({ char }: { char: Character }) {
   const setGenerator = useGame((s) => s.setGenerator)
   const togglePowerAuto = useGame((s) => s.togglePowerAuto)
   const derived = charDerived(char)
-  const weaponType = charDamageProfile(char).mainType
+  const profile = charDamageProfile(char)
+  const weaponType = profile.mainType
   const passives = char.passives ?? [null, null, null]
   const generators = char.generators ?? [null, null, null]
   const equipped = new Set([...char.powers, ...passives, ...generators].filter(Boolean) as string[])
@@ -485,7 +486,19 @@ function PowersSection({ char }: { char: Character }) {
                 </div>
                 {det && (
                   <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-slate-400">
-                    {det.type && <span style={{ color: DAMAGE_TYPES[det.type].color }}>{DAMAGE_TYPES[det.type].icon} {DAMAGE_TYPES[det.type].name}</span>}
+                    {det.type && (() => {
+                      // v0.37 : un sort scale sur le bonus de SON type (matching). On affiche le multiplicateur
+                      // RÉEL pour ce build → le joueur VOIT que stacker cet élément le booste. Visible en texte
+                      // (pas un simple hover) = lisible aussi sur mobile.
+                      const ty = det.type!
+                      const meta = DAMAGE_TYPES[ty]
+                      const tm = spellTypeMult(profile, spellElementTypes(p.tags, ty))
+                      return (
+                        <span style={{ color: meta.color }} title={`Sort de type ${meta.name}. Il profite surtout de ton bonus « +% ${meta.name} » (objets + talents) : actuellement ×${tm.toFixed(2)}. Empile cet élément pour le booster — un autre élément aide bien moins. (La résistance de l'ennemi s'applique en plus pendant le combat.)`}>
+                          {meta.icon} {meta.name} <span className="font-semibold text-slate-200">×{tm.toFixed(2)}</span>
+                        </span>
+                      )
+                    })()}
                     <span>{POWER_EFFECT_META[p.effect ?? 'nuke'].label}</span>
                     {det.scale && <span className="text-amber-300/80" title={scaleHint(det.scale)}>📈 {det.scale}</span>}
                     <span>CD {det.cd.toFixed(1)}s</span>
