@@ -4906,6 +4906,13 @@ export const useGame = create<GameState>((set, get) => {
           }
         }
 
+        // v0.39 — chaque VAGUE de farm démarre FRAÎCHE : PV pleins, bouclier purgé et recharges
+        // remises à zéro (comme l'« entrée fraîche » en donjon). Le farm n'est plus une épreuve
+        // d'attrition entre vagues ; les boucliers de départ (Réservoir/Doctrine, Égide) se
+        // réarment au 1er tick face au nouvel ennemi via gemFightStart.
+        characters = characters.map(fullHeal)
+        resetAllCooldowns(characters)
+
         // L'échoppe ne se renouvelle plus au boss : rotation horaire gérée dans `tick`.
         // 🍖 Appât à champions (v0.26) : les ✦ rôdent plus souvent.
         const enemyNext = makeEnemy(stage, s.activeBiome, rules.has('appat') ? 1 + 0.35 * amp : 1)
