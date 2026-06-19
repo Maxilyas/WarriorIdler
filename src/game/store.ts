@@ -4144,6 +4144,7 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
                   Math.min(BUTIN_RARITY_CAP, cw.floor + rareBonus),
                   Math.min(BUTIN_RARITY_CAP, cw.peak + rareBonus),
                   Math.min(BUTIN_RARITY_CAP, cw.cap + rareBonus),
+                  cw.shoulder != null ? { shoulder: cw.shoulder } : undefined,
                 )
             items.push(generateItem({ ilvl, rarity, primaryBias: bias, uniqueSource: 'dungeon' }))
           }

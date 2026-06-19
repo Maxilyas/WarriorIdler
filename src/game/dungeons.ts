@@ -140,25 +140,32 @@ export function geodeGemRank(level: number): number {
   return level >= 18 ? 3 : level >= 10 ? 2 : 1
 }
 
+/** Plafond pratique de la fenêtre normale de la Cache : Artefact (t7). */
+export const BUTIN_RARITY_CAP = 7
 /**
- * Fenêtre de rareté de la Cache du Pilleur (v0.24, DESIGN §4.2) : FEEDER vers le raid T1.
- * Le pic glisse de Commun → LÉGENDAIRE (~niv 16), plafond pratique ARTEFACT (7). L'échelle
- * des sources : farm (≤ Légendaire) < Cache (pic Légendaire) < raids (seul chemin Céleste+).
- * Au-delà d'Artefact, seul le tirage « au-delà du voile » perce — jusqu'à Éternel max.
+ * Fenêtre de rareté de la Cache du Pilleur (v0.39.1 — retour au profil HISTORIQUE + correction du
+ * plateau précoce). Trois régimes :
+ *   • Niv 1-7  : COURBE HISTORIQUE validée par le joueur — pic Rare(4)→Épique(5)→Légendaire(6),
+ *                floor = pic-2 (la Cache reste meilleure que le farm sans cracher d'Artefact tôt).
+ *   • Niv 8-14 : RAMPE — corrige le défaut de l'ancienne courbe (l'Artefact culminait dès niv 9 et
+ *                restait PLAT jusqu'à 15 → « 9+ == 15+ »). Ici le pic reste Légendaire mais la PART
+ *                d'Artefact grimpe en continu (~18 % → ~64 %) via le knob `shoulder` de rollWindowRarity.
+ *   • Niv 15+  : PLATEAU HISTORIQUE — pic Artefact (~72 % Artefact/objet), l'état final « qui est bon ».
+ * (`cap` reste Artefact ; au-delà, seul le « voile » perce — cf. butinOverTier.)
  */
-export const BUTIN_RARITY_CAP = 7 // Artefact — plafond pratique de la fenêtre normale
-// v0.25 : la Cache se débloque au palier 40 (joueur déjà ~full Légendaire au farm) → elle doit être
-// RELEVANTE dès le rang 1. Pic Rare au rang 1 qui glisse vers Artefact (~niv 9) — et le PLAFOND est
-// Artefact DÈS LE RANG 1 : la traîne à deux pentes de rollWindowRarity rend Légendaire (~4%) et
-// Artefact (~1%) possibles immédiatement — petits, mais meilleurs que le farm. Feeder du raid T1.
-export function cacheRarityWindow(level: number): { floor: number; peak: number; cap: number } {
-  // v0.36 — la Cache sort à TA tranche (ilvl = lootFarmIlvl(bestStage), cf. store) ; le NIVEAU ne change
-  // QUE le PLANCHER de rareté et le nombre d'objets. Plancher : Commun (t2) → Épique (t5). Le PLAFOND est
-  // Artefact (t7) DÈS le niveau 1, mais c'est une TRAÎNE rare : peak = plancher → l'Artefact reste un
-  // jackpot (~5 % au sommet où le gros du butin est Épique, ~0,1 % en début), jamais le gros du loot.
-  // Corrige le « trop d'Artefact » des hauts niveaux (avant : peak=Artefact ⇒ ~72 % d'Artefact).
-  const floor = Math.max(2, Math.min(5, 2 + Math.floor((level - 1) / 3)))
-  return { floor, peak: floor, cap: BUTIN_RARITY_CAP }
+export function cacheRarityWindow(level: number): { floor: number; peak: number; cap: number; shoulder?: number } {
+  const cap = BUTIN_RARITY_CAP
+  if (level <= 7) {
+    const peak = Math.max(4, Math.min(6, 4 + Math.floor(level / 3)))
+    return { floor: Math.max(2, peak - 2), peak, cap }
+  }
+  if (level >= 15) return { floor: 5, peak: 7, cap }
+  // 8-14 : pic Légendaire(6), plancher Épique(5), part d'Artefact interpolée 18 % (niv8) → 72 % (niv15).
+  // shoulder = poids de l'Artefact (t7) relatif au pic ; weights = {Épique 0.3, Légend 1, Artefact shoulder}.
+  const t = (level - 8) / 7 // 0 (niv8) → 1 (niv15)
+  const targetArtefact = 0.18 + (0.72 - 0.18) * t
+  const shoulder = (targetArtefact * 1.3) / (1 - targetArtefact)
+  return { floor: 5, peak: 6, cap, shoulder }
 }
 /** Plancher / plafond pratiques (affichage + rendement des automates). */
 export function butinMinTier(level: number): number {
