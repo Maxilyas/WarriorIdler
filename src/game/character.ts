@@ -1,4 +1,4 @@
-import type { Character, StatBlock, StatKey, PrimaryStat, OffensiveStat, PowerDef, PassiveConversion, DamageType, Item, EquipSlotId } from './types'
+import type { Character, StatBlock, StatKey, PrimaryStat, OffensiveStat, PowerDef, PowerEffect, PassiveConversion, DamageType, Item, EquipSlotId } from './types'
 import { computeTotalStats, computeDerived, type DerivedStats } from './stats'
 import { computeDamageProfile, computeResistProfile, profileDamageMult, type DamageProfile } from './damage'
 import { DAMAGE_TYPE_LIST } from './damage'
@@ -22,13 +22,25 @@ export const TALENT_START_LEVEL = 10
 /** v0.29.5 : 3 emplacements RÉSERVÉS aux capacités PASSIVES (distincts des 5 slots actifs). */
 export const PASSIVE_SLOTS = 3
 
-/** v0.30 : 3 emplacements RÉSERVÉS aux GÉNÉRATEURS (sorts `builder`, auto-cast pur). Hors des 5
- *  actifs → on ne « gâche » pas un slot à timer pour un sort qui ne fait que fabriquer la ressource. */
-export const GENERATOR_SLOTS = 3
+/** v0.39 : 3 emplacements de SOUTIEN (ex-Générateurs), auto-cast pur. Accueillent les builders ET
+ *  les sorts de soutien (boucliers/soins/buffs) à lancer en fond, sans les timer (fire-and-forget). */
+export const SUPPORT_SLOTS = 3
 
-/** Un sort est-il un GÉNÉRATEUR (builder) → va dans la section dédiée, pas dans les actifs. */
-export function isGenerator(p: PowerDef | undefined): boolean {
+/** Un sort est-il un GÉNÉRATEUR (builder) → auto-cast pur, REFUSÉ des actifs (aucun sens en manuel). */
+export function isBuilder(p: PowerDef | undefined): boolean {
   return p?.kind === 'active' && p.effect === 'builder'
+}
+
+/** Effets de SOUTIEN éligibles à la lane Soutien (en plus des builders) : boucliers, soins, buffs. */
+const SUPPORT_EFFECTS: ReadonlySet<PowerEffect> = new Set<PowerEffect>([
+  'shield', 'bigShield', 'invuln', 'avatar', 'heal', 'hot', 'buffParty', 'bigHeal',
+])
+
+/** Un sort peut-il aller dans la lane SOUTIEN ? builder OU sort de soutien. MULTI-LANE (v0.39) : les
+ *  boucliers/soins restent AUSSI équipables en ACTIF (pour un déclenchement manuel) — l'unicité tranche. */
+export function isSupport(p: PowerDef | undefined): boolean {
+  if (!p || p.kind !== 'active') return false
+  return p.effect === 'builder' || (!!p.effect && SUPPORT_EFFECTS.has(p.effect))
 }
 
 /** Points de talent accumulés à un niveau donné (1 par niveau au-delà de TALENT_START_LEVEL). */
@@ -77,16 +89,18 @@ export function makeCharacter(name: string, level: number, bias: PrimaryStat): C
   // classes avancées atteignables une fois débloquées par l'Éveil.
   const pantheon: Record<string, number> = { pa_start: 1 }
   const unlocked = computeUnlockedPowers({ ...talents, ...pantheon }, level)
-  // v0.30 : on répartit les capacités débloquées entre ACTIFS (5), GÉNÉRATEURS (3) et PASSIFS (3).
+  // v0.39 : on répartit les capacités débloquées entre ACTIFS (5), SOUTIEN (3) et PASSIFS (3).
+  // Seuls les builders sont auto-rangés en SOUTIEN ; les boucliers/soins atterrissent en actif (le
+  // joueur les déplace en Soutien s'il veut le fire-and-forget).
   const powers: (string | null)[] = Array(POWER_SLOTS).fill(null)
   const passives: (string | null)[] = Array(PASSIVE_SLOTS).fill(null)
-  const generators: (string | null)[] = Array(GENERATOR_SLOTS).fill(null)
+  const support: (string | null)[] = Array(SUPPORT_SLOTS).fill(null)
   let ai = 0, pi = 0, gi = 0
   for (const id of unlocked) {
     const p = getPower(id)
     if (!p) continue
     if (p.kind === 'passive') { if (pi < PASSIVE_SLOTS) passives[pi++] = id }
-    else if (isGenerator(p)) { if (gi < GENERATOR_SLOTS) generators[gi++] = id }
+    else if (isBuilder(p)) { if (gi < SUPPORT_SLOTS) support[gi++] = id }
     else if (ai < POWER_SLOTS) powers[ai++] = id
   }
 
@@ -99,7 +113,7 @@ export function makeCharacter(name: string, level: number, bias: PrimaryStat): C
     equipment: {},
     powers,
     passives,
-    generators,
+    support,
     powerAuto: Array(POWER_SLOTS).fill(true),
     unlockedPowers: unlocked,
     talentPoints: talentPointsForLevel(level),
@@ -287,15 +301,15 @@ export function charDamageProfile(char: Character): DamageProfile {
   return computeDamageProfile(char.equipment, charKeystones(char))
 }
 
-/** IDs des capacités ACTIVES (actifs + générateurs) — pour le DPS de fiche et le combat. */
+/** IDs des capacités ACTIVES (actifs + soutien auto-cast) — pour le DPS de fiche et le combat. */
 export function charDeck(char: Character): (string | null)[] {
-  return [...char.powers, ...(char.generators ?? [])]
+  return [...char.powers, ...(char.support ?? [])]
 }
 
 /** Génération de ressource (Points de Combo)/s des GÉNÉRATEURS équipés — pour estimer les finisseurs. */
 function comboGenPerSec(char: Character, derived: DerivedStats, comboGen: number): number {
   let g = 0
-  for (const pid of char.generators ?? []) {
+  for (const pid of char.support ?? []) {
     if (!pid) continue
     const p = getPower(pid)
     if (p?.kind === 'active' && p.effect === 'builder') g += ((p.gen ?? 1) + comboGen) / Math.max(0.5, (p.cooldown ?? 3) * (1 - derived.cdr))

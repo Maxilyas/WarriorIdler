@@ -10,6 +10,7 @@ import {
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from '../game/damage'
 import { EFFECTIVE_DR_CAP } from '../game/combat'
 import { POWERS } from '../game/powers'
+import { ConversionChips } from './ui'
 import { TALENTS, CONSTELLATIONS } from '../game/talents'
 import { TALENT_START_LEVEL } from '../game/character'
 import type { StatKey, UniqueRole, SecondaryStat, OffensiveStat } from '../game/types'
@@ -175,6 +176,7 @@ function PowersCodex() {
           {passives.map((p) => (
             <div key={p.id} className="rounded-lg border border-slate-800 bg-black/20 p-2">
               <div className="text-[12px] font-semibold text-slate-100">{p.name}</div>
+              <ConversionChips convert={p.convert} />
               <div className="mt-0.5 text-[10px] leading-snug text-slate-500">{p.description}</div>
             </div>
           ))}

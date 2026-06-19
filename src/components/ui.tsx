@@ -1,5 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { ALL_STAT_META, convSourceMeta } from '../game/stats'
+import type { PassiveConversion } from '../game/types'
 
 /**
  * Feuille de bas d'écran — le standard mobile du jeu pour tout contenu riche.
@@ -57,6 +59,35 @@ export function ConfirmButton({ onConfirm, className = '', confirmLabel = '⚠ C
     >
       {armed ? confirmLabel : children}
     </button>
+  )
+}
+
+/**
+ * Puces de CONVERSION (v0.39) d'un passif : « 25% FOR ➜ INT » (transfert) ou « +30% SOIN ⊕ RÉD »
+ * (additif). Source colorée par la stat d'origine, cible par la stat d'arrivée. Partagé fiche/Codex.
+ */
+export function ConversionChips({ convert }: { convert?: PassiveConversion[] }) {
+  if (!convert?.length) return null
+  return (
+    <div className="mt-1 flex flex-wrap gap-1">
+      {convert.map((cv, i) => {
+        const from = convSourceMeta(cv.from)
+        const to = ALL_STAT_META[cv.to]
+        const pct = Math.round(cv.frac * 100)
+        const add = cv.mode === 'add'
+        return (
+          <span
+            key={i}
+            className="inline-flex items-center gap-1 rounded border border-slate-700/70 bg-black/30 px-1.5 py-0.5 text-[9.5px] font-medium"
+            title={add ? `Ajoute ${pct}% de ${from.short} en ${to.name} (sans rien retirer)` : `Transfère ${pct}% de ${from.short} en ${to.name}`}
+          >
+            <span style={{ color: from.color }}>{add ? '+' : ''}{pct}% {from.short}</span>
+            <span className="text-slate-500">{add ? '⊕' : '➜'}</span>
+            <span style={{ color: to.color }}>{to.short}</span>
+          </span>
+        )
+      })}
+    </div>
   )
 }
 

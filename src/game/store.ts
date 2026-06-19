@@ -8,7 +8,7 @@ import type { DerivedStats } from './stats'
 import {
   makeCharacter, charDerived, charMaxHp, charDamageProfile, charPassives,
   charResist, charCombatMods, abilityPower, powerScale, computeUnlockedPowers, setGlobalCombatMods, setGlobalPrestigeResist,
-  setPactDerivedMods, talentPointsForLevel, teamTalentPool, talentsSpent, charDeck, isGenerator, GENERATOR_SLOTS, type CombatMods as CharCombatMods,
+  setPactDerivedMods, talentPointsForLevel, teamTalentPool, talentsSpent, charDeck, isBuilder, isSupport, SUPPORT_SLOTS, type CombatMods as CharCombatMods,
 } from './character'
 import { getTalent, canAllocate, canAllocatePantheon, nodeTree, eveilBudget } from './talents'
 import { getPower } from './powers'
@@ -612,8 +612,8 @@ interface GameState extends SaveData {
   completeOnboarding: (bias: PrimaryStat) => void
   setPower: (slot: number, powerId: string | null) => void
   setPassive: (slot: number, powerId: string | null) => void
-  /** Équipe un GÉNÉRATEUR (sort builder) dans l'un des 3 slots dédiés (auto-cast). */
-  setGenerator: (slot: number, powerId: string | null) => void
+  /** Équipe un sort de SOUTIEN (builder OU bouclier/soin) dans l'un des 3 slots dédiés (auto-cast). */
+  setSupport: (slot: number, powerId: string | null) => void
   /** Bascule un emplacement de capacité entre AUTO et MANUEL (perso actif). */
   togglePowerAuto: (slot: number, charIndex?: number) => void
   /** Lance MANUELLEMENT la capacité d'un emplacement — strict : ne part qu'au prochain tick si prête.
@@ -1963,37 +1963,40 @@ function sanitize(save: SaveData): SaveData {
     // Points restants = gagnés (au-delà du niveau de départ des talents) − dépensés (hors racine gratuite).
     c.talentPoints = Math.max(0, talentPointsForLevel(c.level) - spent)
     c.unlockedPowers = computeUnlockedPowers({ ...talents, ...pantheon }, c.level)
-    // v0.30 : RÉPARTITION actifs (5) / GÉNÉRATEURS (3) / passifs (3). Migration : on relit les anciens
-    // `powers` (qui mélangeaient builders & actifs) + `generators` + `passives`, on valide, on range par
-    // genre — les builders QUITTENT la barre des actifs et atterrissent dans leurs slots dédiés.
+    // v0.39 : RÉPARTITION actifs (5) / SOUTIEN (3) / passifs (3). Migration : on relit les anciens
+    // `powers` + `support` (ex-`generators`, back-compat) + `passives`, on valide, on range par genre —
+    // seuls les builders quittent la barre des actifs ; les boucliers/soins restent où ils étaient.
+    const legacyGen = (c as { generators?: (string | null)[] }).generators // ex-`generators` → `support`
     const equipped = [
       ...(Array.isArray(c.powers) ? c.powers : []),
-      ...(Array.isArray(c.generators) ? c.generators : []),
+      ...(Array.isArray(c.support) ? c.support : Array.isArray(legacyGen) ? legacyGen : []),
       ...(Array.isArray(c.passives) ? c.passives : []),
     ]
     const act: string[] = []
-    const gen: string[] = []
+    const sup: string[] = []
     const pas: string[] = []
     for (const pid of equipped) {
       if (!pid || !c.unlockedPowers.includes(pid)) continue
       const pw = getPower(pid)
       if (!pw) continue
       if (pw.kind === 'passive') { if (pas.length < 3 && !pas.includes(pid)) pas.push(pid) }
-      else if (isGenerator(pw)) { if (gen.length < GENERATOR_SLOTS && !gen.includes(pid)) gen.push(pid) }
+      else if (isBuilder(pw)) { if (sup.length < SUPPORT_SLOTS && !sup.includes(pid)) sup.push(pid) }
       else if (act.length < 5 && !act.includes(pid)) act.push(pid)
     }
     c.powers = [0, 1, 2, 3, 4].map((i) => act[i] ?? null)
-    c.generators = [0, 1, 2].map((i) => gen[i] ?? null)
+    c.support = [0, 1, 2].map((i) => sup[i] ?? null)
+    delete (c as { generators?: unknown }).generators // v0.39 : champ renommé en `support`
     c.passives = [0, 1, 2].map((i) => pas[i] ?? null)
     // Mode auto/manuel par emplacement ACTIF (défaut AUTO).
     c.powerAuto = [0, 1, 2, 3, 4].map((i) => (Array.isArray(c.powerAuto) ? c.powerAuto[i] !== false : true))
     // Présets de build : structure validée (3 emplacements max, entrées bien formées).
     if (Array.isArray(c.buildPresets)) {
-      c.buildPresets = c.buildPresets.slice(0, 3).map((p) =>
-        p && typeof p === 'object' && p.talents && Array.isArray(p.powers)
-          ? { name: String(p.name ?? 'Build').slice(0, 14), talents: p.talents, powers: p.powers.slice(0, 5), passives: Array.isArray(p.passives) ? p.passives.slice(0, 3) : undefined, generators: Array.isArray(p.generators) ? p.generators.slice(0, 3) : undefined, primaryBias: p.primaryBias ?? 'force' }
-          : null,
-      )
+      c.buildPresets = c.buildPresets.slice(0, 3).map((p) => {
+        if (!(p && typeof p === 'object' && p.talents && Array.isArray(p.powers))) return null
+        const legacyPGen = (p as { generators?: (string | null)[] }).generators // ex-`generators` → `support`
+        const support = Array.isArray(p.support) ? p.support.slice(0, 3) : Array.isArray(legacyPGen) ? legacyPGen.slice(0, 3) : undefined
+        return { name: String(p.name ?? 'Build').slice(0, 14), talents: p.talents, powers: p.powers.slice(0, 5), passives: Array.isArray(p.passives) ? p.passives.slice(0, 3) : undefined, support, primaryBias: p.primaryBias ?? 'force' }
+      })
     } else {
       c.buildPresets = undefined
     }
@@ -2028,7 +2031,7 @@ function migrateOldSave(p: any): SaveData {
     equipment: p.equipment ?? {},
     powers: [null, null, null, null, null],
     passives: [null, null, null],
-    generators: [null, null, null],
+    support: [null, null, null],
     unlockedPowers: [],
     talentPoints: talentPointsForLevel(p.level ?? 1),
     talents: {},
@@ -3258,7 +3261,7 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
     // v0.30 : le « deck » de combat = 5 actifs (auto/manuel) + 3 générateurs (auto pur, fabriquent la ressource).
     const deck: { pid: string; auto: boolean }[] = []
     c.powers.forEach((pid, slot) => { if (pid) deck.push({ pid, auto: c.powerAuto?.[slot] !== false }) })
-    for (const gid of c.generators ?? []) if (gid) deck.push({ pid: gid, auto: true })
+    for (const gid of c.support ?? []) if (gid) deck.push({ pid: gid, auto: true })
     deck.forEach(({ pid, auto }) => {
       const p = getPower(pid)
       if (!p || p.kind !== 'active') return
@@ -3719,7 +3722,7 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
     // v0.30 : deck = 5 actifs (auto/manuel) + 3 générateurs (auto pur).
     const deck: { pid: string; auto: boolean }[] = []
     c.powers.forEach((pid, slot) => { if (pid) deck.push({ pid, auto: c.powerAuto?.[slot] !== false }) })
-    for (const gid of c.generators ?? []) if (gid) deck.push({ pid: gid, auto: true })
+    for (const gid of c.support ?? []) if (gid) deck.push({ pid: gid, auto: true })
     deck.forEach(({ pid, auto }) => {
       const p = getPower(pid)
       if (!p || p.kind !== 'active') return
@@ -6592,10 +6595,12 @@ export const useGame = create<GameState>((set, get) => {
       const char = s.characters[s.activeChar]
       if (!char || slot < 0 || slot >= char.powers.length) return
       if (powerId && !char.unlockedPowers.includes(powerId)) return
-      if (powerId && isGenerator(getPower(powerId))) return // un générateur va dans sa section dédiée
+      if (powerId && isBuilder(getPower(powerId))) return // un builder va en SOUTIEN (auto-cast pur)
       const powers = char.powers.map((x) => (x === powerId ? null : x)) // unicité
       powers[slot] = powerId
-      const nc = { ...char, powers }
+      // MULTI-LANE (v0.39) : un bouclier/soin peut vivre en actif OU en soutien — jamais les deux.
+      const support = (char.support ?? [null, null, null]).map((x) => (x === powerId ? null : x))
+      const nc = { ...char, powers, support }
       nc.hp = Math.min(nc.hp, charMaxHp(nc))
       const characters = s.characters.map((c, i) => (i === s.activeChar ? nc : c))
       const next = { ...s, characters }
@@ -6620,17 +6625,19 @@ export const useGame = create<GameState>((set, get) => {
       set(next)
     },
 
-    // v0.30 : équipe un GÉNÉRATEUR (sort builder) dans l'un des 3 slots dédiés (auto-cast pur).
-    setGenerator: (slot, powerId) => {
+    // v0.39 : équipe un sort de SOUTIEN (builder OU bouclier/soin) dans l'un des 3 slots (auto-cast pur).
+    setSupport: (slot, powerId) => {
       const s = get()
       const char = s.characters[s.activeChar]
-      const cur = char?.generators ?? [null, null, null]
-      if (!char || slot < 0 || slot >= GENERATOR_SLOTS) return
+      const cur = char?.support ?? [null, null, null]
+      if (!char || slot < 0 || slot >= SUPPORT_SLOTS) return
       if (powerId && !char.unlockedPowers.includes(powerId)) return
-      if (powerId && !isGenerator(getPower(powerId))) return // seuls les builders vont ici
-      const generators = cur.map((x) => (x === powerId ? null : x)) // unicité
-      generators[slot] = powerId
-      const nc = { ...char, generators }
+      if (powerId && !isSupport(getPower(powerId))) return // builders + boucliers/soins uniquement
+      const support = cur.map((x) => (x === powerId ? null : x)) // unicité
+      support[slot] = powerId
+      // MULTI-LANE (v0.39) : retirer des actifs si le même sort y était (vit dans une seule lane).
+      const powers = char.powers.map((x) => (x === powerId ? null : x))
+      const nc = { ...char, support, powers }
       nc.hp = Math.min(nc.hp, charMaxHp(nc))
       const characters = s.characters.map((c, i) => (i === s.activeChar ? nc : c))
       const next = { ...s, characters }
@@ -6697,9 +6704,9 @@ export const useGame = create<GameState>((set, get) => {
       const unlockedPowers = computeUnlockedPowers({ ...talents, ...(char.pantheon ?? {}) }, char.level)
       const powers = char.powers.map((p) => (p && unlockedPowers.includes(p) ? p : null))
       const passives = (char.passives ?? []).map((p) => (p && unlockedPowers.includes(p) ? p : null))
-      const generators = (char.generators ?? []).map((p) => (p && unlockedPowers.includes(p) ? p : null))
+      const support = (char.support ?? []).map((p) => (p && unlockedPowers.includes(p) ? p : null))
       // v0.36 — pas de champ talentPoints à rembourser : le pool partagé remonte tout seul (moins dépensé).
-      const nc = { ...char, talents, unlockedPowers, powers, passives, generators }
+      const nc = { ...char, talents, unlockedPowers, powers, passives, support }
       nc.hp = Math.min(nc.hp, charMaxHp(nc))
       const characters = s.characters.map((c, i) => (i === s.activeChar ? nc : c))
       const next = { ...s, gold: s.gold - cost, characters, log: pushLog(s.log, `Talents réinitialisés (-${cost} or).`, 'craft') }
@@ -6735,8 +6742,8 @@ export const useGame = create<GameState>((set, get) => {
       const unlockedPowers = computeUnlockedPowers({ ...char.talents, ...pantheon }, char.level)
       const powers = char.powers.map((p) => (p && unlockedPowers.includes(p) ? p : null))
       const passives = (char.passives ?? []).map((p) => (p && unlockedPowers.includes(p) ? p : null))
-      const generators = (char.generators ?? []).map((p) => (p && unlockedPowers.includes(p) ? p : null))
-      const nc = { ...char, pantheon, unlockedPowers, powers, passives, generators }
+      const support = (char.support ?? []).map((p) => (p && unlockedPowers.includes(p) ? p : null))
+      const nc = { ...char, pantheon, unlockedPowers, powers, passives, support }
       nc.hp = Math.min(nc.hp, charMaxHp(nc))
       const characters = s.characters.map((c, i) => (i === s.activeChar ? nc : c))
       const next = { ...s, characters, log: pushLog(s.log, '🌌 Panthéon réinitialisé.', 'craft') }
@@ -6754,7 +6761,7 @@ export const useGame = create<GameState>((set, get) => {
         talents: { ...char.talents },
         powers: [...char.powers],
         passives: [...(char.passives ?? [])],
-        generators: [...(char.generators ?? [])],
+        support: [...(char.support ?? [])],
         primaryBias: char.primaryBias,
       }
       const characters = s.characters.map((c, i) => (i === s.activeChar ? { ...c, buildPresets: presets } : c))
@@ -6796,8 +6803,8 @@ export const useGame = create<GameState>((set, get) => {
       const unlockedPowers = computeUnlockedPowers({ ...talents, ...(char.pantheon ?? {}) }, char.level)
       const powers = preset.powers.map((p) => (p && unlockedPowers.includes(p) ? p : null))
       const passives = (preset.passives ?? [null, null, null]).map((p) => (p && unlockedPowers.includes(p) ? p : null))
-      const generators = (preset.generators ?? [null, null, null]).map((p) => (p && unlockedPowers.includes(p) ? p : null))
-      const nc = { ...char, talents, unlockedPowers, powers, passives, generators, primaryBias: preset.primaryBias }
+      const support = (preset.support ?? [null, null, null]).map((p) => (p && unlockedPowers.includes(p) ? p : null))
+      const nc = { ...char, talents, unlockedPowers, powers, passives, support, primaryBias: preset.primaryBias }
       nc.hp = Math.min(nc.hp, charMaxHp(nc))
       const characters = s.characters.map((c, i) => (i === s.activeChar ? nc : c))
       const next = {

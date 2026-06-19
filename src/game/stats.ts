@@ -1,4 +1,4 @@
-import type { PrimaryStat, SecondaryStat, StatKey, StatBlock, Equipment } from './types'
+import type { PrimaryStat, SecondaryStat, StatKey, StatBlock, Equipment, ConvSource } from './types'
 import { instanceMods } from './uniques'
 
 export interface StatMeta {
@@ -49,6 +49,13 @@ export const SECONDARY_META: Record<SecondaryStat, StatMeta> = {
 }
 
 export const ALL_STAT_META: Record<StatKey, StatMeta> = { ...PRIMARY_META, ...SECONDARY_META }
+
+/** Libellé court + couleur d'une SOURCE de conversion (v0.39) : une stat OU `healPower` (puissance de soin). */
+export function convSourceMeta(s: ConvSource): { short: string; color: string } {
+  if (s === 'healPower') return { short: 'SOIN', color: '#51cf66' }
+  const m = ALL_STAT_META[s]
+  return { short: m.short, color: m.color }
+}
 
 export const PRIMARY_STATS: PrimaryStat[] = ['force', 'agilite', 'intelligence', 'endurance']
 // v0.38 — liste AFFICHÉE/ROLLÉE : Esquive, Ténacité, Purge, Régén retirées ; Résilience (fusion Tén+Purge) ajoutée.

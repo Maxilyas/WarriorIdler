@@ -5,11 +5,12 @@ import type { StatEffect } from '../game/stats'
 import type { PrimaryStat, DamageType, Character, PowerDef } from '../game/types'
 import type { DerivedStats } from '../game/stats'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST, profileDamageMult, spellTypeMult, spellElementTypes, type DamageProfile } from '../game/damage'
-import { charTotalStats, charDerived, charMaxHp, charDamageProfile, charResist, abilityPower, powerScale, dpsBreakdown, isGenerator, spellDps } from '../game/character'
+import { charTotalStats, charDerived, charMaxHp, charDamageProfile, charResist, abilityPower, powerScale, dpsBreakdown, isBuilder, isSupport, spellDps } from '../game/character'
 import { setBonuses, getSet } from '../game/sets'
 import { getPower, POWER_EFFECT_META, scaleLabel, powerDamageType, powerHasDamageType } from '../game/powers'
 import { RAID_LIST, getRaidDef, raidUnlocked, raidReqs, type RaidId } from '../game/raids'
 import { resistMult } from '../game/resist'
+import { ConversionChips } from './ui'
 import { LevelBadge } from './LevelBadge'
 import { AvatarEditor } from './AvatarEditor'
 
@@ -461,18 +462,19 @@ function ResistSection({ char, allChars }: { char: Character; allChars: Characte
 function PowersSection({ char }: { char: Character }) {
   const setPower = useGame((s) => s.setPower)
   const setPassive = useGame((s) => s.setPassive)
-  const setGenerator = useGame((s) => s.setGenerator)
+  const setSupport = useGame((s) => s.setSupport)
   const togglePowerAuto = useGame((s) => s.togglePowerAuto)
   const derived = charDerived(char)
   const profile = charDamageProfile(char)
   const weaponType = profile.mainType
   const passives = char.passives ?? [null, null, null]
-  const generators = char.generators ?? [null, null, null]
-  const equipped = new Set([...char.powers, ...passives, ...generators].filter(Boolean) as string[])
+  const support = char.support ?? [null, null, null]
+  const equipped = new Set([...char.powers, ...passives, ...support].filter(Boolean) as string[])
   const available = char.unlockedPowers.filter((id) => !equipped.has(id))
-  // Les GÉNÉRATEURS (builder) ont leur propre section → on les sort des actifs.
-  const availActive = available.filter((id) => { const p = getPower(id); return p?.kind === 'active' && !isGenerator(p) })
-  const availGen = available.filter((id) => isGenerator(getPower(id)))
+  // MULTI-LANE (v0.39) : les builders ne vont QU'en Soutien ; les boucliers/soins apparaissent dans
+  // LES DEUX listes (actif pour le manuel, soutien pour l'auto) — l'unicité tranche au clic.
+  const availActive = available.filter((id) => { const p = getPower(id); return p?.kind === 'active' && !isBuilder(p) })
+  const availSupport = available.filter((id) => isSupport(getPower(id)))
   const availPassive = available.filter((id) => getPower(id)?.kind === 'passive')
 
   return (
@@ -528,13 +530,14 @@ function PowersSection({ char }: { char: Character }) {
         )}
       </div>
 
-      {/* --- GÉNÉRATEURS (3 slots dédiés, auto-cast pur) --- */}
+      {/* --- SOUTIEN (3 slots dédiés, auto-cast pur : builders + boucliers/soins) --- */}
       <div>
-        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-amber-300">🔄 Générateurs (3 slots) · auto-cast — fabriquent ta ressource</div>
+        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-amber-300">🛡 Soutien (3 slots) · auto-cast — builders & boucliers/soins</div>
         <div className="grid grid-cols-1 gap-1.5">
-          {generators.map((pid, slot) => {
+          {support.map((pid, slot) => {
             const p = pid ? getPower(pid) : null
-            if (!p) return <div key={slot} className="rounded-lg border border-slate-800 bg-black/20 px-2 py-1.5 text-[11px] italic text-slate-600">— générateur {slot + 1} libre —</div>
+            if (!p) return <div key={slot} className="rounded-lg border border-slate-800 bg-black/20 px-2 py-1.5 text-[11px] italic text-slate-600">— soutien {slot + 1} libre —</div>
+            const builder = p.effect === 'builder'
             const det = powerDetail(p, derived, weaponType)
             const dps = spellDps(char, p)
             return (
@@ -542,30 +545,33 @@ function PowersSection({ char }: { char: Character }) {
                 <div className="flex items-center gap-2">
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[12px] font-medium text-slate-100">{p.name}</span>
-                    <span className="text-[9px] uppercase tracking-wide text-amber-400/80">🔄 Générateur · {p.resource ?? 'Combo'}</span>
+                    <span className="text-[9px] uppercase tracking-wide text-amber-400/80">{builder ? `🔄 Générateur · ${p.resource ?? 'Combo'}` : '🛡 Soutien'}</span>
                   </span>
-                  <button onClick={() => setGenerator(slot, null)} className="rounded px-2 py-1 text-sm text-slate-500 hover:text-red-400" title="Retirer">✕</button>
+                  <button onClick={() => setSupport(slot, null)} className="rounded px-2 py-1 text-sm text-slate-500 hover:text-red-400" title="Retirer">✕</button>
                 </div>
                 <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-slate-400">
                   {det.type && <SpellTypeChip type={det.type} tags={p.tags} profile={profile} />}
+                  <span>{POWER_EFFECT_META[p.effect ?? 'nuke'].label}</span>
                   {det.scale && <span className="text-amber-300/80" title={scaleHint(det.scale)}>📈 {det.scale}</span>}
                   <span>CD {det.cd.toFixed(1)}s</span>
                   {dps > 0 && <span className="font-semibold text-emerald-300" title={dpsHint(p)}>≈ {Math.round(dps).toLocaleString('fr-FR')} DPS</span>}
+                  {dps === 0 && HEAL_EFFECTS.has(p.effect ?? '') && <span className="font-semibold text-emerald-300" title="PV soignés estimés par lancement">≈ {det.value.toLocaleString('fr-FR')} PV</span>}
+                  {dps === 0 && SHIELD_EFFECTS.has(p.effect ?? '') && <span className="font-semibold text-sky-300" title="Bouclier d'absorption estimé">≈ {det.value.toLocaleString('fr-FR')} absorb</span>}
                 </div>
                 <p className="mt-0.5 text-[10px] leading-snug text-slate-500">{p.description}</p>
               </div>
             )
           })}
         </div>
-        {availGen.length > 0 && (
+        {availSupport.length > 0 && (
           <div className="mt-2">
-            <div className="mb-1 text-[10px] text-slate-500">Générateurs débloqués :</div>
+            <div className="mb-1 text-[10px] text-slate-500">Soutien débloqués (les boucliers/soins sont aussi en Actives) :</div>
             <div className="flex flex-wrap gap-1">
-              {availGen.map((id) => {
+              {availSupport.map((id) => {
                 const p = getPower(id)
                 if (!p) return null
-                const emptySlot = generators.indexOf(null)
-                return <button key={id} disabled={emptySlot < 0} onClick={() => setGenerator(emptySlot, id)} title={p.description} className="rounded border border-amber-700/50 bg-amber-900/30 px-2 py-1 text-[10px] text-amber-200 hover:bg-amber-800/40 disabled:opacity-40">🔄 {p.name}</button>
+                const emptySlot = support.indexOf(null)
+                return <button key={id} disabled={emptySlot < 0} onClick={() => setSupport(emptySlot, id)} title={p.description} className="rounded border border-amber-700/50 bg-amber-900/30 px-2 py-1 text-[10px] text-amber-200 hover:bg-amber-800/40 disabled:opacity-40">{p.effect === 'builder' ? '🔄' : '🛡'} {p.name}</button>
               })}
             </div>
           </div>
@@ -588,6 +594,7 @@ function PowersSection({ char }: { char: Character }) {
                   </span>
                   <button onClick={() => setPassive(slot, null)} className="rounded px-2 py-1 text-sm text-slate-500 hover:text-red-400" title="Retirer">✕</button>
                 </div>
+                <ConversionChips convert={p.convert} />
                 <p className="mt-0.5 text-[10px] leading-snug text-slate-500">{p.description}</p>
               </div>
             )

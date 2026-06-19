@@ -743,11 +743,11 @@ function statusChips(c: Character): { icon: string; label: string; cls: string; 
   if (c.frenzy) out.push({ icon: '🔥', label: 'frénésie', cls: 'bg-orange-500/20 text-orange-300', title: `Frénésie : dégâts ×${c.frenzy.mult.toFixed(2)}` })
   if (c.charge) out.push({ icon: '⚡', label: 'vengeance', cls: 'bg-amber-500/20 text-amber-300', title: 'Vengeance différée : la riposte frappe à expiration' })
   // RESSOURCE DE CLASSE (build/spend) — RÉSERVE UNIQUE partagée (char.combo) : TOUS les générateurs la
-  // remplissent, TOUS les finisseurs la dépensent, MÊME entre classes. On scanne actifs ET générateurs
-  // (les builders vivent dans c.generators depuis v0.30) ; on affiche les libellés distincts équipés.
+  // remplissent, TOUS les finisseurs la dépensent, MÊME entre classes. On scanne actifs ET soutien
+  // (les builders vivent dans c.support depuis v0.39) ; on affiche les libellés distincts équipés.
   const cmods = charCombatMods(c)
   const resNames = [...new Set(
-    [...c.powers, ...(c.generators ?? [])]
+    [...c.powers, ...(c.support ?? [])]
       .map((p) => (p ? getPower(p) : null))
       .filter((pw) => pw?.effect === 'builder' || pw?.effect === 'finisher')
       .map((pw) => pw?.resource ?? 'Combo'),

@@ -356,8 +356,8 @@ export interface BuildPreset {
   talents: Record<string, number>
   powers: (string | null)[]
   passives?: (string | null)[]
-  /** Générateurs équipés (sorts builder, auto-cast) — séparés des actifs (v0.30). */
-  generators?: (string | null)[]
+  /** Sorts de SOUTIEN équipés (builders + boucliers/soins auto-cast) — séparés des actifs (v0.39 ; ex-`generators`). */
+  support?: (string | null)[]
   primaryBias: PrimaryStat
 }
 
@@ -372,9 +372,9 @@ export interface Character {
   powers: (string | null)[]
   /** 3 emplacements de capacité PASSIVE (id ou null) — séparés des actifs (v0.29.5). */
   passives?: (string | null)[]
-  /** 3 emplacements de GÉNÉRATEUR (id ou null, sorts `builder`) — auto-cast pur, fabriquent la
-   *  ressource (Combo/Rage/Concentration…) ; hors des 5 actifs pour libérer la barre (v0.30). */
-  generators?: (string | null)[]
+  /** 3 emplacements de SOUTIEN (id ou null) — auto-cast pur : builders (fabriquent Combo/Rage/…) ET
+   *  sorts de soutien (boucliers/soins/buffs) en fire-and-forget. Hors des 5 actifs (v0.39 ; ex-`generators`). */
+  support?: (string | null)[]
   /** Mode de lancement par emplacement actif : true/absent = AUTO, false = MANUEL (bouton). */
   powerAuto?: boolean[]
   /** Capacités débloquées (par niveau + par talents). */
