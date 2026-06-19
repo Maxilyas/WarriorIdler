@@ -4418,11 +4418,12 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
       const bias = pickBias(s.characters)
       const items: Item[] = []
       for (let i = 0; i < count; i++) {
-        // v0.36 — Abîme : traîne plus épaisse (tail 0.25→0.40) → Primordial/Transcendant tombent « un peu
-        // plus » qu'aux raids de base (même fenêtre, cap Transcendant), sans en faire le gros du butin.
+        // v0.40.2 — Abîme : forme custom (down 0.78 / shoulder 0.20 / tail 0.10) → Cosmique/Abyssal/Primo/
+        // Trans = 39/50/10/1 EXACTEMENT. Raids de base : même côté gauche (down 0.30) mais traîne haute
+        // RESSERRÉE (shoulder 0.15 / tail 0.12) → le sommet (Primo/Trans) reste sous l'Abîme.
         const rarity = def.id === 'abysse'
-          ? rollWindowRarity(w.floor, w.peak, w.cap, { tail: 0.40 })
-          : rollWindowRarity(w.floor, w.peak, w.cap)
+          ? rollWindowRarity(w.floor, w.peak, w.cap, { down: 0.78, shoulder: 0.20, tail: 0.10 })
+          : rollWindowRarity(w.floor, w.peak, w.cap, { shoulder: 0.15, tail: 0.12 })
         // L'Abîme : ~30% des objets sont des pièces de la RÉGALIA DU NÉANT (set exclusif).
         if (def.id === 'abysse' && Math.random() < 0.3) {
           const sd = SETS.neant

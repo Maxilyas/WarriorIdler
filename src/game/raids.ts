@@ -289,23 +289,22 @@ export function raidDifficultyIlvl(def: RaidDef, tier: number): number {
 
 /**
  * Rareté du butin de raid : FENÊTRE À PIC par tier (rollWindowRarity).
- * v0.30 — fenêtre quasi-PLATE : l'ilvl (bande 230→700) porte la progression, PAS la rareté. Le pic
- * ne grimpe que TRÈS lentement (Légendaire→Patrimoine sur 10 tiers, ×~1,2 de DPS) → fini le « creep
- * de rareté » qui ajoutait un snowball par-dessus l'ilvl. Le PLAFOND reste haut (jackpots rares
- * Céleste→Transcendant) : les raids restent la seule source des hautes raretés, mais elles sont
- * un événement, pas le vecteur de puissance.
+ * v0.40.2 — peak MOBILE tous les 2 tiers : Mythique (T1-T2) → Abyssal (T10, = peak de l'Abîme), pour que
+ * le sommet des raids de base REJOIGNE l'Abîme sans le dépasser. Fenêtre SYMÉTRIQUE (floor = peak−2,
+ * cap = peak+2, 5 raretés). La traîne haute est RESSERRÉE au roll (shoulder/tail bas, cf. store.ts) →
+ * Primordial/Transcendant restent rares (T10 : ~9,6% / ~1,2%) : l'Abîme reste LA source dense de ces deux.
  */
-const RAID_WINDOW_FLOOR = [4, 4, 4, 5, 5, 5, 5, 6, 6, 6]   // T1..T10 : Rare → Légendaire (pic = +2)
-const RAID_WINDOW_CAP = [11, 11, 12, 12, 13, 13, 14, 14, 15, 16] // T1..T10 : Céleste → Transcendant (jackpots)
+// Peak par tier (T1..T10). T9/T10 montent d'un cran CHACUN (au lieu d'une dernière paire) pour atterrir
+// pile sur Abyssal au T10. Mythique(9)·Ascendant(10)·Céleste(11)·Éternel(12)·Cosmique(13)·Abyssal(14).
+const RAID_WINDOW_PEAK = [9, 9, 10, 10, 11, 11, 12, 12, 13, 14]
 
 export function raidRarityWindow(def: RaidDef, tier: number): { floor: number; peak: number; cap: number } {
-  // v0.36 — Abîme : fenêtre = équivalent du raid T10 mondial (floor Légendaire, cap Transcendant),
-  // IDENTIQUE aux 2 tiers. L'AVANTAGE Primordial/Transcendant vient d'une traîne plus épaisse au roll
-  // (cf. store.ts, opt `tail` relevée pour l'abysse) — pas d'un décalage de fenêtre.
-  if (def.id === 'abysse') return { floor: 6, peak: 8, cap: 16 }
-  const i = Math.max(0, Math.min(RAID_WINDOW_FLOOR.length - 1, globalTier(def, tier) - 1))
-  const floor = RAID_WINDOW_FLOOR[i]
-  return { floor, peak: floor + 2, cap: RAID_WINDOW_CAP[i] }
+  // v0.40.2 — Abîme : fenêtre RESSERRÉE au sommet (Cosmique → Abyssal → Transcendant). Les opts du roll
+  // (store.ts : down 0.78 / shoulder 0.20 / tail 0.10) calent EXACTEMENT 39/50/10/1.
+  if (def.id === 'abysse') return { floor: 13, peak: 14, cap: 16 }
+  const i = Math.max(0, Math.min(RAID_WINDOW_PEAK.length - 1, globalTier(def, tier) - 1))
+  const peak = RAID_WINDOW_PEAK[i]
+  return { floor: peak - 2, peak, cap: Math.min(16, peak + 2) }
 }
 
 /** Rareté plancher de la fenêtre (affichage). */

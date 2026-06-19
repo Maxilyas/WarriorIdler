@@ -32,11 +32,12 @@ for (let T = 1; T <= 2; T++) {
 console.log(`\nRappel raids de base T10 : loot ${raidIlvl(forge,10)} · diff ${raidDifficultyIlvl(forge,10)} · ✨ ${raidFragments(forge,10)} · 💫 ${raidCosmicQty(forge,10)}`)
 
 console.log('\n=== Rareté Abîme vs raid T10 de base (chance Primordial t15 / Transcendant t16 par objet) ===')
-const wA = raidRarityWindow(ab, 1), dAb = dist(wA.floor, wA.peak, wA.cap, 0.40)
-const wB = raidRarityWindow(forge, 10), dBase = dist(wB.floor, wB.peak, wB.cap, 0.25)
+// v0.40.2 — formes réelles (cf. store.ts) : Abîme down0.78/shoulder0.20/tail0.10 ; base down0.30/shoulder0.15/tail0.12.
+const wA = raidRarityWindow(ab, 1), dAb = dist(wA.floor, wA.peak, wA.cap, 0.10, 0.78, 0.20)
+const wB = raidRarityWindow(forge, 10), dBase = dist(wB.floor, wB.peak, wB.cap, 0.12, 0.30, 0.15)
 const p = (d, t) => d.find(([x]) => x === t)?.[1] ?? 0
-console.log(`Abîme (traîne 0.40) : Primordial ${pct(p(dAb,15))} · Transcendant ${pct(p(dAb,16))}`)
-console.log(`Base T10 (traîne 0.25): Primordial ${pct(p(dBase,15))} · Transcendant ${pct(p(dBase,16))}`)
+console.log(`Abîme (39/50/10/1) : Primordial ${pct(p(dAb,15))} · Transcendant ${pct(p(dAb,16))}`)
+console.log(`Base T10 (traîne resserrée): Primordial ${pct(p(dBase,15))} · Transcendant ${pct(p(dBase,16))}`)
 
 console.log('\n=== FIX surilvl : plafond = maxContentIlvl + marge', SURILLVL_OVER_MARGIN, '===')
 const maxContent = (bestStage, prog) => {
