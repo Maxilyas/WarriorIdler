@@ -7163,8 +7163,8 @@ export const useGame = create<GameState>((set, get) => {
       const cosmicCost = (box.costCosmic ?? 0) * qty
       if (s.gold < goldCost || s.fragments < fragCost || s.cosmic < cosmicCost) return
 
-      // B1 — les coffres (souvent gated par raid) suivent la référence du compte, pas seulement le farm.
-      const ilvl = Math.max(1, referenceIlvl(s.bestStage, s.raidProgress, s.dungeonProgress))
+      // v0.40.3 — l'ilvl du drop suit le PALIER DE FARM (comme la forge v0.40.1), plus les donjons/raids.
+      const ilvl = Math.max(1, stageIlvl(s.bestStage))
       // Karma du marchand 🍀 : la malchance accumulée gonfle la chance de jackpot, reset au proc.
       const pityBonus = Math.min(BOX_PITY_CAP, s.boxPity * BOX_PITY_STEP)
       let jackpotHit = false
