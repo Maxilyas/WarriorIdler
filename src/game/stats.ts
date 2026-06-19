@@ -34,12 +34,13 @@ export const SECONDARY_META: Record<SecondaryStat, StatMeta> = {
   reductionDegats: { key: 'reductionDegats', name: 'Réduction de dégâts', short: 'RÉD', color: '#74c0fc', desc: 'Réduction plate des dégâts subis (efficace contre les petits coups rapides).' },
   barriere: { key: 'barriere', name: 'Barrière', short: 'BARR', color: '#4dabf7', desc: 'Bouclier de départ : augmente tes PV effectifs. Excellent contre le burst.' },
   resilience: { key: 'resilience', name: 'Résilience', short: 'RÉSI', color: '#a9e34b', desc: 'Réduit la durée des contrôles ennemis ET la durée/intensité des altérations subies (saignement, poison, brûlure, malédiction).' },
-  // --- DÉPRÉCIÉES (v0.38) : plus rollées ni affichées sur la fiche, mais conservées pour les vieux objets/talents.
-  //     Esquive → repliée dans Réduction · Ténacité + Purge → fusionnées en Résilience · Régénération → retirée. ---
-  esquive: { key: 'esquive', name: 'Esquive', short: 'ESQ', color: '#63e6be', desc: '(Déprécié) Repliée dans la Réduction de dégâts.' },
-  tenacite: { key: 'tenacite', name: 'Ténacité', short: 'TÉN', color: '#a9e34b', desc: '(Déprécié) Fusionnée dans la Résilience.' },
-  purge: { key: 'purge', name: 'Purge', short: 'PURG', color: '#38d9a9', desc: '(Déprécié) Fusionnée dans la Résilience.' },
-  regen: { key: 'regen', name: 'Régénération', short: 'RÉG', color: '#51cf66', desc: '(Déprécié) Retirée — la survie passe par Vol de vie et Barrière.' },
+  // --- DÉPRÉCIÉES (v0.38) : ne sont plus rollées ni listées sur la fiche, mais restent FONCTIONNELLES
+  //     (vieux objets/talents) : Esquive comptée comme Réduction · Ténacité + Purge comptées comme
+  //     Résilience · Régénération toujours active (l'archétype soigneur en dépend). ---
+  esquive: { key: 'esquive', name: 'Esquive', short: 'ESQ', color: '#63e6be', desc: 'Comptée comme Réduction de dégâts (plus rollée).' },
+  tenacite: { key: 'tenacite', name: 'Ténacité', short: 'TÉN', color: '#a9e34b', desc: 'Comptée comme Résilience (plus rollée).' },
+  purge: { key: 'purge', name: 'Purge', short: 'PURG', color: '#38d9a9', desc: 'Comptée comme Résilience (plus rollée).' },
+  regen: { key: 'regen', name: 'Régénération', short: 'RÉG', color: '#51cf66', desc: 'Augmente la régénération des PV (plus rollée au drop).' },
   // RARES (apparition très faible, effets puissants)
   volDeVie: { key: 'volDeVie', name: 'Vol de vie', short: 'VOL', color: '#f06595', desc: 'Soigne en infligeant des dégâts. La stat des builds solo (DPS sans soigneur). Très rare.', rare: true },
   surpuissance: { key: 'surpuissance', name: 'Surpuissance', short: 'SURP', color: '#ff4d4d', desc: 'Augmente TOUS tes dégâts (multiplicatif, universel). Extrêmement rare.', rare: true },
@@ -114,6 +115,7 @@ export interface DerivedStats {
   alterationMult: number // ≥1 multiplicateur des dégâts sur la durée (DoT)
   bossDamageMult: number // ≥1 multiplicateur de dégâts contre les boss/élites
   resilience: number // 0..1 réduction durée CC + durée/intensité altérations (v0.38, ex-Ténacité+Purge fusionnées)
+  regenBonus: number // v0.38 : DÉPRÉCIÉ (hors fiche/loot) mais gardé FONCTIONNEL — l'archétype soigneur (uniques + talents) en dépend
   flatDr: number // 0..1 réduction plate supplémentaire
   /** Dégâts PLATS ajoutés par la Maîtrise du bruiser Force (v0.38 — la tankiness nourrit l'offense). */
   masteryFlat: number
@@ -236,6 +238,7 @@ export function computeDerived(total: StatBlock): DerivedStats {
     alterationMult: 1 + (total.alteration ?? 0) / 4000, // +1% par 40 rating, linéaire (DoT-only)
     bossDamageMult: 1 + (total.degatsBoss ?? 0) / 5000, // +1% par 50 rating, linéaire
     resilience: softCap(resilienceRating / 2000, 0.85, 0.96),
+    regenBonus: (total.regen ?? 0) / PER_PCT, // déprécié (hors fiche/loot) mais gardé pour les soigneurs
     shieldPct,
     flatDr: softCap(flatDrRating / 5000, 0.40, 0.60),
     // stats rares (divisor plus généreux → impact fort malgré la rareté)

@@ -3395,7 +3395,7 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
     const d = info[i]
     if (c.hp > 0 && d) {
       const mh = charMaxHp(c)
-      let regen = mh * REGEN_RATE * regenMult // v0.38 — régén joueur = base seule (stat Régénération retirée)
+      let regen = mh * REGEN_RATE * (1 + d.derived.regenBonus) * regenMult // v0.38 — Régén hors fiche/loot mais gardée fonctionnelle (soigneurs)
       // 🛡️ ÉGIDE « Métaboliseur » : le surplus de résist face aux exigences devient du soin/s.
       if (d.cmods.surplusRegen > 0) {
         regen += mh * Math.min(d.cmods.surplusRegen, (resistSurplus(enemy, d.resist) / RESIST_DSCALE) * d.cmods.surplusRegen)
@@ -3881,7 +3881,7 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
       const mh = charMaxHp(c)
       // v0.27 (Lot 3) « Mal de l'abîme » : la régén de base est BRIDÉE en raid (content.regenMult)
       // → la vie redevient une ressource, fini le tank qui out-régène tout sans bouger.
-      let regen = mh * REGEN_RATE * regenMult * (mods?.content?.regenMult ?? 1) // v0.38 — base seule (stat Régén retirée)
+      let regen = mh * REGEN_RATE * (1 + d.derived.regenBonus) * regenMult * (mods?.content?.regenMult ?? 1) // v0.38 — Régén gardée fonctionnelle (soigneurs)
       const ft = focus()
       if (d.cmods.surplusRegen > 0 && ft) {
         regen += mh * Math.min(d.cmods.surplusRegen, (resistSurplus(ft, d.resist) / RESIST_DSCALE) * d.cmods.surplusRegen)
