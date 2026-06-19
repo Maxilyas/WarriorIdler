@@ -4081,7 +4081,7 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
     }
     // ✦ Hanté : le Champion du pack vient de tomber → objet de haute rareté (Légendaire garanti, mieux possible).
     if (enemies.some((e) => e.champion)) {
-      fightItems.push(generateItem({ ilvl: lootFarmIlvl(s.bestStage), luckTier: dungeonLuckTier(lv) + 4, minTier: 6, primaryBias: pickBias(s.characters) }))
+      fightItems.push(generateItem({ ilvl: lootFarmIlvl(s.bestStage), luckTier: dungeonLuckTier(lv) + 4, minTier: 6, primaryBias: pickBias(s.characters), uniqueSource: 'dungeon' }))
       log = pushLog(log, '✦ Champion abattu — son trésor tombe !', 'loot')
     }
     log = pushLog(log, `⚔️ ${def.icon} Combat ${d.current + 1}/${d.totalFights}${logBit ? ` · ${logBit}` : ''}.`, 'kill')
@@ -4145,7 +4145,7 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
                   Math.min(BUTIN_RARITY_CAP, cw.peak + rareBonus),
                   Math.min(BUTIN_RARITY_CAP, cw.cap + rareBonus),
                 )
-            items.push(generateItem({ ilvl, rarity, primaryBias: bias }))
+            items.push(generateItem({ ilvl, rarity, primaryBias: bias, uniqueSource: 'dungeon' }))
           }
           break
         }
@@ -4426,7 +4426,7 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
           const sd = SETS.neant
           const types = Object.keys(sd.pieces) as ItemType[]
           const t = types[Math.floor(Math.random() * types.length)]
-          const it = generateItem({ ilvl, rarity, type: t, primaryBias: bias, minStars: 4, ...(t === 'armePrincipale' ? { element: 'ombre' as DamageType } : {}) })
+          const it = generateItem({ ilvl, rarity, type: t, primaryBias: bias, minStars: 4, uniqueSource: 'raid', ...(t === 'armePrincipale' ? { element: 'ombre' as DamageType } : {}) })
           it.setId = sd.id
           it.name = sd.pieces[t]!
           items.push(it)
@@ -4434,7 +4434,7 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
         }
         const lootType = pickRaidLootType(def)
         items.push(generateItem({
-          ilvl, rarity, type: lootType, primaryBias: bias, minStars: def.id === 'abysse' ? 4 : 3,
+          ilvl, rarity, type: lootType, primaryBias: bias, minStars: def.id === 'abysse' ? 4 : 3, uniqueSource: 'raid',
           ...(def.id === 'nexus' ? { biasResist: DAMAGE_TYPE_LIST[Math.floor(Math.random() * DAMAGE_TYPE_LIST.length)] } : {}),
         }))
       }

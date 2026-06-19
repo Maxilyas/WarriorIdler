@@ -462,22 +462,47 @@ export function instanceTagMods(inst: UniqueInstance): Record<string, number> {
 }
 
 /**
+ * v0.39.1 — Uniques TAGGÉS (signatures de conversion v0.38 : `tagMods`, ex. [feu]/[zone]/[finisseur]).
+ * Jugés trop puissants pour le farm : ils ne tombent QUE en donjon (traîne infime) et en raid
+ * (la vraie source). Les uniques « simples » (stats/résist/actif, sans tag) tombent partout comme avant.
+ */
+export type UniqueSource = 'farm' | 'dungeon' | 'raid'
+const isTaggedUnique = (u: UniqueEffect): boolean => !!u.tagMods && u.tagMods.length > 0
+export const PLAIN_UNIQUES = UNIQUE_EFFECTS.filter((u) => !isTaggedUnique(u))
+export const TAGGED_UNIQUES = UNIQUE_EFFECTS.filter(isTaggedUnique)
+/** KNOB — fraction des uniques tirés issus du pool TAGGÉ, par source. farm=0 (jamais),
+ *  donjon = très peu, raid = source principale. À ajuster pour durcir/assouplir. */
+export const TAGGED_DROP_RATE: Record<UniqueSource, number> = {
+  farm: 0,
+  dungeon: 0.05,
+  raid: 0.30,
+}
+
+/**
  * Tire (ou non) un effet unique selon la rareté. Naît au rang 1.
  * Les objets Épique (tier 5) et au-dessus peuvent en porter un.
+ * `source` pilote l'éligibilité des uniques TAGGÉS (cf. TAGGED_DROP_RATE).
  */
-export function rollUnique(rarityTier: number): UniqueInstance | undefined {
+export function rollUnique(rarityTier: number, source: UniqueSource = 'farm'): UniqueInstance | undefined {
   if (rarityTier < 5) return undefined
   // v0.32.2 : pente relevée (0.1 → 0.14/cran) + GARANTI au sommet (Céleste t11 ~98 %, Éternel+ = 100 %)
   // — l'unique est LE pic d'euphorie ARPG : une très haute rareté doit quasi toujours en porter un.
   const chance = Math.min(1, (rarityTier - 4) * 0.14)
   if (Math.random() > chance) return undefined
-  const def = UNIQUE_EFFECTS[Math.floor(Math.random() * UNIQUE_EFFECTS.length)]
+  const taggedRate = TAGGED_DROP_RATE[source] ?? 0
+  const pool = taggedRate > 0 && TAGGED_UNIQUES.length && Math.random() < taggedRate
+    ? TAGGED_UNIQUES
+    : PLAIN_UNIQUES
+  const def = pool[Math.floor(Math.random() * pool.length)]
   return { id: def.id, rank: 1 }
 }
 
-/** Tire un effet unique au hasard (rang 1) — pour le craft sommital (infusion). */
-export function randomUniqueInstance(): UniqueInstance {
-  const def = UNIQUE_EFFECTS[Math.floor(Math.random() * UNIQUE_EFFECTS.length)]
+/** Tire un effet unique au hasard (rang 1) — pour le craft sommital (infusion / garantie de coffre).
+ *  Par défaut, pool SIMPLE uniquement : les taggés ne s'obtiennent que par drop donjon/raid ou au CHOIX
+ *  (Éclat cosmique). `allowTagged` rouvre tout le catalogue si besoin. */
+export function randomUniqueInstance(opts?: { allowTagged?: boolean }): UniqueInstance {
+  const pool = opts?.allowTagged ? UNIQUE_EFFECTS : PLAIN_UNIQUES
+  const def = pool[Math.floor(Math.random() * pool.length)]
   return { id: def.id, rank: 1 }
 }
 

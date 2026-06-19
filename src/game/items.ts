@@ -2,7 +2,7 @@ import type { Affix, Item, PrimaryStat, OffensiveStat, ItemOrientation, ItemType
 import { RARITIES, RARITY_LIST, rollRarity } from './rarities'
 import { RARE_STATS, softCap } from './stats'
 import { ITEM_TYPES } from './slots'
-import { rollUnique, instanceMods } from './uniques'
+import { rollUnique, instanceMods, type UniqueSource } from './uniques'
 import { rollSockets } from './gems'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from './damage'
 import { itemBudget, effItemIlvl, clampIlvl, powerAt, RARITY_ILVL_PER_TIER, CHAPITRE_SIZE, lootFarmIlvl } from './progression'
@@ -171,6 +171,9 @@ export interface GenerateOptions {
   starsFin?: number
   /** v0.27 — qualité PLANCHER (raids/coffres : du bon stuff). */
   minStars?: number
+  /** v0.39.1 — source du drop : pilote l'éligibilité des uniques TAGGÉS (donjon/raid seulement).
+   *  Omis = 'farm' (aucun unique taggé). Voir uniques.ts / TAGGED_DROP_RATE. */
+  uniqueSource?: UniqueSource
 }
 
 const OFFENSIVE_POOL: OffensiveStat[] = ['force', 'agilite', 'intelligence']
@@ -233,7 +236,7 @@ export function generateItem(opts: GenerateOptions): Item {
   // v0.32.2 : cap 7 → 9 (les hautes raretés montent jusqu'à 8 lignes de base ; +qualité au-dessus).
   const affixCount = Math.min(9, rarity.affixCount + qualityBonusAffixes(stars))
   const affixes = rollAffixes(affixCount, ilvl, qMult, rarity.tier, opts)
-  const unique = rollUnique(rarity.tier)
+  const unique = rollUnique(rarity.tier, opts.uniqueSource)
 
   // Type de dégâts : uniquement sur l'arme principale (Physique plus fréquent).
   const damageType: DamageType | undefined = isWeapon
