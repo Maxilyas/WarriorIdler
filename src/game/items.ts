@@ -62,9 +62,10 @@ type LineSpec =
 const STAT_WEIGHTS: Record<SecondaryStat, number> = {
   critique: 10, degatsCrit: 9, hate: 10, maitrise: 9, penetration: 7,
   precision: 7, alteration: 6, degatsBoss: 6,
-  reductionDegats: 8, esquive: 7, barriere: 7, tenacite: 5, purge: 7,
-  regen: 6,
+  reductionDegats: 8, barriere: 7, resilience: 8,
   volDeVie: 0.6, surpuissance: 0.3, multifrappe: 0.3, recuperation: 0.3,
+  // v0.38 — DÉPRÉCIÉES (poids 0 = ne rollent plus) : Esquive→Réduction, Ténacité+Purge→Résilience, Régén retirée.
+  esquive: 0, tenacite: 0, purge: 0, regen: 0,
 }
 
 function buildPool(): LineSpec[] {

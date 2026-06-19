@@ -111,8 +111,10 @@ export const EFFECTIVE_DR_CAP = 0.8
  * (capacités passives, keystones) déjà sous forme (1 − x).
  */
 export function genericMitigation(derived: DerivedStats, extraMitigation = 1): number {
-  const g = (1 - derived.dodge) * (1 - derived.flatDr) * (1 - derived.masteryDr) * extraMitigation
-  return Math.max(g, 1 - EFFECTIVE_DR_CAP)
+  // v0.38 — Esquive retirée : ne reste que Réduction × Maîtrise-DR (Force). « Surcharge » de l'Int
+  // (damageTakenMult) AUGMENTE les dégâts subis → appliquée ici (peut dépasser 1 = glass cannon).
+  const g = (1 - derived.flatDr) * (1 - derived.masteryDr) * extraMitigation
+  return Math.max(g, 1 - EFFECTIVE_DR_CAP) * derived.damageTakenMult
 }
 
 /**

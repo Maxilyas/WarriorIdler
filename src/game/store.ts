@@ -2852,7 +2852,7 @@ interface AbilityCtx {
 /** Applique l'effet d'une technique ennemie à un héros cible (modèle d'exigence + Purge). */
 function applyEnemyAbility(ab: EnemyAbility, enemy: Enemy, t: Character, ctx: AbilityCtx) {
   const resist = ctx.resist[ab.element] ?? 0
-  const purge = ctx.derived.purge
+  const purge = ctx.derived.resilience // v0.38 — la Résilience couvre l'ex-Purge (intensité/durée des altérations)
   const extra = (1 - ctx.passives.damageReduction) * (1 - ctx.cmods.flatDr)
   const req = enemyReq(enemy, ab.element)
   // ÉGIDE « Aegis adaptatif » : tout type qui te frappe te rend plus résistant à ce type.
@@ -2881,15 +2881,15 @@ function applyEnemyAbility(ab: EnemyAbility, enemy: Enemy, t: Character, ctx: Ab
         * (ctx.antidote && ctx.antidote.type === ab.element ? 1 - ctx.antidote.pct : 1)
         * gemDefenseMult(t, charMaxHp(t), {
         cond: ctx.cond, surge: ctx.surge, aliveEnemies: ctx.aliveEnemies,
-        telegraphed: !!ab.telegraph, tenacity: ctx.derived.tenacity,
+        telegraphed: !!ab.telegraph, tenacity: ctx.derived.resilience,
       })
       const taken = gemDamageHero(t, dmg, { cond: ctx.cond, attacker: enemy, discrete: true })
       if (ab.kind === 'drain') enemy.hp = Math.min(enemy.maxHp, enemy.hp + taken * 0.6)
       break
     }
     case 'cc': {
-      // Contrôle : durée réduite par la TÉNACITÉ.
-      t.stun = Math.max(t.stun ?? 0, (ab.duration ?? 1) * (1 - ctx.derived.tenacity))
+      // Contrôle : durée réduite par la RÉSILIENCE (v0.38, ex-Ténacité).
+      t.stun = Math.max(t.stun ?? 0, (ab.duration ?? 1) * (1 - ctx.derived.resilience))
       break
     }
     case 'debuff': {
@@ -3306,7 +3306,7 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
       enemy.ccCd = (enemy.ccCd ?? 0) - dt
       if (enemy.ccCd <= 0) {
         enemy.ccCd = CC_INTERVAL
-        t.stun = Math.max(t.stun ?? 0, enemy.ccDur * (1 - td.derived.tenacity))
+        t.stun = Math.max(t.stun ?? 0, enemy.ccDur * (1 - td.derived.resilience))
       }
     }
     // 🧊 Stase (rune) : la montée en puissance ennemie est gelée les X premières secondes.
@@ -3395,7 +3395,7 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
     const d = info[i]
     if (c.hp > 0 && d) {
       const mh = charMaxHp(c)
-      let regen = mh * REGEN_RATE * (1 + d.derived.regenBonus) * regenMult
+      let regen = mh * REGEN_RATE * regenMult // v0.38 — régén joueur = base seule (stat Régénération retirée)
       // 🛡️ ÉGIDE « Métaboliseur » : le surplus de résist face aux exigences devient du soin/s.
       if (d.cmods.surplusRegen > 0) {
         regen += mh * Math.min(d.cmods.surplusRegen, (resistSurplus(enemy, d.resist) / RESIST_DSCALE) * d.cmods.surplusRegen)
@@ -3783,7 +3783,7 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
       enemy.ccCd = (enemy.ccCd ?? 0) - dt
       if (enemy.ccCd <= 0) {
         enemy.ccCd = CC_INTERVAL
-        t.stun = Math.max(t.stun ?? 0, enemy.ccDur * (1 - td.derived.tenacity))
+        t.stun = Math.max(t.stun ?? 0, enemy.ccDur * (1 - td.derived.resilience))
       }
     }
     // 🧊 Stase (rune) : la montée en puissance ennemie est gelée les X premières secondes.
@@ -3881,7 +3881,7 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
       const mh = charMaxHp(c)
       // v0.27 (Lot 3) « Mal de l'abîme » : la régén de base est BRIDÉE en raid (content.regenMult)
       // → la vie redevient une ressource, fini le tank qui out-régène tout sans bouger.
-      let regen = mh * REGEN_RATE * (1 + d.derived.regenBonus) * regenMult * (mods?.content?.regenMult ?? 1)
+      let regen = mh * REGEN_RATE * regenMult * (mods?.content?.regenMult ?? 1) // v0.38 — base seule (stat Régén retirée)
       const ft = focus()
       if (d.cmods.surplusRegen > 0 && ft) {
         regen += mh * Math.min(d.cmods.surplusRegen, (resistSurplus(ft, d.resist) / RESIST_DSCALE) * d.cmods.surplusRegen)

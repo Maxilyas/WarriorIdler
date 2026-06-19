@@ -20,12 +20,13 @@ export type SecondaryStat =
   | 'degatsBoss' // +% de dégâts contre les boss & élites (farm de donjons/raids)
   // --- Défensif ---
   | 'reductionDegats' // réduction plate des dégâts subis
-  | 'esquive' // chance d'éviter complètement un coup
   | 'barriere' // bouclier de départ : PV effectifs en plus (anti-burst)
-  | 'tenacite' // réduit la durée des étourdissements/contrôles ennemis
-  | 'purge' // réduit durée ET intensité des altérations subies (DoT/debuffs ennemis)
-  // --- Soutien ---
-  | 'regen' // régénération des PV
+  | 'resilience' // (v0.38) réduit durée des CC ET durée/intensité des altérations subies (fusion Ténacité+Purge)
+  // --- DÉPRÉCIÉES (v0.38) : conservées pour les vieux objets/talents, repliées dans computeDerived. ---
+  | 'esquive' // (déprécié) repliée dans Réduction
+  | 'tenacite' // (déprécié) fusionnée dans Résilience
+  | 'purge' // (déprécié) fusionnée dans Résilience
+  | 'regen' // (déprécié) retirée
   // --- RARES (apparition très faible, effets puissants) ---
   | 'volDeVie' // soigne en infligeant des dégâts
   | 'surpuissance' // +% de dégâts globaux (multiplicatif)

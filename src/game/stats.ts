@@ -32,12 +32,14 @@ export const SECONDARY_META: Record<SecondaryStat, StatMeta> = {
   degatsBoss: { key: 'degatsBoss', name: 'Dégâts aux boss', short: 'BOSS', color: '#f03e3e', desc: 'Augmente les dégâts infligés aux boss et aux élites (farm de donjons/raids).' },
   // Défensif
   reductionDegats: { key: 'reductionDegats', name: 'Réduction de dégâts', short: 'RÉD', color: '#74c0fc', desc: 'Réduction plate des dégâts subis (efficace contre les petits coups rapides).' },
-  esquive: { key: 'esquive', name: 'Esquive', short: 'ESQ', color: '#63e6be', desc: 'Chance d\'éviter complètement un coup ennemi (tout ou rien).' },
   barriere: { key: 'barriere', name: 'Barrière', short: 'BARR', color: '#4dabf7', desc: 'Bouclier de départ : augmente tes PV effectifs. Excellent contre le burst.' },
-  tenacite: { key: 'tenacite', name: 'Ténacité', short: 'TÉN', color: '#a9e34b', desc: 'Réduit la durée des étourdissements et contrôles infligés par les boss.' },
-  purge: { key: 'purge', name: 'Purge', short: 'PURG', color: '#38d9a9', desc: 'Réduit la durée ET l\'intensité des altérations subies (saignement, poison, brûlure, malédiction). Cruciale hors du biome Physique.' },
-  // Soutien
-  regen: { key: 'regen', name: 'Régénération', short: 'RÉG', color: '#51cf66', desc: 'Augmente la régénération des points de vie (combats longs).' },
+  resilience: { key: 'resilience', name: 'Résilience', short: 'RÉSI', color: '#a9e34b', desc: 'Réduit la durée des contrôles ennemis ET la durée/intensité des altérations subies (saignement, poison, brûlure, malédiction).' },
+  // --- DÉPRÉCIÉES (v0.38) : plus rollées ni affichées sur la fiche, mais conservées pour les vieux objets/talents.
+  //     Esquive → repliée dans Réduction · Ténacité + Purge → fusionnées en Résilience · Régénération → retirée. ---
+  esquive: { key: 'esquive', name: 'Esquive', short: 'ESQ', color: '#63e6be', desc: '(Déprécié) Repliée dans la Réduction de dégâts.' },
+  tenacite: { key: 'tenacite', name: 'Ténacité', short: 'TÉN', color: '#a9e34b', desc: '(Déprécié) Fusionnée dans la Résilience.' },
+  purge: { key: 'purge', name: 'Purge', short: 'PURG', color: '#38d9a9', desc: '(Déprécié) Fusionnée dans la Résilience.' },
+  regen: { key: 'regen', name: 'Régénération', short: 'RÉG', color: '#51cf66', desc: '(Déprécié) Retirée — la survie passe par Vol de vie et Barrière.' },
   // RARES (apparition très faible, effets puissants)
   volDeVie: { key: 'volDeVie', name: 'Vol de vie', short: 'VOL', color: '#f06595', desc: 'Soigne en infligeant des dégâts. La stat des builds solo (DPS sans soigneur). Très rare.', rare: true },
   surpuissance: { key: 'surpuissance', name: 'Surpuissance', short: 'SURP', color: '#ff4d4d', desc: 'Augmente TOUS tes dégâts (multiplicatif, universel). Extrêmement rare.', rare: true },
@@ -48,10 +50,10 @@ export const SECONDARY_META: Record<SecondaryStat, StatMeta> = {
 export const ALL_STAT_META: Record<StatKey, StatMeta> = { ...PRIMARY_META, ...SECONDARY_META }
 
 export const PRIMARY_STATS: PrimaryStat[] = ['force', 'agilite', 'intelligence', 'endurance']
+// v0.38 — liste AFFICHÉE/ROLLÉE : Esquive, Ténacité, Purge, Régén retirées ; Résilience (fusion Tén+Purge) ajoutée.
 export const SECONDARY_STATS: SecondaryStat[] = [
   'critique', 'degatsCrit', 'hate', 'maitrise', 'penetration', 'precision', 'alteration', 'degatsBoss',
-  'reductionDegats', 'esquive', 'barriere', 'tenacite', 'purge',
-  'regen',
+  'reductionDegats', 'barriere', 'resilience',
   'volDeVie', 'surpuissance', 'multifrappe', 'recuperation',
 ]
 
@@ -111,11 +113,12 @@ export interface DerivedStats {
   precision: number // 0..1 (annule l'esquive ennemie)
   alterationMult: number // ≥1 multiplicateur des dégâts sur la durée (DoT)
   bossDamageMult: number // ≥1 multiplicateur de dégâts contre les boss/élites
-  tenacity: number // 0..1 réduction de la durée des contrôles ennemis
-  purge: number // 0..1 réduction de la durée/intensité des altérations subies (DoT/debuffs ennemis)
+  resilience: number // 0..1 réduction durée CC + durée/intensité altérations (v0.38, ex-Ténacité+Purge fusionnées)
   flatDr: number // 0..1 réduction plate supplémentaire
-  dodge: number // 0..1 chance d'esquive
-  regenBonus: number // ajouté au taux de régén PV
+  /** Dégâts PLATS ajoutés par la Maîtrise du bruiser Force (v0.38 — la tankiness nourrit l'offense). */
+  masteryFlat: number
+  /** Multiplicateur de dégâts SUBIS (Surcharge de l'Int glass cannon ; 1 = neutre). */
+  damageTakenMult: number
   /** Fraction de PV effectifs issue de la Barrière (v0.26 : sert à la Doctrine du bouclier). */
   shieldPct: number
   // --- stats rares ---
@@ -173,63 +176,68 @@ export function computeDerived(total: StatBlock): DerivedStats {
   const secondValue = offensive[1]?.[1] ?? 0
   const effMainValue = mainValue + SECOND_STAT_SHARE * secondValue
 
-  // Maîtrise SPÉCIFIQUE À L'ARCHÉTYPE — distincte de la Surpuissance (qui, elle, est un mult brut
-  // universel). La Maîtrise ne donne quasiment pas de dégâts bruts sauf pour l'Intelligence :
-  // - Force        → RÉDUCTION de dégâts (bruiser tanky) + un peu de dégâts
-  // - Agilité      → DÉGÂTS CRITIQUES accrus (burst, rien sans Critique)
-  // - Intelligence → DÉGÂTS BRUTS (le seul archétype « glass cannon » qui scale en dégâts purs)
-  // v0.30 — COMPRESSION anti-snowball : Maîtrise & Dégâts crit SOFT-CAPÉS (canaux multiplicatifs qui
-  // scalaient sans borne → DPS ≈ budget^2,4). Le soft cap garde la pente 1 au seuil (zéro nerf sous
-  // l'ancien rendement) puis borne → secondaires = identité de build, plus inflation de puissance.
+  // === v0.38 — REFONTE DES STATS ===
+  // Critique : base 5% + 1% par 100 rating (rating/10000), soft cap 45% → asymptote 70% (fini les ~75% gratuits).
+  const rawCrit = 0.05 + (total.critique ?? 0) / 10000
+  const critChance = softCap(rawCrit, 0.45, 0.70)
+  // Dégâts crit : ×1,5 + rating/700 (700 rating = +100%), soft cap +400% (×5,5) → +700% (×8,5). Gros SPREAD
+  // (investir paie : ×1,9 à 300 → ×5,4 à 2700), contrairement à l'ancien ×2→×3 ultra-compressé.
+  let critMult = 1.5 + softCap((total.degatsCrit ?? 0) / 700, 4.0, 7.0)
+
+  // --- MAÎTRISE (v0.38) : identité PAR ARCHÉTYPE, chacune avec sa mécanique « folle ». ---
+  // - Force        → bruiser : RÉDUCTION plate + dégâts PLATS nourris par la tankiness (« Riposte »).
+  // - Agilité      → assassin : ×CRIT ; le crit AU-DELÀ du cap n'est plus gaspillé (« Débordement »).
+  // - Intelligence → glass cannon : gros %dégâts MAIS +dégâts subis (« Surcharge »).
   const masteryFrac = softCap((total.maitrise ?? 0) / PER_PCT, 0.8, 1.5)
   let masteryMult = 1
-  let critMult = 2 + softCap((total.degatsCrit ?? 0) / PER_PCT, 1.0, 2.0)
   let masteryDr = 0
-  // v0.29 (Lot A) — RÉÉQUILIBRAGE inter-stats (validé par scripts/sim-classes.mjs : écart DPS
-  // endgame ×3.40 → ×1.67). Avant : la Maîtrise Agi donnait +crit ×2/frac NON CAPÉ → l'Agi
-  // s'emballait à l'endgame. Désormais les 3 stats donnent ~le même dégât brut ; la Force garde
-  // sa réduction (son levier = dégâts ET survie → le bruiser stacke la Maîtrise sans la gaspiller),
-  // l'Agi garde un bonus de crit CAPÉ (saveur sans runaway).
+  let masteryFlat = 0
+  let damageTakenMult = 1
   if (mainStat === 'force') {
-    masteryMult = 1 + masteryFrac * 0.8 // bruiser : dégâts ET réduction (le levier de dégâts de la Force)
-    masteryDr = softCap(masteryFrac * 0.85, 0.5, 0.7)
+    masteryDr = softCap((total.maitrise ?? 0) / 5000, 0.25, 0.40)
+    // « Riposte » : ta tankiness (Endurance) se convertit en dégâts PLATS ajoutés à la puissance.
+    masteryFlat = masteryFrac * statPower(endurance) * 0.5
   } else if (mainStat === 'agilite') {
-    masteryMult = 1 + masteryFrac * 0.6 // dégâts plats relevés (0.45→0.6) pour compenser le cap crit
-    critMult += softCap(masteryFrac * 0.6, 0.8, 1.6) // crit CAPÉ (fini le ×2/frac non capé)
+    masteryMult = 1 + masteryFrac * 0.3 // petit flat pour ne pas être nul sans crit
+    // « Débordement » : la chance de crit AU-DESSUS du cap se reverse en multiplicateur de crit.
+    const overflow = Math.max(0, rawCrit - critChance)
+    critMult += masteryFrac * 0.8 + overflow * 2
   } else {
-    masteryMult = 1 + masteryFrac * 0.8 // 0.9→0.8 : resserre l'écart avec Force/Agi
+    masteryMult = 1 + masteryFrac * 1.0 // glass cannon : gros %dégâts
+    // « Surcharge » : tu subis aussi plus de dégâts (risque/récompense).
+    damageTakenMult = 1 + softCap((total.maitrise ?? 0) / 5000, 0.3, 0.6)
   }
 
   const shieldPct = softCap((total.barriere ?? 0) / PER_PCT, 1, 1.6)
+  // Résilience = ex-Ténacité + ex-Purge FUSIONNÉES (20 rating/1%, soft cap 85% → 96%). Couvre CC ET altérations.
+  const resilienceRating = (total.resilience ?? 0) + (total.tenacite ?? 0) + (total.purge ?? 0)
+  // Réduction plate (50 rating/1%, soft cap 40% → 60%) ; l'Esquive dépréciée est repliée dedans 1:1.
+  const flatDrRating = (total.reductionDegats ?? 0) + (total.esquive ?? 0)
 
   return {
     mainStat,
-    power: statPower(effMainValue),
+    power: statPower(effMainValue) + masteryFlat,
     forcePower,
     agiPower,
     intPower,
     endurancePower: statPower(endurance),
     hp: (100 + endurance * 12) * (1 + shieldPct), // PV/Endurance relevés (survie suit mieux la montée)
-    // Soft caps (style WoW) : plein rendement jusqu'au seuil (= ancien cap), puis dégressif au-delà
-    // en approchant une limite haute. Plus aucun rating gaspillé après le seuil.
-    critChance: softCap(0.05 + (total.critique ?? 0) / PER_PCT, 0.75, 0.92),
+    critChance,
     critMult,
-    // v0.30 — Hâte SOFT-CAPÉE (asymptote ~+1,5 → aps max ~2,5) : c'était le multiplicateur le plus
-    // dangereux (aps non borné × power × maîtrise = courbe cubique). Plein rendement jusqu'à +90%.
-    attacksPerSecond: 1 + softCap((total.hate ?? 0) / PER_PCT, 0.9, 1.5),
+    // Hâte : 1% par 50 rating (rating/5000), soft cap +90% → +140% (aps max ~2,4).
+    attacksPerSecond: 1 + softCap((total.hate ?? 0) / 5000, 0.9, 1.4),
     masteryMult,
     masteryDr,
-    leech: softCap((total.volDeVie ?? 0) / 2500, 0.5, 0.72),
-    penetration: softCap((total.penetration ?? 0) / PER_PCT, 0.6, 0.82),
-    precision: softCap((total.precision ?? 0) / PER_PCT, 0.95, 0.99),
-    alterationMult: 1 + softCap((total.alteration ?? 0) / PER_PCT, 3, 5.5),
-    bossDamageMult: 1 + softCap((total.degatsBoss ?? 0) / PER_PCT, 2.5, 4.5),
-    tenacity: softCap((total.tenacite ?? 0) / PER_PCT, 0.85, 0.96),
-    purge: softCap((total.purge ?? 0) / PER_PCT, 0.8, 0.93),
+    masteryFlat,
+    damageTakenMult,
+    leech: softCap((total.volDeVie ?? 0) / 20000, 0.5, 0.72), // 1% par 200 rating
+    penetration: softCap((total.penetration ?? 0) / 20000, 0.70, 0.85), // 1% par 200 rating, pas de base
+    precision: softCap((total.precision ?? 0) / 20000, 0.90, 0.99), // 1% par 200 rating, pas de base
+    alterationMult: 1 + (total.alteration ?? 0) / 4000, // +1% par 40 rating, linéaire (DoT-only)
+    bossDamageMult: 1 + (total.degatsBoss ?? 0) / 5000, // +1% par 50 rating, linéaire
+    resilience: softCap(resilienceRating / 2000, 0.85, 0.96),
     shieldPct,
-    flatDr: softCap((total.reductionDegats ?? 0) / PER_PCT, 0.5, 0.72),
-    dodge: softCap((total.esquive ?? 0) / PER_PCT, 0.4, 0.62),
-    regenBonus: (total.regen ?? 0) / PER_PCT,
+    flatDr: softCap(flatDrRating / 5000, 0.40, 0.60),
     // stats rares (divisor plus généreux → impact fort malgré la rareté)
     overpower: 1 + softCap((total.surpuissance ?? 0) / 1500, 2, 4),
     multistrike: softCap((total.multifrappe ?? 0) / 1500, 0.6, 0.85),
@@ -280,17 +288,16 @@ export function describeStats(total: StatBlock): { primary: StatEffect[]; second
       case 'critique': effect = `${pct(d.critChance)} de coups critiques`; break
       case 'degatsCrit': effect = `coups critiques ×${d.critMult.toFixed(2)}`; break
       case 'hate': effect = `+${pct(d.attacksPerSecond - 1)} vitesse · ${d.attacksPerSecond.toFixed(2)} att/s`; break
-      case 'maitrise': effect = d.mainStat === 'agilite' ? `coups critiques ×${d.critMult.toFixed(2)} (archétype)` : `+${pct(d.masteryMult - 1)} de dégâts${d.masteryDr > 0 ? ` · -${pct(d.masteryDr)} subis` : ''}`; break
+      case 'maitrise': effect = d.mainStat === 'agilite' ? `coups critiques ×${d.critMult.toFixed(2)} (Débordement)`
+        : d.mainStat === 'force' ? `-${pct(d.masteryDr)} subis · +${Math.round(d.masteryFlat).toLocaleString('fr-FR')} dégâts plats (Riposte)`
+        : `+${pct(d.masteryMult - 1)} de dégâts · +${pct(d.damageTakenMult - 1)} subis (Surcharge)`; break
       case 'penetration': effect = `ignore ${pct(d.penetration)} des résistances/armure`; break
       case 'precision': effect = `annule ${pct(d.precision)} de l'esquive ennemie`; break
       case 'alteration': effect = `+${pct(d.alterationMult - 1)} de dégâts sur la durée`; break
       case 'degatsBoss': effect = `+${pct(d.bossDamageMult - 1)} de dégâts aux boss/élites`; break
       case 'reductionDegats': effect = `-${pct(d.flatDr)} de dégâts subis`; break
-      case 'esquive': effect = `${pct(d.dodge)} d'esquive`; break
       case 'barriere': effect = `+${Math.round(softCap(rating / PER_PCT, 1, 1.6) * 100)}% PV effectifs`; break
-      case 'tenacite': effect = `-${pct(d.tenacity)} de durée des contrôles`; break
-      case 'purge': effect = `-${pct(d.purge)} de durée/intensité des altérations subies`; break
-      case 'regen': effect = `+${pct(d.regenBonus)} de régénération`; break
+      case 'resilience': effect = `-${pct(d.resilience)} de durée des contrôles & altérations`; break
       case 'volDeVie': effect = `${pct(d.leech)} des dégâts rendus en vie`; break
       case 'surpuissance': effect = `+${pct(d.overpower - 1)} de dégâts globaux`; break
       case 'multifrappe': effect = `${pct(d.multistrike)} de frapper deux fois`; break

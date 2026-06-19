@@ -215,7 +215,6 @@ export function charDerived(char: Character): DerivedStats {
     hp: d.hp * GLOBAL.vitality * sb.hpMult * PACT.hpMult,
     cdr: Math.min(0.75, d.cdr + sb.cdr),
     leech: Math.min(0.95, d.leech + sb.leech + PACT.leechBonus),
-    dodge: PACT.noDodge ? 0 : d.dodge,
   }
 }
 
