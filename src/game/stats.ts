@@ -40,7 +40,7 @@ export const SECONDARY_META: Record<SecondaryStat, StatMeta> = {
   esquive: { key: 'esquive', name: 'Esquive', short: 'ESQ', color: '#63e6be', desc: 'Comptée comme Réduction de dégâts (plus rollée).' },
   tenacite: { key: 'tenacite', name: 'Ténacité', short: 'TÉN', color: '#a9e34b', desc: 'Comptée comme Résilience (plus rollée).' },
   purge: { key: 'purge', name: 'Purge', short: 'PURG', color: '#38d9a9', desc: 'Comptée comme Résilience (plus rollée).' },
-  regen: { key: 'regen', name: 'Régénération', short: 'RÉG', color: '#51cf66', desc: 'Augmente la régénération des PV (plus rollée au drop).' },
+  regen: { key: 'regen', name: 'Régénération', short: 'RÉG', color: '#51cf66', desc: 'Comptée comme Intelligence — le soin scale sur l\'Intelligence (plus rollée).' },
   // RARES (apparition très faible, effets puissants)
   volDeVie: { key: 'volDeVie', name: 'Vol de vie', short: 'VOL', color: '#f06595', desc: 'Soigne en infligeant des dégâts. La stat des builds solo (DPS sans soigneur). Très rare.', rare: true },
   surpuissance: { key: 'surpuissance', name: 'Surpuissance', short: 'SURP', color: '#ff4d4d', desc: 'Augmente TOUS tes dégâts (multiplicatif, universel). Extrêmement rare.', rare: true },
@@ -87,6 +87,10 @@ function addItemStats(acc: StatBlock, equipment: Equipment) {
 export function computeTotalStats(base: StatBlock, equipment: Equipment): StatBlock {
   const total: StatBlock = { ...base }
   addItemStats(total, equipment)
+  // v0.38 — RÉGÉNÉRATION RETIRÉE : tout reliquat de `regen` (vieux objets, uniques de soin, talents)
+  // est compté comme INTELLIGENCE — le soin scale désormais sur l'Int (cf. design Option B), donc les
+  // uniques/talents de soin restent pertinents (Int = soins plus gros) sans réécrire leurs données.
+  if (total.regen) { total.intelligence = (total.intelligence ?? 0) + total.regen; total.regen = 0 }
   return total
 }
 

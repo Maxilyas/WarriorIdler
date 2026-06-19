@@ -5,10 +5,10 @@ const load = async (entry) => {
   return import('data:text/javascript;base64,' + Buffer.from(res.outputFiles[0].text).toString('base64'))
 }
 const M = await load(`
-  export { computeDerived, describeStats } from './src/game/stats.ts'
+  export { computeDerived, describeStats, computeTotalStats } from './src/game/stats.ts'
   export { genericMitigation } from './src/game/combat.ts'
 `)
-const { computeDerived, genericMitigation } = M
+const { computeDerived, genericMitigation, computeTotalStats } = M
 
 // Fiche du joueur (build Force).
 const total = {
@@ -25,7 +25,7 @@ console.log('main stat       :', d.mainStat)
 console.log('Critique        :', pct(d.critChance), '(av. 74,6%)')
 console.log('Dégâts crit     : ×' + d.critMult.toFixed(2), '(av. ×3,07)')
 console.log('Hâte            : +' + pct(d.attacksPerSecond - 1), '·', d.attacksPerSecond.toFixed(2), 'att/s (av. 1,59)')
-console.log('Maîtrise (Force): DR', pct(d.masteryDr), '· flat +' + Math.round(d.masteryFlat), 'dmg (av. +42,6%/-45,2%)')
+console.log('Maîtrise (Force): DR', pct(d.masteryDr), '· Riposte', pct(d.riposteChance), '(contre-attaque)')
 console.log('Pénétration     :', pct(d.penetration), '(av. 5,8%)')
 console.log('Précision       :', pct(d.precision), '(av. 39,4%)')
 console.log('Altération      : +' + pct(d.alterationMult - 1), '(av. +52,6%)')
@@ -41,3 +41,7 @@ const mit = genericMitigation(d, 1)
 console.log('Mitigation générique : take', pct(mit), '→ -' + pct(1 - mit), '(av. -80% capé)')
 console.log('PV                   :', Math.round(d.hp).toLocaleString('fr-FR'))
 console.log('EHP effectif         :', Math.round(d.hp / mit).toLocaleString('fr-FR'), '(av. ~690 000)')
+
+console.log('\n=== Repli Régén → Intelligence (unique de soin ex-regen) ===')
+const folded = computeTotalStats({ intelligence: 35, regen: 70 }, {})
+console.log('base {int:35, regen:70} →', JSON.stringify({ intelligence: folded.intelligence, regen: folded.regen ?? 0 }), '(attendu int 105, regen 0)')
