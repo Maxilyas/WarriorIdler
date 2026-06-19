@@ -734,9 +734,9 @@ function statusChips(c: Character): { icon: string; label: string; cls: string; 
   if ((c.stun ?? 0) > 0) out.push({ icon: '💫', label: 'étourdi', cls: 'bg-yellow-500/20 text-yellow-300', title: "Étourdi : n'attaque pas tant que ça dure" })
   if (c.dots && c.dots.length > 0) {
     const dps = c.dots.reduce((a, d) => a + d.dps, 0)
-    out.push({ icon: '🩸', label: 'altéré', cls: 'bg-rose-500/20 text-rose-300', title: `Altération subie (DoT) ~${Math.round(dps).toLocaleString('fr-FR')}/s — Purge et résistance la réduisent` })
+    out.push({ icon: '🩸', label: 'altéré', cls: 'bg-rose-500/20 text-rose-300', title: `Altération subie (DoT) ~${Math.round(dps).toLocaleString('fr-FR')}/s — Résilience et résistance la réduisent` })
   }
-  if (c.weaken) out.push({ icon: '🌀', label: 'affaibli', cls: 'bg-fuchsia-500/20 text-fuchsia-300', title: `Affaibli (malédiction) : dégâts ×${c.weaken.mult.toFixed(2)} — Purge en réduit la durée` })
+  if (c.weaken) out.push({ icon: '🌀', label: 'affaibli', cls: 'bg-fuchsia-500/20 text-fuchsia-300', title: `Affaibli (malédiction) : dégâts ×${c.weaken.mult.toFixed(2)} — Résilience en réduit la durée` })
   if ((c.healCut ?? 0) > 0) out.push({ icon: '🚫', label: 'soins coupés', cls: 'bg-red-500/20 text-red-300', title: 'Blessures mortelles : régénération fortement réduite' })
   if ((c.absorb ?? 0) > 0) out.push({ icon: '🛡', label: 'bouclier', cls: 'bg-sky-500/20 text-sky-200', title: `Bouclier d'absorption : ${Math.round(c.absorb!).toLocaleString('fr-FR')} PV encaissés avant la vie` })
   if ((c.invuln ?? 0) > 0) out.push({ icon: '💎', label: 'immunisé', cls: 'bg-cyan-500/20 text-cyan-200', title: 'Immunité aux dégâts directs' })
@@ -776,10 +776,10 @@ function statusChips(c: Character): { icon: string; label: string; cls: string; 
 /** Aide d'une technique ennemie : type + le contre du kit héros à privilégier. */
 function abilityHint(a: EnemyAbility): string {
   const counter: Record<EnemyAbility['kind'], string> = {
-    dot: 'résiste au type + Purge (+ régén)',
-    burst: 'Barrière / Esquive / Réduction + résiste',
-    cc: 'Ténacité',
-    debuff: 'Purge',
+    dot: 'résiste au type + Résilience (+ soin)',
+    burst: 'Barrière / Réduction + résiste',
+    cc: 'Résilience',
+    debuff: 'Résilience',
     drain: 'Burst (tue-le vite) + résiste',
   }
   return `${a.name} · ${DAMAGE_TYPES[a.element].name} — contre : ${counter[a.kind]}`

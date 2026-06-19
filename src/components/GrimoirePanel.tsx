@@ -67,8 +67,7 @@ export function GrimoirePanel() {
 
 const SECONDARY_GROUPS: { title: string; color: string; keys: SecondaryStat[] }[] = [
   { title: 'Offensif', color: '#ff8787', keys: ['critique', 'degatsCrit', 'hate', 'maitrise', 'penetration', 'precision', 'alteration', 'degatsBoss'] },
-  { title: 'Défensif', color: '#74c0fc', keys: ['reductionDegats', 'esquive', 'barriere', 'tenacite', 'purge'] },
-  { title: 'Soutien', color: '#94d82d', keys: ['regen'] },
+  { title: 'Défensif', color: '#74c0fc', keys: ['reductionDegats', 'barriere', 'resilience'] },
   { title: 'RARES (très puissantes)', color: '#ffd43b', keys: ['volDeVie', 'surpuissance', 'multifrappe', 'recuperation'] },
 ]
 
@@ -115,8 +114,8 @@ function StatsCodex() {
         <Title color="#74c0fc">Survie & résistances — les règles clés</Title>
         <ul className="space-y-1 text-[10.5px] leading-snug text-slate-300">
           <li>• <b className="text-sky-300">Résistances par type</b> (points, sans plafond) : les boss <b>EXIGENT</b> des points de résistance. Au cap de l'exigence → dégâts normaux (×1) ; à zéro résist → jusqu'à <b>×5</b>. ≈0 en farm, modéré en donjon, décisif en raid : prépare ton stuff selon la fiche du boss.</li>
-          <li>• <b className="text-amber-300">Atténuation générique</b> (esquive / réduction / maîtrise / polyvalence) : <b>plafonnée à {Math.round(EFFECTIVE_DR_CAP * 100)} %</b>. Tu encaisses TOUJOURS une part — impossible d'être invincible.</li>
-          <li>• Conséquence : empiler la tankiness ne suffit pas. Il faut un mélange de <b>résistances</b>, de <b>soin/régén/vol de vie</b> et de <b>dégâts</b> pour passer les Chapitres.</li>
+          <li>• <b className="text-amber-300">Atténuation générique</b> (réduction / maîtrise Force) : <b>plafonnée à {Math.round(EFFECTIVE_DR_CAP * 100)} %</b>. Tu encaisses TOUJOURS une part — impossible d'être invincible.</li>
+          <li>• Conséquence : empiler la tankiness ne suffit pas. Il faut un mélange de <b>résistances</b>, de <b>soin / vol de vie / barrière</b> et de <b>dégâts</b> pour passer les Chapitres.</li>
         </ul>
       </Card>
     </div>

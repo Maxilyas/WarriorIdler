@@ -92,8 +92,10 @@ const STAT_FR: Record<string, string> = {
   force: 'Force', agilite: 'Agilité', intelligence: 'Intelligence', endurance: 'Endurance',
   critique: 'Critique', degatsCrit: 'Dégâts crit.', hate: 'Hâte', maitrise: 'Maîtrise', penetration: 'Pénétration',
   precision: 'Précision', alteration: 'Altération', degatsBoss: 'Dégâts boss',
-  reductionDegats: 'Réduction', esquive: 'Esquive', barriere: 'Barrière', tenacite: 'Ténacité', regen: 'Régén', purge: 'Purge',
+  reductionDegats: 'Réduction', barriere: 'Barrière', resilience: 'Résilience',
   volDeVie: 'Vol de vie', surpuissance: 'Surpuissance', multifrappe: 'Multifrappe', recuperation: 'Récupération',
+  // v0.38 — clés DÉPRÉCIÉES (repliées) : libellé = la stat dans laquelle elles comptent.
+  esquive: 'Réduction', tenacite: 'Résilience', regen: 'Intelligence', purge: 'Résilience',
 }
 function sd(mods: StatBlock): string {
   return Object.entries(mods).map(([k, v]) => `+${v} ${STAT_FR[k] ?? k}`).join(', ')
@@ -169,9 +171,9 @@ ks('as_spores', 'assassin', 4, 'Spores', 'Ta Nuée propage les altérations à t
 
 // --- DRAIN (SURVIE — profil poison/drain) ---
 minor('as_sang', 'assassin', 1, 'Sangsue', 5, { volDeVie: 8 }, { requires: ['as_hub'] }) // ⛓ TAMPON survie (maxRank 5)
-ks('as_vamp', 'assassin', 2, 'Vampirisme toxique', 'SURVIE : tes DoT te soignent (25% du tick). +20 Régén. Exige Sangsue au rang max (5).', { stat: { regen: 20 }, ks: { dotLeech: 0.25 } }, { requires: ['as_sang'], requiresRank: { id: 'as_sang', rank: 5 } })
+ks('as_vamp', 'assassin', 2, 'Vampirisme toxique', 'SURVIE : tes DoT te soignent (25% du tick). +20 Intelligence. Exige Sangsue au rang max (5).', { stat: { regen: 20 }, ks: { dotLeech: 0.25 } }, { requires: ['as_sang'], requiresRank: { id: 'as_sang', rank: 5 } })
 ability('as_reprise', 'assassin', 2, 'Reprise', 'second_souffle', 'SURVIE : débloque Reprise (auto-soin) — pour tenir en solo dès le début.', { requires: ['as_sang'] })
-ks('as_meta', 'assassin', 3, 'Métabolisme morbide', 'SURVIE : +30 Régén, +12 Vol de vie, -8% de dégâts subis. Profond : 8 pts dans la voie.', { stat: { regen: 30, volDeVie: 12 }, ks: { flatDr: 0.08 } }, { requires: ['as_vamp'], minSpent: 8 })
+ks('as_meta', 'assassin', 3, 'Métabolisme morbide', 'SURVIE : +30 Intelligence, +12 Vol de vie, -8% de dégâts subis. Profond : 8 pts dans la voie.', { stat: { regen: 30, volDeVie: 12 }, ks: { flatDr: 0.08 } }, { requires: ['as_vamp'], minSpent: 8 })
 
 /* ================= OMBRELAME — combo & ombre (PROFONDEUR : finisseurs gatés + combos) ================= */
 ability('om_hub', 'ombrelame', 0, 'Ombrelame', 'om_frappe_sournoise', 'Entre dans la voie de l\'Ombrelame : débloque Frappe sournoise (générateur de Points de Combo). +18 Agilité, +12 Critique.', { requires: ['cl_voleur'], statMods: { agilite: 18, critique: 12 } })
@@ -197,7 +199,7 @@ ability('om_linceul', 'ombrelame', 5, 'Linceul', 'om_linceul', 'ULTIME — un fi
 // --- FURTIVITÉ (SURVIE = esquive) + CHOIX EXCLUSIF d'ouverture ---
 minor('om_cele', 'ombrelame', 1, 'Célérité', 5, { esquive: 12, hate: 6 }, { requires: ['om_hub'] }) // ⛓ TAMPON survie (maxRank 5)
 ability('om_voile', 'ombrelame', 2, 'Voile d\'ombre', 'posture_defensive', 'SURVIE : débloque Voile d\'ombre (passif : -18% de dégâts subis).', { requires: ['om_cele'] })
-ks('om_derob', 'ombrelame', 2, 'Dérobade', 'Tu frappes depuis l\'ombre : +12% de dégâts, +30 Esquive. Exige Célérité au rang max (5).', { stat: { esquive: 30 }, ks: { damageMult: 1.12 } }, { requires: ['om_cele'], requiresRank: { id: 'om_cele', rank: 5 } })
+ks('om_derob', 'ombrelame', 2, 'Dérobade', 'Tu frappes depuis l\'ombre : +12% de dégâts, +30 Réduction. Exige Célérité au rang max (5).', { stat: { esquive: 30 }, ks: { damageMult: 1.12 } }, { requires: ['om_cele'], requiresRank: { id: 'om_cele', rank: 5 } })
 ability('om_embus', 'ombrelame', 3, 'Embuscade', 'om_embuscade', 'CHOIX de SORT : énorme nuke d\'ouverture mono. Gaté : 8 pts dans la voie.', { requires: ['om_derob'], exclusive: 'om_arme2', minSpent: 8 })
 ability('om_eventail', 'ombrelame', 3, 'Éventail de couteaux', 'om_eventail', 'CHOIX de SORT : finisseur de ZONE. Gaté : 8 pts dans la voie.', { requires: ['om_derob'], exclusive: 'om_arme2', minSpent: 8 })
 
@@ -273,7 +275,7 @@ ability('py_immolation', 'pyromancien', 4, 'Immolation', 'py_immolation', 'CHOIX
 // ── COURTE : survie.
 minor('py_robe', 'pyromancien', 1, 'Robe ignifugée', 5, { regen: 12 }, { requires: ['py_hub'] }) // ⛓ TAMPON survie (maxRank 5)
 ability('py_souffle', 'pyromancien', 2, 'Second souffle', 'second_souffle', 'SURVIE : débloque Second souffle (auto-soin) pour tenir en solo.', { requires: ['py_robe'] })
-ks('py_bouclierflam', 'pyromancien', 2, 'Bouclier de flammes', 'SURVIE : -8% de dégâts subis, +20 Régén, tes assaillants se brûlent (épines 10%). Exige Robe ignifugée au rang max (5).', { stat: { regen: 20 }, ks: { flatDr: 0.08, thorns: 0.1 } }, { requires: ['py_robe'], requiresRank: { id: 'py_robe', rank: 5 } })
+ks('py_bouclierflam', 'pyromancien', 2, 'Bouclier de flammes', 'SURVIE : -8% de dégâts subis, +20 Intelligence, tes assaillants se brûlent (épines 10%). Exige Robe ignifugée au rang max (5).', { stat: { regen: 20 }, ks: { flatDr: 0.08, thorns: 0.1 } }, { requires: ['py_robe'], requiresRank: { id: 'py_robe', rank: 5 } })
 
 /* ---- CRYOMANCIEN — GÈLE puis FRACASSE : contre une cible gelée, tes sorts gagnent un bonus de Fracas
  *   qui ESCALADE (Fracas → Glaciation → Abîme). EASY : geler + frapper. HARD : maintenir le gel et
@@ -297,7 +299,7 @@ ability('cr_nova', 'cryomancien', 4, 'Nova de givre', 'cr_nova', 'CHOIX de SORT 
 // ── COURTE : survie.
 minor('cr_carapace', 'cryomancien', 1, 'Carapace de givre', 5, { barriere: 12 }, { requires: ['cr_hub'] }) // ⛓ TAMPON survie (maxRank 5)
 ability('cr_barriere', 'cryomancien', 2, 'Barrière de glace', 'bouclier_runique', 'SURVIE : débloque Barrière de glace (bouclier d\'absorption).', { requires: ['cr_carapace'] })
-ks('cr_frimas', 'cryomancien', 2, 'Frimas protecteur', 'SURVIE : +30 Esquive, -8% de dégâts subis (le froid ralentit tes assaillants). Exige Carapace de givre au rang max (5).', { stat: { esquive: 30 }, ks: { flatDr: 0.08 } }, { requires: ['cr_carapace'], requiresRank: { id: 'cr_carapace', rank: 5 } })
+ks('cr_frimas', 'cryomancien', 2, 'Frimas protecteur', 'SURVIE : +30 Réduction, -8% de dégâts subis (le froid ralentit tes assaillants). Exige Carapace de givre au rang max (5).', { stat: { esquive: 30 }, ks: { flatDr: 0.08 } }, { requires: ['cr_carapace'], requiresRank: { id: 'cr_carapace', rank: 5 } })
 
 /* ---- ARCANISTE — SURCHARGE INSTABLE : monte tes Charges ; au PLEIN, tu entres en Surcharge (dégâts de
  *   sorts ↑, recharges ×2) qui CONSOMME tes Charges. EASY : générer. HARD : déclencher la fenêtre quand
@@ -324,7 +326,7 @@ ks('ar_apogee', 'arcaniste', 4, 'Apogée arcanique', 'IDENTITÉ (carrefour) : +2
 // SURVIE : voile arcanique.
 minor('ar_voile', 'arcaniste', 1, 'Voile arcanique', 5, { barriere: 12 }, { requires: ['ar_hub'] }) // ⛓ TAMPON survie (maxRank 5)
 ability('ar_barriere', 'arcaniste', 2, 'Bouclier des arcanes', 'bouclier_runique', 'SURVIE : débloque Bouclier des arcanes (absorption).', { requires: ['ar_voile'] })
-ks('ar_clignement', 'arcaniste', 3, 'Clignement', 'SURVIE : +30 Esquive, +18 Récupération (tu te téléportes hors de danger). Exige Voile arcanique au rang max (5).', { stat: { esquive: 30, recuperation: 18 } }, { requires: ['ar_voile'], requiresRank: { id: 'ar_voile', rank: 5 } })
+ks('ar_clignement', 'arcaniste', 3, 'Clignement', 'SURVIE : +30 Réduction, +18 Récupération (tu te téléportes hors de danger). Exige Voile arcanique au rang max (5).', { stat: { esquive: 30, recuperation: 18 } }, { requires: ['ar_voile'], requiresRank: { id: 'ar_voile', rank: 5 } })
 
 /* ================================================================== */
 /* CONVERGENCE (v0.34) — SOMMET ABSOLU DU MAGE : tri-élément feu × givre × arcane.
@@ -411,7 +413,7 @@ ability('fa_mortel', 'faucon', 4, 'Tir mortel', 'fa_mortel', 'CHOIX de SORT : ex
 // SURVIE : camouflage.
 minor('fa_camo', 'faucon', 1, 'Camouflage', 5, { esquive: 12 }, { requires: ['fa_hub'] }) // ⛓ TAMPON survie (maxRank 5)
 ability('fa_posture', 'faucon', 2, 'Posture défensive', 'posture_defensive', 'SURVIE : débloque Posture défensive (-18% de dégâts subis).', { requires: ['fa_camo'] })
-ks('fa_retraite', 'faucon', 2, 'Retraite feinte', 'SURVIE : +30 Esquive, +12% de dégâts (tu frappes en reculant). Exige Camouflage au rang max (5).', { stat: { esquive: 30 }, ks: { damageMult: 1.12 } }, { requires: ['fa_camo'], requiresRank: { id: 'fa_camo', rank: 5 } })
+ks('fa_retraite', 'faucon', 2, 'Retraite feinte', 'SURVIE : +30 Réduction, +12% de dégâts (tu frappes en reculant). Exige Camouflage au rang max (5).', { stat: { esquive: 30 }, ks: { damageMult: 1.12 } }, { requires: ['fa_camo'], requiresRank: { id: 'fa_camo', rank: 5 } })
 
 /* ================================================================== */
 /* SYMBIOSE (v0.34) — SECTION SYNERGIE Meneur de meute × Œil de faucon : le chasseur & sa bête.
@@ -556,7 +558,7 @@ ability('lu_aube', 'lumiere', 5, 'Aube salvatrice', 'lu_aube', 'ULTIME — une v
 // SURVIE : grâce protectrice.
 minor('lu_grace', 'lumiere', 1, 'Grâce', 5, { barriere: 12 }, { requires: ['lu_hub'] }) // ⛓ TAMPON survie (maxRank 5)
 ability('lu_bouclier', 'lumiere', 2, 'Bouclier sacré', 'bouclier_runique', 'SURVIE : débloque Bouclier sacré (absorption).', { requires: ['lu_grace'] })
-ks('lu_protection', 'lumiere', 2, 'Protection divine', 'SURVIE : -10% de dégâts subis, +20 Régén. Exige Grâce au rang max (5).', { stat: { regen: 20 }, ks: { flatDr: 0.1 } }, { requires: ['lu_grace'], requiresRank: { id: 'lu_grace', rank: 5 } })
+ks('lu_protection', 'lumiere', 2, 'Protection divine', 'SURVIE : -10% de dégâts subis, +20 Intelligence. Exige Grâce au rang max (5).', { stat: { regen: 20 }, ks: { flatDr: 0.1 } }, { requires: ['lu_grace'], requiresRank: { id: 'lu_grace', rank: 5 } })
 
 /* ---- VIDE (DPS) — DoT d'ombre + Forme du Vide (frenzy = Folie) + drain. ---- */
 ability('vi_hub', 'vide', 0, 'Vide', 'vi_mot_ombre', 'Entre dans la voie du Vide : débloque Mot de l\'ombre (DoT d\'ombre). +18 Intelligence, +12 Altération.', { requires: ['cl_pretre'], statMods: { intelligence: 18, alteration: 12 } })
@@ -575,7 +577,7 @@ minor('vi_buf_folie', 'vide', 4, 'Murmures du Vide', 5, { degatsCrit: 8 }, { req
 ability('vi_folie', 'vide', 5, 'Folie dévorante', 'vi_folie', 'ULTIME — un cataclysme d\'ombre engloutit tout le pack. Gaté : Murmures du Vide au max + 20 pts dans la voie.', { requires: ['vi_buf_folie'], requiresRank: { id: 'vi_buf_folie', rank: 5 }, minSpent: 20 })
 // DRAIN : survie via les DoT.
 minor('vi_soif', 'vide', 1, 'Soif d\'âmes', 5, { volDeVie: 8 }, { requires: ['vi_hub'] }) // ⛓ TAMPON survie (maxRank 5)
-ks('vi_drain', 'vide', 2, 'Drain d\'ombre', 'SURVIE : tes DoT te soignent (25% du tick), +20 Régén. Exige Soif d\'âmes au rang max (5).', { stat: { regen: 20 }, ks: { dotLeech: 0.25 } }, { requires: ['vi_soif'], requiresRank: { id: 'vi_soif', rank: 5 } })
+ks('vi_drain', 'vide', 2, 'Drain d\'ombre', 'SURVIE : tes DoT te soignent (25% du tick), +20 Intelligence. Exige Soif d\'âmes au rang max (5).', { stat: { regen: 20 }, ks: { dotLeech: 0.25 } }, { requires: ['vi_soif'], requiresRank: { id: 'vi_soif', rank: 5 } })
 ks('vi_meta', 'vide', 3, 'Communion morbide', 'SURVIE : -8% de dégâts subis, +12 Vol de vie. Profond : 8 pts dans la voie.', { stat: { volDeVie: 12 }, ks: { flatDr: 0.08 } }, { requires: ['vi_drain'], minSpent: 8 })
 
 /* ================================================================== */
@@ -644,7 +646,7 @@ minor('sg_os', 'sang', 1, 'Os d\'acier', 5, { endurance: 14 }, { requires: ['sg_
 ability('sg_marque', 'sang', 1, 'Marque sanglante', 'sg_marque', 'FINITION : débloque Marque sanglante (finisseur). +16 Force.', { requires: ['sg_hub'], statMods: { force: 16 } })
 ks('sg_bouclier', 'sang', 2, 'Bouclier d\'os', 'TANK (cd 30 s) : un finisseur t\'accorde un bouclier = 35% de ses dégâts (≤ tes PV). Exige Os d\'acier au max (5).', { stat: { endurance: 20 }, ks: { finisherShield: 0.35 } }, { requires: ['sg_os'], requiresRank: { id: 'sg_os', rank: 5 } })
 ability('sg_builder', 'sang', 1, 'Soif de sang', 'sg_builder', 'GÉNÉRATION : débloque Soif de sang (générateur).', { requires: ['sg_hub'] })
-ks('sg_vampirisme', 'sang', 2, 'Vampirisme', 'SURVIE : tes DoT te soignent (25% du tick), +20 Régén.', { stat: { regen: 20 }, ks: { dotLeech: 0.25 } }, { requires: ['sg_builder'] })
+ks('sg_vampirisme', 'sang', 2, 'Vampirisme', 'SURVIE : tes DoT te soignent (25% du tick), +20 Intelligence.', { stat: { regen: 20 }, ks: { dotLeech: 0.25 } }, { requires: ['sg_builder'] })
 minor('sg_buf2', 'sang', 3, 'Sang noir', 5, { endurance: 12 }, { requires: ['sg_vampirisme'] })
 ks('sg_caillot', 'sang', 4, 'Caillot', 'SURVIE : -12% de dégâts subis. Exige Sang noir au max (5).', { stat: { endurance: 16 }, ks: { flatDr: 0.12 } }, { requires: ['sg_buf2'], requiresRank: { id: 'sg_buf2', rank: 5 } })
 ability('sg_provoc', 'sang', 2, 'Provocation', 'provocation', 'MENACE : attire les attaques (rôle de tank).', { requires: ['sg_os'] })
@@ -683,7 +685,7 @@ minor('lg_buf2', 'legion', 3, 'Savoir interdit', 5, { critique: 8 }, { requires:
 ability('lg_trait', 'legion', 4, 'Trait du chaos', 'lg_trait', 'CHOIX de SORT : un trait de chaos dévastateur. Exige Savoir interdit au max + 8 pts.', { requires: ['lg_buf2'], requiresRank: { id: 'lg_buf2', rank: 5 }, exclusive: 'lg_arme2', minSpent: 8 })
 ability('lg_arma', 'legion', 4, 'Armageddon', 'lg_armageddon', 'CHOIX de SORT : une pluie de feu démoniaque (zone). Exige Savoir interdit au max + 8 pts.', { requires: ['lg_buf2'], requiresRank: { id: 'lg_buf2', rank: 5 }, exclusive: 'lg_arme2', minSpent: 8 })
 minor('lg_buf3', 'legion', 1, 'Cuirasse d\'âmes', 5, { barriere: 12 }, { requires: ['lg_hub'] })
-ks('lg_protection', 'legion', 2, 'Armure démoniaque', 'SURVIE : -10% de dégâts subis, +20 Régén. Exige Cuirasse d\'âmes au max (5).', { stat: { regen: 20 }, ks: { flatDr: 0.1 } }, { requires: ['lg_buf3'], requiresRank: { id: 'lg_buf3', rank: 5 } })
+ks('lg_protection', 'legion', 2, 'Armure démoniaque', 'SURVIE : -10% de dégâts subis, +20 Intelligence. Exige Cuirasse d\'âmes au max (5).', { stat: { regen: 20 }, ks: { flatDr: 0.1 } }, { requires: ['lg_buf3'], requiresRank: { id: 'lg_buf3', rank: 5 } })
 
 /* ================================================================== */
 /* CHAMAN (Mailles) — Élémentaire (DPS) · Vague (HEAL).                */
@@ -703,7 +705,7 @@ ks('el_finamp', 'elementaire', 2, 'Maîtrise du Maelström', 'Tes sorts [finisse
 minor('el_buf2', 'elementaire', 3, 'Flux tellurique', 5, { hate: 8 }, { requires: ['el_finamp'] })
 ability('el_lave', 'elementaire', 4, 'Salve de lave', 'el_lave', 'CHOIX de SORT : un finisseur de feu (× Maelström). Exige Flux tellurique au max + 8 pts.', { requires: ['el_buf2'], requiresRank: { id: 'el_buf2', rank: 5 }, minSpent: 8 })
 minor('el_buf3', 'elementaire', 1, 'Bouclier de pierre', 5, { barriere: 12 }, { requires: ['el_hub'] })
-ks('el_protection', 'elementaire', 2, 'Bouclier élémentaire', 'SURVIE : -10% de dégâts subis, +30 Esquive. Exige Bouclier de pierre au max (5).', { stat: { esquive: 30 }, ks: { flatDr: 0.1 } }, { requires: ['el_buf3'], requiresRank: { id: 'el_buf3', rank: 5 } })
+ks('el_protection', 'elementaire', 2, 'Bouclier élémentaire', 'SURVIE : -10% de dégâts subis, +30 Réduction. Exige Bouclier de pierre au max (5).', { stat: { esquive: 30 }, ks: { flatDr: 0.1 } }, { requires: ['el_buf3'], requiresRank: { id: 'el_buf3', rank: 5 } })
 /* ---- VAGUE (HEAL) — soin de groupe en chaîne + totem (HoT). ---- */
 ability('va_hub', 'vague', 0, 'Vague', 'va_soin', 'Débloque Vague de soin. +18 Intelligence.', { requires: ['cl_chaman'], statMods: { intelligence: 18 } })
 minor('va_eau', 'vague', 1, 'Source vive', 5, { regen: 10 }, { requires: ['va_hub'] })
@@ -739,8 +741,8 @@ minor('ro_ecorce', 'ronce', 1, 'Écorce', 5, { endurance: 14 }, { requires: ['ro
 ks('ro_epines', 'ronce', 2, 'Épines', 'Tes assaillants encaissent 30% de tes dégâts d\'auto en retour. Exige Écorce au max (5).', { stat: { endurance: 20 }, ks: { thorns: 0.3 } }, { requires: ['ro_ecorce'], requiresRank: { id: 'ro_ecorce', rank: 5 } })
 ks('ro_colosse', 'ronce', 3, 'Colosse sylvestre', 'À plus de 60% de PV, +20% de dégâts. Profond : 10 pts.', { stat: { force: 16 }, ks: { highHpBonus: { threshold: 0.6, mult: 1.2 } } }, { requires: ['ro_epines'], minSpent: 10 })
 ability('ro_provoc', 'ronce', 2, 'Provocation', 'provocation', 'MENACE : attire les attaques.', { requires: ['ro_ecorce'] })
-minor('ro_buf2', 'ronce', 1, 'Régénération', 5, { regen: 12 }, { requires: ['ro_hub'] })
-ks('ro_resist', 'ronce', 2, 'Cuir épais', 'SURVIE : -12% de dégâts subis. Exige Régénération au max (5).', { stat: { endurance: 16 }, ks: { flatDr: 0.12 } }, { requires: ['ro_buf2'], requiresRank: { id: 'ro_buf2', rank: 5 } })
+minor('ro_buf2', 'ronce', 1, 'Écorce', 5, { endurance: 12 }, { requires: ['ro_hub'] })
+ks('ro_resist', 'ronce', 2, 'Cuir épais', 'SURVIE : -12% de dégâts subis. Exige Écorce au max (5).', { stat: { endurance: 16 }, ks: { flatDr: 0.12 } }, { requires: ['ro_buf2'], requiresRank: { id: 'ro_buf2', rank: 5 } })
 ability('ro_ronces', 'ronce', 3, 'Ronces acérées', 'ro_ronces', 'CHOIX de SORT : un DoT nature qui saigne le pack. Gaté : 8 pts.', { requires: ['ro_buf2'], minSpent: 8 })
 ability('ro_souffle', 'ronce', 2, 'Second souffle', 'second_souffle', 'SURVIE : auto-soin.', { requires: ['ro_buf2'] })
 /* ---- FLORAISON (HEAL) — HoT empilés. ---- */

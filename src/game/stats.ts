@@ -37,10 +37,10 @@ export const SECONDARY_META: Record<SecondaryStat, StatMeta> = {
   // --- DÉPRÉCIÉES (v0.38) : ne sont plus rollées ni listées sur la fiche, mais restent FONCTIONNELLES
   //     (vieux objets/talents) : Esquive comptée comme Réduction · Ténacité + Purge comptées comme
   //     Résilience · Régénération toujours active (l'archétype soigneur en dépend). ---
-  esquive: { key: 'esquive', name: 'Esquive', short: 'ESQ', color: '#63e6be', desc: 'Comptée comme Réduction de dégâts (plus rollée).' },
-  tenacite: { key: 'tenacite', name: 'Ténacité', short: 'TÉN', color: '#a9e34b', desc: 'Comptée comme Résilience (plus rollée).' },
-  purge: { key: 'purge', name: 'Purge', short: 'PURG', color: '#38d9a9', desc: 'Comptée comme Résilience (plus rollée).' },
-  regen: { key: 'regen', name: 'Régénération', short: 'RÉG', color: '#51cf66', desc: 'Comptée comme Intelligence — le soin scale sur l\'Intelligence (plus rollée).' },
+  esquive: { key: 'esquive', name: 'Réduction', short: 'RÉD', color: '#74c0fc', desc: 'Comptée comme Réduction de dégâts (Esquive dépréciée, plus rollée).' },
+  tenacite: { key: 'tenacite', name: 'Résilience', short: 'RÉSI', color: '#a9e34b', desc: 'Comptée comme Résilience (Ténacité dépréciée, plus rollée).' },
+  purge: { key: 'purge', name: 'Résilience', short: 'RÉSI', color: '#38d9a9', desc: 'Comptée comme Résilience (Purge dépréciée, plus rollée).' },
+  regen: { key: 'regen', name: 'Intelligence', short: 'INT', color: '#4dabf7', desc: 'Comptée comme Intelligence — le soin scale sur l\'Intelligence (Régénération dépréciée, plus rollée).' },
   // RARES (apparition très faible, effets puissants)
   volDeVie: { key: 'volDeVie', name: 'Vol de vie', short: 'VOL', color: '#f06595', desc: 'Soigne en infligeant des dégâts. La stat des builds solo (DPS sans soigneur). Très rare.', rare: true },
   surpuissance: { key: 'surpuissance', name: 'Surpuissance', short: 'SURP', color: '#ff4d4d', desc: 'Augmente TOUS tes dégâts (multiplicatif, universel). Extrêmement rare.', rare: true },

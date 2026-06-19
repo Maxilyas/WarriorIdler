@@ -141,7 +141,7 @@ export const ENCHANTS: EnchantDef[] = [
   { id: 'pacteSangVicie', name: 'Pacte du Sang vicié', icon: '🧛', pact: 'sangVicie',
     description: 'PACTE : la régénération est COUPÉE ; +40% de vol de vie. Vis de ce que tu prends.' },
   { id: 'pacteRoc', name: 'Pacte du Roc', icon: '⛰️', pact: 'roc',
-    description: 'PACTE : l\'esquive est IMPOSSIBLE ; −15% de dégâts subis, toujours. On ne bouge plus.' },
+    description: 'PACTE : aucune Riposte possible ; −15% de dégâts subis, toujours. Inébranlable, mais immobile.' },
   { id: 'pacteBerserk', name: 'Pacte du Berserk', icon: '🤬', pact: 'berserk',
     description: 'PACTE : tes PV sont CAPÉS à 60% du maximum ; +30% de dégâts. Vivre, c\'est surfait.' },
   { id: 'pactePacifiste', name: 'Pacte du Pacifiste', icon: '🕊️', pact: 'pacifiste',
@@ -302,8 +302,8 @@ export interface PactMods {
   leechBonus: number
   /** PV rendus à l'équipe par kill (fraction, Jeûne). */
   killHeal: number
-  /** Esquive forcée à zéro (Roc). */
-  noDodge: boolean
+  /** Riposte forcée à zéro (Roc — immobile, ne contre pas). v0.38 (ex-noDodge). */
+  noRiposte: boolean
   /** PV capés à cette fraction du max (Berserk : 0,6), 0 = inactif. */
   hpCap: number
   /** Bonus vs cible FOCUS / malus hors focus (Duelliste). */
@@ -322,7 +322,7 @@ export interface PactMods {
 export function emptyPactMods(): PactMods {
   return {
     dmgOut: 1, dmgIn: 1, hpMult: 1, apsMult: 1, apsForce: 0, autoMult: 1, spellMult: 1,
-    noHeal: false, noRegen: false, leechBonus: 0, killHeal: 0, noDodge: false, hpCap: 0,
+    noHeal: false, noRegen: false, leechBonus: 0, killHeal: 0, noRiposte: false, hpCap: 0,
     focusBonus: 0, offFocusMult: 1, monoElement: false, rewardBonus: 0, noSursis: false, mementoBonus: 0,
   }
 }
@@ -345,7 +345,7 @@ export function pactMods(pacts: PactId[], teamSize: number, malusMult = 1, maxAc
       case 'meute': out.dmgOut *= 1 + 0.08 * Math.max(0, teamSize - 1); break
       case 'jeune': out.noHeal = true; out.killHeal = 0.06; break
       case 'sangVicie': out.noRegen = true; out.leechBonus = 0.4; break
-      case 'roc': out.noDodge = true; out.dmgIn *= 1 - 0.15; break
+      case 'roc': out.noRiposte = true; out.dmgIn *= 1 - 0.15; break
       case 'berserk': out.hpCap = Math.max(out.hpCap, Math.min(0.9, 0.6 + (1 - malusMult) * 0.4)); out.dmgOut *= 1.3; break
       case 'pacifiste': out.autoMult *= Math.max(0.05, 1 - mal(0.9)); out.spellMult *= 1.6; break
       case 'duelliste': out.focusBonus += 0.4; out.offFocusMult *= 1 - mal(0.3); break

@@ -189,8 +189,8 @@ export function setGlobalCombatMods(m: { power: number; attackSpeed: number; vit
 
 // 🩸 PACTES (v0.26, runes keystone) : mods dérivés d'ÉQUIPE, recalculés par le store au tick —
 // même mécanique module-niveau que GLOBAL (les pactes portés changent rarement, latence ≤ 1 tick).
-let PACT = { hpMult: 1, apsMult: 1, apsForce: 0, leechBonus: 0, noDodge: false }
-export function setPactDerivedMods(m: { hpMult: number; apsMult: number; apsForce: number; leechBonus: number; noDodge: boolean }) {
+let PACT = { hpMult: 1, apsMult: 1, apsForce: 0, leechBonus: 0, noRiposte: false }
+export function setPactDerivedMods(m: { hpMult: number; apsMult: number; apsForce: number; leechBonus: number; noRiposte: boolean }) {
   PACT = m
 }
 
@@ -215,6 +215,7 @@ export function charDerived(char: Character): DerivedStats {
     hp: d.hp * GLOBAL.vitality * sb.hpMult * PACT.hpMult,
     cdr: Math.min(0.75, d.cdr + sb.cdr),
     leech: Math.min(0.95, d.leech + sb.leech + PACT.leechBonus),
+    riposteChance: PACT.noRiposte ? 0 : d.riposteChance, // ⛰️ Pacte du Roc : immobile, ne riposte pas
   }
 }
 

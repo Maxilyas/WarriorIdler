@@ -51,7 +51,7 @@ function def(id: BiomeId, name: string, tier: BiomeTier, lore: string): BiomeDef
 export const BIOMES: Record<BiomeId, BiomeDef> = {
   physique: def('physique', 'Champs de Bataille', 'start', 'Les terres de départ : des brutes qui frappent à l\'acier. On y apprend l\'équipement sans pression élémentaire.'),
   feu: def('feu', 'Terres de Cendres', 'common', 'Volcans et coulées de lave. Les créatures y brûlent ce qu\'elles touchent : la Brûlure ronge sur la durée.'),
-  froid: def('froid', 'Toundra Gelée', 'common', 'Étendues de glace éternelle. Le Gel ralentit et fige les imprudents : la Ténacité est ton alliée.'),
+  froid: def('froid', 'Toundra Gelée', 'common', 'Étendues de glace éternelle. Le Gel ralentit et fige les imprudents : la Résilience est ton alliée.'),
   foudre: def('foudre', 'Pics Orageux', 'common', 'Sommets battus par des orages perpétuels. Des décharges fulgurantes punissent les PV faibles.'),
   nature: def('nature', 'Jungle Sauvage', 'common', 'Une végétation vorace et toxique. Le Poison s\'empile : il faut purger ou survivre.'),
   arcane: def('arcane', 'Voile Arcanique', 'rare', 'Une déchirure de magie pure où la réalité vacille. Des malédictions affaiblissent quiconque s\'y aventure.'),

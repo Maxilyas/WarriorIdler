@@ -944,7 +944,7 @@ function teamPactMods(
     apsMult: pact.apsMult * (buffs?.speedMult ?? 1),
     apsForce: pact.apsForce,
     leechBonus: pact.leechBonus,
-    noDodge: pact.noDodge,
+    noRiposte: pact.noRiposte,
   })
   return pact
 }
@@ -3427,8 +3427,8 @@ function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: 
       if (d.cmods.surplusRegen > 0) {
         regen += mh * Math.min(d.cmods.surplusRegen, (resistSurplus(enemy, d.resist) / RESIST_DSCALE) * d.cmods.surplusRegen)
       }
-      // 💉 Perfusion (v0.26) : sous 50% des PV, la régénération s'emballe.
-      if (mods?.cond?.perfusionBonus && c.hp / mh < 0.5) regen *= 1 + mods.cond.perfusionBonus
+      // 💉 Perfusion (v0.38) : sous 50% des PV, soin/s FORFAITAIRE (la Régén de base a disparu → plus de × sur 0).
+      if (mods?.cond?.perfusionBonus && c.hp / mh < 0.5) regen += mh * mods.cond.perfusionBonus * 0.05
       // 🍽️ Jeûne / 🧛 Sang vicié : la régénération est coupée.
       if (mods?.pact?.noHeal || mods?.pact?.noRegen) regen = 0
       c.hp = Math.min(mh, c.hp + regen * dt)
@@ -3914,8 +3914,8 @@ function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt: number
       if (d.cmods.surplusRegen > 0 && ft) {
         regen += mh * Math.min(d.cmods.surplusRegen, (resistSurplus(ft, d.resist) / RESIST_DSCALE) * d.cmods.surplusRegen)
       }
-      // 💉 Perfusion (v0.26) : sous 50% des PV, la régénération s'emballe.
-      if (mods?.cond?.perfusionBonus && c.hp / mh < 0.5) regen *= 1 + mods.cond.perfusionBonus
+      // 💉 Perfusion (v0.38) : sous 50% des PV, soin/s FORFAITAIRE (la Régén de base a disparu → plus de × sur 0).
+      if (mods?.cond?.perfusionBonus && c.hp / mh < 0.5) regen += mh * mods.cond.perfusionBonus * 0.05
       // v0.27 (Lot 3) « Blessures mortelles » : pendant la fenêtre de heal-cut (posée par la Nova),
       // la régén s'effondre → un tank ne peut plus éponger juste après une Nova.
       if ((c.healCut ?? 0) > 0) { regen *= HEALCUT_REGEN_MULT; c.healCut = Math.max(0, (c.healCut ?? 0) - dt) }

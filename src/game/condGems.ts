@@ -171,7 +171,7 @@ export const COND_GEMS: Record<CondGemId, CondGemDef> = {
   perfusion: {
     id: 'perfusion', family: 'flux', name: 'Perfusion', icon: '💉', color: '#4ade80',
     values: [50, 75, 100, 125, 150],
-    desc: (v) => `Les héros sous 50% des PV régénèrent +${v}% plus vite.`,
+    desc: (v) => `Sous 50% des PV : soigne ${(v / 20).toFixed(1)}% des PV max par seconde.`,
   },
   vases: {
     id: 'vases', family: 'flux', name: 'Vases communicants', icon: '⚱️', color: '#22d3ee',
