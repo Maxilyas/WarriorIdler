@@ -4073,7 +4073,7 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
         logBit = `+${xp.toLocaleString('fr-FR')} XP`
         break
       }
-      // Cache du Pilleur (v0.36) : tout le butin tombe au COFFRE (count 1-3 → 5-8 selon le niveau), à TA
+      // Cache du Pilleur (v0.36) : tout le butin tombe au COFFRE (count 1 → 5, +1 tous les 3 niveaux), à TA
       // tranche d'ilvl. Plus de drop par-combat → le nombre d'objets/run est piloté proprement par le niveau.
       case 'stuff': break
       // La Géode : la poussière 🔹 coule à chaque combat (la gemme, elle, attend le coffre).
@@ -4131,9 +4131,10 @@ function tickDungeon(s: GameState, dt: number, set: (s: GameState) => void) {
         case 'xp': { const bonus = Math.round(1200 * lv * Math.pow(1.12, lv) * chestMult * (1 + (d.xpPotion ?? 0))); chars = grantTeamXp(chars, bonus).chars; cXp += bonus; break }
         case 'stuff': {
           // v0.36 — ilvl du butin = TA tranche (record de palier), IDENTIQUE à tous les niveaux. Ce qui
-          // change avec le niveau : le NOMBRE d'objets (1-3 au début → 5-8 à la fin) et la rareté (cf. cw).
+          // change avec le niveau : le NOMBRE d'objets (1 → 5, droite +1 tous les 3 niveaux) et la rareté (cf. cw).
           const ilvl = lootFarmIlvl(s.bestStage)
-          const count = Math.max(1, Math.round(Math.min(8, 1 + Math.floor((lv - 1) / 2)) * chestMult))
+          // v0.39.1 — droite linéaire 1 → 5 (plafond), +1 tous les 3 niveaux (paliers aux niv 4/7/10/13).
+          const count = Math.max(1, Math.round(Math.min(5, 1 + Math.floor((lv - 1) / 3)) * chestMult))
           // v0.24 : FENÊTRE de la Cache (pic ≤ Légendaire, plafond pratique Artefact — même
           // « Avare » ne le perce pas). Au-dessus, seul le « voile » (infime, → Éternel max).
           const cw = cacheRarityWindow(lv)

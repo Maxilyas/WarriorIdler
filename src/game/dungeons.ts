@@ -205,7 +205,7 @@ export function butinOverTier(): number {
  *   eclats   ≈ 300·N·(1+0.13N)              sceaux  ≈ 3 + 0.9N
  *   xp       ≈ 180·N·1.1^N (équipe)         orbes   ≈ 1 + 0.5N (entrée : 10 Sceaux)
  *   poussiere≈ (1+⌊N/3⌋) garanti + 0..2 bonus (proba croissante)
- *   butin    ≈ (3+⌊N/2⌋) objets, rareté de butinMinTier(N)→butinMaxTier(N)
+ *   butin    = min(5, 1+⌊(N-1)/3⌋) objets (droite 1→5, +1 tous les 3 niv), rareté butinMinTier(N)→butinMaxTier(N)
  */
 
 export function getDungeonDef(id: DungeonId): DungeonDef {
