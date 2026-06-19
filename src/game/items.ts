@@ -5,7 +5,7 @@ import { ITEM_TYPES } from './slots'
 import { rollUnique, instanceMods } from './uniques'
 import { rollSockets } from './gems'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from './damage'
-import { itemBudget, effItemIlvl, clampIlvl, powerAt, RARITY_ILVL_PER_TIER, CHAPITRE_SIZE } from './progression'
+import { itemBudget, effItemIlvl, clampIlvl, powerAt, RARITY_ILVL_PER_TIER, CHAPITRE_SIZE, lootFarmIlvl } from './progression'
 
 /** v0.30.1 — lignes de stat secondaire : PROPORTIONNELLES au budget exponentiel (poids SECONDARY_FRAC)
  *  → même échelle que le primaire à bas ilvl (fini « primaire 2 vs crit 66 »), MAIS plafonnées à
@@ -320,6 +320,37 @@ export function contentRarityTier(bestStage: number, bestRaidTier = 0): number {
   // PLAFOND = Abyssal (t14) : Primordial(t15) & Transcendant(t16) restent le CHASE (over-content = centaines de runs).
   const raidReach = bestRaidTier > 0 ? Math.min(14, 11 + Math.floor((bestRaidTier - 1) / 2)) : 0
   return Math.max(3, cacheReach, raidReach)
+}
+
+/**
+ * v0.36 — RARETÉ ACCESSIBLE à un CHAPITRE donné (Cache plafond Artefact + raid GATÉ au Chapitre).
+ * Reproduit la table validée par le joueur : Cache→Artefact sur les chapitres tuto, puis les raids
+ * (T1 au mur du Ch.5, T(c−4) au mur du Ch.c) montent la rareté — +1/tier jusqu'à Céleste, puis +1
+ * tous les 2 tiers (règle « 2 tiers = 1 rareté »), plafond Abyssal (Primordial/Transcendant = chase).
+ *   Ch.1-4 → Artefact(7) · Ch.5-8 → Patrimoine→Céleste(8-11) · Ch.9+ → +1/2ch → Abyssal(14) max.
+ * C'est l'ancre des RENDEMENTS de donjon ET des fragments/cosmique de raid (via le Chapitre = GT+4).
+ */
+export function accessibleRarityTier(chapter: number): number {
+  const ch = Math.max(1, chapter)
+  if (ch <= 4) return 7
+  if (ch <= 8) return 3 + ch // 8,9,10,11 (raids T1-T4 : +1 rareté par tier)
+  return Math.min(14, 11 + Math.floor((ch - 8) / 2)) // 11,11,12,12,13,13,14… (+1 tous les 2 tiers)
+}
+
+/** Cadence commune : un run/clear ≈ 1/CRAFT_RUNS_TARGET d'un craft à la rareté accessible. */
+export const CRAFT_RUNS_TARGET = 10
+
+/**
+ * Rendement par run/clear d'un MATÉRIAU au Chapitre donné = coût d'un craft à la rareté ACCESSIBLE
+ * (en ce matériau) ÷ cadence. 0 si le matériau n'existe pas encore à cette rareté (fragments < t8,
+ * cosmique < t13). Source unique de vérité partagée par les donjons (niveau = Chapitre) ET les raids
+ * (Chapitre = globalTier + 4) → fragments/cosmique de raid suivent la même courbe que les donjons.
+ */
+export function materialYieldAtChapter(material: keyof CraftCost, chapter: number): number {
+  const ct = accessibleRarityTier(chapter)
+  const ilvl = lootFarmIlvl(chapter * CHAPITRE_SIZE)
+  const cost = createCost(ct, ilvl, ct)[material] ?? 0
+  return cost > 0 ? Math.max(1, Math.round(cost / CRAFT_RUNS_TARGET)) : 0
 }
 /** Multiplicateur de coût « AU-DESSUS DU CONTENU » : ×OVER_CONTENT_STEEP par cran de rareté au-dessus
  *  de ce que le farm donne au Palier. +1 = ×4 (dizaines de runs), +2 = ×16 (centaines), +3 = ×64. */

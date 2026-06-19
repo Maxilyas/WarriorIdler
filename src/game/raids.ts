@@ -1,6 +1,7 @@
 import type { DamageType, Enemy, EnemyAbility, ItemType } from './types'
 import { DAMAGE_TYPE_LIST } from './damage'
 import { enemyHp, enemyDmg, enemyArmor, clampIlvl, lootFarmIlvl, frontierIlvl, lagAt, chapitreOf, ILVL_CAP_BASE, ILVL_CAP_ENDGAME } from './progression'
+import { materialYieldAtChapter } from './items'
 
 /**
  * RAIDS — refonte v0.23 « un boss, dix tiers ».
@@ -326,21 +327,22 @@ export function raidTierUnlockCost(def: RaidDef, next: number): number {
   return 5 * Math.max(1, globalTier(def, next) - 1)
 }
 
-/** Fragments d'éternité gagnés. */
+// v0.36 — Fragments ✨ & Éclats cosmiques 💫 (matériaux EXCLUSIFS aux raids) suivent la MÊME courbe que
+// les donjons de matériaux : rendement/clear = coût d'un craft à la rareté ACCESSIBLE ÷ cadence, au
+// Chapitre CORRESPONDANT au tier. Le tier MONDIAL GT gate le mur du Chapitre (GT+4) → Chapitre = GT+4.
+// Déterministe (plus de tirage de chance) : cohérent avec le rendement déterministe des donjons.
+function raidMatChapter(def: RaidDef, tier: number): number {
+  return globalTier(def, tier) + 4
+}
+
+/** Fragments d'éternité ✨ gagnés par clear (courbe partagée, dès le mur Ch.5 = T1 mondial). */
 export function raidFragments(def: RaidDef, tier: number): number {
-  const gt = globalTier(def, tier)
-  return 1 + gt + (def.id === 'abysse' ? gt : 0)
+  return materialYieldAtChapter('fragments', raidMatChapter(def, tier))
 }
 
-/** Chance d'Éclat cosmique 💫 (ressource ultra-rare, exclusive aux raids). */
-export function raidCosmicChance(def: RaidDef, tier: number): number {
-  const base = 0.04 + globalTier(def, tier) * 0.05
-  return Math.min(0.95, base * (def.id === 'abysse' ? 2.2 : 1))
-}
-
-/** Quantité d'Éclats cosmiques quand le tirage réussit (plus aux hauts tiers / Abîme). */
+/** Éclats cosmiques 💫 gagnés par clear (courbe partagée — n'existe qu'à partir de Cosmique = Ch.12 / GT8). */
 export function raidCosmicQty(def: RaidDef, tier: number): number {
-  return 1 + Math.floor(globalTier(def, tier) / 4) + (def.id === 'abysse' ? 1 : 0)
+  return materialYieldAtChapter('cosmic', raidMatChapter(def, tier))
 }
 
 /** Type d'objet aléatoire dans la catégorie ciblée du raid. */

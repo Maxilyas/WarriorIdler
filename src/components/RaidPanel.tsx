@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useGame } from '../game/store'
 import {
   RAID_LIST, RAID_UNLOCK_STAGE, RAID_MECHANIC_META, getRaidDef, raidUnlocked,
-  raidBossVariant, raidIlvl, raidBerserkTime, raidFragments, raidCosmicChance,
+  raidBossVariant, raidIlvl, raidBerserkTime, raidFragments, raidCosmicQty,
   raidMinTier, raidMaxTier, raidReqs, raidTierUnlockCost, recommendedDps, recommendedEhp, raidPartyHpMult, type RaidDef,
 } from '../game/raids'
 import { charDps, charMaxHp, charResist } from '../game/character'
@@ -306,7 +306,7 @@ function RaidCard({ def, unlocked, progress, cleared, maxTier, trophies, bestSta
       </div>
 
       <div className="mt-1 text-[9.5px] text-slate-500">
-        Récompense : ✨ {raidFragments(def, t)} fragments · 💫 {Math.round(raidCosmicChance(def, t) * 100)}%
+        Récompense : ✨ {raidFragments(def, t)} fragments{raidCosmicQty(def, t) > 0 && <> · 💫 {raidCosmicQty(def, t)} cosmiques</>}
         {def.element !== 'rotating' && <> · attaque {DAMAGE_TYPES[def.element].icon} {DAMAGE_TYPES[def.element].name}</>}
         {def.element === 'rotating' && <> · 🌈 éléments tournants</>}
       </div>

@@ -89,7 +89,7 @@ import {
 import {
   generateRaid, makeRaidAdd, raidMaxAdds, getRaidDef, raidUnlocked, raidBossVariant,
   raidIlvl, raidRarityWindow, rollRaidLootCount, raidTrophyGain, raidTierUnlockCost,
-  raidFragments, raidCosmicChance, raidCosmicQty, pickRaidLootType, globalTier,
+  raidFragments, raidCosmicQty, pickRaidLootType, globalTier,
   PAIR_ENRAGE_MULT, NOVA_MULT, RAIDS, RAID_LIST, type ActiveRaid, type RaidId,
 } from './raids'
 import { SETS } from './sets'
@@ -4388,7 +4388,7 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
           ...(def.id === 'nexus' ? { biasResist: DAMAGE_TYPE_LIST[Math.floor(Math.random() * DAMAGE_TYPE_LIST.length)] } : {}),
         }))
       }
-      const cosmic = Math.random() < raidCosmicChance(def, tier) ? raidCosmicQty(def, tier) : 0
+      const cosmic = raidCosmicQty(def, tier) // v0.36 — déterministe (courbe partagée, 0 sous Cosmique/Ch.12)
       const chest: ChestReward = {
         dungeonName: `${def.icon} ${def.name} · Tier ${tier}`,
         level: tier,

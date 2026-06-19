@@ -4,7 +4,7 @@ import type { GemFamily } from './condGems'
 import { dungeonReq } from './resist'
 import { enemyHp, enemyDmg, enemyArmor, lootFarmIlvl, frontierIlvl, CHAPITRE_SIZE } from './progression'
 import { murSoftness } from './enemies'
-import { createCost, contentRarityTier } from './items'
+import { accessibleRarityTier, materialYieldAtChapter } from './items'
 
 /**
  * DONJONS « par RESSOURCE » (refonte v0.17).
@@ -329,32 +329,25 @@ export function dungeonIlvl(level: number, _bestStage = 0): number {
 }
 
 /**
- * RENDEMENT par run (v0.36) — ∝ au NIVEAU du donjon (= tranche du Chapitre N), INDÉPENDANT du record :
- * ancré sur le coût d'un craft à la rareté du contenu de CE niveau → un run ≈ 1/CRAFT_RUNS_TARGET d'un
- * tel craft. Ratios stables, et farmer un BAS niveau trivial ne rapporte plus comme ton record (fini
- * l'exploit). Pour plus de rendement : monter de niveau (= monter en Chapitre).
+ * RENDEMENT par run (v0.36) — ∝ au NIVEAU du donjon (= Chapitre N), INDÉPENDANT du record : ancré sur
+ * le coût d'un craft à la rareté ACCESSIBLE de ce Chapitre (Cache + raids gatés, cf. accessibleRarityTier)
+ * → un run ≈ 1/CRAFT_RUNS_TARGET d'un tel craft. La rareté accessible MONTE avec le Chapitre (raids) au
+ * lieu de plafonner à Artefact → les hauts niveaux rapportent enfin assez de matériaux. Ratios stables,
+ * et farmer un BAS niveau trivial ne rapporte plus comme ton record. Pour plus : monter en Chapitre.
  */
-const CRAFT_RUNS_TARGET = 10      // craft à la rareté du contenu ≈ 10 runs au niveau correspondant
 const GOLD_BUYS_PER_RUN = 3       // l'or = dump marché : ~3 achats par run (généreux)
 /** Part du rendement distribuée PAR COMBAT (le reste tombe dans le coffre de fin). */
 export const DUNGEON_YIELD_PERFIGHT_FRAC = 0.4
 /** Rendement TOTAL d'un run (par-combat + coffre) pour la ressource du donjon, à la tranche du niveau. */
 export function dungeonRunYield(reward: DungeonReward, level: number, _bestStage = 0): number {
-  const ilvl = lootFarmIlvl(level * CHAPITRE_SIZE)
-  const ct = contentRarityTier(level * CHAPITRE_SIZE)
   if (reward === 'gold') {
-    const marketBuy = ilvl * Math.pow(ct, 2.6) * 1.5 // ≈ shopBuyPrice à la tranche (dump d'or)
+    const ilvl = lootFarmIlvl(level * CHAPITRE_SIZE)
+    const marketBuy = ilvl * Math.pow(accessibleRarityTier(level), 2.6) * 1.5 // ≈ shopBuyPrice (dump d'or)
     return Math.max(1, Math.round(marketBuy * GOLD_BUYS_PER_RUN))
   }
-  // Ancre = coût d'un craft à la rareté du contenu (poussière d'étoile : à partir de Légendaire t6).
-  // v0.36 — planchers de tier : les Noyaux n'existent qu'à partir de t4, la Poussière à partir de t6.
-  // Sans ça, la Forge du Noyau lâchait 0 noyau aux bas niveaux (ct=t3). max(plancher, ct) → toujours > 0.
-  const anchor = reward === 'eclats' ? createCost(ct, ilvl, ct).eclats
-    : reward === 'noyau' ? (createCost(Math.max(4, ct), ilvl).noyau ?? 0)
-    : reward === 'poussiere' ? (createCost(Math.max(6, ct), ilvl).poussiere ?? 0)
-    : 0
-  if (anchor <= 0) return 0
-  return Math.max(1, Math.round(anchor / CRAFT_RUNS_TARGET))
+  // Matériaux (éclats / noyaux / poussière) : courbe partagée = coût d'un craft à la rareté accessible ÷ cadence.
+  if (reward === 'eclats' || reward === 'noyau' || reward === 'poussiere') return materialYieldAtChapter(reward, level)
+  return 0
 }
 
 /**
