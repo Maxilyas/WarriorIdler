@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
-import { useGame, bestRaidTier, forgeContractsForDay, CONTRACT_LINGOTS, referenceIlvl } from '../game/store'
+import { useGame, bestRaidTier, forgeContractsForDay, CONTRACT_LINGOTS } from '../game/store'
 import { ITEM_TYPES } from '../game/slots'
 import { PRIMARY_META, SECONDARY_META } from '../game/stats'
 import { currentWeek } from '../game/maitrise'
@@ -8,6 +8,7 @@ import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from '../game/damage'
 import { RARITIES, RARITY_LIST } from '../game/rarities'
 import { maxCraftTier, createCost, contentRarityTier } from '../game/items'
 import { chapitreOf } from '../game/progression'
+import { stageIlvl } from '../game/enemies'
 import type { Item } from '../game/types'
 import { ComparePanel } from './ComparePanel'
 import { QualityStars } from './ItemRow'
@@ -344,7 +345,6 @@ function MetierTree({ metier, alwaysOpen }: { metier: MetierId; alwaysOpen?: boo
 function ForgeronWorkshop() {
   const bestStage = useGame((s) => s.bestStage)
   const raidProgress = useGame((s) => s.raidProgress)
-  const dungeonProgress = useGame((s) => s.dungeonProgress)
   const essence = useGame((s) => s.essence)
   const noyau = useGame((s) => s.noyau)
   const fragments = useGame((s) => s.fragments)
@@ -374,8 +374,8 @@ function ForgeronWorkshop() {
   const tier = RARITY_LIST.find((r) => r.id === rarity)!.tier
   // v0.28 E2 — bonus de création UNIVERSELS (Maître forgeron + Signature) ; plus de corps de métier.
   const forge = forgeBonus(mods)
-  // B1 — la forge crée au niveau de ton meilleur contenu (farm/donjons/raids) + bonus de métier.
-  const ilvl = referenceIlvl(bestStage, raidProgress, dungeonProgress) + forge.ilvlBonus
+  // v0.40.1 — la forge crée au niveau de ton FARM (palier) + bonus de métier (plus les donjons/raids).
+  const ilvl = stageIlvl(Math.max(1, bestStage)) + forge.ilvlBonus
   const activeSignature = signature && forge.signatures?.includes(signature) ? signature : null
   const signCost = activeSignature ? signatureLingotCost(tier) : 0
   const mwReady = forge.masterwork && lastMasterwork < currentWeek()
@@ -531,7 +531,7 @@ function ForgeronWorkshop() {
 
       {/* Récapitulatif + coût */}
       <div className="mt-3 rounded-lg bg-black/30 p-3 text-xs text-slate-400">
-        <div>iLvl de l'objet : <span className="text-slate-200">{ilvl}</span> (au niveau de ton meilleur contenu — farm / donjons / raids{forge.ilvlBonus > 0 ? ` · 🛠️ +${forge.ilvlBonus}` : ''})</div>
+        <div>iLvl de l'objet : <span className="text-slate-200">{ilvl}</span> (au niveau de ton farm — palier {bestStage}{forge.ilvlBonus > 0 ? ` · 🛠️ +${forge.ilvlBonus}` : ''})</div>
         <div className="mt-1 flex flex-wrap items-center gap-3">
           <span>Coût :</span>
           <span className={essence >= cost.eclats ? 'text-cyan-300' : 'text-red-400'}>♦ {cost.eclats}</span>

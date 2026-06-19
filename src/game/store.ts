@@ -6038,8 +6038,9 @@ export const useGame = create<GameState>((set, get) => {
       if (tier > craftCap) return
       // v0.28 E2 — bonus de création UNIVERSELS (Maître forgeron + Signature), plus de corps de métier.
       const forge = forgeBonus(mods)
-      // B1 — la forge crée au niveau de ton meilleur contenu (raids/donjons compris) + bonus de métier.
-      const ilvl = referenceIlvl(s.bestStage, s.raidProgress, s.dungeonProgress) + forge.ilvlBonus
+      // v0.40.1 — la forge crée au niveau de ton FARM (palier) + bonus de métier — PLUS les donjons/raids,
+      // qui faisaient sauter l'ilvl bien au-dessus du farm (ex. donjon nv 8 / raid T4 = ilvl 105 à palier 50).
+      const ilvl = stageIlvl(Math.max(1, s.bestStage)) + forge.ilvlBonus
       // 🏆 Chef-d'œuvre (étage V) : 1/semaine, +1 cran GARANTI (capé), châsse garantie, coût ×1,5 + Lingots.
       const week = currentWeek()
       const masterwork = !!opts.masterwork
