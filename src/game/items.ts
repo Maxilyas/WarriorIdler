@@ -327,6 +327,18 @@ export function contentRarityTier(bestStage: number, bestRaidTier = 0): number {
 }
 
 /**
+ * v0.40.4 — RARETÉ DÉBLOQUÉE du compte = la plus haute rareté POTENTIELLE (palier / donjon / raid).
+ * Ancre des COFFRES du marché : leur fenêtre = [Rmax−4 → Rmax], pic au plancher (dump d'or). Dès le
+ * Chapitre 1 la Cache du Pilleur donne de l'Artefact → plancher Artefact(7) ; les raids montent ensuite
+ * le plafond : T1-T2 Céleste(11) · T3-T4 Éternel(12) · T5-T6 Cosmique(13) · T7+ Abyssal(14). Séparée
+ * de contentRarityTier (ancre craft/over-content) à dessein : les deux systèmes ne se couplent pas.
+ */
+export function unlockedRarityTier(bestRaidTier = 0): number {
+  const raidReach = bestRaidTier > 0 ? Math.min(14, 11 + Math.floor((bestRaidTier - 1) / 2)) : 0
+  return Math.max(7, raidReach)
+}
+
+/**
  * v0.36 — RARETÉ ACCESSIBLE à un CHAPITRE donné (Cache plafond Artefact + raid GATÉ au Chapitre).
  * Reproduit la table validée par le joueur : Cache→Artefact sur les chapitres tuto, puis les raids
  * (T1 au mur du Ch.5, T(c−4) au mur du Ch.c) montent la rareté — +1/tier jusqu'à Céleste, puis +1

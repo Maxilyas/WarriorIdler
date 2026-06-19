@@ -16,9 +16,9 @@ import { getUpgrade, upgradeCost as accountUpgradeCost, upgradePoussiere, upgrad
 import { achievementBonuses, evaluateNewAchievements, fullyEquippedMinIlvl, getAchievement, type AchvCtx } from './achievements'
 import { cosmeticCost } from './avatar'
 import {
-  generateItem, rollBoxRarity, rollWindowRarity, rollFarmRarity, sellValue, recycleValue, recyclePoussiere, itemScore,
+  generateItem, rollWindowRarity, rollFarmRarity, sellValue, recycleValue, recyclePoussiere, itemScore,
   reforgeItem, surillvlItem, ascendItem,
-  reforgeCost, surillvlCost, ascendCost, createCost, transmuteCost, maxCraftTier, craftRaidGate, contentRarityTier,
+  reforgeCost, surillvlCost, ascendCost, createCost, transmuteCost, maxCraftTier, craftRaidGate, contentRarityTier, unlockedRarityTier,
   SURILLVL_OVER_MARGIN,
   enhanceTypedAffixes, quintRefund, relicFromItem,
 } from './items'
@@ -2242,9 +2242,11 @@ export interface MysteryBox {
   icon: string
   gold: number
   count: number
-  /** Fourchette de rareté des objets (distribution pondérée + jackpot). */
-  minTier: number
-  maxTier: number
+  // v0.40.4 — la rareté n'est PLUS figée par coffre : elle suit la rareté DÉBLOQUÉE du compte
+  // (unlockedRarityTier → fenêtre [top−4 → top]). `priceTier` ne sert qu'au POIDS DE PRIX (boxGoldPrice).
+  priceTier: number
+  /** Forme « premium » (Cosmique/Néant) : traîne haute moins raide → ~6% de rareté débloquée (vs ~1.7%). */
+  richTail?: boolean
   jackpot: number
   /** Cible un type d'objet précis. */
   type?: ItemType
@@ -2310,33 +2312,43 @@ const BOX_ACCESSORIES: ItemType[] = ['anneau', 'bijou', 'cou']
  * un objet utile (ta stat) + des éclats → ils ne sont plus jamais « gâchés ».
  * id = index dans le tableau (utilisé par l'action mysteryBox).
  */
+// v0.40.4 — la RARETÉ de TOUS les coffres suit désormais la rareté DÉBLOQUÉE du compte (unlockedRarityTier,
+// fenêtre [top−4 → top], pic au plancher = dump d'or). Les coffres ne diffèrent plus que par leur EFFET,
+// leur count (2-4), leur `priceTier` (poids de prix) et `richTail` (forme premium). `maxTier` et le verrou
+// de raid (boxRaidGate) ont disparu : on ne peut de toute façon pas dropper au-dessus de ce qu'on a débloqué.
 export const MYSTERY_BOXES: MysteryBox[] = [
   // --- Coffres de BUILD : bon marché, stat primaire GARANTIE + éclats → toujours utiles ---
-  { id: 0, name: 'Coffre du Guerrier', icon: '🗡️', gold: 400, count: 2, minTier: 3, maxTier: 6, jackpot: 0.03, primary: 'force', eclats: 80, desc: 'FORCE garantie sur chaque objet (+ éclats). Rare → Légendaire.' },
-  { id: 1, name: 'Coffre du Rôdeur', icon: '🏹', gold: 400, count: 2, minTier: 3, maxTier: 6, jackpot: 0.03, primary: 'agilite', eclats: 80, desc: 'AGILITÉ garantie sur chaque objet (+ éclats). Rare → Légendaire.' },
-  { id: 2, name: 'Coffre du Mage', icon: '🔮', gold: 400, count: 2, minTier: 3, maxTier: 6, jackpot: 0.03, primary: 'intelligence', eclats: 80, desc: 'INTELLIGENCE garantie sur chaque objet (+ éclats). Rare → Légendaire.' },
+  { id: 0, name: 'Coffre du Guerrier', icon: '🗡️', gold: 400, count: 2, priceTier: 3, jackpot: 0.03, primary: 'force', eclats: 80, desc: 'FORCE garantie sur chaque objet (+ éclats).' },
+  { id: 1, name: 'Coffre du Rôdeur', icon: '🏹', gold: 400, count: 2, priceTier: 3, jackpot: 0.03, primary: 'agilite', eclats: 80, desc: 'AGILITÉ garantie sur chaque objet (+ éclats).' },
+  { id: 2, name: 'Coffre du Mage', icon: '🔮', gold: 400, count: 2, priceTier: 3, jackpot: 0.03, primary: 'intelligence', eclats: 80, desc: 'INTELLIGENCE garantie sur chaque objet (+ éclats).' },
   // --- Coffres de SLOT : combler un emplacement précis ---
-  { id: 3, name: 'Arsenal', icon: '⚔️', gold: 45000, count: 2, minTier: 5, maxTier: 9, jackpot: 0.05, types: BOX_WEAPONS, desc: 'ARMES & boucliers uniquement. Épique → Mythique.' },
-  { id: 4, name: 'Armurerie', icon: '🥋', gold: 45000, count: 3, minTier: 5, maxTier: 9, jackpot: 0.05, types: BOX_ARMOR, desc: 'PIÈCES D\'ARMURE uniquement. Épique → Mythique.' },
-  { id: 5, name: 'Joaillier', icon: '💍', gold: 45000, count: 3, minTier: 5, maxTier: 9, jackpot: 0.05, types: BOX_ACCESSORIES, desc: 'BIJOUX (anneaux, talismans, colliers). Épique → Mythique.' },
+  { id: 3, name: 'Arsenal', icon: '⚔️', gold: 45000, count: 2, priceTier: 5, jackpot: 0.05, types: BOX_WEAPONS, desc: 'ARMES & boucliers uniquement.' },
+  { id: 4, name: 'Armurerie', icon: '🥋', gold: 45000, count: 3, priceTier: 5, jackpot: 0.05, types: BOX_ARMOR, desc: 'PIÈCES D\'ARMURE uniquement.' },
+  { id: 5, name: 'Joaillier', icon: '💍', gold: 45000, count: 3, priceTier: 5, jackpot: 0.05, types: BOX_ACCESSORIES, desc: 'BIJOUX (anneaux, talismans, colliers).' },
   // --- Coffres à AFFIXE / DÉFENSE : stats garanties ---
-  { id: 6, name: 'Coffre du Critique', icon: '🎯', gold: 120000, count: 3, minTier: 6, maxTier: 10, jackpot: 0.06, guaranteeAffix: 'degatsCrit', eclats: 500, desc: 'Ligne de Dégâts critiques GARANTIE sur chaque objet. Légendaire → Ascendant.' },
-  { id: 7, name: 'Coffre du Gardien', icon: '🛡️', gold: 120000, count: 3, minTier: 6, maxTier: 10, jackpot: 0.06, biasResist: true, desc: 'Stuff défensif : résistances garanties. Légendaire → Ascendant.' },
+  { id: 6, name: 'Coffre du Critique', icon: '🎯', gold: 120000, count: 3, priceTier: 6, jackpot: 0.06, guaranteeAffix: 'degatsCrit', eclats: 500, desc: 'Ligne de Dégâts critiques GARANTIE sur chaque objet.' },
+  { id: 7, name: 'Coffre du Gardien', icon: '🛡️', gold: 120000, count: 3, priceTier: 6, jackpot: 0.06, biasResist: true, desc: 'Stuff défensif : résistances garanties.' },
   // --- Matériaux & haut de gamme ---
-  { id: 8, name: 'Coffre du forgeron', icon: '🔨', gold: 400000, count: 1, minTier: 7, maxTier: 11, jackpot: 0.05, eclats: 3000, noyau: 12, poussiere: 8, desc: 'Matériaux de craft en MASSE (atelier/forge) + 1 objet.' },
-  { id: 9, name: 'Coffre légendaire', icon: '🟠', gold: 800000, count: 4, minTier: 8, maxTier: 12, jackpot: 0.07, eclats: 1500, noyau: 5, poussiere: 3, costFragments: 2, desc: 'Mythique → Éternel. Exige des Fragments de raid.' },
-  { id: 10, name: 'Coffre cosmique', icon: '🌟', gold: 2500000, count: 5, minTier: 10, maxTier: 14, jackpot: 0.09, guaranteeUnique: true, eclats: 4000, noyau: 10, poussiere: 12, fragments: 2, costFragments: 6, desc: 'Ascendant → Abyssal, 1 unique garanti. Exige des Fragments.' },
-  { id: 11, name: 'Coffre du Néant', icon: '🕳️', gold: 10000000, count: 6, minTier: 12, maxTier: 16, jackpot: 0.13, guaranteeUnique: true, eclats: 10000, noyau: 25, poussiere: 35, fragments: 8, costFragments: 18, costCosmic: 3, desc: 'Le pari ultime : exige Fragments ✨ ET Éclats cosmiques 💫 (donc des raids).' },
+  { id: 8, name: 'Coffre du forgeron', icon: '🔨', gold: 400000, count: 2, priceTier: 7, jackpot: 0.05, eclats: 3000, noyau: 12, poussiere: 8, desc: 'Matériaux de craft en MASSE (atelier/forge) + objets.' },
+  { id: 9, name: 'Coffre légendaire', icon: '🟠', gold: 800000, count: 4, priceTier: 8, jackpot: 0.07, eclats: 1500, noyau: 5, poussiere: 3, costFragments: 2, desc: 'Gros lot d\'objets. Exige des Fragments de raid.' },
+  { id: 10, name: 'Coffre cosmique', icon: '🌟', gold: 2500000, count: 4, priceTier: 10, jackpot: 0.09, richTail: true, guaranteeUnique: true, eclats: 4000, noyau: 10, poussiere: 12, fragments: 2, costFragments: 6, desc: 'Hautes raretés plus généreuses + 1 unique garanti. Exige des Fragments.' },
+  { id: 11, name: 'Coffre du Néant', icon: '🕳️', gold: 10000000, count: 4, priceTier: 12, jackpot: 0.13, richTail: true, guaranteeUnique: true, eclats: 10000, noyau: 25, poussiere: 35, fragments: 8, costFragments: 18, costCosmic: 3, desc: 'Le pari ultime : hautes raretés généreuses + unique garanti. Exige Fragments ✨ ET Éclats cosmiques 💫.' },
   // --- Nouveautés v0.23 (les ids sont des INDEX : on n'insère jamais, on AJOUTE) ---
-  { id: 12, name: 'Coffre du Jour', icon: '🗓️', gold: 0, free: true, count: 1, minTier: 4, maxTier: 8, jackpot: 0.06, eclats: 150, desc: 'GRATUIT toutes les 22 h. Un objet (Rare → Patrimoine) + des éclats. Reviens demain !' },
-  { id: 13, name: 'Coffre Maudit', icon: '🎲', gold: 60000, count: 2, minTier: 6, maxTier: 10, jackpot: 0.08, cursed: true, desc: '75% : contenu DOUBLÉ (4 objets). 25% : la malédiction ne laisse qu\'un objet Commun.' },
-  { id: 14, name: 'Coffre élémentaire', icon: '🔥', gold: 35000, count: 2, minTier: 5, maxTier: 9, jackpot: 0.05, elementPick: true, desc: 'Choisis un ÉLÉMENT : ligne « +% dégâts du type » garantie sur chaque objet (armes typées).' },
-  { id: 15, name: 'Trousseau du Pilleur', icon: '🗝️', gold: 70000, count: 0, minTier: 1, maxTier: 1, jackpot: 0, sceaux: 5, orbes: 2, desc: '5 Sceaux 🔑 + 2 Orbes 🔮 d\'un coup — moins cher qu\'à l\'unité.' },
-  { id: 16, name: 'Coffre du Lapidaire', icon: '💎', gold: 90000, count: 0, minTier: 1, maxTier: 1, jackpot: 0, gemDust: 220, gemChance: 0.45, desc: 'Poussière de gemme 🔹 (scalée sur ton record) + 45% de gemme de condition.' },
-  { id: 17, name: 'Coffre du Destin', icon: '🎭', gold: 120000, count: 3, minTier: 6, maxTier: 11, jackpot: 0.07, choice: true, desc: 'Révèle 3 objets : tu n\'en GARDES qu\'UN, les deux autres sont recyclés en éclats.' },
-  { id: 18, name: 'Coffre du Maillon Faible', icon: '🧩', gold: 150000, count: 2, minTier: 7, maxTier: 11, jackpot: 0.06, weakest: true, desc: 'Analyse ton équipement et cible ton EMPLACEMENT le plus faible (vide ou en retard).' },
-  { id: 19, name: 'Coffre du Collectionneur', icon: '📖', gold: 300000, count: 1, minTier: 8, maxTier: 12, jackpot: 0.06, collector: true, costFragments: 3, desc: 'Un objet portant un effet unique JAMAIS DÉCOUVERT — complète le Grimoire.' },
+  { id: 12, name: 'Coffre du Jour', icon: '🗓️', gold: 0, free: true, count: 2, priceTier: 4, jackpot: 0.06, eclats: 150, desc: 'GRATUIT toutes les 22 h. Des objets + des éclats. Reviens demain !' },
+  { id: 13, name: 'Coffre Maudit', icon: '🎲', gold: 60000, count: 2, priceTier: 6, jackpot: 0.08, cursed: true, desc: '75% : contenu DOUBLÉ. 25% : la malédiction ne laisse qu\'un objet Commun.' },
+  { id: 14, name: 'Coffre élémentaire', icon: '🔥', gold: 35000, count: 2, priceTier: 5, jackpot: 0.05, elementPick: true, desc: 'Choisis un ÉLÉMENT : ligne « +% dégâts du type » garantie (armes typées).' },
+  { id: 15, name: 'Trousseau du Pilleur', icon: '🗝️', gold: 70000, count: 0, priceTier: 1, jackpot: 0, sceaux: 5, orbes: 2, desc: '5 Sceaux 🔑 + 2 Orbes 🔮 d\'un coup — moins cher qu\'à l\'unité.' },
+  { id: 16, name: 'Coffre du Lapidaire', icon: '💎', gold: 90000, count: 0, priceTier: 1, jackpot: 0, gemDust: 220, gemChance: 0.45, desc: 'Poussière de gemme 🔹 (scalée sur ton record) + 45% de gemme de condition.' },
+  { id: 17, name: 'Coffre du Destin', icon: '🎭', gold: 120000, count: 3, priceTier: 6, jackpot: 0.07, choice: true, desc: 'Révèle 3 objets : tu n\'en GARDES qu\'UN, les deux autres sont recyclés en éclats.' },
+  { id: 18, name: 'Coffre du Maillon Faible', icon: '🧩', gold: 150000, count: 2, priceTier: 7, jackpot: 0.06, weakest: true, desc: 'Analyse ton équipement et cible ton EMPLACEMENT le plus faible (vide ou en retard).' },
+  { id: 19, name: 'Coffre du Collectionneur', icon: '📖', gold: 300000, count: 2, priceTier: 8, jackpot: 0.06, collector: true, costFragments: 3, desc: 'Des objets dont un porte un effet unique JAMAIS DÉCOUVERT — complète le Grimoire.' },
+  // v0.40.4 — le DUMP D'OR générique : pas d'effet, juste des objets à la rareté DÉBLOQUÉE de ton chapitre.
+  { id: 20, name: 'Coffre du Chapitre', icon: '📦', gold: 50000, count: 3, priceTier: 6, jackpot: 0.05, desc: 'Objets à la rareté débloquée de ton chapitre (donjons/raids compris). Le dump d\'or polyvalent.' },
 ]
+
+// v0.40.4 — formes de tirage de rareté des coffres (rollWindowRarity, pic au PLANCHER → dump d'or).
+const BOX_DUMP_SHAPE = { shoulder: 0.45, tail: 0.40 } // standard : rareté débloquée (sommet) ~1,7%
+const BOX_RICH_SHAPE = { shoulder: 0.70, tail: 0.60 } // premium (richTail / jackpot) : sommet ~6%
 
 /**
  * v0.25 — PRIX EN OR d'un coffre de stuff. Suit (a) la rareté ET (b) ton revenu d'or (record) :
@@ -2350,14 +2362,11 @@ const BOX_PRICE_RARITY = 2.5  // ×prix par cran de rareté moyenne (raide : « 
 const BOX_PRICE_STAGE = 1.06  // ×prix par palier de record (< revenu d'or → rentable sur le temps)
 export function boxGoldPrice(box: MysteryBox, bestStage: number): number {
   if (box.free || box.count <= 0) return box.gold
-  const tMoy = box.minTier + 1.5
+  // v0.40.4 — `priceTier` = poids de prix par coffre (ex-minTier) ; le palier indexe via BOX_PRICE_STAGE.
+  const tMoy = box.priceTier + 1.5
   return Math.round(BOX_PRICE_K * box.count * Math.pow(BOX_PRICE_RARITY, tMoy - 3) * Math.pow(BOX_PRICE_STAGE, Math.max(1, bestStage)))
 }
 
-/** v0.25 — VERROU rareté×raids : meilleur tier de raid requis pour acheter (Céleste+ = raid only). */
-export function boxRaidGate(box: MysteryBox): number {
-  return Math.max(0, box.maxTier - 10) // maxTier 11→1 · 12→2 · 14→4 · 16→6
-}
 /** Meilleur tier de raid atteint, tous raids confondus. */
 export function bestRaidTier(raidProgress: Record<string, number>): number {
   let best = 0
@@ -7156,8 +7165,6 @@ export const useGame = create<GameState>((set, get) => {
       if (box.elementPick && !opts.element) return
       // Achat en gros : ×5 d'un coup → -10% d'or. (Pas de gros sur le gratuit / le Destin.)
       const qty = box.free || box.choice ? 1 : Math.max(1, Math.min(BOX_BULK_QTY, Math.round(opts.qty ?? 1)))
-      // v0.25 : verrou rareté×raids — les hautes raretés exigent d'avoir raidé (Céleste+ = raid only).
-      if (bestRaidTier(s.raidProgress) < boxRaidGate(box)) return
       const goldCost = Math.round(boxGoldPrice(box, s.bestStage) * qty * (qty >= BOX_BULK_QTY ? BOX_BULK_DISCOUNT : 1))
       const fragCost = (box.costFragments ?? 0) * qty
       const cosmicCost = (box.costCosmic ?? 0) * qty
@@ -7170,11 +7177,16 @@ export const useGame = create<GameState>((set, get) => {
       let jackpotHit = false
       // Maillon Faible : cible l'emplacement le plus FAIBLE (vide ou au score le plus bas) du perso actif.
       const weakType = box.weakest ? weakestSlotType(s.characters[s.activeChar] ?? s.characters[0]) : undefined
+      // v0.40.4 — fenêtre de rareté = rareté DÉBLOQUÉE du compte (palier/donjon/raid), pic au plancher.
+      const rTop = unlockedRarityTier(bestRaidTier(s.raidProgress))
+      const rFloor = Math.max(1, rTop - 4)
 
       const rollOne = (): Item => {
         const proc = box.jackpot > 0 && Math.random() < Math.min(0.95, box.jackpot + pityBonus)
         if (proc) jackpotHit = true
-        const rarity = rollBoxRarity(box.minTier, box.maxTier, proc ? 1 : 0)
+        // Standard : forme « dump » (sommet ~1,7%). Premium (richTail) ou jackpot : forme riche (~6%).
+        const shape = box.richTail || proc ? BOX_RICH_SHAPE : BOX_DUMP_SHAPE
+        const rarity = rollWindowRarity(rFloor, rFloor, rTop, shape)
         const type = weakType ?? box.type ?? (box.types ? box.types[Math.floor(Math.random() * box.types.length)] : undefined)
         return generateItem({
           ilvl, rarity, primaryBias: pickBias(s.characters),

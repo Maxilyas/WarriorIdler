@@ -2,9 +2,10 @@ import { useState } from 'react'
 import {
   useGame, MYSTERY_BOXES, FREE_BOX_COOLDOWN_MS,
   BOX_BULK_QTY, BOX_BULK_DISCOUNT, BOX_PITY_STEP, BOX_PITY_CAP,
-  boxGoldPrice, boxRaidGate, bestRaidTier,
+  boxGoldPrice, bestRaidTier,
   RECRUIT_COST, RECRUIT_POUSSIERE, type MysteryBox,
 } from '../game/store'
+import { unlockedRarityTier } from '../game/items'
 import { UPGRADES, UPGRADE_CATEGORIES, upgradeCost, upgradePoussiere, upgradeEclats, isMaxed, type UpgradeCategory } from '../game/upgrades'
 import { CONTRACTS, MAITRISE_NODES, MAITRISE_TOTAL_POINTS, conseilFresh, weekRemainingMs } from '../game/maitrise'
 import { RAID_UNLOCK_STAGE } from '../game/raids'
@@ -301,22 +302,6 @@ function BoxCard({ box: b, gold, fragments, cosmic, qty, bestStage, raidTier, la
       </div>
     )
   }
-  // v0.25 — VERROU rareté×raids : les hautes raretés exigent d'avoir vaincu un tier de raid (Céleste+
-  // = raid only). On NE PEUT PAS acheter la fin de partie au marché sans raider.
-  const raidGate = boxRaidGate(b)
-  if (raidTier < raidGate) {
-    return (
-      <div className="flex items-center gap-2 rounded-lg border border-rose-900/40 bg-rose-950/10 p-2 opacity-70">
-        <span className="text-2xl grayscale">☠️</span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-[12px] font-semibold text-slate-400">{b.icon} {b.name}</span>
-          <span className="block text-[9px] text-rose-300/80">
-            🔒 Exige un <b>tier de raid ≥ {raidGate}</b> (record actuel {raidTier}) — la haute rareté se mérite en raid.
-          </span>
-        </span>
-      </div>
-    )
-  }
   // Gratuit / Destin : toujours à l'unité. Les autres profitent de l'achat en gros (-10% à ×5).
   const effQty = b.free || b.choice ? 1 : qty
   const goldCost = Math.round(boxGoldPrice(b, bestStage) * effQty * (effQty >= BOX_BULK_QTY ? BOX_BULK_DISCOUNT : 1))
@@ -324,8 +309,10 @@ function BoxCard({ box: b, gold, fragments, cosmic, qty, bestStage, raidTier, la
   const cosmicCost = (b.costCosmic ?? 0) * effQty
   const cooldownLeft = b.free ? Math.max(0, FREE_BOX_COOLDOWN_MS - (Date.now() - lastFreeBox)) : 0
   const affordable = gold >= goldCost && fragments >= fragCost && cosmic >= cosmicCost && cooldownLeft === 0
-  const minName = RARITY_LIST.find((r) => r.tier === b.minTier)
-  const maxName = RARITY_LIST.find((r) => r.tier === b.maxTier)
+  // v0.40.4 — fenêtre dynamique = rareté DÉBLOQUÉE du compte (palier/donjon/raid), pic au plancher.
+  const rTop = unlockedRarityTier(raidTier)
+  const minName = RARITY_LIST.find((r) => r.tier === Math.max(1, rTop - 4))
+  const maxName = RARITY_LIST.find((r) => r.tier === rTop)
   const tag = boxTag(b)
   return (
     <button
