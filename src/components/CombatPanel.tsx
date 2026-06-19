@@ -480,7 +480,7 @@ export function CombatPanel() {
                 <span key={type}>
                   <span style={{ color: m.color }}>{m.icon} {m.name}</span>{' '}
                   <span className={resist ? 'text-red-400' : 'text-emerald-400'}>
-                    {resist ? `résiste +${Math.round(shown * 100)}%` : `vulnérable ${Math.round(shown * 100)}%`}
+                    {resist ? `résiste +${Math.round(shown * 100)}%` : `vulnérable ${Math.round(Math.abs(shown) * 100)}%`}
                   </span>
                 </span>
               )

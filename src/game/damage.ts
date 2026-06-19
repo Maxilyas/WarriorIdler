@@ -23,6 +23,22 @@ export const DAMAGE_TYPES: Record<DamageType, DamageTypeMeta> = {
 export const DAMAGE_TYPE_LIST: DamageType[] = Object.keys(DAMAGE_TYPES) as DamageType[]
 
 /**
+ * v0.37 « Triangle d'élément » — chaque élément/biome RÉSISTE son propre élément et est VULNÉRABLE à
+ * son opposé. Paires mutuelles (feu↔froid, foudre↔nature, arcane↔ombre) → rock-paper-scissors lisible.
+ * Le Physique est NEUTRE (jamais bonus ni malus élémentaire ; il reste contré par l'armure). Donne du
+ * sens à matcher l'élément de tes sorts AU CONTENU, et fait du multi-classe un levier (amène le contre).
+ */
+export const ELEMENT_COUNTER: Partial<Record<DamageType, DamageType>> = {
+  feu: 'froid', froid: 'feu',
+  foudre: 'nature', nature: 'foudre',
+  arcane: 'ombre', ombre: 'arcane',
+}
+/** Surcroît de résistance d'un ennemi sur SON propre élément (points, additif à la rampe). Knob. */
+export const ELEM_SELF_RESIST = 0.15
+/** Vulnérabilité d'un ennemi à l'élément OPPOSÉ (points retranchés ; résist <0 = vrai bonus). Knob. */
+export const ELEM_VULN = 0.20
+
+/**
  * v0.24 : la résistance du héros est en POINTS, NON PLAFONNÉE (modèle relatif — voir resist.ts).
  * L'ancien cap dur de 75 % est supprimé ; 1 ancien % = 1 point.
  */
