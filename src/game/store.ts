@@ -89,7 +89,7 @@ import {
 import {
   generateRaid, makeRaidAdd, raidMaxAdds, getRaidDef, raidUnlocked, raidBossVariant,
   raidIlvl, raidRarityWindow, rollRaidLootCount, raidTrophyGain, raidTierUnlockCost,
-  raidFragments, raidCosmicQty, pickRaidLootType, globalTier,
+  raidFragments, raidCosmicQty, raidTierCap, pickRaidLootType, globalTier,
   PAIR_ENRAGE_MULT, NOVA_MULT, RAIDS, RAID_LIST, type ActiveRaid, type RaidId,
 } from './raids'
 import { SETS } from './sets'
@@ -2361,7 +2361,12 @@ export function tutContext(s: {
 }
 
 export function maxContentIlvl(bestStage: number, raidProgress: Record<string, number>): number {
-  let best = Math.round(stageIlvl(Math.max(1, bestStage)) * 1.25)
+  // v0.36 — FIX : plus de ×1.25 (relique v0.25, quand les donjons donnaient 125% du record). Comme
+  // `stageIlvl` est désormais CAPÉ à 200, le ×1.25 gonflait le plafond à 250 → on pouvait surilvl un
+  // objet 200 jusqu'à ~256 SANS l'Abîme. Le plafond = le MEILLEUR ilvl réellement atteignable (farm
+  // capé 200 + raids vaincus, dont l'Abîme à 220/240) ; le surilvl ne perce que d'une MARGE fixe
+  // (SURILLVL_OVER_MARGIN) au-dessus → pour dépasser 200, il FAUT clear l'Abîme.
+  let best = stageIlvl(Math.max(1, bestStage))
   for (const def of RAID_LIST) {
     const t = raidProgress[def.id] ?? 0
     if (t >= 1) best = Math.max(best, raidIlvl(def, t, bestStage))
@@ -4370,7 +4375,11 @@ function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
       const bias = pickBias(s.characters)
       const items: Item[] = []
       for (let i = 0; i < count; i++) {
-        const rarity = rollWindowRarity(w.floor, w.peak, w.cap)
+        // v0.36 — Abîme : traîne plus épaisse (tail 0.25→0.40) → Primordial/Transcendant tombent « un peu
+        // plus » qu'aux raids de base (même fenêtre, cap Transcendant), sans en faire le gros du butin.
+        const rarity = def.id === 'abysse'
+          ? rollWindowRarity(w.floor, w.peak, w.cap, { tail: 0.40 })
+          : rollWindowRarity(w.floor, w.peak, w.cap)
         // L'Abîme : ~30% des objets sont des pièces de la RÉGALIA DU NÉANT (set exclusif).
         if (def.id === 'abysse' && Math.random() < 0.3) {
           const sd = SETS.neant
@@ -6369,6 +6378,8 @@ export const useGame = create<GameState>((set, get) => {
       const def = getRaidDef(raidId)
       if (!def) return
       const cur = s.raidTierUnlocked[raidId] ?? 1
+      // v0.36 — cap de tiers par raid (l'Abîme s'arrête à 2). Au-delà, plus de déblocage.
+      if (cur + 1 > raidTierCap(def)) return
       // Il faut avoir VAINCU la frontière actuelle (le mur se franchit, il ne s'achète pas seul)…
       if ((s.raidProgress[raidId] ?? 0) < cur) return
       // …et payer les Trophées du raid (≈ 5 clears du tier courant).

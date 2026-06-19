@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useGame } from '../game/store'
 import {
   RAID_LIST, RAID_UNLOCK_STAGE, RAID_MECHANIC_META, getRaidDef, raidUnlocked,
-  raidBossVariant, raidIlvl, raidBerserkTime, raidFragments, raidCosmicQty,
+  raidBossVariant, raidIlvl, raidBerserkTime, raidFragments, raidCosmicQty, raidTierCap,
   raidMinTier, raidMaxTier, raidReqs, raidTierUnlockCost, recommendedDps, recommendedEhp, raidPartyHpMult, type RaidDef,
 } from '../game/raids'
 import { charDps, charMaxHp, charResist } from '../game/character'
@@ -314,7 +314,7 @@ function RaidCard({ def, unlocked, progress, cleared, maxTier, trophies, bestSta
       <RarityRange def={def} tier={t} />
 
       {/* 🏆 Passage de tier : chaque tier est un MUR — clear de la frontière + Trophées du raid */}
-      {maxTier < 10 && (
+      {maxTier < raidTierCap(def) && (
         <div className="mt-1.5 flex items-center gap-1.5 rounded-lg border border-amber-800/40 bg-amber-950/15 px-2 py-1.5">
           <span className="min-w-0 flex-1 text-[9.5px] leading-snug text-slate-400">
             {frontierCleared

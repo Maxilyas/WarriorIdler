@@ -115,13 +115,12 @@ export const RAIDS: Record<RaidId, RaidDef> = {
     id: 'abysse', name: 'L\'Abîme Primordial', icon: '🕳️', color: '#8a2be2',
     lore: 'Le gouffre d\'où tout est né et où tout retourne. Les horreurs y chassent PAR PAIRES : abats l\'une, l\'autre entre en furie. Seul endroit au monde où tombe la Régalia du Néant.',
     lootTypes: ['tete', 'epaules', 'torse', 'jambes', 'mains', 'taille', 'pieds', 'poignets', 'cape', 'cou', 'anneau', 'bijou', 'armePrincipale', 'armeSecondaire'], lootLabel: 'Tout + set Régalia du Néant',
-    // v0.23 : l'Abîme était EXTRÊMEMENT overtuné (ancré au palier 100 → des milliards de PV au T1).
-    // Il reste verrouillé derrière le palier 100, mais sa DIFFICULTÉ est ancrée au palier 70 :
-    // son Tier 1 ≈ un Tier 6 du Nexus, puis il scale au même pas (+4 paliers/tier).
-    // v0.27 : accès = T7 sur les 4 raids de base (palier 100 RETIRÉ). tierOffset +6 ⇒ son T1 calcule
-    // récompenses & checks comme un Tier 7 MONDIAL ; difficulté inchangée (anchorStage 70).
+    // v0.36 : l'Abîme = ENDGAME pur, verrouillé derrière les 4 raids de base TOUS au Tier 10. Réduit à
+    // 2 TIERS (cf. raidTierCap) dont le SEUL but est l'équipement : T1 lâche de l'ilvl 220, T2 de l'ilvl
+    // 240 (au-dessus du cap 200 du contenu de base). Difficulté CALÉE sur son loot (raidDifficultyIlvl
+    // spécial-casé) → un vrai cran au-dessus du T10 de base (186). tierOffset +6 (récompenses/checks).
     unlockStage: 50, anchorStage: 70, tierOffset: 6,
-    requiresAllTier: { raids: ['forge', 'reliquaire', 'citadelle', 'nexus'], tier: 7 },
+    requiresAllTier: { raids: ['forge', 'reliquaire', 'citadelle', 'nexus'], tier: 10 },
     baseDifficulty: 1.9, signature: ['berserk', 'nova'], element: 'rotating', orbeCost: 3,
   },
 }
@@ -253,9 +252,9 @@ export function raidAnchorPalier(globalTierN: number): number {
  * palier ancre (lootFarmIlvl) → un joueur calé sur ce palier livre un TTK ~40 s ; un sur-palier out-gear.
  */
 export function raidIlvl(def: RaidDef, tier: number, _bestStage = 0): number {
-  // v0.36 — l'Abîme (endgame) est la SEULE source d'ilvl > base : un poil au-dessus de 200, le grind
-  // ultime (T1 = 204 … plafonné à ILVL_CAP_ENDGAME = 240). Les futurs raids endgame suivront ce patron.
-  if (def.id === 'abysse') return Math.min(ILVL_CAP_ENDGAME, ILVL_CAP_BASE + tier * 4)
+  // v0.36 — l'Abîme (endgame, 2 tiers) est la SEULE source d'ilvl > base : T1 = 220, T2 = 240
+  // (= ILVL_CAP_ENDGAME). C'est SON intérêt : l'équipement au-dessus du cap 200 du contenu de base.
+  if (def.id === 'abysse') return Math.min(ILVL_CAP_ENDGAME, ILVL_CAP_BASE + tier * 20)
   // Base raids : ancrés sur le Chapitre gaté (lootFarmIlvl est déjà capé à ILVL_CAP_BASE = 200).
   return clampIlvl(lootFarmIlvl(Math.round(raidAnchorPalier(globalTier(def, tier)))))
 }
@@ -266,6 +265,9 @@ export function raidIlvl(def: RaidDef, tier: number, _bestStage = 0): number {
  * reste capé (200 base / 240 Abîme) ; seule la DIFFICULTÉ continue de grimper. Corrige le plateau de PV.
  */
 export function raidDifficultyIlvl(def: RaidDef, tier: number): number {
+  // v0.36 — l'Abîme se BAT à l'ilvl qu'il LÂCHE (220/240) : un vrai cran au-dessus du T10 de base (≈186),
+  // cohérent avec son gate (les 4 raids de base à T10). Tu pousses à 220 pour gagner du 220, puis 240.
+  if (def.id === 'abysse') return raidIlvl(def, tier)
   const stage = Math.round(raidAnchorPalier(globalTier(def, tier)))
   return clampIlvl(Math.round(frontierIlvl(stage) - lagAt(chapitreOf(stage))))
 }
@@ -282,6 +284,10 @@ const RAID_WINDOW_FLOOR = [4, 4, 4, 5, 5, 5, 5, 6, 6, 6]   // T1..T10 : Rare →
 const RAID_WINDOW_CAP = [11, 11, 12, 12, 13, 13, 14, 14, 15, 16] // T1..T10 : Céleste → Transcendant (jackpots)
 
 export function raidRarityWindow(def: RaidDef, tier: number): { floor: number; peak: number; cap: number } {
+  // v0.36 — Abîme : fenêtre = équivalent du raid T10 mondial (floor Légendaire, cap Transcendant),
+  // IDENTIQUE aux 2 tiers. L'AVANTAGE Primordial/Transcendant vient d'une traîne plus épaisse au roll
+  // (cf. store.ts, opt `tail` relevée pour l'abysse) — pas d'un décalage de fenêtre.
+  if (def.id === 'abysse') return { floor: 6, peak: 8, cap: 16 }
   const i = Math.max(0, Math.min(RAID_WINDOW_FLOOR.length - 1, globalTier(def, tier) - 1))
   const floor = RAID_WINDOW_FLOOR[i]
   return { floor, peak: floor + 2, cap: RAID_WINDOW_CAP[i] }
@@ -335,14 +341,26 @@ function raidMatChapter(def: RaidDef, tier: number): number {
   return globalTier(def, tier) + 4
 }
 
+// L'Abîme (endgame, 2 tiers) : matériaux ANCRÉS au plateau de la courbe (rareté Abyssal, Ch.15) × prime
+// de tier (T1 ×2, T2 ×3) → nettement plus que les raids de base (qui plafonnent à ~79 ✨ / 3 💫). Son
+// vrai intérêt reste l'équipement (220/240), mais c'est AUSSI la meilleure source de fragments/cosmiques.
+const ABYSSE_MAT_CHAPTER = 15
+
 /** Fragments d'éternité ✨ gagnés par clear (courbe partagée, dès le mur Ch.5 = T1 mondial). */
 export function raidFragments(def: RaidDef, tier: number): number {
+  if (def.id === 'abysse') return materialYieldAtChapter('fragments', ABYSSE_MAT_CHAPTER) * (tier + 1)
   return materialYieldAtChapter('fragments', raidMatChapter(def, tier))
 }
 
 /** Éclats cosmiques 💫 gagnés par clear (courbe partagée — n'existe qu'à partir de Cosmique = Ch.12 / GT8). */
 export function raidCosmicQty(def: RaidDef, tier: number): number {
+  if (def.id === 'abysse') return materialYieldAtChapter('cosmic', ABYSSE_MAT_CHAPTER) * (tier + 1)
   return materialYieldAtChapter('cosmic', raidMatChapter(def, tier))
+}
+
+/** Tier MAXIMAL d'un raid. v0.36 : l'Abîme est verrouillé à 2 tiers (T1 ilvl 220, T2 ilvl 240) ; les 4 raids de base montent à 10. */
+export function raidTierCap(def: RaidDef): number {
+  return def.id === 'abysse' ? 2 : 10
 }
 
 /** Type d'objet aléatoire dans la catégorie ciblée du raid. */
