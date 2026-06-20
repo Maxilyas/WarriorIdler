@@ -90,12 +90,18 @@ d'une **tuile-cœur** centrale (acquise gratuitement à l'ouverture du métier).
 - `keystone` (en bordure, exclusif) — effet identitaire fort.
 
 ### Synergies d'adjacence (le min-max)
-- **Chaîne** : N tuiles **possédées, de la même famille, connectées** → bonus croissant.
-  `CHAINE = [0,0,0, .12, .20, .30, .42][min(6,N)]` (×3 = +12 %, ×4 = +20 %, ×5 = +30 %…).
-- **Mosaïque** : une tuile possédée touchant **≥ 3 familles différentes** → bonus transversal (+X % au
-  rendement du Foyer). Récompense les carrefours.
-- Le joueur **route son chemin** pour maximiser ses chaînes TOUT EN atteignant les fonctions/keystones
-  voulus : c'est le puzzle d'optimisation, et il est entièrement lisible (cf. Tableau, §8).
+Deux stratégies opposées (le théorycraft) : **profond** (un bras à fond) vs **large** (le cœur).
+
+- **Chaîne** *(profond)* : N tuiles **possédées, de la même famille, connectées** → bonus croissant à
+  cette famille. `CHAINE = [0,0,0, .12, .20, .30, .42][min(6,N)]` (×3 = +12 %, ×4 = +20 %, ×5 = +30 %…).
+  Chaque bras est mono-famille : le pousser à fond = une longue chaîne + son keystone ◆.
+- **Creuset** *(large, cœur gratuit)* : la tuile-cœur touche les **3 entrées** (A1/F1/I1). Bonus à
+  **toutes les Voies** = `CREUSET_BONUS × (nb d'entrées possédées)` (3 entrées = Creuset plein).
+  Récompense le multi-feu — cohérent avec « le multi-classe est la dynamique reine ».
+- **Jonctions** *(les 3 coutures, optionnelles)* : J1/J2/J3 relient deux bras + le cœur. Les forger
+  donne un **bonus hybride** (pont croisé entre 2 familles) — voir la carte ci-dessous.
+- Le joueur **route son chemin** : maximiser une chaîne + keystone (profond) OU remplir le Creuset et
+  les jonctions (large). On ne peut pas tout faire → c'est le puzzle, entièrement lisible (Tableau §8).
 
 ### Modèle de données (extension de `MetierNode`)
 ```ts
@@ -103,7 +109,7 @@ interface MetierNode {
   // … champs existants (id, name, icon, desc, maxRank, minLevel?, minStage?, exclusive?, keystone?) …
   /** Coordonnées axiales sur le nid d'abeille (pilote Forgeron). Absent = ancien rendu liste. */
   hex?: { q: number; r: number }
-  /** Famille de synergie (pour les Chaînes/Mosaïques). */
+  /** Famille de synergie (pour les Chaînes). */
   family?: 'qualite' | 'ressource' | 'idle' | 'chance'
   /** Type de tuile (défaut déduit : maxRank>1 = 'stat', sinon 'function'). */
   kind?: 'stat' | 'function' | 'keystone'
@@ -112,6 +118,40 @@ interface MetierNode {
 - `requires`/`requiresRank` **abandonnés sur le Forgeron** (remplacés par l'adjacence calculée depuis
   `hex`). On les garde sur les 3 autres métiers (non pilotes).
 - L'adjacence se calcule sur la grille axiale (6 voisins : `(q±1,r), (q,r±1), (q+1,r−1), (q−1,r+1)`).
+
+### Carte des tuiles (planche figée — v0.41)
+
+Coordonnées axiales `(q,r)`, cœur en `(0,0)`. Trois bras à 120° : Armurier vers le haut, Fondeur en
+bas-droite, Industriel en bas-gauche. Pixels (flat-top) : `x = 190 + 39q`, `y = 205 + 45.03·(r + q/2)`.
+
+| Code | Tuile | (q,r) | Voie | Famille | Type |
+|---|---|---|---|---|---|
+| C | Creuset (cœur) | (0,0) | — | hub | core · gratuit |
+| A1 | Affûtage | (0,−1) | Armurier | qualité | function (entrée) |
+| A2 | Polissage | (0,−2) | Armurier | qualité | stat |
+| A3 | Maître forgeron | (0,−3) | Armurier | qualité | stat |
+| A4 | ◆ Ascension | (0,−4) | Armurier | qualité | keystone |
+| A5 | Signature | (1,−2) | Armurier | qualité | function |
+| A6 | Frappe brûlante | (−1,−1) | Armurier | qualité | function (mini-jeu) |
+| F1 | Forge économe | (1,0) | Fondeur | ressource | stat (entrée) |
+| F2 | Fonderie & Contrats | (2,0) | Fondeur | ressource | function |
+| F3 | Maître fondeur | (3,0) | Fondeur | ressource | stat |
+| F4 | Prodige | (1,1) | Fondeur | chance | stat |
+| F5 | Transmutateur | (2,1) | Fondeur | ressource | function |
+| F6 | ◆ Haut fourneau | (3,1) | Fondeur | ressource | keystone |
+| I1 | Foyer | (−1,1) | Industriel | idle | function (entrée, cœur de voie) |
+| I2 | Trempe lente | (−1,2) | Industriel | idle | stat |
+| I3 | Industrialisation | (−2,2) | Industriel | idle | function |
+| I4 | Chaîne de montage | (−2,3) | Industriel | idle | stat |
+| I5 | ◆ Manufacture | (−3,3) | Industriel | idle | keystone |
+| J1 | Pont Qualité–Foyer | (−1,0) | couture A/I | pont | function · option |
+| J2 | Pont Qualité–Lingots | (1,−1) | couture A/F | pont | function · option |
+| J3 | Pont Lingots–Foyer | (0,1) | couture F/I | pont | function · option |
+
+- **Jonctions** : J1 (A1↔I1) = tes Chefs-d'œuvre nourrissent le Foyer ; J2 (A1/A5↔F1) = −coût des
+  Signatures/Ascensions ; J3 (F1/F4↔I1/I2) = +🧱 au Foyer. Chaque jonction touche le Creuset + deux
+  familles → c'est là que se font les ponts croisés.
+- 18 tuiles « cœur de métier » (C + 6 A + 6 F + 5 I) + 3 jonctions optionnelles = **21 tuiles**.
 
 ### Rendu UI (mobile)
 - Planche **pannable/zoomable** (pinch + drag), recentrage auto sur les tuiles forgeables.
@@ -221,7 +261,8 @@ Nouvelle sous-page Forgeron pour le min-maxer (voir [maquette « tableau »] en 
 | `FOYER_AUTO_K` | poids des automates | 0.15 |
 | `FOYER_OFFLINE_CAP_H` | plafond d'accumulation hors-ligne | 12 h |
 | `CHAINE[N]` | bonus de chaîne par longueur | [.12,.20,.30,.42] |
-| `MOSAIC_BONUS` | bonus de carrefour (≥3 familles) | +10 % Foyer |
+| `CREUSET_BONUS` | bonus à toutes les Voies par entrée possédée | +6 % / entrée (max +18 %) |
+| `JONCTION_BONUS` | bonus hybride d'un pont forgé | +10 % sur l'effet ponté |
 | `CHALEUR_MAX` | réserve de Chaleur | 100 |
 | `FRAPPE_ZONE` | largeur de la zone parfaite | 16 % (difficulté) |
 | `FRAPPE_STREAK_RARITY` | série pour +1 cran garanti | 5 |
