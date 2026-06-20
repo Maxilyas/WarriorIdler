@@ -395,7 +395,8 @@ export const METIER_NODES: Record<MetierId, MetierNode[]> = {
 /** Bonus de Compagnonnage applicables au craft d'un TYPE de pièce donné (majeur puis mineur). */
 /** v0.28 E2 — affixes proposables à la Signature (au choix, UNIVERSEL) : union des anciennes
  *  listes de corps de métier, sans lock-in de spécialisation. */
-export const SIGNATURE_CHOICES: SecondaryStat[] = ['critique', 'resilience', 'reductionDegats', 'barriere', 'hate', 'volDeVie', 'alteration', 'precision']
+// v0.41 — vol de vie RETIRÉ des choix de Signature : stat rare et trop forte pour être garantie au choix.
+export const SIGNATURE_CHOICES: SecondaryStat[] = ['critique', 'resilience', 'reductionDegats', 'barriere', 'hate', 'alteration', 'precision']
 
 /** Bonus de CRÉATION universels (v0.28 E2) — dérivés de Maître forgeron + Signature, appliqués à
  *  TOUTES les pièces (le Compagnonnage par corps a été retiré : plus de lock-in). */
