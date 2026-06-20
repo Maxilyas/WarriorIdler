@@ -8,9 +8,9 @@ const load = async (entry) => {
   return import('data:text/javascript;base64,' + Buffer.from(res.outputFiles[0].text).toString('base64'))
 }
 const M = await load(`
-  export { emptyMetiers, hexNeighbors, forgeChains, forgeChainBonus, forgeCreuset, forgeForgeable } from './src/game/metiers.ts'
+  export { emptyMetiers, hexNeighbors, forgeChains, forgeChainBonus, forgeCreuset, forgeForgeable, judgeFrappe } from './src/game/metiers.ts'
 `)
-const { emptyMetiers, hexNeighbors, forgeChains, forgeChainBonus, forgeCreuset, forgeForgeable } = M
+const { emptyMetiers, hexNeighbors, forgeChains, forgeChainBonus, forgeCreuset, forgeForgeable, judgeFrappe } = M
 
 let fails = 0
 const check = (label, cond, got) => {
@@ -47,6 +47,13 @@ check('Creuset 3 entrées = 0,18', Math.abs(forgeCreuset(withNodes({ surillvl: 1
 check('vide : Affûtage forgeable (voisin du cœur)', forgeForgeable(emptyMetiers(), 'surillvl') === true, null)
 check('vide : Polissage NON forgeable (pas voisin du cœur)', forgeForgeable(emptyMetiers(), 'polissage') === false, null)
 check('Affûtage pris : Polissage devient forgeable', forgeForgeable(withNodes({ surillvl: 1 }), 'polissage') === true, null)
+
+// 7) Frappe (Lot 3) — jugement par zones (parfait centré, bien autour, raté au bord).
+check('centre = PARFAIT', judgeFrappe(0.5) === 'perfect', judgeFrappe(0.5))
+check('bord de la zone parfaite = PARFAIT', judgeFrappe(0.58) === 'perfect', judgeFrappe(0.58))
+check('juste hors zone parfaite = BIEN', judgeFrappe(0.62) === 'good', judgeFrappe(0.62))
+check('loin du centre = RATÉ', judgeFrappe(0.78) === 'miss', judgeFrappe(0.78))
+check('extrémité = RATÉ', judgeFrappe(0) === 'miss', judgeFrappe(0))
 
 console.log(fails === 0 ? '\n🎉 Tout passe.' : `\n💥 ${fails} échec(s).`)
 process.exit(fails === 0 ? 0 : 1)

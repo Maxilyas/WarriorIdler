@@ -29,6 +29,7 @@ import {
   pointsSpentInBranch, respecBranchCost,
   forgeBonus, signatureLingotCost, smeltLingots, MASTERWORK_LINGOTS,
   emptyFoyer, foyerActive, foyerRate, foyerAccrue, masterworkKey,
+  frappeActive, CHALEUR_MAX, FRAPPE_HEAT_PERFECT, FRAPPE_HEAT_GOOD, FRAPPE_STREAK_RARITY, SURCHAUFFE_COST,
   type MetierId, type MetiersState, type ForgeronFoyer,
 } from './metiers'
 import { itemSockets, unsocketCost, parseGemKey } from './gems'
@@ -151,6 +152,8 @@ export interface CreateOptions {
   signature?: SecondaryStat
   /** v0.26 — Chef-d'œuvre hebdomadaire (Compagnonnage V) : +1 cran garanti + châsse garantie. */
   masterwork?: boolean
+  /** v0.41 — Surchauffe : dépense de la Chaleur (mini-jeu de Frappe) pour +1 ⭐ garanti. */
+  surchauffe?: boolean
 }
 
 /** v0.26 — Contrat de forge quotidien : « forge-moi CETTE pièce ». */
@@ -432,6 +435,10 @@ interface SaveData {
   metiers: MetiersState
   /** 🔥 Le Foyer (v0.41) : production idle d'XP de Forgeron + Lingots, indexée sur les Chefs-d'œuvre. */
   foyer: ForgeronFoyer
+  /** 🔥 Chaleur (v0.41) : ressource du mini-jeu de Frappe (0..CHALEUR_MAX), dépensée à la forge. */
+  chaleur: number
+  /** Série de frappes PARFAITES en cours (5 → +1 cran de rareté garanti à la prochaine forge). */
+  chaleurStreak: number
   /** Automates de forge : farment en boucle les donjons/raids déjà battus (3 max). */
   automates: Automate[]
   /** Stock de l'échoppe du marchand. */
@@ -578,6 +585,8 @@ interface GameState extends SaveData {
   /** 🜍 Forge la Pierre philosophale (capstone : réactifs des 7 biomes + un Millésime + 🌌). */
   craftPhilosophale: () => void
   createItem: (opts: CreateOptions) => void
+  /** 🔨 FRAPPE (v0.41) : une frappe du mini-jeu (parfait/bien/raté) → Chaleur + série + XP. */
+  strikeForge: (result: 'perfect' | 'good' | 'miss') => void
   /** 🫕 FONDERIE (v0.26) : fond un objet du SAC (Rare+) en Lingots 🧱. */
   smeltItem: (itemId: string) => void
   /** 🔥 TREMPE LENTE (v0.26) : dépose un objet du sac au bac (+1 iLvl/24 h réelles, 5 max). */
@@ -1468,6 +1477,8 @@ function freshSave(): SaveData {
     cosmetics: {},
     metiers: emptyMetiers(),
     foyer: emptyFoyer(),
+    chaleur: 0,
+    chaleurStreak: 0,
     automates: [],
     shopStock: [],
     inventory: [],
@@ -1838,6 +1849,8 @@ function sanitize(save: SaveData): SaveData {
   if (typeof save.foyer.lastTick !== 'number') save.foyer.lastTick = Date.now()
   if (typeof save.foyer.xpAcc !== 'number') save.foyer.xpAcc = 0
   if (typeof save.foyer.lingotAcc !== 'number') save.foyer.lingotAcc = 0
+  if (typeof save.chaleur !== 'number') save.chaleur = 0
+  if (typeof save.chaleurStreak !== 'number') save.chaleurStreak = 0
   if (typeof save.lastShopRefresh !== 'number') save.lastShopRefresh = 0
   // Filet de sécurité : une save chargée SANS le flag = joueur existant → déjà onboardé (pas d'écran
   // d'accueil). Seul `freshSave()` pose explicitement `false` (et false reste false : c'est un booléen).
@@ -2173,6 +2186,8 @@ function persist(s: GameState) {
     cosmetics: s.cosmetics,
     metiers: s.metiers,
     foyer: s.foyer,
+    chaleur: s.chaleur,
+    chaleurStreak: s.chaleurStreak,
     automates: s.automates,
     shopStock: s.shopStock,
     inventory: s.inventory,
@@ -6118,7 +6133,11 @@ export const useGame = create<GameState>((set, get) => {
       // 🎲 Prodige : chance de rareté SUPÉRIEURE (corps IV : +12% local) — 💡 Inspiration : DEUX crans.
       const lucky = masterwork || (Math.random() < Math.min(0.75, mods.luckChance + forge.luckBonus) && tier < craftCap)
       const inspired = lucky && !masterwork && mods.inspiration > 0 && Math.random() < mods.inspiration && tier + 2 <= craftCap
-      const prodTier = Math.min(craftCap, tier + (inspired ? 2 : lucky ? 1 : 0))
+      // 🔨 Frappe maîtrisée : 5 PARFAITS d'affilée → +1 cran de rareté GARANTI (consommé ici).
+      const streakReady = frappeActive(s.metiers) && s.chaleurStreak >= FRAPPE_STREAK_RARITY && tier < craftCap
+      // 🔥 Surchauffe : dépense de Chaleur → +1 ⭐ garanti sur la pièce.
+      const surchauffe = !!opts.surchauffe && frappeActive(s.metiers) && s.chaleur >= SURCHAUFFE_COST
+      const prodTier = Math.min(craftCap, tier + (inspired ? 2 : lucky ? 1 : 0) + (streakReady ? 1 : 0))
       const rarityId = RARITY_LIST.find((r) => r.tier === prodTier)?.id ?? opts.rarity
       const item = generateItem({
         ilvl, type: opts.type, rarity: rarityId, primary: opts.primary,
@@ -6129,6 +6148,8 @@ export const useGame = create<GameState>((set, get) => {
         ...(opts.element ? { element: opts.element } : {}),
         ...(signature ? { forceStat: signature } : {}),
       })
+      // 🔥 Surchauffe : +1 ⭐ garanti (capé à 5).
+      if (surchauffe) item.stars = Math.min(5, (item.stars ?? 0) + 1)
       // 🏆 Chef-d'œuvre : châsse garantie (la qualité est désormais roulée dans generateItem).
       if (masterwork && itemSockets(item, 0) < 1) item.sockets = 1
       const inventory = [item, ...s.inventory].slice(0, invMax)
@@ -6148,6 +6169,8 @@ export const useGame = create<GameState>((set, get) => {
         + `${signature ? ` · ✒️ Signature ${signature}` : ''} (+${gain} XP 🔨).`,
         'craft',
       )
+      if (streakReady) log = pushLog(log, `⚡ Frappe maîtrisée : +1 cran de rareté garanti !`, 'craft')
+      if (surchauffe) log = pushLog(log, `🔥 Surchauffe : +1 ⭐ (−${SURCHAUFFE_COST} Chaleur).`, 'craft')
       if (refundPct > 0 && refund.eclats > 0) log = pushLog(log, `🍀 Sérendipité : ${Math.round(refundPct * 100)}% des coûts remboursés.`, 'craft')
       // 📋 Contrats de forge : la commande du jour est-elle remplie par CE craft ?
       let lingots = s.lingots - signCost - (masterwork ? MASTERWORK_LINGOTS : 0)
@@ -6175,6 +6198,8 @@ export const useGame = create<GameState>((set, get) => {
       const next = {
         ...s,
         foyer,
+        chaleur: surchauffe ? s.chaleur - SURCHAUFFE_COST : s.chaleur,
+        chaleurStreak: streakReady ? 0 : s.chaleurStreak,
         essence: s.essence - cost.eclats + refund.eclats,
         noyau: s.noyau - cost.noyau + refund.noyau,
         fragments: s.fragments - cost.fragments + refund.fragments,
@@ -6188,6 +6213,28 @@ export const useGame = create<GameState>((set, get) => {
         codex: discoverFromItems(s.codex, [item]),
         log,
       }
+      persist(next)
+      set(next)
+    },
+
+    strikeForge: (result) => {
+      const s = get()
+      if (!frappeActive(s.metiers)) return
+      let chaleur = s.chaleur
+      let streak = s.chaleurStreak
+      let xpGain = 0
+      if (result === 'perfect') {
+        chaleur = Math.min(CHALEUR_MAX, chaleur + FRAPPE_HEAT_PERFECT)
+        streak += 1
+        xpGain = metierXpGain(2, 'modify', craftMods(s.metiers).forgeronXpMult)
+      } else if (result === 'good') {
+        chaleur = Math.min(CHALEUR_MAX, chaleur + FRAPPE_HEAT_GOOD)
+        xpGain = 1
+      } else {
+        streak = 0
+      }
+      const g = xpGain > 0 ? gainMetierXp(s, 'forgeron', xpGain) : { metiers: s.metiers, log: s.log }
+      const next = { ...s, chaleur, chaleurStreak: streak, metiers: g.metiers, log: g.log }
       persist(next)
       set(next)
     },

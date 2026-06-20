@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import type { ReactNode } from 'react'
 import { useGame, bestRaidTier, forgeContractsForDay, CONTRACT_LINGOTS } from '../game/store'
 import { ITEM_TYPES } from '../game/slots'
@@ -16,6 +16,7 @@ import {
   METIERS, METIER_LIST, METIER_NODES, METIER_BRANCHES, METIER_MAX_LEVEL, AUTOMATE_FORGERON_LEVELS,
   craftMods, levelFromXp, xpTotalForLevel, pointsAvailable, pointsTotal, canLearnNode, nodeRank,
   forgeChainBonus, forgeCreuset, foyerRate,
+  frappeActive, judgeFrappe, CHALEUR_MAX, FRAPPE_ZONE, FRAPPE_NEAR, FRAPPE_STREAK_RARITY, SURCHAUFFE_COST,
   respecCost, respecBranchCost, pointsSpentInBranch,
   forgeBonus, signatureLingotCost, smeltLingots, MASTERWORK_LINGOTS,
   type MetierId, type MetierNode,
@@ -348,7 +349,7 @@ function MetierTree({ metier, alwaysOpen }: { metier: MetierId; alwaysOpen?: boo
 const FAMILY_LABEL: Record<string, string> = { qualite: 'Qualité', ressource: 'Ressource', idle: 'Idle', chance: 'Chance' }
 /** Tuiles dont l'EFFET n'est pas encore branché (lots ultérieurs) : visibles mais non forgeables.
  *  (Le Foyer en est exclu : c'est la porte d'entrée de la Voie Industriel — sa prod arrive au Lot 2.) */
-const FORGE_PENDING = new Set(['frappe', 'hautFourneau', 'jonctionAI', 'jonctionAF', 'jonctionFI'])
+const FORGE_PENDING = new Set(['hautFourneau', 'jonctionAI', 'jonctionAF', 'jonctionFI'])
 
 /** Couleur de Voie d'une tuile (dérivée de sa famille / nature). */
 function tileColor(n: MetierNode): string {
@@ -518,6 +519,64 @@ function FoyerPanel() {
   )
 }
 
+/** v0.41 (Lot 3) — Le mini-jeu de Frappe : génère la Chaleur (ressource) + une série de PARFAITS. */
+function FrappePanel() {
+  const metiers = useGame((s) => s.metiers)
+  const chaleur = useGame((s) => s.chaleur)
+  const streak = useGame((s) => s.chaleurStreak)
+  const strike = useGame((s) => s.strikeForge)
+  const active = frappeActive(metiers)
+  const posRef = useRef(0)
+  const dirRef = useRef(1)
+  const markerRef = useRef<HTMLDivElement | null>(null)
+  const [flash, setFlash] = useState<'perfect' | 'good' | 'miss' | null>(null)
+  useEffect(() => {
+    if (!active) return
+    let raf = 0
+    const loop = () => {
+      posRef.current += dirRef.current * 0.018
+      if (posRef.current >= 1) { posRef.current = 1; dirRef.current = -1 }
+      else if (posRef.current <= 0) { posRef.current = 0; dirRef.current = 1 }
+      if (markerRef.current) markerRef.current.style.left = `calc(${(posRef.current * 100).toFixed(2)}% - 2px)`
+      raf = requestAnimationFrame(loop)
+    }
+    raf = requestAnimationFrame(loop)
+    return () => cancelAnimationFrame(raf)
+  }, [active])
+  if (!active) return null
+  const onStrike = () => { const r = judgeFrappe(posRef.current); strike(r); setFlash(r) }
+  const flashTxt = flash === 'perfect' ? { t: 'PARFAIT !', c: 'text-emerald-300' }
+    : flash === 'good' ? { t: 'Bien', c: 'text-amber-300' }
+    : flash === 'miss' ? { t: 'Raté — série perdue', c: 'text-rose-400' } : null
+  const dots = '●'.repeat(Math.min(streak, FRAPPE_STREAK_RARITY)) + '○'.repeat(Math.max(0, FRAPPE_STREAK_RARITY - streak))
+  return (
+    <div className="mb-3 rounded-xl border border-amber-800/40 bg-amber-950/10 p-2.5">
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-amber-300">🔨 Frappe — Chaleur</span>
+        <span className="text-[10px] font-semibold text-amber-200">🔥 {chaleur}/{CHALEUR_MAX}</span>
+      </div>
+      <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+        <div className="h-full bg-amber-500 transition-all" style={{ width: `${(chaleur / CHALEUR_MAX) * 100}%` }} />
+      </div>
+      <div className="relative mt-2 h-5 overflow-hidden rounded bg-slate-800">
+        <div className="absolute inset-y-0 bg-amber-900/50" style={{ left: `${(0.5 - FRAPPE_NEAR / 2) * 100}%`, width: `${FRAPPE_NEAR * 100}%` }} />
+        <div className="absolute inset-y-0 bg-emerald-600/60" style={{ left: `${(0.5 - FRAPPE_ZONE / 2) * 100}%`, width: `${FRAPPE_ZONE * 100}%` }} />
+        <div ref={markerRef} className="absolute inset-y-0 w-1 bg-amber-100" style={{ left: 0 }} />
+      </div>
+      <div className="mt-1 min-h-[14px] text-center text-[10px] font-semibold">
+        {flashTxt && <span className={flashTxt.c}>{flashTxt.t}</span>}
+      </div>
+      <button onClick={onStrike} className="w-full rounded-lg bg-amber-600 py-2 text-[12px] font-semibold text-slate-950 hover:bg-amber-500">🔨 Frapper</button>
+      <div className="mt-1.5 flex items-center gap-1.5 text-[10px] text-slate-400">
+        <span>Série {Math.min(streak, FRAPPE_STREAK_RARITY)}/{FRAPPE_STREAK_RARITY}</span>
+        <span className="tracking-widest text-amber-300">{dots}</span>
+        {streak >= FRAPPE_STREAK_RARITY && <span className="rounded bg-emerald-900/40 px-1.5 py-0.5 font-semibold text-emerald-300">⚡ +1 cran prêt</span>}
+      </div>
+      <p className="mt-1 text-[9px] leading-snug text-slate-500">Frappe dans le vert : +Chaleur & série. 5 parfaites → +1 cran garanti à la forge ; la Chaleur achète des ⭐ (Surchauffe, plus bas).</p>
+    </div>
+  )
+}
+
 /* ------------------------------------------------------------------ */
 /* 🔨 Forgeron : création d'objets + automates                         */
 /* ------------------------------------------------------------------ */
@@ -534,6 +593,8 @@ function ForgeronWorkshop() {
   const lastMasterwork = useGame((s) => s.lastMasterwork)
   const createItem = useGame((s) => s.createItem)
   const metiers = useGame((s) => s.metiers)
+  const chaleur = useGame((s) => s.chaleur)
+  const chaleurStreak = useGame((s) => s.chaleurStreak)
   const mods = craftMods(metiers)
 
   // v0.25 : double horloge — le palier de farm ET le meilleur tier de raid bornent la rareté.
@@ -549,6 +610,7 @@ function ForgeronWorkshop() {
   const [rarity, setRarity] = useState<RarityId>(rarities[Math.min(3, rarities.length - 1)].id)
   const [signature, setSignature] = useState<SecondaryStat | null>(null)
   const [masterwork, setMasterwork] = useState(false)
+  const [surchauffe, setSurchauffe] = useState(false)
 
   const isWeapon = type === 'armePrincipale'
   const tier = RARITY_LIST.find((r) => r.id === rarity)!.tier
@@ -569,6 +631,7 @@ function ForgeronWorkshop() {
   return (
     <>
       <FoyerPanel />
+      <FrappePanel />
       {/* Type d'objet */}
       <Section title="Type d'objet">
         <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-7">
@@ -741,6 +804,25 @@ function ForgeronWorkshop() {
         {tier >= 7 && <div className="mt-1 text-[10.5px] text-fuchsia-300/80">Rareté Artefact+ : chance d'obtenir un effet unique.</div>}
       </div>
 
+      {/* 🔥 Frappe : Surchauffe (Chaleur → +1 ⭐) + série maîtrisée (+1 cran garanti) */}
+      {frappeActive(metiers) && (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setSurchauffe((v) => !v)}
+            disabled={chaleur < SURCHAUFFE_COST && !surchauffe}
+            className={
+              'rounded-lg border px-2.5 py-1.5 text-[11px] font-medium ' +
+              (surchauffe ? 'border-amber-400 bg-amber-500/20 text-amber-200' : chaleur >= SURCHAUFFE_COST ? 'border-amber-700/50 text-amber-300/80 hover:bg-amber-900/20' : 'border-slate-800 text-slate-600')
+            }
+          >
+            🔥 Surchauffe +1 ⭐ <span className="text-amber-300/70">−{SURCHAUFFE_COST} Chaleur</span>
+          </button>
+          {chaleurStreak >= FRAPPE_STREAK_RARITY && (
+            <span className="rounded-lg bg-emerald-900/30 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-300">⚡ Frappe maîtrisée : +1 cran sur cette forge</span>
+          )}
+        </div>
+      )}
+
       <button
         disabled={!canForge}
         onClick={() => createItem({
@@ -748,6 +830,7 @@ function ForgeronWorkshop() {
           ...(isWeapon ? { element } : {}),
           ...(activeSignature ? { signature: activeSignature } : {}),
           ...(mwOn ? { masterwork: true } : {}),
+          ...(surchauffe ? { surchauffe: true } : {}),
         })}
         className="mt-3 w-full rounded-lg bg-amber-600 py-2.5 text-sm font-semibold text-slate-950 hover:bg-amber-500 disabled:opacity-40"
       >

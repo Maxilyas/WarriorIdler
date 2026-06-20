@@ -628,6 +628,32 @@ export function masterworkKey(type: string, primary: string, element: string | u
 }
 
 /* ------------------------------------------------------------------ */
+/* La Frappe & la Chaleur (v0.41, Lot 3) — le geste actif de l'Armurier */
+/* ------------------------------------------------------------------ */
+
+/** Knobs de la Frappe (à éprouver, cf. DESIGN v0.41 §6/§11). */
+export const CHALEUR_MAX = 100
+export const FRAPPE_HEAT_PERFECT = 12    // Chaleur gagnée sur une frappe PARFAITE
+export const FRAPPE_HEAT_GOOD = 5        // Chaleur gagnée sur une frappe BIEN
+export const FRAPPE_STREAK_RARITY = 5    // série de PARFAIT → +1 cran de rareté GARANTI à la forge
+export const SURCHAUFFE_COST = 40        // Chaleur dépensée pour +1 ⭐ garanti sur une création
+export const FRAPPE_ZONE = 0.16          // largeur de la zone PARFAIT (fraction de la barre)
+export const FRAPPE_NEAR = 0.40          // largeur de la zone BIEN
+
+/** Le mini-jeu de Frappe est-il débloqué (tuile possédée) ? */
+export function frappeActive(metiers: MetiersState): boolean {
+  return (metiers.forgeron.nodes.frappe ?? 0) > 0
+}
+
+/** Juge une frappe selon la position du curseur (0..1), zone parfaite centrée sur 0,5. */
+export function judgeFrappe(pos: number): 'perfect' | 'good' | 'miss' {
+  const d = Math.abs(pos - 0.5)
+  if (d <= FRAPPE_ZONE / 2) return 'perfect'
+  if (d <= FRAPPE_NEAR / 2) return 'good'
+  return 'miss'
+}
+
+/* ------------------------------------------------------------------ */
 /* Effets agrégés                                                      */
 /* ------------------------------------------------------------------ */
 
