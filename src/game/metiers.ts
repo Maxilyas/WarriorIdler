@@ -565,6 +565,69 @@ export function forgeForgeable(metiers: MetiersState, tileId: string): boolean {
 }
 
 /* ------------------------------------------------------------------ */
+/* Le Foyer (v0.41, Lot 2) — production idle d'XP & de Lingots          */
+/* ------------------------------------------------------------------ */
+
+/** État du Foyer : horloge d'accumulation + set des Chefs-d'œuvre UNIQUES forgés (indexe le rendement). */
+export interface ForgeronFoyer {
+  /** Horodatage du dernier crédit (l'écart à `now` = temps online OU offline, plafonné). */
+  lastTick: number
+  /** Clés d'unicité des Chefs-d'œuvre forgés (le nombre multiplie la production). */
+  masterworkKeys: string[]
+  /** Restes fractionnaires — pour ne perdre aucune miette entre deux crédits entiers. */
+  xpAcc: number
+  lingotAcc: number
+}
+
+export function emptyFoyer(): ForgeronFoyer {
+  return { lastTick: Date.now(), masterworkKeys: [], xpAcc: 0, lingotAcc: 0 }
+}
+
+/** Knobs du Foyer (à éprouver en partie réelle, cf. DESIGN v0.41 §11). */
+export const FOYER_BASE_XP = 0.15        // XP/s de base (≈ 1 niveau de métier / 15 min en early)
+export const FOYER_LINGOT_RATIO = 0.02   // Lingots/s = ratio × (XP/s)
+export const FOYER_MW_K = 0.10           // +10% de production par Chef-d'œuvre UNIQUE
+export const FOYER_AUTO_K = 0.15         // +15% par automate construit
+export const FOYER_OFFLINE_CAP_H = 12    // plafond d'accumulation hors-ligne (h)
+
+/** Le Foyer est-il actif (tuile possédée) ? */
+export function foyerActive(metiers: MetiersState): boolean {
+  return (metiers.forgeron.nodes.foyer ?? 0) > 0
+}
+
+/**
+ * Débit du Foyer. BOUCLE VERTUEUSE : le nombre de Chefs-d'œuvre UNIQUES (jeu actif, Voie Armurier)
+ * multiplie la production passive ; ça croît aussi avec les automates (Industriel) et le contenu battu.
+ */
+export function foyerRate(
+  metiers: MetiersState, automatesCount: number, bestStage: number, masterworks: number,
+): { xp: number; lingots: number } {
+  if (!foyerActive(metiers)) return { xp: 0, lingots: 0 }
+  const stageFactor = 1 + Math.max(0, bestStage - METIERS.forgeron.unlockStage) * 0.01
+  const xp = FOYER_BASE_XP * (1 + masterworks * FOYER_MW_K) * (1 + automatesCount * FOYER_AUTO_K) * stageFactor
+  return { xp, lingots: xp * FOYER_LINGOT_RATIO }
+}
+
+/** Crédite le Foyer pour le temps écoulé depuis `lastTick` (plafonné), en gardant les fractions. */
+export function foyerAccrue(
+  foyer: ForgeronFoyer, rate: { xp: number; lingots: number }, now: number,
+): { foyer: ForgeronFoyer; xp: number; lingots: number } {
+  const capMs = FOYER_OFFLINE_CAP_H * 3600 * 1000
+  const elapsedSec = Math.min(Math.max(0, now - foyer.lastTick), capMs) / 1000
+  if (elapsedSec <= 0) return { foyer: { ...foyer, lastTick: now }, xp: 0, lingots: 0 }
+  const xpAcc = foyer.xpAcc + rate.xp * elapsedSec
+  const lingotAcc = foyer.lingotAcc + rate.lingots * elapsedSec
+  const xp = Math.floor(xpAcc)
+  const lingots = Math.floor(lingotAcc)
+  return { foyer: { ...foyer, lastTick: now, xpAcc: xpAcc - xp, lingotAcc: lingotAcc - lingots }, xp, lingots }
+}
+
+/** Clé d'unicité d'un Chef-d'œuvre (type · stat · élément · rareté) pour l'indexation du Foyer. */
+export function masterworkKey(type: string, primary: string, element: string | undefined, rarity: string): string {
+  return `${type}|${primary}|${element ?? ''}|${rarity}`
+}
+
+/* ------------------------------------------------------------------ */
 /* Effets agrégés                                                      */
 /* ------------------------------------------------------------------ */
 

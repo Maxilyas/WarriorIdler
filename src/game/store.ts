@@ -28,7 +28,8 @@ import {
   levelFromXp, METIERS, METIER_LIST, METIER_NODES, METIER_BRANCHES, AUTOMATE_FORGERON_LEVELS,
   pointsSpentInBranch, respecBranchCost,
   forgeBonus, signatureLingotCost, smeltLingots, MASTERWORK_LINGOTS,
-  type MetierId, type MetiersState,
+  emptyFoyer, foyerActive, foyerRate, foyerAccrue, masterworkKey,
+  type MetierId, type MetiersState, type ForgeronFoyer,
 } from './metiers'
 import { itemSockets, unsocketCost, parseGemKey } from './gems'
 import {
@@ -429,6 +430,8 @@ interface SaveData {
   cosmetics: Record<string, true>
   /** Métiers de l'Atelier (v0.22) : XP cumulée + nœuds d'arbre appris, par métier. */
   metiers: MetiersState
+  /** 🔥 Le Foyer (v0.41) : production idle d'XP de Forgeron + Lingots, indexée sur les Chefs-d'œuvre. */
+  foyer: ForgeronFoyer
   /** Automates de forge : farment en boucle les donjons/raids déjà battus (3 max). */
   automates: Automate[]
   /** Stock de l'échoppe du marchand. */
@@ -1464,6 +1467,7 @@ function freshSave(): SaveData {
     achievements: {},
     cosmetics: {},
     metiers: emptyMetiers(),
+    foyer: emptyFoyer(),
     automates: [],
     shopStock: [],
     inventory: [],
@@ -1828,6 +1832,12 @@ function sanitize(save: SaveData): SaveData {
   if (save.pendingChoice && !Array.isArray(save.pendingChoice.items)) save.pendingChoice = null
   if (typeof save.killsSinceEpic !== 'number') save.killsSinceEpic = 0
   if (typeof save.lastSeen !== 'number') save.lastSeen = Date.now()
+  // v0.41 — Le Foyer (défauts robustes pour les anciennes saves).
+  if (!save.foyer || typeof save.foyer !== 'object') save.foyer = emptyFoyer()
+  if (!Array.isArray(save.foyer.masterworkKeys)) save.foyer.masterworkKeys = []
+  if (typeof save.foyer.lastTick !== 'number') save.foyer.lastTick = Date.now()
+  if (typeof save.foyer.xpAcc !== 'number') save.foyer.xpAcc = 0
+  if (typeof save.foyer.lingotAcc !== 'number') save.foyer.lingotAcc = 0
   if (typeof save.lastShopRefresh !== 'number') save.lastShopRefresh = 0
   // Filet de sécurité : une save chargée SANS le flag = joueur existant → déjà onboardé (pas d'écran
   // d'accueil). Seul `freshSave()` pose explicitement `false` (et false reste false : c'est un booléen).
@@ -2133,7 +2143,7 @@ function persist(s: GameState) {
     armedXpBonus: s.armedXpBonus,
     lastTransmute: s.lastTransmute,
     philosophale: s.philosophale,
-    metiersV: s.metiersV ?? 7,
+    metiersV: s.metiersV ?? 8,
     essences: s.essences,
     sceaux: s.sceaux,
     dungeonProgress: s.dungeonProgress,
@@ -2162,6 +2172,7 @@ function persist(s: GameState) {
     achievements: s.achievements,
     cosmetics: s.cosmetics,
     metiers: s.metiers,
+    foyer: s.foyer,
     automates: s.automates,
     shopStock: s.shopStock,
     inventory: s.inventory,
@@ -4658,6 +4669,21 @@ export const useGame = create<GameState>((set, get) => {
         if (ar.completed) persist(s)
       }
 
+      // 🔥 Le Foyer (v0.41) : production idle d'XP + Lingots, en parallèle de tout (farm/donjon/raid).
+      // Crédité par paquets toutes ~2 s (lissé) ; au retour d'absence, le grand écart est plafonné (12 h).
+      if (foyerActive(s.metiers) && Date.now() - s.foyer.lastTick >= 2000) {
+        const rate = foyerRate(s.metiers, s.automates.length, s.bestStage, s.foyer.masterworkKeys.length)
+        const acc = foyerAccrue(s.foyer, rate, Date.now())
+        let foyerLog = s.log
+        let foyerMetiers = s.metiers
+        if (acc.xp > 0) {
+          const g = gainMetierXp({ metiers: foyerMetiers, log: foyerLog, characters: s.characters }, 'forgeron', acc.xp)
+          foyerMetiers = g.metiers
+          foyerLog = g.log
+        }
+        s = { ...s, foyer: acc.foyer, metiers: foyerMetiers, lingots: s.lingots + acc.lingots, log: foyerLog }
+      }
+
       if (s.raid) {
         tickRaid(s, dt, set)
         return
@@ -6140,8 +6166,15 @@ export const useGame = create<GameState>((set, get) => {
           log = pushLog(cg.log, `📋 CONTRAT REMPLI : +${reward} Lingot${reward > 1 ? 's' : ''} 🧱 et double XP !`, 'craft')
         }
       }
+      // 🔥 Foyer : un Chef-d'œuvre d'un type INÉDIT accélère la production passive (boucle vertueuse).
+      let foyer = s.foyer
+      if (masterwork) {
+        const mwk = masterworkKey(item.type, item.primary, item.damageType, item.rarity)
+        if (!foyer.masterworkKeys.includes(mwk)) foyer = { ...foyer, masterworkKeys: [...foyer.masterworkKeys, mwk] }
+      }
       const next = {
         ...s,
+        foyer,
         essence: s.essence - cost.eclats + refund.eclats,
         noyau: s.noyau - cost.noyau + refund.noyau,
         fragments: s.fragments - cost.fragments + refund.fragments,

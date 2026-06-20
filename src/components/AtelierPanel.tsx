@@ -15,7 +15,7 @@ import { QualityStars } from './ItemRow'
 import {
   METIERS, METIER_LIST, METIER_NODES, METIER_BRANCHES, METIER_MAX_LEVEL, AUTOMATE_FORGERON_LEVELS,
   craftMods, levelFromXp, xpTotalForLevel, pointsAvailable, pointsTotal, canLearnNode, nodeRank,
-  forgeChainBonus, forgeCreuset,
+  forgeChainBonus, forgeCreuset, foyerRate,
   respecCost, respecBranchCost, pointsSpentInBranch,
   forgeBonus, signatureLingotCost, smeltLingots, MASTERWORK_LINGOTS,
   type MetierId, type MetierNode,
@@ -491,6 +491,33 @@ function ForgeBoard() {
   )
 }
 
+/** v0.41 (Lot 2) — Le Foyer : carte de production idle d'XP + Lingots, indexée sur les Chefs-d'œuvre. */
+function FoyerPanel() {
+  const metiers = useGame((s) => s.metiers)
+  const foyer = useGame((s) => s.foyer)
+  const automates = useGame((s) => s.automates)
+  const bestStage = useGame((s) => s.bestStage)
+  const mw = foyer.masterworkKeys.length
+  const rate = foyerRate(metiers, automates.length, bestStage, mw)
+  if (rate.xp <= 0) return null // Foyer non débloqué (tuile Industriel de la planche ⬡ Forge)
+  return (
+    <div className="mb-3 rounded-xl border border-violet-800/40 bg-violet-950/10 p-2.5">
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-violet-300">🔥 Foyer — production passive</span>
+        <span className="text-[10px] font-semibold text-violet-200">+{(rate.xp * 60).toFixed(1)} XP/min · +{(rate.lingots * 3600).toFixed(1)} 🧱/h</span>
+      </div>
+      <p className="mt-1 text-[9.5px] leading-snug text-slate-500">
+        Tourne en continu, même hors-ligne (plafond 12 h). Forge des Chefs-d'œuvre VARIÉS (🏆 Maître forgeron R3) pour l'accélérer.
+      </p>
+      <div className="mt-1.5 flex flex-wrap gap-1.5 text-[10px]">
+        <span className="rounded bg-violet-900/40 px-1.5 py-0.5 text-violet-200">🏆 Chefs-d'œuvre ×{mw} <span className="text-violet-300/70">+{mw * 10}%</span></span>
+        <span className="rounded bg-violet-900/40 px-1.5 py-0.5 text-violet-200">🤖 Automates ×{automates.length} <span className="text-violet-300/70">+{automates.length * 15}%</span></span>
+        <span className="rounded bg-slate-800 px-1.5 py-0.5 text-slate-300">⛰ Palier {bestStage}</span>
+      </div>
+    </div>
+  )
+}
+
 /* ------------------------------------------------------------------ */
 /* 🔨 Forgeron : création d'objets + automates                         */
 /* ------------------------------------------------------------------ */
@@ -541,6 +568,7 @@ function ForgeronWorkshop() {
 
   return (
     <>
+      <FoyerPanel />
       {/* Type d'objet */}
       <Section title="Type d'objet">
         <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-7">
