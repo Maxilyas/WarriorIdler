@@ -4,7 +4,7 @@ import { computeDamageProfile, computeResistProfile, profileDamageMult, type Dam
 import { DAMAGE_TYPE_LIST } from './damage'
 import { setBonuses } from './sets'
 import { instanceTagMods } from './uniques'
-import { getPower, POWER_SLOTS, SOCLE_PASSIVE_IDS } from './powers'
+import { getPower, POWER_SLOTS } from './powers'
 import { theoreticalDps, genericMitigation } from './combat'
 import {
   talentStatMods, talentResistMods, talentUnlockedPowers, talentKeystones, type KeystoneEffect,
@@ -127,12 +127,12 @@ export function makeCharacter(name: string, level: number, bias: PrimaryStat): C
 }
 
 /**
- * Capacités débloquées = nœuds `ability` alloués dans l'arbre + SOCLE de passifs-conversion
- * universels débloqués par NIVEAU (v0.39 : accessibles à tous, hors arbre, pour l'équité).
+ * Capacités débloquées = nœuds `ability` alloués dans l'arbre. v0.42 : plus AUCUN passif débloqué par
+ * NIVEAU — les passifs utilitaires (slots) comme les capstones d'identité s'obtiennent DANS L'ARBRE.
+ * (Le paramètre `level` est conservé pour la compat des appelants ; il n'est plus utilisé ici.)
  */
-export function computeUnlockedPowers(talents: Record<string, number>, level = 0): string[] {
-  const socle = SOCLE_PASSIVE_IDS.filter((id) => (getPower(id)?.unlockLevel ?? 999) <= level)
-  return [...new Set([...talentUnlockedPowers(talents), ...socle])]
+export function computeUnlockedPowers(talents: Record<string, number>, _level = 0): string[] {
+  return talentUnlockedPowers(talents)
 }
 
 /** v0.33 : allocations TOTALES d'un perso = arbre de base (`talents`) + Panthéon (`pantheon`).

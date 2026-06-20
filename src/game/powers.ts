@@ -1,4 +1,4 @@
-import type { PowerDef, PowerEffect, DamageType, OffensiveStat, PassiveConversion } from './types'
+import type { PowerDef, PowerEffect, DamageType, OffensiveStat } from './types'
 import type { SpellSpec } from './classData'
 
 /**
@@ -499,49 +499,22 @@ const PALADIN_SPELLS: SpellSpec[] = [
 ]
 for (const s of PALADIN_SPELLS) POWERS.push(specToPower(s))
 
-/* ================= v0.39 : PASSIFS « moteur de conversions » =================
- * Niche LIBRE (les gemmes = déclencheurs de combat ; les runes = horloges/pactes) : ces passifs
- * transforment la FICHE de stats au calcul (applyStatConversions). `transfer` (défaut) RETIRE de la
- * source → vrai sidegrade (préserve l'invariance TTK) ; `add` (sources dérivées comme healPower) ajoute.
- * SOCLE = universel, débloqué par NIVEAU (unlockLevel, hors arbre) ; SIGNATURES = par nœud d'arbre (lvl 1). */
-interface PassiveSpec { id: string; name: string; icon: string; lvl: number; desc: string; convert: PassiveConversion[] }
-function passiveToPower(s: PassiveSpec): PowerDef {
-  return { id: s.id, name: s.name, kind: 'passive', icon: s.icon, description: s.desc, unlockLevel: s.lvl, convert: s.convert }
-}
-const SOCLE_PASSIVES: PassiveSpec[] = [
-  // Hybrides primaires (multi-classe) — débloqués tôt pour encourager le mélange.
-  { id: 'soc_fonte', name: 'Fonte de guerre', icon: '🔥', lvl: 12, desc: 'Transfère 25% de ta Force en Intelligence — ouvre les builds hybrides FOR/INT.', convert: [{ from: 'force', to: 'intelligence', frac: 0.25 }] },
-  { id: 'soc_esprit', name: 'Esprit guerrier', icon: '🧠', lvl: 12, desc: 'Transfère 25% de ton Intelligence en Force — le mage de mêlée.', convert: [{ from: 'intelligence', to: 'force', frac: 0.25 }] },
-  { id: 'soc_grace', name: 'Grâce mortelle', icon: '🗡', lvl: 16, desc: 'Transfère 25% de ton Agilité en Force.', convert: [{ from: 'agilite', to: 'force', frac: 0.25 }] },
-  { id: 'soc_danse', name: 'Danse arcanique', icon: '✨', lvl: 16, desc: 'Transfère 25% de ton Agilité en Intelligence.', convert: [{ from: 'agilite', to: 'intelligence', frac: 0.25 }] },
-  // Offense ↔ Survie (le cadran principal).
-  { id: 'soc_stoicisme', name: 'Stoïcisme', icon: '🛡', lvl: 20, desc: 'Transfère 25% de ta Surpuissance en Réduction de dégâts — le DPS achète de la survie.', convert: [{ from: 'surpuissance', to: 'reductionDegats', frac: 0.25 }] },
-  { id: 'soc_temerite', name: 'Témérité', icon: '⚔️', lvl: 20, desc: 'Transfère 25% de ta Réduction de dégâts en Surpuissance — le tank achète du dégât.', convert: [{ from: 'reductionDegats', to: 'surpuissance', frac: 0.25 }] },
-  { id: 'soc_coeur', name: 'Cœur de pierre', icon: '🪨', lvl: 26, desc: 'Transfère 12% de ton Endurance en Surpuissance — tes PV deviennent des dégâts.', convert: [{ from: 'endurance', to: 'surpuissance', frac: 0.12 }] },
-  { id: 'soc_discipline', name: 'Discipline', icon: '🧱', lvl: 26, desc: 'Transfère 30% de ta Surpuissance en Barrière (PV effectifs, anti-burst).', convert: [{ from: 'surpuissance', to: 'barriere', frac: 0.30 }] },
-  { id: 'soc_garde', name: 'Garde instinctive', icon: '🤺', lvl: 32, desc: 'Transfère 20% de ton Critique en Réduction de dégâts.', convert: [{ from: 'critique', to: 'reductionDegats', frac: 0.20 }] },
-  { id: 'soc_carapace', name: 'Carapace vitale', icon: '🐢', lvl: 32, desc: 'Transfère 40% de ton Vol de vie en Réduction de dégâts.', convert: [{ from: 'volDeVie', to: 'reductionDegats', frac: 0.40 }] },
-  // Recyclage offensif.
-  { id: 'soc_tempo', name: 'Tempo critique', icon: '⏱️', lvl: 40, desc: 'Transfère 20% de ta Hâte en Dégâts de Crit.', convert: [{ from: 'hate', to: 'degatsCrit', frac: 0.20 }] },
-  { id: 'soc_precision', name: 'Précision létale', icon: '🎯', lvl: 40, desc: 'Transfère 30% de ta Précision en Pénétration — une fois le touché garanti, perce les défenses.', convert: [{ from: 'precision', to: 'penetration', frac: 0.30 }] },
-  { id: 'soc_toxico', name: 'Toxicologie', icon: '🧪', lvl: 48, desc: 'Transfère 25% de ton Critique en Altération — bascule d\'un build crit vers un build DoT.', convert: [{ from: 'critique', to: 'alteration', frac: 0.25 }] },
-  { id: 'soc_meditation', name: 'Méditation martiale', icon: '💗', lvl: 48, desc: 'Ajoute 30% de ta puissance de soin en Réduction de dégâts (n\'enlève rien).', convert: [{ from: 'healPower', to: 'reductionDegats', frac: 0.30, mode: 'add' }] },
+/* ================= PASSIFS UTILITAIRES (3 slots) — v0.42 =================
+ * Les passifs slottés sont désormais des BONUS DIRECTS, débloqués DANS L'ARBRE (cluster « Instincts »
+ * du Cœur) — fini l'auto-déblocage par niveau. Le joueur en équipe 3 (loadout). Le moteur de
+ * conversions (`convert` / applyStatConversions) reste en place mais DORMANT — réservé aux gemmes
+ * (à venir). VALEURS PROVISOIRES : sims ttk/survival à rafraîchir avant le calibrage fin. */
+const UTILITY_PASSIVES: PowerDef[] = [
+  { id: 'pas_vitalite', name: 'Vitalité', kind: 'passive', icon: '❤️', unlockLevel: 1, description: 'Constitution de fer : +80 Endurance (PV) tant qu\'il est équipé.', mods: { endurance: 80 } },
+  { id: 'pas_carapace', name: 'Carapace', kind: 'passive', icon: '🐢', unlockLevel: 1, description: 'Cuir épais : -12% de dégâts subis et +20 Endurance.', damageReduction: 0.12, mods: { endurance: 20 } },
+  { id: 'pas_rempart', name: 'Rempart', kind: 'passive', icon: '🧱', unlockLevel: 1, description: 'Garde anti-burst : +60 Barrière (PV effectifs).', mods: { barriere: 60 } },
+  { id: 'pas_sangsue', name: 'Sangsue', kind: 'passive', icon: '🩸', unlockLevel: 1, description: 'Tes coups te soignent : +50 Vol de vie.', mods: { volDeVie: 50 } },
+  { id: 'pas_lynx', name: 'Œil de lynx', kind: 'passive', icon: '🦅', unlockLevel: 1, description: 'Tir assuré : +70 Précision.', mods: { precision: 70 } },
+  { id: 'pas_perforation', name: 'Perforation', kind: 'passive', icon: '🗡️', unlockLevel: 1, description: 'Perce les défenses : +70 Pénétration.', mods: { penetration: 70 } },
+  { id: 'pas_cruaute', name: 'Cruauté', kind: 'passive', icon: '💢', unlockLevel: 1, description: 'Coups vicieux : +70 Dégâts de crit.', mods: { degatsCrit: 70 } },
+  { id: 'pas_celerite', name: 'Célérité', kind: 'passive', icon: '⚡', unlockLevel: 1, description: 'Cadence accrue : +70 Hâte.', mods: { hate: 70 } },
 ]
-const SIGNATURE_PASSIVES: PassiveSpec[] = [
-  { id: 'sig_gu_colere', name: 'Colère incarnée', icon: '🗿', lvl: 1, desc: 'GUERRIER — transfère 18% de ton Endurance en Force : le colosse frappe avec sa masse.', convert: [{ from: 'endurance', to: 'force', frac: 0.18 }] },
-  { id: 'sig_pa_foi', name: 'Foi inébranlable', icon: '🔰', lvl: 1, desc: 'PALADIN — ajoute 40% de ta puissance de soin en Barrière : ta foi devient un mur.', convert: [{ from: 'healPower', to: 'barriere', frac: 0.40, mode: 'add' }] },
-  { id: 'sig_dk_sang', name: 'Pacte de sang', icon: '🩸', lvl: 1, desc: 'CHEVALIER DE LA MORT — transfère 30% de ton Vol de vie en Force : frappe plus fort en te nourrissant.', convert: [{ from: 'volDeVie', to: 'force', frac: 0.30 }] },
-  { id: 'sig_ma_mana', name: 'Manabouclier', icon: '🔮', lvl: 1, desc: 'MAGE — transfère 20% de ton Intelligence en Barrière : l\'arcane protège.', convert: [{ from: 'intelligence', to: 'barriere', frac: 0.20 }] },
-  { id: 'sig_sh_ancrage', name: 'Ancrage tellurique', icon: '⛰️', lvl: 1, desc: 'CHAMAN — transfère 15% de ton Endurance en Intelligence : la terre nourrit l\'esprit.', convert: [{ from: 'endurance', to: 'intelligence', frac: 0.15 }] },
-  { id: 'sig_pr_verbe', name: 'Verbe guerrier', icon: '⚜️', lvl: 1, desc: 'PRÊTRE — ajoute 35% de ta puissance de soin en Surpuissance : soigne en frappant (fistweaver).', convert: [{ from: 'healPower', to: 'surpuissance', frac: 0.35, mode: 'add' }] },
-  { id: 'sig_vo_sangfroid', name: 'Sang-froid', icon: '🥶', lvl: 1, desc: 'VOLEUR — transfère 25% de ta Maîtrise en Dégâts de Crit : l\'archétype se mue en pure létalité.', convert: [{ from: 'maitrise', to: 'degatsCrit', frac: 0.25 }] },
-  { id: 'sig_ch_lien', name: 'Lien bestial', icon: '🐾', lvl: 1, desc: 'CHASSEUR — transfère 15% de ton Agilité en Endurance : partage la vitalité de ton familier.', convert: [{ from: 'agilite', to: 'endurance', frac: 0.15 }] },
-  { id: 'sig_dd_equilibre', name: 'Équilibre primordial', icon: '🌿', lvl: 1, desc: 'DRUIDE — transfère 25% de ton Altération en Réduction de dégâts : le DoT nourrit l\'écorce.', convert: [{ from: 'alteration', to: 'reductionDegats', frac: 0.25 }] },
-  { id: 'sig_de_sacrifice', name: 'Sacrifice', icon: '😈', lvl: 1, desc: 'DÉMONISTE — transfère 35% de ta Barrière en Surpuissance : brûle ta protection pour la puissance.', convert: [{ from: 'barriere', to: 'surpuissance', frac: 0.35 }] },
-]
-for (const s of [...SOCLE_PASSIVES, ...SIGNATURE_PASSIVES]) POWERS.push(passiveToPower(s))
-/** IDs du SOCLE de passifs-conversion (débloqués par NIVEAU, hors arbre) — lus par computeUnlockedPowers. */
-export const SOCLE_PASSIVE_IDS: string[] = SOCLE_PASSIVES.map((s) => s.id)
+for (const p of UTILITY_PASSIVES) POWERS.push(p)
 
 const BY_ID = new Map(POWERS.map((p) => [p.id, p]))
 

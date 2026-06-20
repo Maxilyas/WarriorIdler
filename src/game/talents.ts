@@ -816,20 +816,36 @@ ability('au_imposition', 'aube', 3, 'Imposition des mains', 'au_imposition', 'D�
 minor('au_buf3', 'aube', 1, 'Plaque sacrée', 5, { reductionDegats: 10 }, { requires: ['au_hub'] })
 ks('au_resist', 'aube', 2, 'Grâce protectrice', 'SURVIE : -10% de dégâts subis. Exige Plaque sacrée au max (5).', { stat: { endurance: 16 }, ks: { flatDr: 0.1 } }, { requires: ['au_buf3'], requiresRank: { id: 'au_buf3', rank: 5 } })
 
-/* ================= v0.39 : SIGNATURES de classe (passifs-conversion) =================
- * Un passif-conversion SIGNATURE par classe, branché sur la racine de classe (tier 1, non exclusif,
- * sans minSpent) → accessible à TOUT build de la classe, quel que soit l'archétype. Le socle de
- * conversions UNIVERSELLES, lui, se débloque par niveau (hors arbre — voir powers.ts SOCLE_PASSIVES). */
-ability('gu_sig_colere', 'guerrier', 1, 'Colère incarnée', 'sig_gu_colere', 'SIGNATURE : 18% de ton Endurance compte comme Force (transfert). Le colosse frappe avec sa masse.', { requires: ['cl_guerrier'] })
-ability('pa_sig_foi', 'paladin', 1, 'Foi inébranlable', 'sig_pa_foi', 'SIGNATURE : ajoute 40% de ta puissance de soin en Barrière. Ta foi devient un mur.', { requires: ['cl_paladin'] })
-ability('dk_sig_sang', 'dk', 1, 'Pacte de sang', 'sig_dk_sang', 'SIGNATURE : 30% de ton Vol de vie compte comme Force (transfert).', { requires: ['cl_dk'] })
-ability('ma_sig_mana', 'mage', 1, 'Manabouclier', 'sig_ma_mana', 'SIGNATURE : 20% de ton Intelligence compte comme Barrière (transfert). L\'arcane protège.', { requires: ['cl_mage'] })
-ability('sh_sig_ancrage', 'chaman', 1, 'Ancrage tellurique', 'sig_sh_ancrage', 'SIGNATURE : 15% de ton Endurance compte comme Intelligence (transfert).', { requires: ['cl_chaman'] })
-ability('pr_sig_verbe', 'pretre', 1, 'Verbe guerrier', 'sig_pr_verbe', 'SIGNATURE : ajoute 35% de ta puissance de soin en Surpuissance. Soigne en frappant.', { requires: ['cl_pretre'] })
-ability('vo_sig_sangfroid', 'voleur', 1, 'Sang-froid', 'sig_vo_sangfroid', 'SIGNATURE : 25% de ta Maîtrise compte comme Dégâts de Crit (transfert).', { requires: ['cl_voleur'] })
-ability('ch_sig_lien', 'chasseur', 1, 'Lien bestial', 'sig_ch_lien', 'SIGNATURE : 15% de ton Agilité compte comme Endurance (transfert).', { requires: ['cl_chasseur'] })
-ability('dd_sig_equilibre', 'druide', 1, 'Équilibre primordial', 'sig_dd_equilibre', 'SIGNATURE : 25% de ton Altération compte comme Réduction de dégâts (transfert).', { requires: ['cl_druide'] })
-ability('de_sig_sacrifice', 'demoniste', 1, 'Sacrifice', 'sig_de_sacrifice', 'SIGNATURE : 35% de ta Barrière compte comme Surpuissance (transfert).', { requires: ['cl_demoniste'] })
+/* ================= v0.42 : CAPSTONES D'IDENTITÉ DE CLASSE (classes de base) =================
+ * UNE node très forte par classe, TOUT AU FOND : gatée derrière les ULTIMES de ses archétypes
+ * (`requires` = OR via isReachable → il suffit d'avoir bouclé N'IMPORTE quel archétype de la classe).
+ * Toujours active une fois allouée (keystone, PAS un slot). Effets 100% sur des leviers `ks` existants.
+ * VALEURS PROVISOIRES : sims ttk/survival à rafraîchir avant calibrage. (Panthéon : à faire plus tard.) */
+ks('id_voleur', 'voleur', 2, 'Sang-froid absolu', 'IDENTITÉ — la létalité de l\'assassin accompli : +2 Points de Combo max ET tes finisseurs frappent +30%. Exige un ultime Voleur.',
+  { stat: { degatsCrit: 30, critique: 15 }, ks: { comboCap: 2, finisherMult: 0.3 } }, { requires: ['as_peste', 'om_linceul', 'lv_apotheose'] })
+ks('id_mage', 'mage', 2, 'Convergence parfaite', 'IDENTITÉ — maître des trois éléments : +20% de dégâts à TOUS tes sorts. Exige un ultime Mage.',
+  { stat: { intelligence: 30 }, ks: { damageMult: 1.20 } }, { requires: ['py_meteore', 'cr_hiver', 'ar_singularite', 'cv_cataclysme'] })
+ks('id_chasseur', 'chasseur', 2, 'Meute primale', 'IDENTITÉ — la bête déchaînée : +50% de dégâts de familier ET +50% × ta Précision en dégâts de familier. Exige un ultime Chasseur.',
+  { stat: { agilite: 25 }, ks: { petBonus: 0.5, petFromPrecision: 0.5 } }, { requires: ['me_curee', 'fa_aigle', 'sy_assaut'] })
+ks('id_guerrier', 'guerrier', 2, 'Indomptable', 'IDENTITÉ — le colosse acculé : sous 50% PV, +30% de dégâts ; et -15% de dégâts subis en permanence. Exige un ultime Guerrier.',
+  { stat: { force: 25 }, ks: { lowHpBonus: { threshold: 0.5, mult: 1.3 }, flatDr: 0.15 } }, { requires: ['se_carnage', 're_egide', 'ju_avatar', 'fu_berserk'] })
+ks('id_pretre', 'pretre', 2, 'Équilibre divin', 'IDENTITÉ — la boucle Lumière↔Ombre complète : 25% de tes soins frappent l\'ennemi ET 20% de tes dégâts d\'ombre soignent le groupe. Exige un ultime Prêtre.',
+  { stat: { intelligence: 24 }, ks: { healToDamage: 0.25, damageToHeal: 0.2 } }, { requires: ['lu_aube', 'vi_folie', 'cr_eclipse'] })
+ks('id_druide', 'druide', 2, 'Avatar primordial', 'IDENTITÉ — tu incarnes les trois aspects à la fois (Fauve + Ours + Hibou) : +12% de dégâts et un socle de stats des trois formes. Exige un ultime Druide.',
+  { stat: { agilite: 18, endurance: 18, critique: 15, intelligence: 15 }, ks: { damageMult: 1.12 } }, { requires: ['ln_etoiles', 'fo_eclosion', 'mf_chimere'] })
+
+/* ================= v0.42 : INSTINCTS — passifs utilitaires (3 slots) =================
+ * Cluster universel du Cœur : chaque node débloque un passif slottable (le joueur en équipe 3). Fini
+ * l'auto-déblocage par niveau. Effets = bonus directs (mods/réduction). VALEURS PROVISOIRES. */
+minor('inst_hub', 'coeur', 1, 'Instincts', 1, { endurance: 10 }, { requires: ['co_start'] })
+ability('inst_vitalite', 'coeur', 2, 'Vitalité', 'pas_vitalite', 'SLOT — +80 Endurance (PV) une fois équipé.', { requires: ['inst_hub'] })
+ability('inst_carapace', 'coeur', 2, 'Carapace', 'pas_carapace', 'SLOT — -12% de dégâts subis, +20 Endurance.', { requires: ['inst_hub'] })
+ability('inst_rempart', 'coeur', 2, 'Rempart', 'pas_rempart', 'SLOT — +60 Barrière (anti-burst).', { requires: ['inst_hub'] })
+ability('inst_sangsue', 'coeur', 2, 'Sangsue', 'pas_sangsue', 'SLOT — +50 Vol de vie.', { requires: ['inst_hub'] })
+ability('inst_lynx', 'coeur', 2, 'Œil de lynx', 'pas_lynx', 'SLOT — +70 Précision.', { requires: ['inst_hub'] })
+ability('inst_perforation', 'coeur', 2, 'Perforation', 'pas_perforation', 'SLOT — +70 Pénétration.', { requires: ['inst_hub'] })
+ability('inst_cruaute', 'coeur', 2, 'Cruauté', 'pas_cruaute', 'SLOT — +70 Dégâts de crit.', { requires: ['inst_hub'] })
+ability('inst_celerite', 'coeur', 2, 'Célérité', 'pas_celerite', 'SLOT — +70 Hâte.', { requires: ['inst_hub'] })
 
 /* ------------------------------------------------------------------ */
 /* Méta de constellation.                                             */
