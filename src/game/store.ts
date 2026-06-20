@@ -4947,7 +4947,11 @@ export const useGame = create<GameState>((set, get) => {
       // On ne peut farmer que jusqu'à son RECORD DANS LE BIOME ACTIF.
       const cap = Math.max(1, s.biomeBest[s.activeBiome] ?? 1)
       const stage = Math.max(1, Math.min(cap, Math.round(n)))
-      const next = { ...s, stage, enemy: makeEnemy(stage, s.activeBiome) }
+      // v0.40.2 — chaque vague démarre FRAÎCHE (cf. passage de vague par kill) : changer manuellement
+      // de vague soigne l'équipe à fond + RAZ les recharges (sinon la barre de vie restait à son niveau).
+      const characters = s.characters.map(fullHeal)
+      resetAllCooldowns(characters)
+      const next = { ...s, characters, stage, enemy: makeEnemy(stage, s.activeBiome) }
       persist(next)
       set(next)
     },
@@ -4960,8 +4964,10 @@ export const useGame = create<GameState>((set, get) => {
       // v0.35 — progression GLOBALE : changer de biome GARDE ton Palier (le biome n'est qu'un CANAL
       // d'élément/résistance, pas un monde séparé). Une seule zone, un seul Palier.
       const stage = s.stage
+      const characters = s.characters.map(fullHeal) // v0.40.2 — entrée fraîche (PV pleins + recharges RAZ)
+      resetAllCooldowns(characters)
       const next = {
-        ...s, activeBiome: biome,
+        ...s, activeBiome: biome, characters,
         enemy: makeEnemy(stage, biome),
         log: pushLog(s.log, `🧭 Zone : ${getBiomeDef(biome).icon} ${getBiomeDef(biome).name} (élément ${DAMAGE_TYPES[biome].name}).`, 'info'),
       }
@@ -4979,10 +4985,12 @@ export const useGame = create<GameState>((set, get) => {
       const biomeStages = { ...s.biomeStages, [s.activeBiome]: s.stage }
       const stage = Math.max(1, biomeStages[biome] ?? 1)
       const until = Date.now() + BIOME_LOCK_MS
+      const characters = s.characters.map(fullHeal) // v0.40.2 — entrée fraîche (PV pleins + recharges RAZ)
+      resetAllCooldowns(characters)
       const next = {
         ...s,
         fragments: s.fragments - BIOME_LOCK_FRAGMENTS,
-        activeBiome: biome, biomeStages, stage,
+        activeBiome: biome, biomeStages, stage, characters,
         biomeLockUntil: until,
         nextRotateAt: until, // à la fin du forçage, la rotation aléatoire reprend aussitôt
         enemy: makeEnemy(stage, biome),
