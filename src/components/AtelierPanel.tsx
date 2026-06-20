@@ -15,6 +15,7 @@ import { QualityStars } from './ItemRow'
 import {
   METIERS, METIER_LIST, METIER_NODES, METIER_BRANCHES, METIER_MAX_LEVEL, AUTOMATE_FORGERON_LEVELS,
   craftMods, levelFromXp, xpTotalForLevel, pointsAvailable, pointsTotal, canLearnNode, nodeRank,
+  forgeChainBonus, forgeCreuset,
   respecCost, respecBranchCost, pointsSpentInBranch,
   forgeBonus, signatureLingotCost, smeltLingots, MASTERWORK_LINGOTS,
   type MetierId, type MetierNode,
@@ -103,7 +104,9 @@ export function AtelierPanel() {
         (() => {
           // E1 — chaque métier est découpé en SOUS-PAGES (moins dense, mobile-first). L'Arbre
           // a sa propre page ; les pages non pertinentes (ex. Automates < palier 65) sont MASQUÉES.
-          const treePage: SubPage = { id: 'arbre', label: 'Arbre', icon: '🌳', hint: 'Dépense tes points de métier dans les compétences.', node: <MetierTree metier={metier} alwaysOpen /> }
+          const treePage: SubPage = metier === 'forgeron'
+            ? { id: 'arbre', label: 'Forge', icon: '⬡', hint: 'Pose tes tuiles : chaque tuile doit toucher une tuile déjà forgée (ou le Creuset central).', node: <ForgeBoard /> }
+            : { id: 'arbre', label: 'Arbre', icon: '🌳', hint: 'Dépense tes points de métier dans les compétences.', node: <MetierTree metier={metier} alwaysOpen /> }
           let pages: SubPage[]
           if (metier === 'forgeron') {
             pages = [
@@ -334,6 +337,156 @@ function MetierTree({ metier, alwaysOpen }: { metier: MetierId; alwaysOpen?: boo
           </div>
         )
       })}
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* ⬡ La Forge hexagonale (v0.41, Lot 1) — planche à tuiles du Forgeron */
+/* ------------------------------------------------------------------ */
+
+const FAMILY_LABEL: Record<string, string> = { qualite: 'Qualité', ressource: 'Ressource', idle: 'Idle', chance: 'Chance' }
+/** Tuiles dont l'EFFET n'est pas encore branché (lots ultérieurs) : visibles mais non forgeables.
+ *  (Le Foyer en est exclu : c'est la porte d'entrée de la Voie Industriel — sa prod arrive au Lot 2.) */
+const FORGE_PENDING = new Set(['frappe', 'hautFourneau', 'jonctionAI', 'jonctionAF', 'jonctionFI'])
+
+/** Couleur de Voie d'une tuile (dérivée de sa famille / nature). */
+function tileColor(n: MetierNode): string {
+  if (n.kind === 'junction') return '#94a3b8'
+  if (n.family === 'qualite') return '#60a5fa'
+  if (n.family === 'ressource' || n.family === 'chance') return '#fb923c'
+  if (n.family === 'idle') return '#a78bfa'
+  return '#94a3b8'
+}
+
+/**
+ * v0.41 — La Forge hexagonale : allocation par ADJACENCE (le build = le placement).
+ * Le Creuset (cœur) est acquis d'office ; une tuile se forge si elle touche une tuile possédée.
+ * Remplace MetierTree pour le seul Forgeron ; les 3 autres métiers gardent la liste.
+ */
+function ForgeBoard() {
+  const metiers = useGame((s) => s.metiers)
+  const bestStage = useGame((s) => s.bestStage)
+  const learn = useGame((s) => s.learnMetierNode)
+  const [selected, setSelected] = useState<string | null>(null)
+
+  const tiles = METIER_NODES.forgeron.filter((n) => n.hex)
+  const S = 26, OX = 190, OY = 205, HH = (Math.sqrt(3) / 2) * S
+  const px = (q: number, r: number) => ({ x: OX + S * 1.5 * q, y: OY + HH * 2 * (r + q / 2) })
+  const poly = (cx: number, cy: number) =>
+    `${cx + S},${cy} ${cx + S / 2},${cy + HH} ${cx - S / 2},${cy + HH} ${cx - S},${cy} ${cx - S / 2},${cy - HH} ${cx + S / 2},${cy - HH}`
+
+  // Tuiles possédées indexées par coordonnée (pour tracer les liens de Chaîne).
+  const ownedByKey = new Map<string, MetierNode>()
+  for (const n of tiles) if ((metiers.forgeron.nodes[n.id] ?? 0) > 0) ownedByKey.set(`${n.hex!.q},${n.hex!.r}`, n)
+
+  const links: { x1: number; y1: number; x2: number; y2: number; color: string }[] = []
+  const seenLink = new Set<string>()
+  const DIRS: [number, number][] = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]]
+  for (const n of ownedByKey.values()) {
+    if (!n.family) continue
+    const a = px(n.hex!.q, n.hex!.r)
+    for (const [dq, dr] of DIRS) {
+      const m = ownedByKey.get(`${n.hex!.q + dq},${n.hex!.r + dr}`)
+      if (!m || m.family !== n.family) continue
+      const key = [n.id, m.id].sort().join('|')
+      if (seenLink.has(key)) continue
+      seenLink.add(key)
+      const b = px(m.hex!.q, m.hex!.r)
+      links.push({ x1: a.x, y1: a.y, x2: b.x, y2: b.y, color: tileColor(n) })
+    }
+  }
+
+  const core = px(0, 0)
+  const creuset = forgeCreuset(metiers)
+  const chains = forgeChainBonus(metiers)
+  const sel = selected ? tiles.find((t) => t.id === selected) : undefined
+  const selRank = sel ? (metiers.forgeron.nodes[sel.id] ?? 0) : 0
+  const selPending = !!sel && FORGE_PENDING.has(sel.id)
+  const selCheck = sel && !selPending ? canLearnNode(metiers, 'forgeron', sel.id, bestStage) : null
+  const selMaxed = !!sel && selRank >= (sel?.maxRank ?? 1)
+
+  return (
+    <div className="mb-3">
+      <svg viewBox="0 0 380 356" className="w-full select-none" style={{ touchAction: 'manipulation' }}>
+        {links.map((l, i) => (
+          <line key={i} x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2} stroke={l.color} strokeWidth={3} strokeOpacity={0.5} strokeLinecap="round" />
+        ))}
+        {/* Creuset (cœur, acquis d'office) */}
+        <polygon points={poly(core.x, core.y)} fill={creuset > 0 ? '#fbbf2433' : '#1c1206'} stroke="#fbbf24" strokeWidth={2} />
+        <text x={core.x} y={core.y - 3} textAnchor="middle" dominantBaseline="central" fontSize={15}>🔥</text>
+        <text x={core.x} y={core.y + 13} textAnchor="middle" dominantBaseline="central" fontSize={8} fill="#fcd34d">Creuset</text>
+        {tiles.map((n) => {
+          const { x, y } = px(n.hex!.q, n.hex!.r)
+          const rank = metiers.forgeron.nodes[n.id] ?? 0
+          const owned = rank > 0
+          const maxed = rank >= n.maxRank
+          const pending = FORGE_PENDING.has(n.id)
+          const ok = !pending && canLearnNode(metiers, 'forgeron', n.id, bestStage).ok
+          const color = tileColor(n)
+          const isKey = n.kind === 'keystone'
+          const fill = owned ? color + '44' : ok ? color + '1f' : '#0b0e14'
+          const stroke = owned ? color : ok ? color : '#283042'
+          return (
+            <g key={n.id} onClick={() => setSelected(n.id)} style={{ cursor: 'pointer' }}>
+              <polygon points={poly(x, y)} fill={fill} stroke={stroke} strokeWidth={isKey ? 2.6 : 1.4} strokeOpacity={owned || ok ? 1 : 0.7} />
+              {selected === n.id && <polygon points={poly(x, y)} fill="none" stroke="#e2e8f0" strokeWidth={1.4} />}
+              <text x={x} y={n.maxRank > 1 ? y - 4 : y} textAnchor="middle" dominantBaseline="central" fontSize={15} opacity={owned || ok ? 1 : 0.4}>{n.icon}</text>
+              {n.maxRank > 1 && (
+                <text x={x} y={y + 12} textAnchor="middle" dominantBaseline="central" fontSize={9} fill={owned ? color : '#64748b'}>{rank}/{n.maxRank}</text>
+              )}
+              {maxed && <text x={x + 14} y={y - 13} textAnchor="middle" dominantBaseline="central" fontSize={11} fill="#34d399">✓</text>}
+              {isKey && !maxed && <text x={x} y={y - 17} textAnchor="middle" dominantBaseline="central" fontSize={9} fill={owned ? color : '#64748b'}>◆</text>}
+              {pending && <text x={x} y={y + 12} textAnchor="middle" dominantBaseline="central" fontSize={9} fill="#64748b">⏳</text>}
+            </g>
+          )
+        })}
+      </svg>
+
+      {/* Synergies actives (mini-récap ; le tableau complet vient au Lot 4) */}
+      {(creuset > 0 || chains.qualite > 0 || chains.ressource > 0 || chains.idle > 0 || chains.chance > 0) && (
+        <div className="mt-1 flex flex-wrap gap-1.5 text-[10px]">
+          {creuset > 0 && <span className="rounded bg-amber-900/30 px-1.5 py-0.5 text-amber-200">🔥 Creuset +{Math.round(creuset * 100)}%</span>}
+          {(['qualite', 'ressource', 'idle', 'chance'] as const).map((f) =>
+            chains[f] > 0 ? (
+              <span key={f} className="rounded bg-slate-800 px-1.5 py-0.5 text-slate-300">⛓ {FAMILY_LABEL[f]} +{Math.round(chains[f] * 100)}%</span>
+            ) : null,
+          )}
+        </div>
+      )}
+
+      {/* Détail de la tuile sélectionnée */}
+      {sel ? (
+        <div className="mt-2 rounded-xl border border-slate-700 bg-[#0d111a] p-2.5">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">{sel.icon}</span>
+            <span className="flex-1 text-[12px] font-semibold text-slate-200">
+              {sel.kind === 'keystone' && <span className="text-amber-300">◆ </span>}{sel.name}
+              {sel.maxRank > 1 && <span className="text-slate-500"> {selRank}/{sel.maxRank}</span>}
+            </span>
+          </div>
+          <p className="mt-1 text-[10.5px] leading-snug text-slate-400">{sel.desc}</p>
+          {sel.kind === 'keystone' && <p className="mt-1 text-[9.5px] text-amber-300/70">Keystone exclusif : un seul des trois actif (en choisir un autre rembourse celui-ci).</p>}
+          {sel.id === 'foyer' && <p className="mt-1 text-[9.5px] text-violet-300/70">Ouvre la Voie Industriel — sa production passive est branchée au prochain lot.</p>}
+          <div className="mt-2">
+            {selPending ? (
+              <span className="text-[10.5px] font-medium text-slate-500">⏳ Bientôt — cette tuile s'active dans un prochain lot.</span>
+            ) : selMaxed ? (
+              <span className="text-[11px] font-semibold text-emerald-400">✓ Acquis</span>
+            ) : selCheck?.ok ? (
+              <button onClick={() => learn('forgeron', sel.id)} className="w-full rounded-lg bg-amber-600 py-2 text-[12px] font-semibold text-slate-950 hover:bg-amber-500">
+                🔨 Forger {selRank > 0 ? `rang ${selRank + 1}` : 'cette tuile'} · 1 pt
+              </button>
+            ) : (
+              <span className="text-[10.5px] font-medium text-rose-400/80">🔒 {selCheck?.reason}</span>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="mt-2 rounded-xl border border-dashed border-slate-800 bg-black/20 p-3 text-center text-[10.5px] text-slate-500">
+          Touche une tuile pour la voir. Une tuile se forge si elle touche une tuile déjà acquise (ou le Creuset central 🔥).
+        </div>
+      )}
     </div>
   )
 }

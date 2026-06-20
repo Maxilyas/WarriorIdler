@@ -243,7 +243,7 @@ export const METIER_NODES: Record<MetierId, MetierNode[]> = {
     { id: 'frappe', name: 'Frappe brûlante', icon: '🔨', maxRank: 1, minLevel: 8, branch: 'armurier',
       hex: { q: -1, r: -1 }, family: 'qualite', kind: 'function',
       desc: 'Débloque le MINI-JEU DE FRAPPE : frappe dans la zone pour générer de la CHALEUR (qualité/rareté).' },
-    { id: 'ascension', name: 'Grand-maître forgeron', icon: '✨', maxRank: 1, minLevel: 14, minStage: 50, requires: 'surillvl', branch: 'atelier', keystone: true,
+    { id: 'ascension', name: 'Grand-maître forgeron', icon: '✨', maxRank: 1, minLevel: 14, minStage: 50, branch: 'atelier', keystone: true, exclusive: 'forge-keystone',
       hex: { q: 0, r: -4 }, family: 'qualite', kind: 'keystone',
       desc: 'Débloque l\'ASCENSION : monter un objet d\'un cran de rareté.' },
     /* — 🔥 FONDEUR : ressources / lingots / chance (bras sud-est) — */
@@ -262,7 +262,7 @@ export const METIER_NODES: Record<MetierId, MetierNode[]> = {
     { id: 'transmute', name: 'Transmutateur', icon: '🔄', maxRank: 1, minLevel: 4, minStage: 20, branch: 'atelier',
       hex: { q: 2, r: 1 }, family: 'ressource', kind: 'function',
       desc: 'Débloque la TRANSMUTATION : changer la stat primaire d\'un objet.' },
-    { id: 'hautFourneau', name: 'Haut fourneau', icon: '🌋', maxRank: 1, minLevel: 14, minStage: 50, branch: 'fondeur', keystone: true,
+    { id: 'hautFourneau', name: 'Haut fourneau', icon: '🌋', maxRank: 1, minLevel: 14, minStage: 50, branch: 'fondeur', keystone: true, exclusive: 'forge-keystone',
       hex: { q: 3, r: 1 }, family: 'ressource', kind: 'keystone',
       desc: 'KEYSTONE : la fonte/recyclage rembourse une part des coûts ET lâche un BURST d\'XP de Forgeron.' },
     /* — 🤖 INDUSTRIEL : idle / automates / Foyer (bras sud-ouest) — */
@@ -278,7 +278,7 @@ export const METIER_NODES: Record<MetierId, MetierNode[]> = {
     { id: 'montage', name: 'Chaîne de montage', icon: '⚙️', maxRank: 3, requires: 'automates', branch: 'manufacture',
       hex: { q: -2, r: 3 }, family: 'idle', kind: 'stat',
       desc: '−8% de durée des runs d\'automates par rang.' },
-    { id: 'automate4', name: 'Manufacture', icon: '🏭', maxRank: 1, minLevel: 40, minStage: 80, requires: 'automates', branch: 'manufacture', keystone: true,
+    { id: 'automate4', name: 'Manufacture', icon: '🏭', maxRank: 1, minLevel: 40, minStage: 80, requires: 'automates', branch: 'manufacture', keystone: true, exclusive: 'forge-keystone',
       hex: { q: -3, r: 3 }, family: 'idle', kind: 'keystone',
       desc: 'Débloque la construction d\'un QUATRIÈME automate.' },
     /* — ◈ CARREFOURS : jonctions (ponts croisés) — invisibles tant que la planche hex n'est pas livrée — */
@@ -464,10 +464,18 @@ export function canLearnNode(
   if (pointsAvailable(state) + exclusiveRefund < 1) return { ok: false, reason: 'Aucun point disponible — pratique ton métier.' }
   if (def.minLevel && levelFromXp(state.xp) < def.minLevel) return { ok: false, reason: `Niveau de métier ${def.minLevel} requis.` }
   if (def.minStage && bestStage < def.minStage) return { ok: false, reason: `Chapitre ${chapitreOf(def.minStage)} requis.` }
-  const needRank = def.requiresRank ?? 1
-  if (def.requires && (state.nodes[def.requires] ?? 0) < needRank) {
-    const parent = getMetierNode(metier, def.requires)
-    return { ok: false, reason: `Requiert « ${parent?.name ?? def.requires} »${needRank > 1 ? ` rang ${needRank}` : ''}.` }
+  // v0.41 — Forgeron : gating par ADJACENCE hexagonale (remplace requires/requiresRank). Le 1er rang
+  // exige une tuile voisine déjà possédée (ou le Creuset) ; monter un rang déjà placé reste libre.
+  if (metier === 'forgeron' && def.hex) {
+    if (rank === 0 && !forgeForgeable(metiers, nodeId)) {
+      return { ok: false, reason: 'Tuile isolée — forge une tuile adjacente d\'abord.' }
+    }
+  } else {
+    const needRank = def.requiresRank ?? 1
+    if (def.requires && (state.nodes[def.requires] ?? 0) < needRank) {
+      const parent = getMetierNode(metier, def.requires)
+      return { ok: false, reason: `Requiert « ${parent?.name ?? def.requires} »${needRank > 1 ? ` rang ${needRank}` : ''}.` }
+    }
   }
   // (v0.28 : plus de blocage exclusif — choisir une autre spé la remplace gratuitement, voir learnMetierNode.)
   return { ok: true }
