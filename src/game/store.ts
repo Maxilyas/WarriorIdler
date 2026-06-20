@@ -1435,7 +1435,7 @@ function freshSave(): SaveData {
     armedXpBonus: null,
     lastTransmute: 0,
     philosophale: false,
-    metiersV: 7,
+    metiersV: 8,
     essences: {},
     sceaux: 0,
     dungeonProgress: emptyDungeonProgress(),
@@ -1702,6 +1702,23 @@ function sanitize(save: SaveData): SaveData {
     }
     save.metiers = { ...save.metiers, alchimiste: { ...save.metiers.alchimiste, nodes } }
     save.metiersV = 7
+  }
+  // v0.41 — MIGRATION metiersV 8 : Forge hexagonale. Les ids de tuiles sont INCHANGÉS (compat directe :
+  // une tuile déjà possédée le reste, l'adjacence ne gate que les NOUVEAUX forgeages). Seule nouveauté
+  // structurelle : le `foyer` est une tuile NEUVE servant de PORTE d'entrée de la Voie Industriel — les
+  // anciennes saves possèdent automates/trempe/montage SANS foyer. On l'OFFRE (gratuit, si un point est
+  // libre) pour reconnecter le bras au Creuset. Le reste est grandfathered : on ne retire RIEN (les
+  // éventuels keystones multiples d'avant restent ; l'exclusivité ne vaut que pour les futurs choix).
+  if ((save.metiersV ?? 1) < 8 && save.metiers?.forgeron) {
+    const f = save.metiers.forgeron
+    const nodes: Record<string, number> = { ...(f.nodes ?? {}) }
+    const ownsIndustriel = ['automates', 'trempeLente', 'montage', 'automate4'].some((id) => (nodes[id] ?? 0) > 0)
+    if (ownsIndustriel && !(nodes.foyer > 0)) {
+      const available = levelFromXp(f.xp ?? 0) - Object.values(nodes).reduce((a, b) => a + b, 0)
+      if (available >= 1) nodes.foyer = 1 // cadeau : reconnecte le bras Industriel sans rien faire perdre
+    }
+    save.metiers = { ...save.metiers, forgeron: { ...f, nodes } }
+    save.metiersV = 8
   }
   // v0.26 : 📖 Catalogue — les saves d'avant sont créditées de leurs gemmes déjà possédées
   // (stock + serties), pour ne pas repartir de zéro.
