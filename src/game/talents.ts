@@ -835,17 +835,21 @@ ks('id_druide', 'druide', 2, 'Avatar primordial', 'IDENTITÉ — tu incarnes les
   { stat: { agilite: 18, endurance: 18, critique: 15, intelligence: 15 }, ks: { damageMult: 1.12 } }, { requires: ['ln_etoiles', 'fo_eclosion', 'mf_chimere'] })
 
 /* ================= v0.42 : INSTINCTS — passifs utilitaires (3 slots) =================
- * Cluster universel du Cœur : chaque node débloque un passif slottable (le joueur en équipe 3). Fini
- * l'auto-déblocage par niveau. Effets = bonus directs (mods/réduction). VALEURS PROVISOIRES. */
+ * Cluster universel du Cœur. LAYOUT : CHAÎNE (`requires` = le précédent) → le dendrogramme radial en
+ * fait un ÉPI bien espacé (chaque node à une PROFONDEUR distincte = rayon distinct), au lieu d'un
+ * éventail de 8 feuilles sœurs SUPERPOSÉES à faible rayon (incliquables). RÉACHABILITÉ : `links:
+ * inst_hub` → dès « Instincts » pris, CHACUN est allouable directement (on en choisit 3, sans ordre
+ * imposé ; isReachable lit requires+links en OU, mais l'arbre couvrant n'utilise QUE requires → l'épi
+ * reste propre, les liens-ponts colinéaires se masquent dessus). Effets = bonus directs. PROVISOIRE. */
 minor('inst_hub', 'coeur', 1, 'Instincts', 1, { endurance: 10 }, { requires: ['co_start'] })
-ability('inst_vitalite', 'coeur', 2, 'Vitalité', 'pas_vitalite', 'SLOT — +80 Endurance (PV) une fois équipé.', { requires: ['inst_hub'] })
-ability('inst_carapace', 'coeur', 2, 'Carapace', 'pas_carapace', 'SLOT — -12% de dégâts subis, +20 Endurance.', { requires: ['inst_hub'] })
-ability('inst_rempart', 'coeur', 2, 'Rempart', 'pas_rempart', 'SLOT — +60 Barrière (anti-burst).', { requires: ['inst_hub'] })
-ability('inst_sangsue', 'coeur', 2, 'Sangsue', 'pas_sangsue', 'SLOT — +50 Vol de vie.', { requires: ['inst_hub'] })
-ability('inst_lynx', 'coeur', 2, 'Œil de lynx', 'pas_lynx', 'SLOT — +70 Précision.', { requires: ['inst_hub'] })
-ability('inst_perforation', 'coeur', 2, 'Perforation', 'pas_perforation', 'SLOT — +70 Pénétration.', { requires: ['inst_hub'] })
-ability('inst_cruaute', 'coeur', 2, 'Cruauté', 'pas_cruaute', 'SLOT — +70 Dégâts de crit.', { requires: ['inst_hub'] })
-ability('inst_celerite', 'coeur', 2, 'Célérité', 'pas_celerite', 'SLOT — +70 Hâte.', { requires: ['inst_hub'] })
+ability('inst_vitalite', 'coeur', 2, 'Vitalité', 'pas_vitalite', 'SLOT — +80 Endurance (PV).', { requires: ['inst_hub'] })
+ability('inst_cruaute', 'coeur', 3, 'Cruauté', 'pas_cruaute', 'SLOT — +70 Dégâts de crit.', { requires: ['inst_vitalite'], links: ['inst_hub'] })
+ability('inst_carapace', 'coeur', 4, 'Carapace', 'pas_carapace', 'SLOT — -12% de dégâts subis, +20 Endurance.', { requires: ['inst_cruaute'], links: ['inst_hub'] })
+ability('inst_perforation', 'coeur', 5, 'Perforation', 'pas_perforation', 'SLOT — +70 Pénétration.', { requires: ['inst_carapace'], links: ['inst_hub'] })
+ability('inst_sangsue', 'coeur', 6, 'Sangsue', 'pas_sangsue', 'SLOT — +50 Vol de vie.', { requires: ['inst_perforation'], links: ['inst_hub'] })
+ability('inst_lynx', 'coeur', 7, 'Œil de lynx', 'pas_lynx', 'SLOT — +70 Précision.', { requires: ['inst_sangsue'], links: ['inst_hub'] })
+ability('inst_rempart', 'coeur', 8, 'Rempart', 'pas_rempart', 'SLOT — +60 Barrière (anti-burst).', { requires: ['inst_lynx'], links: ['inst_hub'] })
+ability('inst_celerite', 'coeur', 9, 'Célérité', 'pas_celerite', 'SLOT — +70 Hâte.', { requires: ['inst_rempart'], links: ['inst_hub'] })
 
 /* ------------------------------------------------------------------ */
 /* Méta de constellation.                                             */
