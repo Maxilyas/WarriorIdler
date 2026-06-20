@@ -2007,21 +2007,29 @@ function sanitize(save: SaveData): SaveData {
     // `powers` + `support` (ex-`generators`, back-compat) + `passives`, on valide, on range par genre —
     // seuls les builders quittent la barre des actifs ; les boucliers/soins restent où ils étaient.
     const legacyGen = (c as { generators?: (string | null)[] }).generators // ex-`generators` → `support`
-    const equipped = [
-      ...(Array.isArray(c.powers) ? c.powers : []),
-      ...(Array.isArray(c.support) ? c.support : Array.isArray(legacyGen) ? legacyGen : []),
-      ...(Array.isArray(c.passives) ? c.passives : []),
-    ]
+    const powersArr = Array.isArray(c.powers) ? c.powers : []
+    const supportArr = Array.isArray(c.support) ? c.support : Array.isArray(legacyGen) ? legacyGen : []
+    const passivesArr = Array.isArray(c.passives) ? c.passives : []
     const act: string[] = []
     const sup: string[] = []
     const pas: string[] = []
-    for (const pid of equipped) {
-      if (!pid || !c.unlockedPowers.includes(pid)) continue
-      const pw = getPower(pid)
+    const seen = new Set<string>()
+    const valid = (pid: string | null) => (pid && !seen.has(pid) && c.unlockedPowers.includes(pid) ? getPower(pid) : undefined)
+    // v0.39 BUGFIX : on RESPECTE la lane où le joueur a rangé chaque sort. Les boucliers/soins sont
+    // MULTI-LANE (équipables en Actif OU en Soutien) ; sans ce premier passage par lane, la
+    // réconciliation les renvoyait toujours en Actif (`else`) → ils disparaissaient des slots Soutien
+    // à chaque chargement de la save (« bouclier runique / second souffle s'enlève »).
+    for (const pid of supportArr) { const pw = valid(pid); if (pw && isSupport(pw) && sup.length < SUPPORT_SLOTS) { sup.push(pid!); seen.add(pid!) } }
+    for (const pid of passivesArr) { const pw = valid(pid); if (pw && pw.kind === 'passive' && pas.length < 3) { pas.push(pid!); seen.add(pid!) } }
+    for (const pid of powersArr) { const pw = valid(pid); if (pw && pw.kind === 'active' && !isBuilder(pw) && act.length < 5) { act.push(pid!); seen.add(pid!) } }
+    // Filet : un sort mal rangé (builder resté en Actif, passif égaré…) rejoint sa lane naturelle s'il
+    // reste de la place — seuls les builders quittent d'office la barre d'actifs.
+    for (const pid of [...supportArr, ...powersArr, ...passivesArr]) {
+      const pw = valid(pid)
       if (!pw) continue
-      if (pw.kind === 'passive') { if (pas.length < 3 && !pas.includes(pid)) pas.push(pid) }
-      else if (isBuilder(pw)) { if (sup.length < SUPPORT_SLOTS && !sup.includes(pid)) sup.push(pid) }
-      else if (act.length < 5 && !act.includes(pid)) act.push(pid)
+      if (pw.kind === 'passive') { if (pas.length < 3) { pas.push(pid!); seen.add(pid!) } }
+      else if (isBuilder(pw)) { if (sup.length < SUPPORT_SLOTS) { sup.push(pid!); seen.add(pid!) } }
+      else if (act.length < 5) { act.push(pid!); seen.add(pid!) }
     }
     c.powers = [0, 1, 2, 3, 4].map((i) => act[i] ?? null)
     c.support = [0, 1, 2].map((i) => sup[i] ?? null)

@@ -432,7 +432,7 @@ ks('sy_tireur', 'symbiose', 3, 'Tireur d\'élite', 'CHOIX : +0,2 finisseur & +24
 minor('sy_instinct', 'symbiose', 2, 'Instinct de chasse', 5, { agilite: 6, precision: 6 }, { requires: ['sy_pivot'] }) // ⛓ tampon Agi/Précision
 ks('sy_oeilcroc', 'symbiose', 3, 'Œil et croc', 'CROSS-SCALING : ton familier inflige +50 % × ta Précision (BORNÉ) — la Précision sert au tir ET à la bête. Exige Instinct de chasse au max (5) + 10 pts.', { stat: { precision: 16 }, ks: { petFromPrecision: 0.5 } }, { requires: ['sy_instinct'], requiresRank: { id: 'sy_instinct', rank: 5 }, minSpent: 10 })
 ks('sy_miseamort', 'symbiose', 4, 'Mise à mort partagée', 'EXÉCUTION : tes finisseurs exécutent sous 25 % de PV (×2,4) ; +10 % de dégâts de familier. Profond : 8 pts.', { stat: { degatsBoss: 16 }, ks: { executeBonus: { threshold: 0.25, mult: 2.4 }, petBonus: 0.1 } }, { requires: ['sy_bond'], minSpent: 8 })
-ks('sy_seigneur', 'symbiose', 5, 'Seigneur des bêtes', 'CAPSTONE : +12 % de dégâts permanent ET +25 % de dégâts de familier (la bête déchaînée). Tout au fond : 14 pts.', { stat: { agilite: 20 }, ks: { damageMult: 1.12, petBonus: 0.25 } }, { requires: ['sy_oeilcroc'], minSpent: 14 })
+ks('sy_seigneur', 'symbiose', 5, 'Seigneur des bêtes', 'CAPSTONE : +12 % de dégâts permanent ET +25 % de dégâts de familier (la bête déchaînée). Tout au fond : 13 pts.', { stat: { agilite: 20 }, ks: { damageMult: 1.12, petBonus: 0.25 } }, { requires: ['sy_oeilcroc'], minSpent: 13 })
 ability('sy_assaut', 'symbiose', 6, 'Assaut de la meute', 'sy_assaut', 'ULTIME — toi et toute la meute déferlez sur le pack en un assaut coordonné. Gaté : Seigneur des bêtes + 14 pts.', { requires: ['sy_seigneur'], minSpent: 14 })
 
 /* ================================================================== */
@@ -650,7 +650,7 @@ ks('sg_vampirisme', 'sang', 2, 'Vampirisme', 'SURVIE : tes DoT te soignent (25% 
 minor('sg_buf2', 'sang', 3, 'Sang noir', 5, { endurance: 12 }, { requires: ['sg_vampirisme'] })
 ks('sg_caillot', 'sang', 4, 'Caillot', 'SURVIE : -12% de dégâts subis. Exige Sang noir au max (5).', { stat: { endurance: 16 }, ks: { flatDr: 0.12 } }, { requires: ['sg_buf2'], requiresRank: { id: 'sg_buf2', rank: 5 } })
 ability('sg_provoc', 'sang', 2, 'Provocation', 'provocation', 'MENACE : attire les attaques (rôle de tank).', { requires: ['sg_os'] })
-ability('sg_egide', 'sang', 5, 'Égide titanesque', 'egide_titanesque', 'ULTIME — énorme bouclier d\'absorption. Tout au fond : 20 pts dans la voie.', { requires: ['sg_bouclier'], minSpent: 20 })
+ability('sg_egide', 'sang', 5, 'Égide titanesque', 'egide_titanesque', 'ULTIME — énorme bouclier d\'absorption. Tout au fond : 17 pts dans la voie.', { requires: ['sg_bouclier'], minSpent: 17 })
 
 /* ================================================================== */
 /* DÉMONISTE (Tissu) — Pestilence (multi-DoT) · Légion (démons).       */
@@ -803,7 +803,7 @@ ks('tp_epines', 'templier', 3, 'Épines sacrées', 'Tes assaillants encaissent 3
 ability('tp_provoc', 'templier', 2, 'Provocation', 'provocation', 'MENACE : attire les attaques.', { requires: ['tp_aura'] })
 minor('tp_buf2', 'templier', 1, 'Plaque bénie', 5, { reductionDegats: 10 }, { requires: ['tp_hub'] })
 ks('tp_resist', 'templier', 2, 'Forteresse sacrée', 'SURVIE : -12% de dégâts subis. Exige Plaque bénie au max (5).', { stat: { endurance: 16 }, ks: { flatDr: 0.12 } }, { requires: ['tp_buf2'], requiresRank: { id: 'tp_buf2', rank: 5 } })
-ability('tp_egide', 'templier', 3, 'Égide titanesque', 'egide_titanesque', 'ULTIME — énorme bouclier d\'absorption (40% à l\'équipe). Tout au fond : 20 pts.', { requires: ['tp_resist'], minSpent: 20 })
+ability('tp_egide', 'templier', 3, 'Égide titanesque', 'egide_titanesque', 'ULTIME — énorme bouclier d\'absorption (40% à l\'équipe). Tout au fond : 15 pts.', { requires: ['tp_resist'], minSpent: 15 })
 /* ---- AUBE (HEAL) — soigne en FRAPPANT (damageToHeal), scale FORCE. ---- */
 ability('au_hub', 'aube', 0, 'Aube', 'au_verdict', 'Débloque Verdict sacré : un healer offensif. +18 Force.', { requires: ['cl_paladin'], statMods: { force: 18 } })
 minor('au_zele', 'aube', 1, 'Zèle sacré', 5, { critique: 10 }, { requires: ['au_hub'] })
