@@ -331,7 +331,7 @@ const MAGE_SPELLS: SpellSpec[] = [
   { id: 'ar_deflag', name: 'Déflagration des arcanes', icon: '🔷', effect: 'finisher', mag: 1.5, cd: 3.5, type: 'arcane', scale: 'intelligence', tags: ['mono', 'direct', 'arcane', 'finisseur'], resource: 'Charge des arcanes' },
   { id: 'ar_orbe', name: 'Orbe des arcanes', icon: '🟣', effect: 'cleave', mag: 3.4, cd: 3.2, type: 'arcane', scale: 'intelligence', tags: ['zone', 'direct', 'arcane'] },
   { id: 'ar_rupture', name: 'Rupture des arcanes', icon: '🌀', effect: 'executeNuke', mag: 4.0, cd: 5, type: 'arcane', scale: 'intelligence', tags: ['mono', 'direct', 'arcane'] },
-  { id: 'ar_singularite', name: 'Singularité', icon: '🌌', effect: 'finisher', mag: 3.0, cd: 16, type: 'arcane', scale: 'intelligence', tags: ['mono', 'direct', 'arcane', 'finisseur', 'ultime'], resource: 'Charge des arcanes' },
+  { id: 'ar_singularite', name: 'Singularité', icon: '🌌', effect: 'finisher', mag: 7.0, cd: 16, type: 'arcane', scale: 'intelligence', tags: ['mono', 'direct', 'arcane', 'finisseur', 'ultime'], resource: 'Charge des arcanes' }, // ultime mono : parité avec om_linceul/fa_aigle (7.0) — était 3.0
   // Convergence (tri-élément) — sorts qui portent feu+givre+arcane à la fois (gèlent via [controle]).
   { id: 'cv_prisme', name: 'Prisme élémentaire', icon: '🔱', effect: 'nuke', mag: 3.4, cd: 4, type: 'arcane', scale: 'intelligence', tags: ['mono', 'direct', 'feu', 'froid', 'arcane', 'controle'], duration: 3 },
   { id: 'cv_cataclysme', name: 'Cataclysme', icon: '✦', effect: 'megaCleave', mag: 7, cd: 22, type: 'arcane', scale: 'intelligence', tags: ['zone', 'direct', 'feu', 'froid', 'arcane', 'controle', 'ultime'], duration: 3 },
@@ -371,7 +371,7 @@ const GUERRIER_SPELLS: SpellSpec[] = [
   { id: 'se_saignement', name: 'Saignement profond', icon: '🩸', effect: 'dot', mag: 2.4, cd: 4, scale: 'force', tags: ['mono', 'dot'] },
   { id: 'se_decapite', name: 'Décapitation', icon: '🗡️', effect: 'executeNuke', mag: 4.0, cd: 5, scale: 'force', tags: ['mono', 'direct'] },
   { id: 'se_tourmente', name: 'Tourmente', icon: '🌀', effect: 'cleave', mag: 3.0, cd: 3, scale: 'force', tags: ['zone', 'direct'] },
-  { id: 'se_carnage', name: 'Carnage', icon: '💥', effect: 'finisher', mag: 3.0, cd: 16, scale: 'force', tags: ['mono', 'direct', 'finisseur', 'ultime'], resource: 'Rage' },
+  { id: 'se_carnage', name: 'Carnage', icon: '💥', effect: 'finisher', mag: 7.0, cd: 16, scale: 'force', tags: ['mono', 'direct', 'finisseur', 'ultime'], resource: 'Rage' }, // ultime mono : parité avec om_linceul/fa_aigle (7.0) — était 3.0
   // Rempart (TANK — Rage → bouclier + provocation + épines)
   { id: 're_bouclier_coup', name: 'Coup de bouclier', icon: '🛡️', effect: 'builder', mag: 2.2, cd: 3.2, scale: 'force', tags: ['mono', 'direct', 'generateur', 'protection'], resource: 'Rage' }, // FOR : lent, solide
   { id: 're_revanche', name: 'Revanche', icon: '🤺', effect: 'finisher', mag: 1.4, cd: 3.5, scale: 'force', tags: ['mono', 'direct', 'finisseur', 'protection'], resource: 'Rage' },
