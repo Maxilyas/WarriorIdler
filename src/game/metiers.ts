@@ -608,8 +608,12 @@ export function foyerRate(
   // « ressource » → Lingots, Creuset → les deux.
   const chains = forgeChainBonus(metiers)
   const cr = forgeCreuset(metiers)
-  const xp = FOYER_BASE_XP * (1 + masterworks * FOYER_MW_K) * (1 + automatesCount * FOYER_AUTO_K) * stageFactor * (1 + chains.idle + cr)
-  return { xp, lingots: xp * FOYER_LINGOT_RATIO * (1 + chains.ressource + cr) }
+  // 🔗 Jonctions : Pont Qualité–Foyer (AI) → les Chefs-d'œuvre nourrissent + le Foyer ;
+  // Pont Lingots–Foyer (FI) → plus de Lingots produits.
+  const jAI = (metiers.forgeron.nodes.jonctionAI ?? 0) > 0 ? 1.6 : 1
+  const jFI = (metiers.forgeron.nodes.jonctionFI ?? 0) > 0 ? 1.6 : 1
+  const xp = FOYER_BASE_XP * (1 + masterworks * FOYER_MW_K * jAI) * (1 + automatesCount * FOYER_AUTO_K) * stageFactor * (1 + chains.idle + cr)
+  return { xp, lingots: xp * FOYER_LINGOT_RATIO * (1 + chains.ressource + cr) * jFI }
 }
 
 /** Crédite le Foyer pour le temps écoulé depuis `lastTick` (plafonné), en gardant les fractions. */
@@ -676,6 +680,10 @@ export interface CraftMods {
   chainChance: number
   /** Bonus du Creuset, appliqué à toutes les Voies (fraction). */
   creuset: number
+  /** ◆ Haut fourneau (keystone Fondeur) : la fonte rembourse des éclats + burst d'XP. */
+  hautFourneau: boolean
+  /** 🔗 Pont Qualité–Lingots (jonctionAF) : multiplicateur du coût en Lingots de la Signature (≤ 1). */
+  signatureCostMult: number
   /** Chance de forger une rareté +1 cran (création). */
   luckChance: number
   surillvl: boolean
@@ -822,6 +830,8 @@ export function craftMods(metiers: MetiersState): CraftMods {
     chainIdle: chain.idle,
     chainChance: chain.chance,
     creuset,
+    hautFourneau: r('forgeron', 'hautFourneau') > 0,
+    signatureCostMult: r('forgeron', 'jonctionAF') > 0 ? 0.5 : 1,
     luckChance: Math.min(0.6, r('forgeron', 'chance') * 0.05),
     surillvl: r('forgeron', 'surillvl') > 0,
     surillvlStep: r('forgeron', 'surillvl') >= 2 ? 3 : 2,

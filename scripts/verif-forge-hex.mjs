@@ -8,9 +8,9 @@ const load = async (entry) => {
   return import('data:text/javascript;base64,' + Buffer.from(res.outputFiles[0].text).toString('base64'))
 }
 const M = await load(`
-  export { emptyMetiers, hexNeighbors, forgeChains, forgeChainBonus, forgeCreuset, forgeForgeable, judgeFrappe } from './src/game/metiers.ts'
+  export { emptyMetiers, hexNeighbors, forgeChains, forgeChainBonus, forgeCreuset, forgeForgeable, judgeFrappe, craftMods, foyerRate } from './src/game/metiers.ts'
 `)
-const { emptyMetiers, hexNeighbors, forgeChains, forgeChainBonus, forgeCreuset, forgeForgeable, judgeFrappe } = M
+const { emptyMetiers, hexNeighbors, forgeChains, forgeChainBonus, forgeCreuset, forgeForgeable, judgeFrappe, craftMods, foyerRate } = M
 
 let fails = 0
 const check = (label, cond, got) => {
@@ -54,6 +54,19 @@ check('bord de la zone parfaite = PARFAIT', judgeFrappe(0.58) === 'perfect', jud
 check('juste hors zone parfaite = BIEN', judgeFrappe(0.62) === 'good', judgeFrappe(0.62))
 check('loin du centre = RATÉ', judgeFrappe(0.78) === 'miss', judgeFrappe(0.78))
 check('extrémité = RATÉ', judgeFrappe(0) === 'miss', judgeFrappe(0))
+
+// 8) Keystone Haut fourneau + jonctions (polish v0.41) — câblage dans craftMods / foyerRate.
+const cmBase = craftMods(emptyMetiers())
+check('par défaut : signatureCostMult = 1', cmBase.signatureCostMult === 1, cmBase.signatureCostMult)
+check('par défaut : hautFourneau = false', cmBase.hautFourneau === false, cmBase.hautFourneau)
+const cmJ = craftMods(withNodes({ jonctionAF: 1, hautFourneau: 1 }))
+check('jonctionAF → signatureCostMult 0,5', cmJ.signatureCostMult === 0.5, cmJ.signatureCostMult)
+check('hautFourneau → mods.hautFourneau true', cmJ.hautFourneau === true, cmJ.hautFourneau)
+const frBase = foyerRate(withNodes({ foyer: 1 }), 0, 6, 4)
+const frFI = foyerRate(withNodes({ foyer: 1, jonctionFI: 1 }), 0, 6, 4)
+const frAI = foyerRate(withNodes({ foyer: 1, jonctionAI: 1 }), 0, 6, 4)
+check('jonctionFI → +Lingots du Foyer', frFI.lingots > frBase.lingots * 1.4, [frBase.lingots, frFI.lingots])
+check('jonctionAI → +XP du Foyer (via Chefs-d\'œuvre)', frAI.xp > frBase.xp, [frBase.xp, frAI.xp])
 
 console.log(fails === 0 ? '\n🎉 Tout passe.' : `\n💥 ${fails} échec(s).`)
 process.exit(fails === 0 ? 0 : 1)

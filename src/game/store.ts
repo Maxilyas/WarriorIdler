@@ -6123,7 +6123,7 @@ export const useGame = create<GameState>((set, get) => {
       if (masterwork && (!forge.masterwork || s.lastMasterwork >= week || s.lingots < MASTERWORK_LINGOTS)) return
       // ✒️ Signature : affixe garanti AU CHOIX (universel, débloqué par le nœud Signature) — coûte des Lingots.
       const signature = opts.signature && forge.signatures?.includes(opts.signature) ? opts.signature : undefined
-      const signCost = signature ? signatureLingotCost(tier) : 0
+      const signCost = signature ? Math.max(1, Math.round(signatureLingotCost(tier) * mods.signatureCostMult)) : 0
       if (signature && s.lingots < signCost + (masterwork ? MASTERWORK_LINGOTS : 0)) return
       // Coût : rareté choisie × métier (Économe) × chef-d'œuvre (×1,5).
       const c = createCost(tier, ilvl, contentRarityTier(s.bestStage, bestRaidTier(s.raidProgress)))
@@ -6250,15 +6250,21 @@ export const useGame = create<GameState>((set, get) => {
       const item = s.inventory[idx]
       const base = smeltLingots(RARITIES[item.rarity].tier)
       if (base <= 0) return // sous Rare : ne vaut pas le feu
+      const tierS = RARITIES[item.rarity].tier
       const lingots = Math.max(1, Math.round(base * mods.lingotierMult))
-      const gain = metierXpGain(RARITIES[item.rarity].tier, 'modify', mods.forgeronXpMult)
+      // ◆ Haut fourneau (keystone Fondeur) : burst d'XP (fonte = 'ascend' ×2) + remboursement d'éclats.
+      const gain = mods.hautFourneau
+        ? metierXpGain(tierS, 'ascend', mods.forgeronXpMult) * 2
+        : metierXpGain(tierS, 'modify', mods.forgeronXpMult)
+      const eclatsRefund = mods.hautFourneau ? Math.round(tierS * tierS * 6) : 0
       const g = gainMetierXp(s, 'forgeron', gain)
       const next = {
         ...s,
         inventory: s.inventory.filter((i) => i.id !== itemId),
         lingots: s.lingots + lingots,
+        essence: s.essence + eclatsRefund,
         metiers: g.metiers,
-        log: pushLog(g.log, `🫕 Fondu : ${item.name} → +${lingots} Lingot${lingots > 1 ? 's' : ''} 🧱.`, 'craft'),
+        log: pushLog(g.log, `🫕 Fondu : ${item.name} → +${lingots} Lingot${lingots > 1 ? 's' : ''} 🧱${mods.hautFourneau ? ` · 🌋 +${eclatsRefund} ♦ & burst d'XP` : ''}.`, 'craft'),
       }
       persist(next)
       set(next)

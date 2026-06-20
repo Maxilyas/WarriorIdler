@@ -350,7 +350,7 @@ function MetierTree({ metier, alwaysOpen }: { metier: MetierId; alwaysOpen?: boo
 const FAMILY_LABEL: Record<string, string> = { qualite: 'Qualité', ressource: 'Ressource', idle: 'Idle', chance: 'Chance' }
 /** Tuiles dont l'EFFET n'est pas encore branché (lots ultérieurs) : visibles mais non forgeables.
  *  (Le Foyer en est exclu : c'est la porte d'entrée de la Voie Industriel — sa prod arrive au Lot 2.) */
-const FORGE_PENDING = new Set(['hautFourneau', 'jonctionAI', 'jonctionAF', 'jonctionFI'])
+const FORGE_PENDING = new Set<string>()
 
 /** Couleur de Voie d'une tuile (dérivée de sa famille / nature). */
 function tileColor(n: MetierNode): string {
@@ -469,7 +469,7 @@ function ForgeBoard() {
           </div>
           <p className="mt-1 text-[10.5px] leading-snug text-slate-400">{sel.desc}</p>
           {sel.kind === 'keystone' && <p className="mt-1 text-[9.5px] text-amber-300/70">Keystone exclusif : un seul des trois actif (en choisir un autre rembourse celui-ci).</p>}
-          {sel.id === 'foyer' && <p className="mt-1 text-[9.5px] text-violet-300/70">Ouvre la Voie Industriel — sa production passive est branchée au prochain lot.</p>}
+          {sel.id === 'foyer' && <p className="mt-1 text-[9.5px] text-violet-300/70">Cœur de la Voie Industriel : produit XP + Lingots en continu (page Créer), indexé sur tes Chefs-d'œuvre.</p>}
           <div className="mt-2">
             {selPending ? (
               <span className="text-[10.5px] font-medium text-slate-500">⏳ Bientôt — cette tuile s'active dans un prochain lot.</span>
@@ -695,7 +695,7 @@ function ForgeronWorkshop() {
   // v0.40.1 — la forge crée au niveau de ton FARM (palier) + bonus de métier (plus les donjons/raids).
   const ilvl = stageIlvl(Math.max(1, bestStage)) + forge.ilvlBonus
   const activeSignature = signature && forge.signatures?.includes(signature) ? signature : null
-  const signCost = activeSignature ? signatureLingotCost(tier) : 0
+  const signCost = activeSignature ? Math.max(1, Math.round(signatureLingotCost(tier) * mods.signatureCostMult)) : 0
   const mwReady = forge.masterwork && lastMasterwork < currentWeek()
   const mwOn = masterwork && mwReady
   const raw = createCost(tier, ilvl, contentRarityTier(bestStage, raidTier))
