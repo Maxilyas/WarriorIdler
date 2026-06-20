@@ -6131,7 +6131,7 @@ export const useGame = create<GameState>((set, get) => {
       const cost = { eclats: Math.round(c.eclats * m), noyau: Math.round(c.noyau * m), fragments: Math.round((c.fragments ?? 0) * m), poussiere: Math.round((c.poussiere ?? 0) * m), cosmic: Math.round((c.cosmic ?? 0) * m) }
       if (s.essence < cost.eclats || s.noyau < cost.noyau || s.fragments < cost.fragments || s.poussiere < cost.poussiere || s.cosmic < cost.cosmic) return
       // 🎲 Prodige : chance de rareté SUPÉRIEURE (corps IV : +12% local) — 💡 Inspiration : DEUX crans.
-      const lucky = masterwork || (Math.random() < Math.min(0.75, mods.luckChance + forge.luckBonus) && tier < craftCap)
+      const lucky = masterwork || (Math.random() < Math.min(0.75, mods.luckChance + forge.luckBonus + mods.chainChance + mods.creuset) && tier < craftCap)
       const inspired = lucky && !masterwork && mods.inspiration > 0 && Math.random() < mods.inspiration && tier + 2 <= craftCap
       // 🔨 Frappe maîtrisée : 5 PARFAITS d'affilée → +1 cran de rareté GARANTI (consommé ici).
       const streakReady = frappeActive(s.metiers) && s.chaleurStreak >= FRAPPE_STREAK_RARITY && tier < craftCap
@@ -6150,6 +6150,8 @@ export const useGame = create<GameState>((set, get) => {
       })
       // 🔥 Surchauffe : +1 ⭐ garanti (capé à 5).
       if (surchauffe) item.stars = Math.min(5, (item.stars ?? 0) + 1)
+      // ◈ Chaîne « qualité » + Creuset : chance d'un ⭐ supplémentaire (synergies hexagonales, Lot 4).
+      if (Math.random() < mods.chainQualite + mods.creuset) item.stars = Math.min(5, (item.stars ?? 0) + 1)
       // 🏆 Chef-d'œuvre : châsse garantie (la qualité est désormais roulée dans generateItem).
       if (masterwork && itemSockets(item, 0) < 1) item.sockets = 1
       const inventory = [item, ...s.inventory].slice(0, invMax)

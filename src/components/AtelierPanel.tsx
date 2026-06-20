@@ -117,6 +117,7 @@ export function AtelierPanel() {
               // contrairement au palier qui reset) — ou au palier 65 (avant de l'avoir appris).
               ...(nodeRank(metiers, 'forgeron', 'automates') > 0 || bestStage >= 65 ? [{ id: 'automates', label: 'Automates', icon: '🤖', hint: 'Envoie des automates farmer le contenu déjà vaincu.', node: <AutomateWorkshop /> }] : []),
               treePage,
+              { id: 'build', label: 'Build', icon: '📊', hint: 'Synergies hexagonales : engagement par Voie, Chaînes, Creuset et effets cumulés.', node: <ForgeBuildPanel /> },
             ]
           } else if (metier === 'joaillier') {
             pages = [
@@ -488,6 +489,81 @@ function ForgeBoard() {
           Touche une tuile pour la voir. Une tuile se forge si elle touche une tuile déjà acquise (ou le Creuset central 🔥).
         </div>
       )}
+    </div>
+  )
+}
+
+/** v0.41 (Lot 4) — Le tableau de Build : engagement par Voie + synergies hexagonales + effets cumulés. */
+function ForgeBuildPanel() {
+  const metiers = useGame((s) => s.metiers)
+  const automates = useGame((s) => s.automates)
+  const bestStage = useGame((s) => s.bestStage)
+  const foyer = useGame((s) => s.foyer)
+  const chains = forgeChainBonus(metiers)
+  const creuset = forgeCreuset(metiers)
+  const tiles = METIER_NODES.forgeron.filter((n) => n.hex && n.family)
+  const voies = [
+    { name: 'Armurier', icon: '🛡️', color: '#60a5fa', fams: ['qualite'] },
+    { name: 'Fondeur', icon: '🔥', color: '#fb923c', fams: ['ressource', 'chance'] },
+    { name: 'Industriel', icon: '🤖', color: '#a78bfa', fams: ['idle'] },
+  ]
+  const pct = (x: number) => `${Math.round(x * 100)}%`
+  const rate = foyerRate(metiers, automates.length, bestStage, foyer.masterworkKeys.length)
+  const effects = [
+    { label: '🎲 Rareté (chance)', v: chains.chance + creuset },
+    { label: '⭐ Qualité', v: chains.qualite + creuset },
+    { label: '🔥 Foyer — XP', v: chains.idle + creuset },
+    { label: '🧱 Foyer — Lingots', v: chains.ressource + creuset },
+  ]
+  return (
+    <div className="mb-3 space-y-3">
+      <div className="rounded-xl border border-slate-800 bg-[#0d111a] p-2.5">
+        <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Engagement par Voie</div>
+        <div className="space-y-1.5">
+          {voies.map((v) => {
+            const list = tiles.filter((n) => (v.fams as readonly string[]).includes(n.family ?? ''))
+            const owned = list.filter((n) => (metiers.forgeron.nodes[n.id] ?? 0) > 0).length
+            const total = list.length
+            return (
+              <div key={v.name}>
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="font-medium" style={{ color: v.color }}>{v.icon} {v.name}</span>
+                  <span className="text-slate-500">{owned}/{total} tuiles</span>
+                </div>
+                <div className="mt-0.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+                  <div className="h-full" style={{ width: `${total ? (owned / total) * 100 : 0}%`, background: v.color }} />
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-slate-800 bg-[#0d111a] p-2.5">
+        <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Synergies actives</div>
+        <div className="flex flex-wrap gap-1.5 text-[10px]">
+          <span className="rounded bg-amber-900/30 px-1.5 py-0.5 text-amber-200">🔥 Creuset +{pct(creuset)}</span>
+          {(['qualite', 'ressource', 'idle', 'chance'] as const).map((f) => (
+            <span key={f} className={'rounded px-1.5 py-0.5 ' + (chains[f] > 0 ? 'bg-slate-800 text-slate-200' : 'bg-slate-900 text-slate-600')}>
+              ⛓ {FAMILY_LABEL[f]} +{pct(chains[f])}
+            </span>
+          ))}
+        </div>
+        <p className="mt-1.5 text-[9px] leading-snug text-slate-500">Une Chaîne = des tuiles de MÊME famille reliées (×3 = +12% · ×4 = +20% · ×5 = +30%). Le Creuset monte avec tes 3 entrées de Voie (Affûtage · Forge économe · Foyer).</p>
+      </div>
+
+      <div className="rounded-xl border border-slate-800 bg-[#0d111a] p-2.5">
+        <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Effets cumulés</div>
+        <div className="grid grid-cols-2 gap-1.5">
+          {effects.map((e) => (
+            <div key={e.label} className="rounded-lg bg-black/30 px-2 py-1.5">
+              <div className="text-[10px] text-slate-400">{e.label}</div>
+              <div className={'text-[14px] font-semibold ' + (e.v > 0 ? 'text-emerald-300' : 'text-slate-500')}>+{pct(e.v)}</div>
+            </div>
+          ))}
+        </div>
+        <div className="mt-1.5 text-[10px] text-slate-500">Foyer actuel : <span className="text-violet-300">+{(rate.xp * 60).toFixed(1)} XP/min · +{(rate.lingots * 3600).toFixed(1)} 🧱/h</span></div>
+      </div>
     </div>
   )
 }

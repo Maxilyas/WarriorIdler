@@ -604,8 +604,12 @@ export function foyerRate(
 ): { xp: number; lingots: number } {
   if (!foyerActive(metiers)) return { xp: 0, lingots: 0 }
   const stageFactor = 1 + Math.max(0, bestStage - METIERS.forgeron.unlockStage) * 0.01
-  const xp = FOYER_BASE_XP * (1 + masterworks * FOYER_MW_K) * (1 + automatesCount * FOYER_AUTO_K) * stageFactor
-  return { xp, lingots: xp * FOYER_LINGOT_RATIO }
+  // v0.41 Lot 4 — les synergies hexagonales nourrissent le Foyer : Chaîne « idle » → XP, Chaîne
+  // « ressource » → Lingots, Creuset → les deux.
+  const chains = forgeChainBonus(metiers)
+  const cr = forgeCreuset(metiers)
+  const xp = FOYER_BASE_XP * (1 + masterworks * FOYER_MW_K) * (1 + automatesCount * FOYER_AUTO_K) * stageFactor * (1 + chains.idle + cr)
+  return { xp, lingots: xp * FOYER_LINGOT_RATIO * (1 + chains.ressource + cr) }
 }
 
 /** Crédite le Foyer pour le temps écoulé depuis `lastTick` (plafonné), en gardant les fractions. */
