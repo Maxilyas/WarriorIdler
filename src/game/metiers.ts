@@ -141,6 +141,11 @@ export function respecCost(state: MetierState): number {
 /* Arbres                                                              */
 /* ------------------------------------------------------------------ */
 
+/** Famille de synergie hexagonale (v0.41, pilote Forgeron) — base des Chaînes. */
+export type ForgeFamily = 'qualite' | 'ressource' | 'idle' | 'chance'
+/** Nature d'une tuile de la Forge hexagonale. */
+export type ForgeKind = 'stat' | 'function' | 'keystone' | 'junction'
+
 export interface MetierNode {
   id: string
   name: string
@@ -162,6 +167,12 @@ export interface MetierNode {
   requiresRank?: number
   /** Keystone (v0.28 E2) : nœud terminal à fort impact — rendu mis en avant (halo) dans l'arbre. */
   keystone?: boolean
+  /** v0.41 — position axiale sur la Forge hexagonale (pilote Forgeron). */
+  hex?: { q: number; r: number }
+  /** v0.41 — famille de synergie (Chaînes). Absent sur les jonctions. */
+  family?: ForgeFamily
+  /** v0.41 — nature de la tuile. */
+  kind?: ForgeKind
 }
 
 /** Une branche d'arbre (v0.26) : l'UI groupe les nœuds par branche, le respec est par branche. */
@@ -211,37 +222,75 @@ export const METIER_NODES: Record<MetierId, MetierNode[]> = {
   // + Industrialisation. ~62 rangs dépensables. Les ARMES restent hors spé (bien réglées).
   // v0.28 E2 — arbre RÉDUIT : 2 sections, ~14 nœuds. Atelier = les verbes de modif (3 premiers
   // indispensables). Manufacture = idle + ressources + efficacité. Plus de Compagnonnage (lock-in retiré).
+  // v0.41 — Forge hexagonale (pilote) : chaque tuile porte sa position `hex`, sa `family` (Chaînes) et
+  // son `kind`. Les `branch`/`requires` HISTORIQUES sont conservés pour l'ancienne UI (révélation Lot 1) :
+  // les tuiles neuves (frappe/foyer/hautFourneau/jonctions) ont une branche de Voie absente de
+  // METIER_BRANCHES.forgeron → invisibles/non-allouables tant que la planche hex n'est pas livrée.
   forgeron: [
-    /* — 🔨 ATELIER : les outils de modif (les 3 premiers = indispensables) — */
+    /* — 🛡️ ARMURIER : qualité / craft actif / frappe (bras nord) — */
     { id: 'surillvl', name: 'Affûtage', icon: '⬆️', maxRank: 2, minLevel: 2, minStage: 20, branch: 'atelier',
+      hex: { q: 0, r: -1 }, family: 'qualite', kind: 'function',
       desc: 'Débloque le SURILLVL (augmente l\'iLvl d\'un objet). Rang 2 : +1 iLvl supplémentaire par usage.' },
     { id: 'polissage', name: 'Polissage', icon: '🌟', maxRank: 3, minLevel: 6, branch: 'atelier',
+      hex: { q: 0, r: -2 }, family: 'qualite', kind: 'stat',
       desc: 'Tes créations reçoivent une QUALITÉ ⭐1–5. Rangs 2-3 : meilleures chances de hautes étoiles.' },
-    { id: 'trempeLente', name: 'Trempe lente', icon: '🔥', maxRank: 1, minLevel: 8, branch: 'atelier',
-      desc: 'Débloque le BAC DE TREMPE : un objet déposé gagne +1 iLvl par 24 h RÉELLES (5 max par objet).' },
-    { id: 'transmute', name: 'Transmutateur', icon: '🔄', maxRank: 1, minLevel: 4, minStage: 20, branch: 'atelier',
-      desc: 'Débloque la TRANSMUTATION : changer la stat primaire d\'un objet.' },
     { id: 'maitreForgeron', name: 'Maître forgeron', icon: '🛠️', maxRank: 3, minLevel: 10, branch: 'atelier',
+      hex: { q: 0, r: -3 }, family: 'qualite', kind: 'stat',
       desc: 'Tes créations : +1 iLvl (R1) · +12% rareté supérieure (R2) · ◆ Chef-d\'œuvre hebdomadaire (R3).' },
     { id: 'signature', name: 'Signature', icon: '✒️', maxRank: 1, minLevel: 12, branch: 'atelier',
+      hex: { q: 1, r: -2 }, family: 'qualite', kind: 'function',
       desc: 'Une création reçoit un AFFIXE GARANTI au choix (crit, ténacité, hâte…) — coûte des Lingots 🧱.' },
+    { id: 'frappe', name: 'Frappe brûlante', icon: '🔨', maxRank: 1, minLevel: 8, branch: 'armurier',
+      hex: { q: -1, r: -1 }, family: 'qualite', kind: 'function',
+      desc: 'Débloque le MINI-JEU DE FRAPPE : frappe dans la zone pour générer de la CHALEUR (qualité/rareté).' },
     { id: 'ascension', name: 'Grand-maître forgeron', icon: '✨', maxRank: 1, minLevel: 14, minStage: 50, requires: 'surillvl', branch: 'atelier', keystone: true,
+      hex: { q: 0, r: -4 }, family: 'qualite', kind: 'keystone',
       desc: 'Débloque l\'ASCENSION : monter un objet d\'un cran de rareté.' },
-    /* — ⚙️ MANUFACTURE : idle, ressources & efficacité — */
+    /* — 🔥 FONDEUR : ressources / lingots / chance (bras sud-est) — */
     { id: 'econome', name: 'Forge économe', icon: '💰', maxRank: 5, branch: 'manufacture',
+      hex: { q: 1, r: 0 }, family: 'ressource', kind: 'stat',
       desc: '−5% des coûts de craft par rang, et un craft sans proc de rareté rembourse une part de ses coûts.' },
-    { id: 'chance', name: 'Prodige', icon: '🎲', maxRank: 5, minLevel: 5, branch: 'manufacture',
-      desc: '+5% de chance de forger une rareté SUPÉRIEURE par rang ; au proc, chance de sauter DEUX crans.' },
     { id: 'fonderie', name: 'Fonderie & Contrats', icon: '🫕', maxRank: 1, minLevel: 6, branch: 'manufacture',
+      hex: { q: 2, r: 0 }, family: 'ressource', kind: 'function',
       desc: 'Débloque la FONTE (objet Rare+ → Lingots 🧱) ET 3 CONTRATS quotidiens (Lingots + grosse XP).' },
     { id: 'maitreFondeur', name: 'Maître fondeur', icon: '🧱', maxRank: 3, minLevel: 11, requires: 'fonderie', branch: 'manufacture',
+      hex: { q: 3, r: 0 }, family: 'ressource', kind: 'stat',
       desc: '+15% de Lingots à la fonte et +1 Lingot par contrat rempli, par rang.' },
+    { id: 'chance', name: 'Prodige', icon: '🎲', maxRank: 5, minLevel: 5, branch: 'manufacture',
+      hex: { q: 1, r: 1 }, family: 'chance', kind: 'stat',
+      desc: '+5% de chance de forger une rareté SUPÉRIEURE par rang ; au proc, chance de sauter DEUX crans.' },
+    { id: 'transmute', name: 'Transmutateur', icon: '🔄', maxRank: 1, minLevel: 4, minStage: 20, branch: 'atelier',
+      hex: { q: 2, r: 1 }, family: 'ressource', kind: 'function',
+      desc: 'Débloque la TRANSMUTATION : changer la stat primaire d\'un objet.' },
+    { id: 'hautFourneau', name: 'Haut fourneau', icon: '🌋', maxRank: 1, minLevel: 14, minStage: 50, branch: 'fondeur', keystone: true,
+      hex: { q: 3, r: 1 }, family: 'ressource', kind: 'keystone',
+      desc: 'KEYSTONE : la fonte/recyclage rembourse une part des coûts ET lâche un BURST d\'XP de Forgeron.' },
+    /* — 🤖 INDUSTRIEL : idle / automates / Foyer (bras sud-ouest) — */
+    { id: 'foyer', name: 'Foyer', icon: '🔥', maxRank: 1, minLevel: 6, branch: 'industriel',
+      hex: { q: -1, r: 1 }, family: 'idle', kind: 'function',
+      desc: 'Débloque le FOYER : production PASSIVE d\'XP et de Lingots, indexée sur tes Chefs-d\'œuvre uniques.' },
+    { id: 'trempeLente', name: 'Trempe lente', icon: '🔥', maxRank: 1, minLevel: 8, branch: 'atelier',
+      hex: { q: -1, r: 2 }, family: 'idle', kind: 'stat',
+      desc: 'Débloque le BAC DE TREMPE : un objet déposé gagne +1 iLvl par 24 h RÉELLES (5 max par objet).' },
     { id: 'automates', name: 'Industrialisation', icon: '🤖', maxRank: 1, minLevel: 12, minStage: 65, branch: 'manufacture',
+      hex: { q: -2, r: 2 }, family: 'idle', kind: 'function',
       desc: 'Débloque les AUTOMATES : des machines qui refont les donjons/raids déjà vaincus (idle).' },
     { id: 'montage', name: 'Chaîne de montage', icon: '⚙️', maxRank: 3, requires: 'automates', branch: 'manufacture',
+      hex: { q: -2, r: 3 }, family: 'idle', kind: 'stat',
       desc: '−8% de durée des runs d\'automates par rang.' },
     { id: 'automate4', name: 'Manufacture', icon: '🏭', maxRank: 1, minLevel: 40, minStage: 80, requires: 'automates', branch: 'manufacture', keystone: true,
+      hex: { q: -3, r: 3 }, family: 'idle', kind: 'keystone',
       desc: 'Débloque la construction d\'un QUATRIÈME automate.' },
+    /* — ◈ CARREFOURS : jonctions (ponts croisés) — invisibles tant que la planche hex n'est pas livrée — */
+    { id: 'jonctionAI', name: 'Pont Qualité–Foyer', icon: '🔗', maxRank: 1, minLevel: 10, branch: 'carrefour',
+      hex: { q: -1, r: 0 }, kind: 'junction',
+      desc: 'JONCTION (Armurier↔Industriel) : tes Chefs-d\'œuvre nourrissent le Foyer.' },
+    { id: 'jonctionAF', name: 'Pont Qualité–Lingots', icon: '🔗', maxRank: 1, minLevel: 10, branch: 'carrefour',
+      hex: { q: 1, r: -1 }, kind: 'junction',
+      desc: 'JONCTION (Armurier↔Fondeur) : −coût des Signatures et de l\'Ascension.' },
+    { id: 'jonctionFI', name: 'Pont Lingots–Foyer', icon: '🔗', maxRank: 1, minLevel: 10, branch: 'carrefour',
+      hex: { q: 0, r: 1 }, kind: 'junction',
+      desc: 'JONCTION (Fondeur↔Industriel) : +Lingots au Foyer.' },
   ],
   // v0.26 — arbre REFONDU : ~62 rangs dépensables (tronc + 4 branches), specs étagées I→V.
   // v0.28 E2 — arbre RÉDUIT : 2 sections, ~14 nœuds. Taillerie = les verbes gemme (3 premiers
@@ -425,6 +474,89 @@ export function canLearnNode(
 }
 
 /* ------------------------------------------------------------------ */
+/* Forge hexagonale (v0.41) — géométrie & synergies (pilote Forgeron)  */
+/* ------------------------------------------------------------------ */
+
+/** Les 6 directions de voisinage sur la grille axiale. */
+const HEX_DIRS: [number, number][] = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]]
+
+/** Voisins axiaux d'une tuile. */
+export function hexNeighbors(q: number, r: number): { q: number; r: number }[] {
+  return HEX_DIRS.map(([dq, dr]) => ({ q: q + dq, r: r + dr }))
+}
+
+/** Bonus de Chaîne par longueur de run connecté de même famille (v0.41 §4). */
+export const CHAINE_BONUS = [0, 0, 0, 0.12, 0.20, 0.30, 0.42]
+/** Bonus du Creuset par tuile d'ENTRÉE possédée. */
+export const CREUSET_BONUS_PER_ENTRY = 0.06
+/** Les 3 tuiles d'entrée que touche le Creuset (cœur) : Affûtage / Forge économe / Foyer. */
+export const FORGE_ENTRIES = ['surillvl', 'econome', 'foyer'] as const
+
+/** Tuiles Forgeron POSSÉDÉES (rang ≥ 1) qui ont une position hexagonale. */
+function forgeOwnedTiles(metiers: MetiersState): { q: number; r: number; family?: ForgeFamily }[] {
+  const st = metiers.forgeron
+  const out: { q: number; r: number; family?: ForgeFamily }[] = []
+  for (const n of METIER_NODES.forgeron) {
+    if (n.hex && (st.nodes[n.id] ?? 0) > 0) out.push({ q: n.hex.q, r: n.hex.r, family: n.family })
+  }
+  return out
+}
+
+/** Composantes connexes de MÊME famille parmi les tuiles possédées (la longueur fait le bonus). */
+export function forgeChains(metiers: MetiersState): { family: ForgeFamily; size: number }[] {
+  const owned = forgeOwnedTiles(metiers)
+  const byKey = new Map<string, { q: number; r: number; family?: ForgeFamily }>()
+  for (const t of owned) byKey.set(`${t.q},${t.r}`, t)
+  const seen = new Set<string>()
+  const chains: { family: ForgeFamily; size: number }[] = []
+  for (const t of owned) {
+    const key = `${t.q},${t.r}`
+    if (seen.has(key) || !t.family) continue
+    seen.add(key)
+    let size = 0
+    const stack = [t]
+    while (stack.length) {
+      const cur = stack.pop()!
+      size++
+      for (const nb of hexNeighbors(cur.q, cur.r)) {
+        const nk = `${nb.q},${nb.r}`
+        const o = byKey.get(nk)
+        if (o && !seen.has(nk) && o.family === t.family) { seen.add(nk); stack.push(o) }
+      }
+    }
+    chains.push({ family: t.family, size })
+  }
+  return chains
+}
+
+/** Meilleure Chaîne par famille → bonus (fraction). */
+export function forgeChainBonus(metiers: MetiersState): Record<ForgeFamily, number> {
+  const best: Record<ForgeFamily, number> = { qualite: 0, ressource: 0, idle: 0, chance: 0 }
+  for (const c of forgeChains(metiers)) {
+    const b = CHAINE_BONUS[Math.min(CHAINE_BONUS.length - 1, c.size)]
+    if (b > best[c.family]) best[c.family] = b
+  }
+  return best
+}
+
+/** Bonus du Creuset : +CREUSET_BONUS_PER_ENTRY par tuile d'entrée possédée (0 → 3 entrées). */
+export function forgeCreuset(metiers: MetiersState): number {
+  const st = metiers.forgeron
+  let n = 0
+  for (const id of FORGE_ENTRIES) if ((st.nodes[id] ?? 0) > 0) n++
+  return n * CREUSET_BONUS_PER_ENTRY
+}
+
+/** Une tuile est-elle FORGEABLE ? Règle d'adjacence : voisine d'une tuile possédée ou du Creuset (0,0). */
+export function forgeForgeable(metiers: MetiersState, tileId: string): boolean {
+  const node = getMetierNode('forgeron', tileId)
+  if (!node?.hex) return false
+  const ownedKeys = new Set(forgeOwnedTiles(metiers).map((t) => `${t.q},${t.r}`))
+  ownedKeys.add('0,0') // le Creuset (cœur) est acquis d'office à l'ouverture du métier
+  return hexNeighbors(node.hex.q, node.hex.r).some((nb) => ownedKeys.has(`${nb.q},${nb.r}`))
+}
+
+/* ------------------------------------------------------------------ */
 /* Effets agrégés                                                      */
 /* ------------------------------------------------------------------ */
 
@@ -432,6 +564,17 @@ export interface CraftMods {
   /* Forgeron */
   /** Multiplicateur des coûts de craft (≤ 1). */
   costMult: number
+  /* — v0.41 Forge hexagonale : synergies additives (consommées par les lots ultérieurs) — */
+  /** Bonus de Chaîne « qualité » (fraction). */
+  chainQualite: number
+  /** Bonus de Chaîne « ressource » (fraction). */
+  chainRessource: number
+  /** Bonus de Chaîne « idle » (fraction). */
+  chainIdle: number
+  /** Bonus de Chaîne « chance » (fraction). */
+  chainChance: number
+  /** Bonus du Creuset, appliqué à toutes les Voies (fraction). */
+  creuset: number
   /** Chance de forger une rareté +1 cran (création). */
   luckChance: number
   surillvl: boolean
@@ -567,9 +710,17 @@ export interface CraftMods {
 
 export function craftMods(metiers: MetiersState): CraftMods {
   const r = (m: MetierId, id: string) => metiers[m].nodes[id] ?? 0
+  const chain = forgeChainBonus(metiers)
+  const creuset = forgeCreuset(metiers)
   return {
     // v0.28 E2 — Forgeron remappé sur l'arbre réduit (Atelier + Manufacture).
     costMult: Math.max(0.4, 1 - r('forgeron', 'econome') * 0.05),
+    // v0.41 — synergies hexagonales (additif, branché par les lots ultérieurs).
+    chainQualite: chain.qualite,
+    chainRessource: chain.ressource,
+    chainIdle: chain.idle,
+    chainChance: chain.chance,
+    creuset,
     luckChance: Math.min(0.6, r('forgeron', 'chance') * 0.05),
     surillvl: r('forgeron', 'surillvl') > 0,
     surillvlStep: r('forgeron', 'surillvl') >= 2 ? 3 : 2,

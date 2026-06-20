@@ -1,0 +1,52 @@
+// Vérif de la Forge hexagonale (DESIGN v0.41, Lot 0) — branchée sur le VRAI code de metiers.ts.
+// Prouve : voisinage axial, Chaînes (run connecté de même famille), Creuset (entrées possédées),
+// et la règle de FORGEABILITÉ par adjacence (voisin d'une tuile possédée ou du Creuset (0,0)).
+import { build } from 'esbuild'
+
+const load = async (entry) => {
+  const res = await build({ stdin: { contents: entry, resolveDir: process.cwd(), loader: 'ts' }, bundle: true, format: 'esm', write: false, logLevel: 'silent' })
+  return import('data:text/javascript;base64,' + Buffer.from(res.outputFiles[0].text).toString('base64'))
+}
+const M = await load(`
+  export { emptyMetiers, hexNeighbors, forgeChains, forgeChainBonus, forgeCreuset, forgeForgeable } from './src/game/metiers.ts'
+`)
+const { emptyMetiers, hexNeighbors, forgeChains, forgeChainBonus, forgeCreuset, forgeForgeable } = M
+
+let fails = 0
+const check = (label, cond, got) => {
+  console.log(`${cond ? '✅' : '❌'} ${label}${cond ? '' : `  (obtenu : ${JSON.stringify(got)})`}`)
+  if (!cond) fails++
+}
+const withNodes = (nodes) => { const m = emptyMetiers(); m.forgeron.nodes = nodes; return m }
+
+// 1) Voisinage axial du cœur — doit inclure les 3 entrées (0,-1)/(1,0)/(-1,1).
+const nb = hexNeighbors(0, 0).map((p) => `${p.q},${p.r}`)
+check('cœur a 6 voisins', nb.length === 6, nb)
+check('voisins du cœur incluent les 3 entrées', ['0,-1', '1,0', '-1,1'].every((k) => nb.includes(k)), nb)
+
+// 2) Chaîne « qualité » — bras Armurier complet (6 tuiles connectées) → bonus plein 0,42.
+const fullArm = withNodes({ surillvl: 1, polissage: 1, maitreForgeron: 1, signature: 1, frappe: 1, ascension: 1 })
+const chains = forgeChains(fullArm)
+check('bras Armurier = 1 seule Chaîne qualité de taille 6', chains.length === 1 && chains[0].family === 'qualite' && chains[0].size === 6, chains)
+check('Chaîne ×6 → bonus qualité 0,42', forgeChainBonus(fullArm).qualite === 0.42, forgeChainBonus(fullArm))
+
+// 3) Chaîne courte — 2 tuiles = sous le seuil (×3) → bonus 0 ; 3 tuiles → 0,12.
+check('Chaîne ×2 → 0', forgeChainBonus(withNodes({ surillvl: 1, polissage: 1 })).qualite === 0, null)
+check('Chaîne ×3 → 0,12', forgeChainBonus(withNodes({ surillvl: 1, polissage: 1, maitreForgeron: 1 })).qualite === 0.12, null)
+
+// 4) Familles distinctes ne fusionnent pas (qualité vs ressource).
+const mixed = forgeChains(withNodes({ surillvl: 1, econome: 1 }))
+check('familles distinctes = 2 Chaînes de taille 1', mixed.length === 2 && mixed.every((c) => c.size === 1), mixed)
+
+// 5) Creuset — 0 / 2 / 3 entrées possédées.
+check('Creuset sans entrée = 0', forgeCreuset(emptyMetiers()) === 0, null)
+check('Creuset 2 entrées = 0,12', Math.abs(forgeCreuset(withNodes({ surillvl: 1, econome: 1 })) - 0.12) < 1e-9, forgeCreuset(withNodes({ surillvl: 1, econome: 1 })))
+check('Creuset 3 entrées = 0,18', Math.abs(forgeCreuset(withNodes({ surillvl: 1, econome: 1, foyer: 1 })) - 0.18) < 1e-9, null)
+
+// 6) Forgeabilité par adjacence.
+check('vide : Affûtage forgeable (voisin du cœur)', forgeForgeable(emptyMetiers(), 'surillvl') === true, null)
+check('vide : Polissage NON forgeable (pas voisin du cœur)', forgeForgeable(emptyMetiers(), 'polissage') === false, null)
+check('Affûtage pris : Polissage devient forgeable', forgeForgeable(withNodes({ surillvl: 1 }), 'polissage') === true, null)
+
+console.log(fails === 0 ? '\n🎉 Tout passe.' : `\n💥 ${fails} échec(s).`)
+process.exit(fails === 0 ? 0 : 1)
