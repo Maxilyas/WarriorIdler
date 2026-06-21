@@ -13,8 +13,25 @@ import { resolveClass, lookTier } from '../game/wardrobe'
  * et le mapping complet slot→mesh viennent ensuite. Voir DESIGN_v0.43_avatar.md.
  */
 
-const BASE = `${import.meta.env.BASE_URL}models/base.glb`
-const ANIMS = `${import.meta.env.BASE_URL}models/animations.glb`
+const URL = import.meta.env.BASE_URL
+const BASE = `${URL}models/base.glb`
+const ANIMS = `${URL}models/animations.glb`
+const WPN_SWORD = `${URL}models/wpn_sword.glb`
+const SHIELD = `${URL}models/shield_round.glb`
+
+/** Attache un asset (arme/bouclier) à un os du squelette (ex. `handslot.r`). */
+function Attach({ model, bone, url }: { model: Group; bone: string; url: string }) {
+  const { scene } = useGLTF(url)
+  const obj = useMemo(() => SkeletonUtils.clone(scene) as Group, [scene])
+  useEffect(() => {
+    const target = model.getObjectByName(bone)
+    if (!target) return
+    obj.traverse((o: Object3D) => { o.castShadow = true })
+    target.add(obj)
+    return () => { target.remove(obj) }
+  }, [model, bone, obj])
+  return null
+}
 
 function KnightFigure({ char }: { char: Character }) {
   const root = useRef<Group>(null)
@@ -54,6 +71,8 @@ function KnightFigure({ char }: { char: Character }) {
   return (
     <group ref={root} position={[fit.px, fit.py, fit.pz]} scale={fit.s}>
       <primitive object={model} />
+      {char.equipment?.armePrincipale && <Attach model={model} bone="handslot.r" url={WPN_SWORD} />}
+      {char.equipment?.armeSecondaire && <Attach model={model} bone="handslot.l" url={SHIELD} />}
     </group>
   )
 }
@@ -89,3 +108,5 @@ export default function Avatar3D({ char, maxWidth = 168 }: { char: Character; ma
 
 useGLTF.preload(BASE)
 useGLTF.preload(ANIMS)
+useGLTF.preload(WPN_SWORD)
+useGLTF.preload(SHIELD)
