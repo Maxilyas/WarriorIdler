@@ -5,6 +5,7 @@ import { useMediaQuery } from '../useMediaQuery'
 import { ItemRow, QualityStars } from './ItemRow'
 import { ComparePanel } from './ComparePanel'
 import { LevelBadge } from './LevelBadge'
+import { Mannequin } from './Mannequin'
 import { EQUIP_SLOTS, ITEM_TYPES, equipSlotsForType, slotAccepts } from '../game/slots'
 import { RARITIES, RARITY_LIST } from '../game/rarities'
 import { itemScore, itemHasRareStat, itemStatBlock } from '../game/items'
@@ -565,6 +566,13 @@ function PaperDoll({ characters, activeChar, onSwitch, equipment, selectedSlot, 
               {c.name}
             </button>
           ))}
+        </div>
+      )}
+
+      {/* 👤 v0.43 — avatar 2D en pied : on VOIT le stuff porté (tranche verticale, placeholder SVG). */}
+      {active && (
+        <div className="mb-2 rounded-lg border border-slate-800 bg-[#0a0e16] py-2">
+          <Mannequin char={active} maxWidth={cols === 1 ? 150 : 190} />
         </div>
       )}
 
