@@ -81,8 +81,16 @@ const CLASS_NODE_HINTS: { prefix: string; id: ClassId }[] = [
   { prefix: 'de_', id: 'demoniste' },
 ]
 
+/**
+ * v0.43.2 — PREUVE GLOBALE : force l'avatar de TOUS les héros sur une seule classe, le temps de
+ * prouver le système avec un unique jeu d'art (guerrier). La diversité par classe viendra ensuite :
+ * repasser à `null` rétablit la résolution normale (talents → catégorie d'armure → classe).
+ */
+export const AVATAR_FORCE_CLASS: ClassId | null = 'guerrier'
+
 /** Résout corps + teinte d'un héros : talents → catégorie d'armure (+ classe fine), fallback biais. */
 export function resolveClass(char: Character): ClassMeta {
+  if (AVATAR_FORCE_CLASS) return CLASS_META[AVATAR_FORCE_CLASS]
   const talents = char.talents ?? {}
   // 1) Catégorie d'armure = gateway cat_* alloué (rang ≥ 1).
   let armor: ArmorType | undefined
