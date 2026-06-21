@@ -17,7 +17,8 @@
     "mur": "node scripts/sim-mur.mjs",
     "eco": "node scripts/eco-sim.mjs",
     "weights": "node scripts/stat-weights.mjs",
-    "forge-hex": "node scripts/verif-forge-hex.mjs"
+    "forge-hex": "node scripts/verif-forge-hex.mjs",
+    "avatar": "node scripts/avatar-import.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",
