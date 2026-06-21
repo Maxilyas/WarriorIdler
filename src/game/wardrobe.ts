@@ -82,11 +82,10 @@ const CLASS_NODE_HINTS: { prefix: string; id: ClassId }[] = [
 ]
 
 /**
- * v0.43.2 — PREUVE GLOBALE : force l'avatar de TOUS les héros sur une seule classe, le temps de
- * prouver le système avec un unique jeu d'art (guerrier). La diversité par classe viendra ensuite :
- * repasser à `null` rétablit la résolution normale (talents → catégorie d'armure → classe).
+ * Force l'avatar de TOUS les héros sur une seule classe (debug / preuve avec un seul jeu d'art).
+ * `null` = résolution normale par classe (talents → catégorie d'armure → classe).
  */
-export const AVATAR_FORCE_CLASS: ClassId | null = 'guerrier'
+export const AVATAR_FORCE_CLASS: ClassId | null = null
 
 /** Résout corps + teinte d'un héros : talents → catégorie d'armure (+ classe fine), fallback biais. */
 export function resolveClass(char: Character): ClassMeta {
@@ -177,16 +176,6 @@ const SLOT_RENDER: Partial<Record<EquipSlotId, { region: BodyRegion; z: number }
   armeSecondaire: { region: 'bouclier', z: 65 },
   tete: { region: 'tete', z: 70 },
   armePrincipale: { region: 'arme', z: 80 },
-}
-
-/** Corps de base (nu) d'une classe — le calque le plus bas, sur lequel le gear se compose. */
-export function baseImageSrc(cls: ClassId): string {
-  return `${import.meta.env.BASE_URL}avatars/${cls}/base.webp`
-}
-
-/** Calque d'une pièce : transparent, aligné sur le corps de base (extrait par diff). */
-export function layerImageSrc(cls: ClassId, region: BodyRegion, tier: VisualTier): string {
-  return `${import.meta.env.BASE_URL}avatars/${cls}/${region}-${tier}.webp`
 }
 
 /** Ordre des régions à composer (de l'arrière vers l'avant). */

@@ -1,22 +1,20 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import type { Character } from '../game/types'
 import { resolveAvatar } from '../game/avatar'
 import {
-  avatarArtSrc, baseImageSrc, buildLayers, hasAvatarArt, layerImageSrc, lookTier, resolveClass,
-  type BodyShape, type ClassMeta, type GearLayer, type VisualTier,
+  avatarArtSrc, buildLayers, hasAvatarArt, lookTier, resolveClass,
+  type BodyShape, type GearLayer, type VisualTier,
 } from '../game/wardrobe'
 
 /**
- * 👤 MANNEQUIN (v0.43.2) — avatar 2D EN PIED. Trois modes, dans l'ordre de préférence :
- *  1. CALQUES (cible) : un CORPS DE BASE (`base.webp`) + un calque transparent par pièce équipée
- *     (`<region>-<tier>.webp`), empilés en z-order. C'est le « voir chaque pièce se poser ».
- *  2. ILLUSTRATION ENTIÈRE (repli) : une image par classe×palier (`AVATAR_ART`).
- *  3. PLACEHOLDER procédural (dernier repli) : silhouette SVG + formes tintées.
- * Les calques raster sont alignés par construction (extraits par diff du corps de base, cf.
- * scripts/avatar-layer.mjs) → composition = simple empilement plein-cadre. Voir DESIGN_v0.43_avatar.md.
+ * 👤 MANNEQUIN (v0.43.4) — avatar 2D EN PIED. UNE illustration réaliste par `classe × palier`
+ * (`AVATAR_ART` → `avatars/<classe>/<palier>.webp`), choisie par `lookTier` (palier d'allure agrégé
+ * de l'équipement). Tant que l'image n'existe pas, repli sur un PLACEHOLDER procédural (silhouette SVG
+ * + formes tintées reflétant le gear). Le détail par-pièce vit dans la grille des 16 slots. Voir
+ * DESIGN_v0.43_avatar.md (§0).
  */
 
-// ---- Placeholder procédural (dernier repli) ----
+// ---- Placeholder procédural (repli avant l'art) ----
 
 const CX = 50
 const HEAD_CY = 19
@@ -187,55 +185,15 @@ function Placeholder({ char, glow }: { char: Character; glow: boolean }) {
   )
 }
 
-// ---- Mode CALQUES (raster) ----
-
-/** Un calque de pièce : <img> plein-cadre qui se masque tout seul si l'asset manque. */
-function LayerImg({ cls, l }: { cls: ClassMeta; l: GearLayer }) {
-  const [failed, setFailed] = useState(false)
-  if (failed) return null
-  const glowOn = l.region === 'arme' || l.tier >= 4
-  return (
-    <img
-      src={layerImageSrc(cls.id, l.region, l.tier)} alt="" loading="lazy" onError={() => setFailed(true)}
-      className="pointer-events-none absolute inset-0 h-full w-full"
-      style={{ objectFit: 'cover', zIndex: l.z, filter: glowOn ? `drop-shadow(0 0 ${(1 + l.glow * 4).toFixed(1)}px ${l.glowColor})` : undefined }}
-    />
-  )
-}
-
-/** Corps de base + calques. Si le corps de base manque → repli (illustration entière / placeholder). */
-function LayeredFigure({ cls, layers, tier, char }: { cls: ClassMeta; layers: GearLayer[]; tier: VisualTier; char: Character }) {
-  const [baseFailed, setBaseFailed] = useState(false)
-  if (baseFailed) {
-    if (hasAvatarArt(cls.id, tier)) {
-      return (
-        <img
-          src={avatarArtSrc(cls.id, tier)} alt={`${cls.name} · palier ${TIER_NAME[tier]}`} loading="lazy"
-          className="relative block w-full" style={{ filter: tier >= 5 ? 'drop-shadow(0 0 6px rgba(255,255,255,.4))' : undefined }}
-        />
-      )
-    }
-    return <Placeholder char={char} glow={tier >= 5} />
-  }
-  return (
-    <div className="relative w-full" style={{ aspectRatio: '2 / 3' }}>
-      <img
-        src={baseImageSrc(cls.id)} alt={cls.name} onError={() => setBaseFailed(true)}
-        className="absolute inset-0 h-full w-full" style={{ objectFit: 'cover', zIndex: 0 }}
-      />
-      {layers.map((l) => <LayerImg key={l.slot} cls={cls} l={l} />)}
-    </div>
-  )
-}
-
 const TIER_NAME: Record<VisualTier, string> = { 0: 'Brut', 1: 'Affûté', 2: 'Ouvragé', 3: 'Héroïque', 4: 'Glorieux', 5: 'Mythique' }
 
 export function Mannequin({ char, maxWidth = 168, caption = true }: { char: Character; maxWidth?: number; caption?: boolean }) {
   const cls = useMemo(() => resolveClass(char), [char])
   const tier = useMemo(() => lookTier(char), [char.equipment])
-  const layers = useMemo(() => buildLayers(char), [char.equipment])
   const { aura } = resolveAvatar(char.primaryBias, char.avatar)
   const equipped = Object.values(char.equipment ?? {}).some(Boolean)
+  // UNE illustration par classe×palier si elle existe, sinon placeholder procédural.
+  const art = hasAvatarArt(cls.id, tier)
 
   return (
     <div className="relative mx-auto" style={{ width: '100%', maxWidth }}>
@@ -245,8 +203,14 @@ export function Mannequin({ char, maxWidth = 168, caption = true }: { char: Char
           style={{ width: '82%', paddingBottom: '82%', height: 0, background: `radial-gradient(circle, ${aura.color} 0%, transparent 66%)`, opacity: 0.5 }}
         />
       )}
-      {/* key=cls.id : re-tente le corps de base quand on change de classe/perso. */}
-      <LayeredFigure key={cls.id} cls={cls} layers={layers} tier={tier} char={char} />
+      {art ? (
+        <img
+          src={avatarArtSrc(cls.id, tier)} alt={`${cls.name} · palier ${TIER_NAME[tier]}`} loading="lazy"
+          className="relative block w-full" style={{ filter: tier >= 5 ? 'drop-shadow(0 0 6px rgba(255,255,255,.4))' : undefined }}
+        />
+      ) : (
+        <Placeholder char={char} glow={tier >= 5} />
+      )}
       {caption && (
         <div className="mt-1 text-center text-[10px] leading-tight">
           <span className="font-semibold text-slate-200">{cls.name}</span>
