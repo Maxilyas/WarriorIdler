@@ -134,6 +134,7 @@ export function lookTier(char: Character): VisualTier {
  * Ajouter la clé ICI au moment où l'image est déposée (cf. public/avatars/README.md).
  */
 export const AVATAR_ART: ReadonlySet<string> = new Set<string>([
+  'guerrier-0'
   // ex. 'guerrier-0', 'guerrier-1', … 'mage-5'
 ])
 
@@ -151,9 +152,9 @@ const ILVL_GLOW_REF = 700
 
 // ---- Calques ----
 
-/** Région du corps où se pose un calque (un slot d'équipement → une région, ~10 visibles). */
+/** Région du corps où se pose un calque (un slot d'équipement → une région). */
 export type BodyRegion =
-  | 'cape' | 'jambes' | 'torse' | 'pieds' | 'mains' | 'taille' | 'epaules' | 'tete' | 'bouclier' | 'arme'
+  | 'cape' | 'jambes' | 'torse' | 'pieds' | 'poignets' | 'mains' | 'taille' | 'epaules' | 'tete' | 'bouclier' | 'arme'
 
 /** Slot d'équipement → région visible + z-order (dos → face). Les slots absents (bijouterie) = pas de calque. */
 const SLOT_RENDER: Partial<Record<EquipSlotId, { region: BodyRegion; z: number }>> = {
@@ -162,11 +163,22 @@ const SLOT_RENDER: Partial<Record<EquipSlotId, { region: BodyRegion; z: number }
   pieds: { region: 'pieds', z: 35 },
   torse: { region: 'torse', z: 40 },
   taille: { region: 'taille', z: 45 },
+  poignets: { region: 'poignets', z: 50 },
   mains: { region: 'mains', z: 55 },
   epaules: { region: 'epaules', z: 60 },
   armeSecondaire: { region: 'bouclier', z: 65 },
   tete: { region: 'tete', z: 70 },
   armePrincipale: { region: 'arme', z: 80 },
+}
+
+/** Corps de base (nu) d'une classe — le calque le plus bas, sur lequel le gear se compose. */
+export function baseImageSrc(cls: ClassId): string {
+  return `${import.meta.env.BASE_URL}avatars/${cls}/base.webp`
+}
+
+/** Calque d'une pièce : transparent, aligné sur le corps de base (extrait par diff). */
+export function layerImageSrc(cls: ClassId, region: BodyRegion, tier: VisualTier): string {
+  return `${import.meta.env.BASE_URL}avatars/${cls}/${region}-${tier}.webp`
 }
 
 /** Ordre des régions à composer (de l'arrière vers l'avant). */
