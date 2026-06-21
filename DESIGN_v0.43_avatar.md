@@ -12,7 +12,49 @@
 > (vitrine). Le médaillon actuel ([LevelBadge.tsx](src/components/LevelBadge.tsx)) reste partout
 > ailleurs (combat, barres) — la figurine **augmente**, ne remplace pas.
 
-## 1. Décisions verrouillées (cadrage)
+## 0. RÉVISION v0.43.1 — PIVOT vers illustrations réalistes par palier
+
+> Retour joueur : *« je veux vraiment quelque chose de RÉALISTE pour les assets. »*
+
+Le plan LAYERED (calques par pièce, pack LPC) décrit en §1-§10 est **ABANDONNÉ** : LPC est du
+pixel-art stylisé (l'inverse de réaliste), et empiler des centaines de calques d'armure *réalistes*
+cohérents (anatomie / lumière / perspective / ancrage) est infaisable en 2D — c'est précisément
+pourquoi les jeux AAA à avatar équipable passent par la **3D**. Nouvelle direction **verrouillée** :
+
+- **L'avatar = UNE illustration réaliste en pied, par `classe × palier visuel`** (10 classes × 6
+  paliers ≈ **60-120 images**), affichée en entier (aucune composition de calques).
+- **Elle change d'ALLURE GLOBALE** selon le palier d'équipement du héros (`lookTier`, §0.2).
+- **Le « voir chaque pièce » est DÉLÉGUÉ à la grille des 16 slots** (déjà existante,
+  [StuffScreen.tsx:537](src/components/StuffScreen.tsx#L537)) : le détail par-pièce y vit déjà ;
+  l'avatar devient la **pièce maîtresse esthétique**, pas un inventaire visuel.
+- **Effets** (glow d'arme élémentaire, aura de prestige, éclat de haut palier) = overlays CSS
+  par-dessus l'image — inchangés.
+
+### 0.1 Source d'art (⚠ non générable par l'assistant)
+Aucun pack open-source d'armures réalistes en calques n'existe. Pour ~60-120 illustrations réalistes
+COHÉRENTES, la voie réaliste solo = **génération IA pilotée par template strict** (ou commission
+d'artiste). **Le code CONSOMME les images et le SPEC de génération est fourni
+([public/avatars/README.md](public/avatars/README.md)), mais la PRODUCTION des images se fait via un
+modèle d'image / un artiste — hors des outils de l'assistant.** Le système fonctionne AVANT l'art
+(fallback placeholder procédural).
+
+### 0.2 Palier d'allure (`lookTier`)
+Agrège la rareté de l'équipement porté → 0..5. **Moyenne** des raretés portées (stable) plutôt que
+le max (qui sauterait au moindre drop chanceux). Knob : biais vers « meilleure pièce » ajustable.
+
+### 0.3 Architecture de consommation (livrée v0.43.1)
+- `public/avatars/<classId>/<tier>.webp` (fond transparent ou sombre, cadrage / pose CONSTANTS).
+- Manifeste `AVATAR_ART` (set de combos `classId-tier` disponibles, [wardrobe.ts](src/game/wardrobe.ts)) :
+  tant qu'un combo en est absent, le Mannequin affiche le **placeholder procédural** (§5, conservé
+  comme repli). Déposer l'image + ajouter son combo au set → l'avatar réel remplace le placeholder
+  pour ce `classe×palier`. Mise en prod incrémentale, jamais cassée.
+- Poids PWA : WebP/AVIF, ~768×1152, **lazy-load** de la seule image affichée.
+
+> Tout ce qui suit (§1-§10) décrit le plan LAYERED d'origine. **À lire comme l'historique** : les
+> points RENDU / PILOTAGE / SOURCE D'ART sont supersédés par cette §0. Restent valides — résolution
+> classe→catégorie→palier (§3), les 6 paliers visuels, les effets CSS, les emplacements (Stuff + Héros).
+
+## 1. Décisions verrouillées (cadrage — RENDU/PILOTAGE/SOURCE supersédés par §0)
 
 Issues du Q&A de cadrage. Ce sont les invariants du chantier.
 

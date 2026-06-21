@@ -1,9 +1,9 @@
 import { useMemo } from 'react'
 import type { Character } from '../game/types'
 import { resolveAvatar } from '../game/avatar'
-import { RARITIES } from '../game/rarities'
 import {
-  buildLayers, resolveClass, topVisualTier, type BodyShape, type GearLayer, type VisualTier,
+  avatarArtSrc, buildLayers, hasAvatarArt, lookTier, resolveClass,
+  type BodyShape, type GearLayer, type VisualTier,
 } from '../game/wardrobe'
 
 /**
@@ -177,16 +177,30 @@ function Body({ geo }: { geo: Geo }) {
 
 const TIER_NAME: Record<VisualTier, string> = { 0: 'Brut', 1: 'Affûté', 2: 'Ouvragé', 3: 'Héroïque', 4: 'Glorieux', 5: 'Mythique' }
 
-export function Mannequin({ char, maxWidth = 168, caption = true }: { char: Character; maxWidth?: number; caption?: boolean }) {
-  const cls = useMemo(() => resolveClass(char), [char])
-  const layers = useMemo(() => buildLayers(char), [char.equipment])
+/** Repli procédural (placeholder) : silhouette de classe + gear composé en calques. */
+function Placeholder({ char, glow }: { char: Character; glow: boolean }) {
+  const cls = resolveClass(char)
   const geo = GEO[cls.body]
-  const { aura } = resolveAvatar(char.primaryBias, char.avatar)
-  const top = topVisualTier(char)
-
-  // La cape se rend DERRIÈRE le corps ; le reste devant (les calques sont déjà triés dos→face).
+  const layers = buildLayers(char)
   const capeLayer = layers.find((l) => l.region === 'cape')
   const frontLayers = layers.filter((l) => l.region !== 'cape')
+  return (
+    <svg viewBox="0 0 100 152" className="relative block w-full" style={{ filter: glow ? 'drop-shadow(0 0 5px rgba(255,255,255,.35))' : undefined }}>
+      <ellipse cx={CX} cy={FOOT_Y + 1} rx={geo.hipW * 0.9} ry={4} fill="#000" opacity={0.35} />
+      {capeLayer && <Region l={capeLayer} geo={geo} classTint={cls.tint} />}
+      <Body geo={geo} />
+      {frontLayers.map((l) => <Region key={l.slot} l={l} geo={geo} classTint={cls.tint} />)}
+    </svg>
+  )
+}
+
+export function Mannequin({ char, maxWidth = 168, caption = true }: { char: Character; maxWidth?: number; caption?: boolean }) {
+  const cls = useMemo(() => resolveClass(char), [char])
+  const tier = useMemo(() => lookTier(char), [char.equipment])
+  const { aura } = resolveAvatar(char.primaryBias, char.avatar)
+  const equipped = Object.values(char.equipment ?? {}).some(Boolean)
+  // v0.43.1 — illustration réaliste si elle existe (classe × palier), sinon placeholder procédural.
+  const art = hasAvatarArt(cls.id, tier)
 
   return (
     <div className="relative mx-auto" style={{ width: '100%', maxWidth }}>
@@ -196,21 +210,18 @@ export function Mannequin({ char, maxWidth = 168, caption = true }: { char: Char
           style={{ width: '82%', paddingBottom: '82%', height: 0, background: `radial-gradient(circle, ${aura.color} 0%, transparent 66%)`, opacity: 0.5 }}
         />
       )}
-      <svg viewBox="0 0 100 152" className="relative block w-full" style={{ filter: top >= 5 ? 'drop-shadow(0 0 5px rgba(255,255,255,.35))' : undefined }}>
-        {/* Socle */}
-        <ellipse cx={CX} cy={FOOT_Y + 1} rx={geo.hipW * 0.9} ry={4} fill="#000" opacity={0.35} />
-        {capeLayer && <Region l={capeLayer} geo={geo} classTint={cls.tint} />}
-        <Body geo={geo} />
-        {frontLayers.map((l) => <Region key={l.slot} l={l} geo={geo} classTint={cls.tint} />)}
-      </svg>
+      {art ? (
+        <img
+          src={avatarArtSrc(cls.id, tier)} alt={`${cls.name} · palier ${TIER_NAME[tier]}`} loading="lazy"
+          className="relative block w-full" style={{ filter: tier >= 5 ? 'drop-shadow(0 0 6px rgba(255,255,255,.4))' : undefined }}
+        />
+      ) : (
+        <Placeholder char={char} glow={tier >= 5} />
+      )}
       {caption && (
         <div className="mt-1 text-center text-[10px] leading-tight">
           <span className="font-semibold text-slate-200">{cls.name}</span>
-          {layers.length > 0 && (
-            <span className="ml-1" style={{ color: RARITIES[Object.values(char.equipment).find((i) => i)?.rarity ?? 'commun']?.color }}>
-              · palier {TIER_NAME[top]}
-            </span>
-          )}
+          {equipped && <span className="ml-1 text-slate-400">· palier {TIER_NAME[tier]}</span>}
         </div>
       )}
     </div>

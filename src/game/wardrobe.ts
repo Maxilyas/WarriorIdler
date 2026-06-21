@@ -101,12 +101,49 @@ export function resolveClass(char: Character): ClassMeta {
 
 // ---- Paliers visuels ----
 
-/** 6 paliers visuels : projection des 16 raretés (la forme du gear change 6 fois). */
+/** 6 paliers visuels : projection des 16 raretés. */
 export type VisualTier = 0 | 1 | 2 | 3 | 4 | 5
 
-export function visualTier(rarity: RarityId): VisualTier {
-  const t = RARITIES[rarity].tier // 1..16
+/** Bucket d'un tier de rareté brut (1..16) → palier visuel (0..5). */
+function bucketTier(t: number): VisualTier {
   return (t <= 2 ? 0 : t <= 4 ? 1 : t <= 6 ? 2 : t <= 8 ? 3 : t <= 11 ? 4 : 5) as VisualTier
+}
+
+export function visualTier(rarity: RarityId): VisualTier {
+  return bucketTier(RARITIES[rarity].tier)
+}
+
+/**
+ * v0.43.1 — PALIER D'ALLURE de l'avatar : agrège la rareté de l'équipement porté → 0..5. C'est lui
+ * qui choisit l'illustration réaliste (classe × palier). MOYENNE des raretés portées (stable) plutôt
+ * que le max — un seul drop chanceux ne doit pas faire sauter toute l'allure. Knob : pondérer vers la
+ * meilleure pièce en remplaçant la moyenne par un percentile haut.
+ */
+export function lookTier(char: Character): VisualTier {
+  const items = Object.values(char.equipment ?? {}).filter((i): i is Item => !!i)
+  if (!items.length) return 0
+  const avg = items.reduce((s, it) => s + RARITIES[it.rarity].tier, 0) / items.length
+  return bucketTier(Math.round(avg))
+}
+
+// ---- Illustrations réalistes (v0.43.1) ----
+
+/**
+ * Combos `classId-tier` pour lesquels une illustration réaliste EXISTE dans `public/avatars`.
+ * VIDE tant que l'art n'est pas produit → le Mannequin retombe sur le placeholder procédural.
+ * Ajouter la clé ICI au moment où l'image est déposée (cf. public/avatars/README.md).
+ */
+export const AVATAR_ART: ReadonlySet<string> = new Set<string>([
+  // ex. 'guerrier-0', 'guerrier-1', … 'mage-5'
+])
+
+export function hasAvatarArt(cls: ClassId, tier: VisualTier): boolean {
+  return AVATAR_ART.has(`${cls}-${tier}`)
+}
+
+/** Chemin de l'illustration (respecte la base Vite pour le déploiement en sous-chemin). */
+export function avatarArtSrc(cls: ClassId, tier: VisualTier): string {
+  return `${import.meta.env.BASE_URL}avatars/${cls}/${tier}.webp`
 }
 
 /** iLvl de référence pour normaliser le glow (cap de contenu v0.30 ≈ 700). */
