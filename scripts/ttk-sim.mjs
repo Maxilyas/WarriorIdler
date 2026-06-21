@@ -26,11 +26,19 @@ setGlobalCombatMods({ power: 1, attackSpeed: 1, vitality: 1 })
 const fmt = (n) => n >= 1e12 ? (n / 1e12).toFixed(2) + 'T' : n >= 1e9 ? (n / 1e9).toFixed(2) + 'Md' : n >= 1e6 ? (n / 1e6).toFixed(2) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : Math.round(n).toString()
 const ok = (b) => b ? '✅' : '❌'
 
-// Builds optimisés (mêmes keystones/sorts que build-sim — comparaison contrôlée).
+// Builds ENDGAME représentatifs (v0.42 : chemin de classe réel + keystones + capstone d'IDENTITÉ ;
+// le générateur va en SOUTIEN — sinon les finisseurs tombent à combo 1 ; + 3 PASSIFS slottés).
+const DPS_PASSIVES = ['pas_cruaute', 'pas_perforation', 'pas_celerite']
 const BUILDS = {
-  FORCE: { primary: 'force', bias: 'force', elem: 'physique', talents: ['fo_b5', 'fo_c4', 'bo_b2', 'fo_b1', 'du_a3'], powers: ['frappe_lourde', 'choc_sismique', 'laceration', 'decapitation', 'tourbillon'] },
-  AGI: { primary: 'agilite', bias: 'agilite', elem: 'physique', talents: ['ag_b5', 'du_b2', 'sp_b2', 'ag_b3', 'du_a3'], powers: ['eviscaration', 'tir_precis', 'volee_de_fleches', 'poison', 'soif_du_neant'] },
-  INT: { primary: 'intelligence', bias: 'intelligence', elem: 'arcane', talents: ['in_a7', 'in_b5', 'el_a1', 'el_a3', 'in_a5'], powers: ['eclair', 'embrasement', 'trait_de_givre', 'salve_arcanique', 'deluge_stellaire'] },
+  FORCE: { primary: 'force', bias: 'force', elem: 'physique',
+    talents: ['cat_plaque', 'cl_guerrier', 'se_hub', 'se_brutal', 'se_mortel', 'se_rage', 'id_guerrier'],
+    support: ['se_mutile'], powers: ['gu_frappe', 'se_sentence', 'se_saignement', 'se_decapite', 'se_tourmente'], passives: DPS_PASSIVES },
+  AGI: { primary: 'agilite', bias: 'agilite', elem: 'physique',
+    talents: ['cat_cuir', 'cl_voleur', 'om_hub', 'om_saig', 'om_surin', 'om_jum', 'id_voleur'],
+    support: ['om_frappe_sournoise'], powers: ['om_eviscaration', 'vo_tranchant', 'om_embuscade', 'om_eventail', 'as_lame_enduite'], passives: DPS_PASSIVES },
+  INT: { primary: 'intelligence', bias: 'intelligence', elem: 'feu',
+    talents: ['cat_tissu', 'cl_mage', 'py_hub', 'py_pyromanie', 'py_hotstreak', 'py_combustion', 'id_mage'],
+    support: [], powers: ['ma_eclair', 'py_boule', 'py_pyroblast', 'py_flammes', 'py_immolation'], passives: DPS_PASSIVES },
 }
 
 // Perso calé : équipement RÉEL généré à l'ilvl du contenu, rareté légendaire (= stuff réaliste du tier).
@@ -44,6 +52,8 @@ function gearedChar(b, ci, rarity = 'legendaire') {
   c.talents = { co_start: 1 }
   for (const t of b.talents) c.talents[t] = 1
   c.powers = [...b.powers]
+  c.support = [...(b.support ?? [])]
+  c.passives = [...(b.passives ?? [])]
   c.hp = charMaxHp(c)
   return c
 }

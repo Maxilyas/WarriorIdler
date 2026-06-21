@@ -7,78 +7,65 @@ const load = async (entry) => {
 }
 const M = await load(`
   export { makeCharacter, charDerived, charMaxHp, charResist, charCombatMods, charPassives, charDps, setGlobalCombatMods } from './src/game/character.ts'
-  export { makeEnemy } from './src/game/enemies.ts'
   export { incomingDps } from './src/game/combat.ts'
-  export { RARITIES } from './src/game/rarities.ts'
-  export { ITEM_TYPES, EQUIP_SLOTS } from './src/game/slots.ts'
+  export { enemyHp, enemyDmg } from './src/game/progression.ts'
+  export { generateItem } from './src/game/items.ts'
+  export { EQUIP_SLOTS } from './src/game/slots.ts'
 `)
-const { makeCharacter, charDerived, charMaxHp, charResist, charCombatMods, charPassives, charDps, setGlobalCombatMods, makeEnemy, incomingDps, RARITIES, ITEM_TYPES, EQUIP_SLOTS } = M
+const { makeCharacter, charDerived, charMaxHp, charResist, charCombatMods, charPassives, charDps, setGlobalCombatMods, incomingDps, enemyHp, enemyDmg, generateItem, EQUIP_SLOTS } = M
 setGlobalCombatMods({ power: 1, attackSpeed: 1, vitality: 1 })
 
-const statAffix = (stat, ilvl, statMult) => ({ kind: 'stat', stat, value: Math.max(1, Math.round(ilvl * 0.8 * statMult * 1.3)) })
-const resistAffix = (type, tier) => ({ kind: 'resist', type, value: Math.min(30, Math.round(13 * (1 + tier * 0.06))) })
-
-function makeItem(type, primary, ilvl, rarityId, mode) {
-  const r = RARITIES[rarityId]
-  const budget = ilvl * ITEM_TYPES[type].weight * r.statMult
-  const offFrac = mode === 'tank' ? 0.3 : 0.82 // defensif vs offensif (ENDURANCE = 1.9 dans items.ts)
-  const affixes = []
-  const defPrio = ['reductionDegats', 'esquive', 'barriere', 'tenacite']
-  for (let i = 0; i < r.affixCount; i++) {
-    if (mode === 'tank') {
-      if (i < 2) affixes.push(resistAffix('physique', r.tier)) // 2 lignes de résist physique (auto ennemi = physique)
-      else affixes.push(statAffix(defPrio[(i - 2) % defPrio.length], ilvl, r.statMult))
-    } else {
-      affixes.push(statAffix(['maitrise', 'critique', 'degatsCrit', 'hate', 'penetration'][i % 5], ilvl, r.statMult))
-    }
-  }
-  return {
-    id: type, name: type, type, rarity: rarityId, ilvl, primary,
-    primaryValue: Math.max(1, Math.round(budget * offFrac * 1.15)),
-    endurance: Math.max(1, Math.round(budget * (1 - offFrac) * 1.9 * 1.15)),
-    orientation: mode === 'tank' ? 'defensif' : 'offensif',
-    affixes,
-    ...(type === 'armePrincipale' ? { damageType: 'physique' } : {}),
-  }
-}
-function makeChar(level, ilvl, rarityId, mode, talents) {
+// v0.42 — gear RÉEL via generateItem (budget exponentiel v0.30, comme ttk-sim). Le makeItem hand-rollé
+// d'avant (budget LINÉAIRE) sous-estimait massivement l'EHP au-delà de l'ilvl ~150. Tank = orientation
+// défensive (≈70% Endurance), DPS = offensive.
+function makeChar(level, ilvl, rarityId, mode, b) {
   const c = makeCharacter('Sim', level, 'force')
   const eq = {}
-  for (const s of EQUIP_SLOTS) eq[s.id] = makeItem(s.accepts, 'force', ilvl, rarityId, mode)
+  for (const s of EQUIP_SLOTS) eq[s.id] = generateItem({ ilvl, rarity: rarityId, type: s.accepts, primary: 'force', stars: 3, orientation: mode === 'tank' ? 'defensif' : 'offensif', ...(s.accepts === 'armePrincipale' ? { element: 'physique' } : {}) })
   c.equipment = eq
   c.talents = { co_start: 1 }
-  for (const t of talents) c.talents[t] = 1
-  c.powers = ['frappe_lourde', 'choc_sismique', 'laceration', 'decapitation', 'tourbillon']
+  for (const t of b.talents) c.talents[t] = 1
+  c.support = [...(b.support ?? [])]
+  c.passives = [...(b.passives ?? [])]
+  c.powers = [...b.powers]
   c.hp = charMaxHp(c)
   return c
 }
 const fmt = (n) => n >= 1e9 ? (n/1e9).toFixed(1)+'Md' : n >= 1e6 ? (n/1e6).toFixed(1)+'M' : n >= 1e3 ? (n/1e3).toFixed(0)+'k' : Math.round(n).toString()
 
-// Tank : keystones défensifs (Forteresse flatDr .15, Inébranlable flatDr .2) + résist talents (Égide).
-const TANK_TAL = ['ba_a5', 'ba_a7', 'ba_b0', 'ba_b3']
-const DPS_TAL = ['fo_b5', 'fo_c4', 'bo_b2']
+// v0.42 — builds réels (Guerrier). TANK : keystones flatDr (Forteresse .12 + Résilience .10 +
+// Vengeance .06 + capstone Indomptable .15) + 3 passifs défensifs. DPS : Sentence + capstone + 3
+// passifs offensifs. Générateur en SOUTIEN (sinon finisseurs à combo 1).
+const TANK = {
+  talents: ['cat_plaque', 'cl_guerrier', 're_hub', 're_inebranlable', 'se_resilience', 'ju_vengeance', 'id_guerrier'],
+  support: ['re_bouclier_coup'], powers: ['gu_frappe', 're_revanche', 'se_saignement', 'gu_condamnation'],
+  passives: ['pas_vitalite', 'pas_carapace', 'pas_rempart'],
+}
+const DPS = {
+  talents: ['cat_plaque', 'cl_guerrier', 'se_hub', 'se_brutal', 'se_mortel', 'se_rage', 'id_guerrier'],
+  support: ['se_mutile'], powers: ['gu_frappe', 'se_sentence', 'se_saignement', 'se_decapite', 'se_tourmente'],
+  passives: ['pas_cruaute', 'pas_perforation', 'pas_celerite'],
+}
 
-function survivalSeconds(c, enemy) {
+function survivalSeconds(c, dmg, dmgType) {
   const d = charDerived(c); const res = charResist(c); const pass = charPassives(c); const cm = charCombatMods(c)
   const extra = (1 - pass.damageReduction) * (1 - cm.flatDr)
-  const dpsTaken = incomingDps(enemy.damage, enemy.damageType, d, res, extra)
+  const dpsTaken = incomingDps(dmg, dmgType, d, res, extra)
   return { hp: charMaxHp(c), dpsTaken, ttd: charMaxHp(c) / dpsTaken }
 }
 
-const STAGES = [30, 50, 70, 100, 130]
-console.log('=== Survie vs offense par palier (rareté transcendant, ilvl=1.5xpalier) ===')
-console.log('TTD = temps pour mourir (tank) · TTK = temps pour tuer (build DPS) · ratio<1 = on meurt avant de tuer\n')
-for (const stage of STAGES) {
-  const ilvl = Math.round(stage * 1.5); const lvl = stage
-  const tank = makeChar(lvl, ilvl, 'transcendant', 'tank', TANK_TAL)
-  const dps = makeChar(lvl, ilvl, 'transcendant', 'dps', DPS_TAL)
-  const enemyN = makeEnemy(stage, 'physique')
-  const enemyB = makeEnemy(stage - (stage % 10) + 10, 'physique') // prochain boss
-  const sN = survivalSeconds(tank, enemyN)
-  const sB = survivalSeconds(tank, enemyB)
-  const playerDps = charDps(dps)
-  const ttkN = enemyN.maxHp / playerDps
-  const ttkB = enemyB.maxHp / playerDps
-  console.log(`Palier ${stage}: tank HP=${fmt(sN.hp)}  | NORMAL dmg=${fmt(enemyN.damage)}/s TTD=${sN.ttd.toFixed(1)}s TTK=${ttkN.toFixed(1)}s ratio=${(sN.ttd/ttkN).toFixed(2)}`)
-  console.log(`            boss(${enemyB.name.slice(0,12)}) dmg=${fmt(enemyB.damage)}/s TTD=${sB.ttd.toFixed(1)}s TTK=${ttkB.toFixed(1)}s ratio=${(sB.ttd/ttkB).toFixed(2)}`)
+// v0.42 — modèle de contenu COURANT (aligné sur ttk-sim) : ilvl de contenu (ci) + gear LÉGENDAIRE calé,
+// PV/dégâts ennemis via progression.ts (fini les paliers + transcendant sur-stuffé d'avant les Chapitres).
+const CIS = [50, 150, 300, 400, 500, 700]
+console.log('=== Survie vs offense à stuff calé (légendaire, ilvl = contenu) ===')
+console.log('TTD = temps pour mourir (tank, dégâts boss en auto) · TTK = temps pour tuer (build DPS) · ratio<1 = on meurt avant de tuer\n')
+for (const ci of CIS) {
+  const lvl = Math.max(1, Math.min(200, Math.round(ci / 4)))
+  const tank = makeChar(lvl, ci, 'legendaire', 'tank', TANK)
+  const dps = makeChar(lvl, ci, 'legendaire', 'dps', DPS)
+  const bossDmg = enemyDmg(ci, 'boss'); const bossHp = enemyHp(ci, 'boss')
+  const sB = survivalSeconds(tank, bossDmg, 'physique')
+  const ttkB = bossHp / charDps(dps)
+  const ratio = sB.ttd / ttkB
+  console.log(`ci ${String(ci).padStart(3)}: tank EHP=${fmt(sB.hp).padStart(6)} vs boss ${fmt(bossDmg).padStart(6)}/s → TTD=${sB.ttd.toFixed(1).padStart(5)}s | dps TTK boss=${ttkB.toFixed(1).padStart(5)}s | ratio ${ratio.toFixed(2).padStart(5)} ${ratio >= 1 ? '✅' : '❌ meurt avant'}`)
 }
