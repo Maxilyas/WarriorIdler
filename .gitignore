@@ -6,7 +6,3 @@ dev.log
 .DS_Store
 .vite
 tsconfig.tsbuildinfo
-
-# Packs 3D bruts (KayKit, etc.) — on ne commite QUE les .glb extraits dans public/models/.
-3d-source/
-public/models/KayKit_*
