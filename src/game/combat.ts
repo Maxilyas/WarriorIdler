@@ -1,3 +1,9 @@
+/**
+ * COMBAT — résolution d'un coup (`rollHit`), mitigation (armure), dégâts subis (`incomingDps`),
+ * DPS théorique affiché (`theoreticalDps`). Ordre d'un coup : esquive → crit → bruts → armure
+ * (Physique) → résist par type. L'atténuation générique est BORNÉE (`EFFECTIVE_DR_CAP = 0.8`).
+ *   → Doc : docs/systemes/01-combat-et-degats.md
+ */
 import type { DerivedStats } from './stats'
 import type { DamageType, Enemy } from './types'
 import type { DamageProfile } from './damage'

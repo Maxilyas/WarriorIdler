@@ -1,3 +1,13 @@
+/**
+ * STORE ZUSTAND — le cœur runtime du jeu. Tient TOUT l'état mutable (`GameState`), expose les
+ * actions, fait tourner la BOUCLE DE COMBAT (`tick`, 5 Hz) et gère la SAUVEGARDE/MIGRATION
+ * localStorage (`persist` → `SaveData`, clé `SAVE_KEY`).
+ *
+ * Règle d'or : la logique de jeu vit dans les modules PURS de `game/` ; le store ne fait
+ * qu'orchestrer l'état et appeler ces fonctions. Les champs transitoires (cooldowns, compteurs
+ * de gemmes, états d'archétype) ne sont PAS persistés.
+ *   → Doc : docs/systemes/10-etat-store-et-sauvegarde.md + docs/ARCHITECTURE.md
+ */
 import { create } from 'zustand'
 import type {
   Equipment, Item, Affix, PrimaryStat, OffensiveStat, SecondaryStat, EquipSlotId, ItemType, Enemy, DamageType, RarityId, Character, PowerDef, EnemyAbility,

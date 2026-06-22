@@ -1,3 +1,10 @@
+/**
+ * DÉGÂTS — les 7 types, le PROFIL de dégâts (`computeDamageProfile` à partir de TOUT l'équipement +
+ * keystones), le triangle d'élément (`ELEMENT_COUNTER`, affinités ennemies), et le matching de type
+ * des sorts vs auto-attaques (`spellTypeMult`, knob `SPELL_TYPE_MATCH`). Le bonus cumulé par type est
+ * soft-capé (`TYPE_BONUS_SOFT/HARD`).
+ *   → Doc : docs/systemes/01-combat-et-degats.md
+ */
 import type { DamageType, Equipment } from './types'
 import type { KeystoneEffect } from './talents'
 import { instanceResist } from './uniques'

@@ -1,3 +1,9 @@
+/**
+ * EMPLACEMENTS & TYPES D'OBJET — les 16 emplacements (`EQUIP_SLOTS`) et 14 types (`ITEM_TYPES`,
+ * avec leur poids de budget de stats). Mapping type → emplacements acceptés (un anneau va en
+ * Anneau I ou II). Données pures.
+ *   → Doc : docs/systemes/04-stuff-et-loot.md
+ */
 import type { EquipSlotId, ItemType } from './types'
 
 export interface EquipSlotMeta {

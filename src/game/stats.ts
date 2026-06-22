@@ -1,3 +1,11 @@
+/**
+ * STATS — méta des stats, agrégation (`computeTotalStats`) et stats dérivées de combat
+ * (`computeDerived`). Chaque secondaire a une COURBE à soft cap (`softCap`, rendement décroissant,
+ * jamais de mur). La MAÎTRISE a une identité par stat primaire dominante (Force=DR+Riposte,
+ * Agi=Débordement crit, Int=Surcharge). Refonte majeure v0.38 (Esquive/Ténacité/Purge/Régén
+ * dépréciées mais repliées pour la rétro-compat).
+ *   → Doc : docs/systemes/02-stats-et-maitrises.md
+ */
 import type { PrimaryStat, SecondaryStat, StatKey, StatBlock, Equipment, ConvSource } from './types'
 import { instanceMods } from './uniques'
 

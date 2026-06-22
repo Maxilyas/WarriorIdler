@@ -1,3 +1,10 @@
+/**
+ * MARCHÉ & BONUS DE COMPTE — améliorations permanentes (`UPGRADES`, puits d'or/éclats) ET
+ * l'AGRÉGATEUR CENTRAL `computeGlobalMods` où se cumulent améliorations + Conseil des Maîtrises +
+ * hauts faits (mêmes clés/coefficients). Brancher ici tout nouveau bonus de compte. Le Marché est
+ * volontairement VIDÉ de sa puissance (v0.25) : seule la Forge stellaire reste un puits de combat.
+ *   → Doc : docs/systemes/08-metiers-et-craft.md
+ */
 export type UpgradeCategory = 'economie' | 'progression' | 'combat' | 'confort'
 
 export interface UpgradeDef {

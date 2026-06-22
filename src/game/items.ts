@@ -1,3 +1,10 @@
+/**
+ * STUFF & LOOT — génération d'objets (`generateItem`), budget de stats EXPONENTIEL (la stat primaire
+ * porte le DPS ∝ b^ilvl → TTK constant), fenêtres de rareté (`rollWindowRarity` & dérivées), score,
+ * vente/recyclage, et COÛTS de craft (reforge/surilvl/ascension/création) avec gating anti-snowball
+ * (`overContentMult`, `craftRaidGate`). Qualité unifiée 1-5.
+ *   → Doc : docs/systemes/04-stuff-et-loot.md
+ */
 import type { Affix, Item, PrimaryStat, OffensiveStat, ItemOrientation, ItemType, SecondaryStat, RarityId, DamageType } from './types'
 import { RARITIES, RARITY_LIST, rollRarity } from './rarities'
 import { RARE_STATS, softCap } from './stats'

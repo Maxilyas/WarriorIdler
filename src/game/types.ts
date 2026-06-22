@@ -1,3 +1,10 @@
+/**
+ * VOCABULAIRE DE DOMAINE — les types partagés par tout le jeu (aucune logique ici).
+ * Item, Affix, Character, Enemy, DamageType, EquipSlotId, PowerDef… Toute la logique vit
+ * dans les autres modules `game/` ; ce fichier ne fait que définir les formes.
+ *   → Doc : docs/systemes/10-etat-store-et-sauvegarde.md
+ */
+
 // ---- Stats ----
 
 /** Stats primaires : orientent le build (le talent tree décidera laquelle scaler). */

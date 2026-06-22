@@ -1,3 +1,10 @@
+/**
+ * PERSONNAGE — assemble un `Character` (base + équipement + talents) en stats dérivées, profil de
+ * dégâts, decks de capacités, et DPS/EHP. `charDps`/`dpsBreakdown` sont EXACTS par construction
+ * (mêmes fonctions que le combat réel). Budget de talents PARTAGÉ au niveau de compte
+ * (`teamTalentPool`) ; l'arbre s'ouvre au niveau 11 (`TALENT_START_LEVEL`).
+ *   → Doc : docs/systemes/06-classes-talents-pouvoirs.md + docs/systemes/10-etat-store-et-sauvegarde.md
+ */
 import type { Character, StatBlock, StatKey, PrimaryStat, OffensiveStat, PowerDef, PowerEffect, PassiveConversion, DamageType, Item, EquipSlotId } from './types'
 import { computeTotalStats, computeDerived, type DerivedStats } from './stats'
 import { computeDamageProfile, computeResistProfile, profileDamageMult, type DamageProfile } from './damage'
