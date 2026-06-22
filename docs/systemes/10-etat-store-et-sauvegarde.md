@@ -1,7 +1,8 @@
 # 10 — État, store & sauvegarde
 
-> Source : [`store.ts`](../../src/game/store.ts) (~6.5k lignes : état + actions + boucle),
-> [`save.ts`](../../src/game/save.ts) (sauvegarde & migration, extrait de `store.ts`),
+> Source : [`store.ts`](../../src/game/store.ts) (~4.5k lignes : état + actions + orchestration),
+> [`save.ts`](../../src/game/save.ts) (sauvegarde & migration), [`combatEngine.ts`](../../src/game/combatEngine.ts)
+> (moteur de combat) — tous deux extraits de `store.ts`,
 > [`types.ts`](../../src/game/types.ts) (vocabulaire de domaine), [`character.ts`](../../src/game/character.ts)
 > (modèle de perso dérivé). Pilotage du tick : [`App.tsx`](../../src/App.tsx). Voir aussi
 > [`ARCHITECTURE.md`](../ARCHITECTURE.md).

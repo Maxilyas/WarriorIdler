@@ -1,7 +1,7 @@
 # 01 — Combat & dégâts
 
 > Source : [`combat.ts`](../../src/game/combat.ts), [`damage.ts`](../../src/game/damage.ts),
-> [`resist.ts`](../../src/game/resist.ts), boucle dans [`store.ts`](../../src/game/store.ts)
+> [`resist.ts`](../../src/game/resist.ts), moteur dans [`combatEngine.ts`](../../src/game/combatEngine.ts), orchestration dans [`store.ts`](../../src/game/store.ts)
 > (`tick`, `tickHeroStatuses`, `tickEnemyAbilities`). UI : [`CombatPanel.tsx`](../../src/components/CombatPanel.tsx).
 
 ## Rôle
@@ -92,7 +92,12 @@ Gradation des exigences par contenu : **farm** `farmReq(stage)` (0 avant palier 
 `power × masteryMult × overpower × avgCrit × attacksPerSecond × typeMult × (1+multistrike)`.
 Ignore armure/résistances (c'est l'estimation affichée, pas le DPS réel en combat).
 
-## Boucle de combat (`store.ts`)
+## Boucle de combat (`combatEngine.ts` + `store.ts`)
+
+> Le **pas de combat pur** (`partyCombatStep`/`partyCombatStepMulti` + l'état transitoire :
+> cooldowns, compteurs de gemmes, accumulateurs de runes/pactes…) vit dans
+> [`combatEngine.ts`](../../src/game/combatEngine.ts). Le **store** orchestre (tick à 5 Hz,
+> donjons/raids, loot, XP, log, sauvegarde) et l'appelle via `CombatMods`.
 
 `tick(dt)` à 5 Hz résout un pas : auto-attaques (cadence = Hâte), capacités auto-lancées au
 cooldown (avec demandes de **lancement manuel** en attente), `tickHeroStatuses` (DoT/HoT de
