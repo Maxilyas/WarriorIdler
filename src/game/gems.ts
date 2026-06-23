@@ -2,7 +2,7 @@ import type { DamageType, GemInstance, Item } from './types'
 import { RARITIES } from './rarities'
 
 /**
- * CHÂSSES & STOCK DE GEMMES (v0.22).
+ * CHÂSSES & STOCK DE GEMMES.
  *
  * Les gemmes ÉLÉMENTAIRES (+% dégâts / +% résistance) ont été SUPPRIMÉES — broyées en
  * poussière de gemme 💠 à la migration. Toutes les gemmes sont désormais des gemmes de
@@ -22,7 +22,7 @@ export function parseGemKey(key: string): GemInstance {
 }
 
 /**
- * CHÂSSES ROULÉES (v0.25) — une châsse est un NET AVANTAGE (gemme = comportement de combat fort),
+ * CHÂSSES ROULÉES — une châsse est un NET AVANTAGE (gemme = comportement de combat fort),
  * donc RARE par design : la plupart des objets n'en ont AUCUNE, et le nombre monte doucement avec la
  * rareté. [P(exactement 1), P(2), P(3)] par tier de rareté ; le reste = 0 châsse.
  *   tier 1 (Médiocre) → 0 partout · tier 6 (Légendaire) → ~9% d'au moins 1 · tier 16 (Transcendant)
@@ -48,7 +48,7 @@ export function rollSockets(tier: number): number {
 }
 
 /** Ancienne règle déterministe (Rare=1, Patrimoine=2, Éternel=3) — sert au GRANDFATHER du stuff
- *  d'avant v0.25 (sockets non roulés) pour ne pas faire sauter les gemmes déjà serties. */
+ *  hérité (sockets non roulés) pour ne pas faire sauter les gemmes déjà serties. */
 function legacySockets(item: Item): number {
   const t = RARITIES[item.rarity].tier
   if (t >= 12) return 3

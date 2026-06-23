@@ -1,20 +1,20 @@
 import type { Character, DamageType, GemInstance } from './types'
 
 /**
- * GEMMES DE CONDITION (v0.22, refonte v0.26) — LE système de gemmes.
+ * GEMMES DE CONDITION — LE système de gemmes.
  *
  * Plus AUCUNE stat plate : chaque gemme déclenche un COMPORTEMENT de combat. QUATRE familles :
  *  - 🥁 RYTHME        : compteurs (attaques, sorts, kills) — le tempo du combat.
  *  - 🌊 FLUX          : gestion de ressources (PV, soins, recharges, boucliers).
  *  - 🌍 ENVIRONNEMENT : l'état du monde (télégraphes, Surcharge, donjons, raids, champions).
- *  - 🛡️ BASTION       : la défense (v0.26) — anti-burst, épines, redirections. Biome Physique.
+ *  - 🛡️ BASTION       : la défense — anti-burst, épines, redirections. Biome Physique.
  *
  * Chaque gemme a UN paramètre chiffré (équilibrable), amélioré par la RECOUPE (rang 1→maxRank)
- * et par la QUALITÉ (v0.26 : Éclatée ▾ / Polie / Parfaite ▴ — roulée à la TAILLE). Les effets
+ * et par la QUALITÉ (Éclatée ▾ / Polie / Parfaite ▴ — roulée à la TAILLE). Les effets
  * sont agrégés au niveau de l'ÉQUIPE (meilleure instance portée). Doublons inutiles → FUSION
  * (3 identiques → rang +1) ou broyage en poussière 💠.
  *
- * v0.26 : drops ×0,4 (le drop redevient un événement) — la poussière est LA monnaie, le
+ * Drops volontairement bas (le drop est un événement) — la poussière est LA monnaie, le
  * Joaillier taille/fusionne/corrompt pour produire ce que le hasard ne donne plus.
  */
 
@@ -34,16 +34,16 @@ export type CondGemId =
   | 'metronome' | 'echo' | 'crescendo' | 'overkill' | 'conquete'
   | 'pacte' | 'souffle' | 'tresorerie' | 'acharne'
   | 'opportuniste' | 'orage' | 'nuee'
-  // v0.26 — 🥁 Rythme
+  // 🥁 Rythme
   | 'tambour' | 'hemorragie' | 'glas' | 'riposte' | 'ostinato'
   | 'cadence' | 'marche' | 'detonation' | 'carillon' | 'dacapo'
-  // v0.26 — 🌊 Flux
+  // 🌊 Flux
   | 'calice' | 'fievre' | 'perfusion' | 'vases' | 'garrot'
   | 'reservoir' | 'tension' | 'echangeur' | 'testament' | 'goutte'
-  // v0.26 — 🌍 Environnement
+  // 🌍 Environnement
   | 'boussole' | 'sceauGemme' | 'trophee' | 'prisme' | 'paratonnerre'
   | 'premiere' | 'cartographe' | 'sixieme' | 'piedDuMur' | 'veineMere'
-  // v0.26 — 🛡️ Bastion
+  // 🛡️ Bastion
   | 'egide' | 'rempart' | 'carapace' | 'ancrage' | 'cilice'
   | 'verreTrempe' | 'doctrine' | 'granit' | 'tourGarde' | 'memoirePierre'
 
@@ -276,7 +276,7 @@ export const COND_GEMS: Record<CondGemId, CondGemDef> = {
     desc: (v) => `Les poussières (💠 gemme et 🌌 étoile) droppent +${v}% souvent.`,
   },
 
-  /* ================= 🛡️ BASTION — la défense (v0.26, biome Physique) ================= */
+  /* ================= 🛡️ BASTION — la défense (biome Physique) ================= */
   egide: {
     id: 'egide', family: 'bastion', name: 'Égide du premier sang', icon: '🛡️', color: '#94a3b8',
     values: [30, 38, 45, 53, 60],
@@ -340,7 +340,7 @@ export function gemMaxRank(def: CondGemDef): number {
 }
 
 /* ------------------------------------------------------------------ */
-/* Qualité (v0.26) — Éclatée ▾ / Polie / Parfaite ▴                     */
+/* Qualité — Éclatée ▾ / Polie / Parfaite ▴                            */
 /* ------------------------------------------------------------------ */
 
 /** 0 = Éclatée (−), 1 = Polie (neutre), 2 = Parfaite (+). Roulée à la TAILLE, jamais au drop. */
@@ -389,7 +389,7 @@ export function gemDesc(def: CondGemDef, rank = 1, quality: GemQuality = 1, famM
 /* Clés de stock                                                       */
 /* ------------------------------------------------------------------ */
 
-/** Clé de stock : `cond:id[:rang[:qualité]]` — rang 1 Polie = `cond:id` (compat v0.22-25). */
+/** Clé de stock : `cond:id[:rang[:qualité]]` — rang 1 Polie = `cond:id` (compat ancien format). */
 export function condGemKey(id: CondGemId, rank = 1, quality: GemQuality = 1): string {
   if (quality !== 1) return `cond:${id}:${rank}:${quality}`
   return rank > 1 ? `cond:${id}:${rank}` : `cond:${id}`
@@ -418,7 +418,7 @@ export function condGemInstance(id: CondGemId, rank = 1, quality: GemQuality = 1
 /* Drops                                                               */
 /* ------------------------------------------------------------------ */
 
-/** Famille de gemme qui tombe dans chaque biome — v0.26 : le Physique a la sienne (Bastion). */
+/** Famille de gemme qui tombe dans chaque biome — le Physique a la sienne (Bastion). */
 export const BIOME_GEM_FAMILY: Partial<Record<DamageType, GemFamily>> = {
   feu: 'rythme', foudre: 'rythme',
   ombre: 'flux', nature: 'flux',
@@ -433,16 +433,16 @@ export function rollCondGem(family?: GemFamily): CondGemDef {
 }
 
 /** Chance de drop d'une gemme de condition dans le biome, par rang d'ennemi.
- *  v0.26 : ×0,4 (retour joueur « trop de gemmes ») — la TAILLE et la FUSION compensent. */
+ *  Volontairement basse — la TAILLE et la FUSION compensent. */
 export const COND_GEM_DROP = { normal: 0.0012, elite: 0.008, boss: 0.02 }
-/** Chance de drop des champions ✦ (v0.26 : 12% → 8%). */
+/** Chance de drop des champions ✦ (8%). */
 export const CHAMPION_GEM_DROP = 0.08
-/** Chance et montants de drop de POUSSIÈRE de gemme 💠, par rang d'ennemi (INCHANGÉ v0.26 :
- *  la poussière est la monnaie du Joaillier, c'est elle qui doit couler). */
+/** Chance et montants de drop de POUSSIÈRE de gemme 💠, par rang d'ennemi (la poussière est la
+ *  monnaie du Joaillier, c'est elle qui doit couler). */
 export const GEM_DUST_DROP = { chance: { normal: 0.06, elite: 0.2, boss: 0.35 }, amount: { normal: 2, elite: 5, boss: 10 } }
 
 /* ------------------------------------------------------------------ */
-/* Poussière : broyage / taille / recoupe / fusion / corruption (v0.26)*/
+/* Poussière : broyage / taille / recoupe / fusion / corruption        */
 /* ------------------------------------------------------------------ */
 
 /** Poussière rendue par le broyage (+ par rang recoupé, ± par qualité). */
@@ -451,7 +451,7 @@ export function grindDust(rank = 1, quality: GemQuality = 1): number {
   return Math.round(base * (quality === 2 ? 1.3 : quality === 0 ? 0.7 : 1))
 }
 
-/** Poussière rendue par une ANCIENNE gemme élémentaire (migration v0.22). */
+/** Poussière rendue par une ANCIENNE gemme élémentaire (migration du stuff hérité). */
 export function legacyGemDust(tier: number): number {
   return 2 * Math.pow(3, Math.max(1, tier) - 1) // Éclatée 2 · Polie 6 · Parfaite 18
 }
@@ -464,11 +464,11 @@ export function recutCost(rank: number): number {
   return 25 * (rank + 1) // 50 · 75 · 100 · 125
 }
 
-/** FUSION (v0.26) : 3 gemmes identiques (id + rang + qualité) → 1 au rang +1 (qualité conservée). */
+/** FUSION : 3 gemmes identiques (id + rang + qualité) → 1 au rang +1 (qualité conservée). */
 export const GEM_FUSE_COUNT = 3
 export const GEM_FUSE_COST = 30
 
-/** CORRUPTION (v0.26, PoE) : retaille risquée d'une gemme du stock. */
+/** CORRUPTION (PoE) : retaille risquée d'une gemme du stock. */
 export const GEM_CORRUPT_COST = 40
 /** Probabilités [rang +1, rien, broyée] — améliorées par « Pacte du lapidaire » (rangs). */
 export function corruptOdds(pacteRank = 0): [number, number, number] {
@@ -492,13 +492,13 @@ export function rollCutQuality(mainSureRank = 0): GemQuality {
   return 2
 }
 
-/** PERÇAGE (v0.26) : ajouter UNE châsse à un objet qui n'en a pas le maximum (1×/objet). */
+/** PERÇAGE : ajouter UNE châsse à un objet qui n'en a pas le maximum (1×/objet). */
 export function drillCost(rarityTier: number): { dust: number; gold: number } {
   return { dust: 120 + 30 * rarityTier, gold: 40_000 * rarityTier }
 }
 
 /* ------------------------------------------------------------------ */
-/* ◈ Spécialisations de famille (v0.26 : lignes étagées I→V)           */
+/* ◈ Spécialisations de famille (lignes étagées I→V)                   */
 /* ------------------------------------------------------------------ */
 
 /** Spécialisation majeure du Joaillier : famille + étage (1..5). `minor` : 2e famille à +1 rang. */
@@ -542,7 +542,7 @@ export interface CondMods {
   tresorerieCap?: number
   opportuniste?: number
   orage?: number
-  /* — 🥁 Rythme v0.26 — */
+  /* — 🥁 Rythme — */
   /** Brèche : −% d'armure (fraction) toutes les 8 attaques sur la même cible, 6 s. */
   tambourPct?: number
   /** Saignement tous les N critiques (60% du coup sur 6 s). */
@@ -563,7 +563,7 @@ export interface CondMods {
   carillonN?: number
   /** Compteurs de rythme ×2 au-delà de N s de combat. */
   dacapoSec?: number
-  /* — 🌊 Flux v0.26 — */
+  /* — 🌊 Flux — */
   caliceCap?: number
   fievreLeech?: number
   /** Bonus de régén sous 50% PV (fraction : 1 = +100%). */
@@ -576,7 +576,7 @@ export interface CondMods {
   echangeurSec?: number
   testamentPct?: number
   goutteePct?: number
-  /* — 🌍 Environnement v0.26 — */
+  /* — 🌍 Environnement — */
   boussolePct?: number
   sceauPct?: number
   /** Points de résistance offerts en raid. */
@@ -588,7 +588,7 @@ export interface CondMods {
   sixiemePct?: number
   piedDuMurPct?: number
   veineMerePct?: number
-  /* — 🛡️ Bastion v0.26 — */
+  /* — 🛡️ Bastion — */
   egidePct?: number
   /** Nombre de coups couverts par l'Égide (2 en ◈ Bastion V « Citadelle »). */
   egideHits?: number
@@ -610,7 +610,7 @@ export interface CondMods {
   envChestPct?: number
 }
 
-/** Options d'agrégation calculées par le store depuis l'arbre du Joaillier (v0.26). */
+/** Options d'agrégation calculées par le store depuis l'arbre du Joaillier. */
 export interface GemModOpts {
   /** Multiplicateur GLOBAL de paramètres (Mosaïque, Catalogue). */
   paramMult?: number

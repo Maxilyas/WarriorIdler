@@ -2,16 +2,16 @@ import type { Character, Item } from './types'
 import { RARITIES } from './rarities'
 
 /**
- * RUNES (v0.22 refonte Runiste · v0.26 grande extension) : TEMPS, RÈGLES… et PACTES.
+ * RUNES : TEMPS, RÈGLES… et PACTES.
  *
  * Une rune par pièce, remplaçable ; graver CONSOMME l'exemplaire possédé. Effets d'ÉQUIPE :
  *  - ⏳ TEMPS  (16) : manipulent les horloges du combat (début, recharges, télégraphes, DoT).
  *  - ⚖️ RÈGLE  (17) : tordent le fonctionnement du JEU (loot, clés, drops, économie) tant que portées.
- *  - 🩸 PACTE  (14, v0.26) : keystones à la PoE — GROS bonus permanent CONTRE GROS malus.
+ *  - 🩸 PACTE  (14) : keystones à la PoE — GROS bonus permanent CONTRE GROS malus.
  *    UN SEUL pacte actif par équipe (deux via « Double pacte », malus ×1,5). Les pactes ne
  *    DROPPENT JAMAIS : uniquement forgés à l'Atelier runique (très cher — destruction de runes).
  *
- * Craft runique (v0.26, le métier le plus cher du jeu) :
+ * Craft runique (le métier le plus cher du jeu) :
  *  - EFFACEMENT : sacrifier une rune possédée → Fragments runiques 🜁 (1 temps · 2 règle).
  *  - FORGE RUNIQUE : fragments + 🌌 + or (+ 💫 pour les pactes) → la rune de ton CHOIX,
  *    coût ×1,5 à chaque exemplaire déjà forgé de la même rune (anti-spam).
@@ -23,14 +23,14 @@ import { RARITIES } from './rarities'
 
 export type RuleId =
   | 'karma' | 'econome' | 'transmutation'
-  // v0.26
+  // extension
   | 'collectionneur' | 'prospecteur' | 'archiviste' | 'tropheiste' | 'clesDouble'
   | 'appat' | 'monomanie' | 'quartzite' | 'coffresDoubles' | 'tisseChasse'
   | 'mecene' | 'bourse' | 'talion' | 'saturnales'
 
 export type TimeRuneId =
   | 'premierElan' | 'boucle' | 'sursis' | 'dilatation'
-  // v0.26
+  // extension
   | 'ouverture' | 'latence' | 'rembobinage' | 'sabliers' | 'usure' | 'hateFunebre'
   | 'preparation' | 'echoTemporel' | 'stase' | 'secondeAube' | 'avanceRapide' | 'grainDeSable'
 
@@ -47,9 +47,9 @@ export interface EnchantDef {
   time?: TimeRuneId
   /** Rune de RÈGLE : tord les règles du jeu. */
   rule?: RuleId
-  /** Rune de PACTE (v0.26) : keystone bonus/malus — jamais droppée, un seul actif. */
+  /** Rune de PACTE : keystone bonus/malus — jamais droppée, un seul actif. */
   pact?: PactId
-  /** Marqueur « rare » (v0.25 : les règles sont 2× plus rares au DROP). */
+  /** Marqueur « rare » (les règles sont 2× plus rares au DROP). */
   rare?: boolean
 }
 
@@ -63,7 +63,7 @@ export const ENCHANTS: EnchantDef[] = [
     description: 'Un héros qui devrait mourir survit à 25% de ses PV (une fois par minute chacun).' },
   { id: 'runeDilatation', name: 'Rune de Dilatation', icon: '🐌', time: 'dilatation',
     description: 'Les incantations télégraphiées des ennemis durent +50% (synergie : Œil de l\'Opportuniste).' },
-  // --- v0.26 ---
+  // --- extension ---
   { id: 'runeOuverture', name: 'Rune d\'Ouverture', icon: '🔓', time: 'ouverture',
     description: 'Au début de chaque combat, la PLUS LONGUE capacité de chaque héros est déjà rechargée.' },
   { id: 'runeLatence', name: 'Rune de Latence', icon: '🫧', time: 'latence',
@@ -96,7 +96,7 @@ export const ENCHANTS: EnchantDef[] = [
     description: '15% de chance de ne PAS consommer la clé (Sceau / Orbe) — pour toi ET tes automates.' },
   { id: 'runeTransmutation', name: 'Rune de Transmutation brute', icon: '⚗️', rare: true, rule: 'transmutation',
     description: 'Les monstres NORMAUX ne droppent plus d\'objets ; en échange, chance de Quintessence et de Gemme ×2. (Boss, élites et champions droppent toujours.)' },
-  // --- v0.26 ---
+  // --- extension ---
   { id: 'runeCollectionneur', name: 'Rune du Collectionneur', icon: '🧿', rare: true, rule: 'collectionneur',
     description: 'Les gemmes de condition droppées ont 20% de chance de tomber directement au RANG 2.' },
   { id: 'runeProspecteur', name: 'Rune du Prospecteur', icon: '⛏️', rare: true, rule: 'prospecteur',
@@ -126,7 +126,7 @@ export const ENCHANTS: EnchantDef[] = [
   { id: 'runeSaturnales', name: 'Rune des Saturnales', icon: '🎉', rare: true, rule: 'saturnales',
     description: 'Le DIMANCHE (réel) : or et XP de farm +15%. Le calendrier a du bon.' },
 
-  /* ============================ 🩸 PACTES (v0.26) ============================ */
+  /* ============================ 🩸 PACTES ============================ */
   // JAMAIS droppés : forgés à l'Atelier runique uniquement. UN SEUL actif par équipe.
   { id: 'pacteVerre', name: 'Pacte du Verre', icon: '🍷', pact: 'verre',
     description: 'PACTE : +35% de dégâts infligés… ET subis. Tout devient tranchant.' },
@@ -217,7 +217,7 @@ export interface TimeRuneMods {
   sursisCd?: number
   /** Allongement des télégraphes ennemis (fraction). */
   dilatation?: number
-  /* — v0.26 — */
+  /* — extension — */
   /** 🔓 Ouverture : la plus longue capacité démarre rechargée. */
   ouverture?: boolean
   /** 🫧 Latence : réduction des dégâts ennemis (fraction) pendant 8 s. */
@@ -248,7 +248,7 @@ export function timeRuneMods(runes: Set<TimeRuneId>, tempo = 1): TimeRuneMods {
   if (runes.has('boucle')) out.boucleEvery = Math.round(45 / tempo)
   if (runes.has('sursis')) out.sursisCd = Math.round(60 / tempo)
   if (runes.has('dilatation')) out.dilatation = 0.5 * tempo
-  // --- v0.26 ---
+  // --- extension ---
   if (runes.has('ouverture')) out.ouverture = true
   if (runes.has('latence')) out.latence = Math.min(0.6, 0.3 * tempo)
   if (runes.has('rembobinage')) out.rembobinageSec = 8 * tempo
@@ -302,7 +302,7 @@ export interface PactMods {
   leechBonus: number
   /** PV rendus à l'équipe par kill (fraction, Jeûne). */
   killHeal: number
-  /** Riposte forcée à zéro (Roc — immobile, ne contre pas). v0.38 (ex-noDodge). */
+  /** Riposte forcée à zéro (Roc — immobile, ne contre pas). Ex-noDodge. */
   noRiposte: boolean
   /** PV capés à cette fraction du max (Berserk : 0,6), 0 = inactif. */
   hpCap: number
@@ -364,7 +364,7 @@ export function pactMods(pacts: PactId[], teamSize: number, malusMult = 1, maxAc
 
 /**
  * Coût de gravure : éclats + 🌌 poussière d'étoile (l'encre du Runiste — thème temps/astres).
- * v0.25 : coût RÉDUIT — la rareté vient du DROP : graver CONSOMME une rune possédée.
+ * Coût RÉDUIT — la rareté vient du DROP : graver CONSOMME une rune possédée.
  */
 export function enchantCost(_def: EnchantDef, item: Item): { eclats: number; poussiere: number } {
   const tier = RARITIES[item.rarity].tier
@@ -374,10 +374,10 @@ export function enchantCost(_def: EnchantDef, item: Item): { eclats: number; pou
   }
 }
 
-/* ---- v0.25 : RUNES PAR DÉCOUVERTE (option A) ----
- * Les runes ne se gravent plus à volonté : elles TOMBENT — raids surtout, hauts donjons un peu —
+/* ---- RUNES PAR DÉCOUVERTE ----
+ * Les runes ne se gravent pas à volonté : elles TOMBENT — raids surtout, hauts donjons un peu —
  * et la gravure CONSOMME l'exemplaire. Les RÈGLES sont 2× plus rares que le TEMPS.
- * v0.26 : les PACTES ne tombent JAMAIS (forge runique uniquement). */
+ * Les PACTES ne tombent JAMAIS (forge runique uniquement). */
 
 /** Tire la rune qui tombe (TEMPS pondérée 2 · RÈGLE pondérée 1 · PACTE exclu). */
 export function rollRuneDrop(): EnchantDef {
@@ -399,7 +399,7 @@ export function dungeonRuneChance(level: number, greffierMult = 1): number {
 }
 
 /* ------------------------------------------------------------------ */
-/* 🜁 Atelier runique (v0.26) : Effacement · Forge · Surcharge          */
+/* 🜁 Atelier runique : Effacement · Forge · Surcharge          */
 /* ------------------------------------------------------------------ */
 
 /** Fragments runiques 🜁 rendus par l'EFFACEMENT d'une rune possédée. */
