@@ -8,7 +8,7 @@ import { ENEMY_DODGE } from './stats'
 import { accessibleRarityTier, materialYieldAtChapter } from './items'
 
 /**
- * DONJONS « par RESSOURCE » (refonte v0.17).
+ * DONJONS « par RESSOURCE ».
  *
  * Fini les donjons « par type de résistance ». Désormais chaque donjon CIBLE une ressource
  * (or, éclats, poussière, noyaux, XP, stuff, clés) et possède une IDENTITÉ MÉCANIQUE légère
@@ -20,7 +20,7 @@ import { accessibleRarityTier, materialYieldAtChapter } from './items'
  *  - 'elite'   → élites coriaces            → DPS soutenu + Dégâts vs Boss
  *  - 'regen'   → ennemis qui se régénèrent  → BURST (sinon ils ne meurent jamais)
  *
- * Boucle voulue : taper les paliers classiques → farmer les donjons (ressources/stuff)
+ * Boucle voulue : taper les vagues classiques → farmer les donjons (ressources/stuff)
  * → réussir les raids (pièces hors-norme).
  */
 
@@ -43,8 +43,8 @@ export interface DungeonDef {
   /** Palier de farm requis pour débloquer. */
   unlockStage: number
   /**
-   * Ancre de DIFFICULTÉ (sert au décalage de départ) quand elle diffère du palier de déblocage —
-   * même idée que les raids : l'Observatoire est GATÉ au palier 50 (contenu endgame, timing de la
+   * Ancre de DIFFICULTÉ (sert au décalage de départ) quand elle diffère de la vague de déblocage —
+   * même idée que les raids : l'Observatoire est GATÉ à la vague 50 (contenu endgame, timing de la
    * poussière 🌌) mais sa difficulté reste calée sur 45.
    */
   anchorStage?: number
@@ -109,7 +109,7 @@ export const DUNGEONS: Record<DungeonId, DungeonDef> = {
   },
 }
 
-// v0.36 — l'OR et l'XP ne viennent QUE du farm classique (idle). Les donjons « Chambre du Trésor » (or)
+// l'OR et l'XP ne viennent QUE du farm classique (idle). Les donjons « Chambre du Trésor » (or)
 // et « Sanctuaire du Savoir » (xp) sont RETIRÉS du jeu (sortis de la liste jouable) → plus aucun donjon
 // ne donne or/XP (tue le snowball de donjon). Leurs défs restent dans DUNGEONS (type-safety) mais sont
 // injouables. (Nettoyage des types 'or'/'savoir'/'gold'/'xp' = passe cosmétique.)
@@ -120,7 +120,7 @@ export const DUNGEON_LIST: DungeonDef[] = [
 // ---- La Géode : ailes (famille de gemme) + rendements ----
 
 /** Élément des golems de chaque aile (assorti aux biomes de drop de la famille).
- *  v0.26 : 4e aile — le Bastion vient du Physique. */
+ *  4e aile — le Bastion vient du Physique. */
 export const GEODE_WING_ELEMENT: Record<GemFamily, DamageType> = {
   rythme: 'feu', flux: 'ombre', environnement: 'froid', bastion: 'physique',
 }
@@ -143,8 +143,7 @@ export function geodeGemRank(level: number): number {
 /** Plafond pratique de la fenêtre normale de la Cache : Artefact (t7). */
 export const BUTIN_RARITY_CAP = 7
 /**
- * Fenêtre de rareté de la Cache du Pilleur (v0.39.1 — retour au profil HISTORIQUE + correction du
- * plateau précoce). Trois régimes :
+ * Fenêtre de rareté de la Cache du Pilleur. Trois régimes :
  *   • Niv 1-7  : COURBE HISTORIQUE validée par le joueur — pic Rare(4)→Épique(5)→Légendaire(6),
  *                floor = pic-2 (la Cache reste meilleure que le farm sans cracher d'Artefact tôt).
  *   • Niv 8-14 : RAMPE — corrige le défaut de l'ancienne courbe (l'Artefact culminait dès niv 9 et
@@ -185,9 +184,9 @@ export function butinOverChance(level: number): number {
 }
 
 /** Répartition du tirage « au-delà du voile » (au-dessus d'Artefact).
- *  v0.36 : la Cache TOPE à Artefact (t7) — le voile ne lâche QUE du Patrimoine (t8), un seul cran
- *  au-dessus, comme jackpot ultra-rare. Mythique+ (et tout Céleste+) est l'apanage EXCLUSIF des raids
- *  (cf. re-ancrage v0.36 : Cache→Artefact, raids→Patrimoine/Céleste+). */
+ *  La Cache TOPE à Artefact (t7) — le voile ne lâche QUE du Patrimoine (t8), un seul cran au-dessus,
+ *  comme jackpot ultra-rare. Mythique+ (et tout Céleste+) est l'apanage EXCLUSIF des raids
+ *  (Cache→Artefact, raids→Patrimoine/Céleste+). */
 const BUTIN_OVER_WEIGHTS: { tier: number; w: number }[] = [
   { tier: 8, w: 100 }, // Patrimoine (seul cran du voile)
 ]
@@ -214,14 +213,14 @@ export function getDungeonDef(id: DungeonId): DungeonDef {
 
 // ---- Modificateurs (style Mythique+) : épice aléatoire en plus de l'identité du donjon ----
 //
-// v0.25.x — REFONTE (retour joueur) : la variance se JOUE au lieu d'être subie.
+// La variance se JOUE au lieu d'être subie :
 //  (A) chaque affixe de difficulté PAIE : `rewardMult` multiplie les récompenses (par-combat + coffre),
 //      affiché dans la description → un tirage dur est une opportunité, pas une loterie ;
 //  (C) anti-synergies BANNIES : `excludeTraits` empêche les doubles murs (Blindé sur un donjon
 //      déjà « armure », Colossal sur le colosse unique ou les régénérants, Enragé sur les cogneurs) ;
 //  (+) affixes « fun d'abord » : Pressé (défi de temps, zéro difficulté ajoutée), Hanté (champion
 //      jackpot). « Réfléchissant » est SUPPRIMÉ du tirage (anti-fun pur : punissait le DPS sans
-//      contrepartie) ; « Volatile » est SUPPRIMÉ à son tour (v0.26, retour joueur : les explosions
+//      contrepartie) ; « Volatile » est SUPPRIMÉ à son tour (les explosions
 //      en chaîne sur les packs one-shotaient l'équipe) — les runs en cours restent gérés.
 
 export interface DungeonModifier {
@@ -234,12 +233,12 @@ export interface DungeonModifier {
   noGold?: boolean
   rareBonus?: number
   enrageRampPerSec?: number
-  /** Vestige (« Réfléchissant », retiré du tirage v0.25.x) — encore appliqué aux runs en cours. */
+  /** Vestige (« Réfléchissant », retiré du tirage) — encore appliqué aux runs en cours. */
   reflectPct?: number
   regenPct?: number
   /** (A) Multiplicateur de RÉCOMPENSES du donjon (par-combat + coffre) — le risque paie. */
   rewardMult?: number
-  /** Vestige (« Volatile », retiré du tirage v0.26) — encore appliqué aux runs en cours. */
+  /** Vestige (« Volatile », retiré du tirage) — encore appliqué aux runs en cours. */
   explodePct?: number
   /** Pressé : bonus de COFFRE si le run est bouclé en moins de `timerSec` (posé à la génération). */
   timerBonus?: number
@@ -258,7 +257,7 @@ export const DUNGEON_MODIFIERS: DungeonModifier[] = [
   { id: 'enrage', name: 'Enragé', description: 'Les ennemis frappent de plus en plus fort avec le temps · récompenses +25%.', enrageRampPerSec: 0.08, rewardMult: 1.25, excludeTraits: ['rapide'] },
   { id: 'erudit', name: 'Érudit', description: '+100% XP, mais ennemis plus coriaces.', xpMult: 2, hpMult: 1.5, onlyReward: 'xp' },
   { id: 'avare', name: 'Avare', description: 'Aucun or, mais davantage d\'objets rares.', noGold: true, rareBonus: 1 },
-  // --- v0.25.x : le fun d'abord --- (« Volatile » retiré du tirage en v0.26 : one-shots de packs)
+  // --- le fun d'abord --- (« Volatile » retiré du tirage : one-shots de packs)
   { id: 'presse', name: 'Pressé', description: 'Boucle le donjon dans le temps imparti : coffre +30%.', timerBonus: 0.3 },
   { id: 'hante', name: 'Hanté', description: 'Un Champion ✦ rôde dans ce donjon : abats-le pour un objet de haute rareté.', champion: true },
 ]
@@ -266,13 +265,14 @@ export const DUNGEON_MODIFIERS: DungeonModifier[] = [
 // ---- Donjon actif ----
 
 export interface ActiveDungeon {
-  /** 💰 Potion du pillard ARMÉE à l'entrée (v0.26) : bonus de coffre (fraction). */
+  /** 💰 Potion du pillard ARMÉE à l'entrée : bonus de coffre (fraction). */
   chestPotion?: number
-  /** 📚 Potion de l'érudit ARMÉE à l'entrée (v0.26) : bonus d'XP du run (fraction). */
+  /** 📚 Potion de l'érudit ARMÉE à l'entrée : bonus d'XP du run (fraction). */
   xpPotion?: number
   dungeonId: DungeonId
   level: number
-  /** Record de farm au lancement (v0.35) : cale la difficulté ET le loot du donjon sur TA tranche. */
+  /** Record de farm au lancement. Conservé pour la compat de signature : la difficulté et le loot
+   *  sont FIXES par niveau, il ne les cale PAS. */
   bestStage: number
   name: string
   trait: DungeonTrait
@@ -309,35 +309,34 @@ interface TraitCfg { hp: number; dmg: number; armor: number; pack: number; elite
 const TRAIT_CFG: Record<DungeonTrait, TraitCfg> = {
   rapide: { hp: 0.8, dmg: 1.5, armor: 1, pack: 2 },
   pack: { hp: 0.55, dmg: 0.9, armor: 1, pack: 4 },
-  colosse: { hp: 1.6, dmg: 1.25, armor: 1.3, pack: 1 }, // v0.36 : 2.6→1.6 (le colosse était ×1,5 le mur précédent → faisable, mais reste la plus grosse barre de PV des donjons)
+  colosse: { hp: 1.6, dmg: 1.25, armor: 1.3, pack: 1 }, // la plus grosse barre de PV des donjons
   armure: { hp: 1.0, dmg: 1.0, armor: 3.4, pack: 2 },
-  // v0.22 : durcis pour la qualité du butin. v0.35 : hp 2,1→1,5 — couplé au boss ×5 ça faisait
-  // ~×10,5 PV (≈ le mur lui-même) → niveau 1 infranchissable. Reste le donjon le plus exigeant, mais
-  // son entrée redevient un OUTIL (la difficulté vient du PUSH, pas de l'entrée).
+  // hp 1,5 (durci pour la qualité du butin) — à 2,1, couplé au boss ×5, ça faisait ~×10,5 PV
+  // (≈ le mur lui-même) → niveau 1 infranchissable. Reste le donjon le plus exigeant, mais son entrée
+  // est un OUTIL (la difficulté vient du PUSH, pas de l'entrée).
   elite: { hp: 1.5, dmg: 1.3, armor: 1.2, pack: 2, elite: true },
   regen: { hp: 1.1, dmg: 1.0, armor: 1, pack: 2, regen: 0.03 },
 }
 
-/** Nombre de combats d'un donjon de niveau N — court et dense (v0.21 : 2 à 4, fini les 4+N). */
+/** Nombre de combats d'un donjon de niveau N — court et dense (2 à 4 combats). */
 export function dungeonFights(level: number): number {
   return Math.min(4, 2 + Math.floor(level / 4))
 }
 
 /**
- * ilvl du butin du coffre : en avance sur le farm pour récompenser le défi, mais PLAFONNÉ à
- * 125% de l'ilvl du record de palier. v0.22 : avant (10 + 12·niv, sans plafond) la Cache niv 38
- * crachait de l'ilvl 466 quand le farm en donnait 180 — boule de neige stuff → niveau suivant.
- * Monter le PALIER redevient le moteur ; le donjon garde une longueur d'avance, pas une galaxie.
+ * ilvl du butin du coffre — FIXE par niveau : le loot du niveau N sort à la tranche du Chapitre N
+ * (lootFarmIlvl(N×10), capé 200), indépendant du record du joueur. Le niveau garde une longueur
+ * d'avance sur le farm de bas Chapitre, sans s'emballer (plus de boule de neige stuff).
  */
 export function dungeonIlvl(level: number, _bestStage = 0): number {
-  // v0.36 — donjon à difficulté FIXE par niveau : le loot du niveau N sort à la tranche du CHAPITRE N
+  // donjon à difficulté FIXE par niveau : le loot du niveau N sort à la tranche du CHAPITRE N
   // (lootFarmIlvl(N×10), capé 200), INDÉPENDANT du record du joueur → le niveau 1 reste à jamais le
   // niveau 1 (on le dépasse en montant les niveaux, en parallèle des Chapitres). Sa valeur = rareté + mats.
   return lootFarmIlvl(level * CHAPITRE_SIZE)
 }
 
 /**
- * RENDEMENT par run (v0.36) — ∝ au NIVEAU du donjon (= Chapitre N), INDÉPENDANT du record : ancré sur
+ * RENDEMENT par run — ∝ au NIVEAU du donjon (= Chapitre N), INDÉPENDANT du record : ancré sur
  * le coût d'un craft à la rareté ACCESSIBLE de ce Chapitre (Cache + raids gatés, cf. accessibleRarityTier)
  * → un run ≈ 1/CRAFT_RUNS_TARGET d'un tel craft. La rareté accessible MONTE avec le Chapitre (raids) au
  * lieu de plafonner à Artefact → les hauts niveaux rapportent enfin assez de matériaux. Ratios stables,
@@ -359,7 +358,7 @@ export function dungeonRunYield(reward: DungeonReward, level: number, _bestStage
 }
 
 /**
- * Rendement TOTAL en CLÉS (Sceaux / Orbes) d'un run — v0.21 : mappé comme les autres ressources
+ * Rendement TOTAL en CLÉS (Sceaux / Orbes) d'un run — mappé comme les autres ressources
  * (40% au fil des combats, 60% au coffre). Avant, le fil de combats était indexé sur l'XP du pack
  * (exponentielle) et le coffre sur une formule linéaire → le Vortex crachait tout PENDANT le run
  * et un coffre ridicule. C'est désormais l'inverse : le coffre est le gros morceau.
@@ -375,14 +374,14 @@ export function dungeonLuckTier(level: number): number {
 
 // Constantes d'équilibrage des donjons.
 const EFF_STAGE_PER_LEVEL = 7      // sert aux RÉCOMPENSES (xp) → économie inchangée.
-// v0.30 — la COURBE DE COMBAT n'est plus propre aux donjons : PV/dégâts = base unifiée b^ilvl
+// la COURBE DE COMBAT n'est pas propre aux donjons : PV/dégâts = base unifiée b^ilvl
 // (progression.ts, dungeonDifficultyIlvl). Le décalage de départ (anchorStage) est ABSORBÉ par
 // l'ilvl du donjon — plus besoin d'offsets. L'identité (TRAIT_CFG) reste un multiplicateur.
 const DUNGEON_FIGHT_RAMP_ILVL = 2 // +ilvl de difficulté par combat DANS un run (rampe douce)
 const DUNGEON_BOSS_HP_MULT = 5    // boss (dernier combat) : pic de PV (~15 s, pacing donjon court)
 const DUNGEON_ELITE_HP_MULT = 2.7 // élites coriaces (Cache)
 
-// v0.36 — DIFFICULTÉ FIXE par niveau : le niveau N est calé sur la FRONTIÈRE du Chapitre N (stage N×10),
+// DIFFICULTÉ FIXE par niveau : le niveau N est calé sur la FRONTIÈRE du Chapitre N (stage N×10),
 // INDÉPENDANT du record du joueur. On fait le donjon niveau N quand on est au Chapitre N ; le niveau 1
 // reste à jamais le niveau 1 (finit trivial = voulu — on monte les niveaux EN PARALLÈLE des Chapitres).
 export function dungeonContentIlvl(level: number, _bestStage = 0): number {
@@ -390,11 +389,11 @@ export function dungeonContentIlvl(level: number, _bestStage = 0): number {
 }
 
 /** Régénération des ennemis (fraction des PV max/s) imposée par l'identité du donjon.
- *  v0.35 — RAMPE avec le niveau : NULLE au niveau 1 (la passerelle Antre des Failles doit être
+ *  RAMPE avec le niveau : NULLE au niveau 1 (la passerelle Antre des Failles doit être
  *  franchissable d'emblée pour ouvrir la boucle des donjons), pleine au niveau 5+ (le check de burst
  *  revient pour le défi et les clés). Évite que le donjon-passerelle soit un mur de burst infranchissable. */
 export function dungeonRegen(trait: DungeonTrait, level = 1): number {
-  // v0.35.1 — rampe BIEN plus douce : NULLE jusqu'au niveau 3 (l'Antre des Failles est le donjon
+  // rampe douce : NULLE jusqu'au niveau 3 (l'Antre des Failles est le donjon
   // d'ENTRÉE, il doit être le plus facile — retour joueur), pleine vers le niveau 9. Le check de burst
   // (regen) est un défi de PUSH, jamais une barrière à l'entrée de la boucle.
   return (TRAIT_CFG[trait].regen ?? 0) * Math.max(0, Math.min(1, (level - 3) / 6))
@@ -427,10 +426,10 @@ export function makeDungeonEnemy(
     if (m.xpMult) xpMult *= m.xpMult
   }
 
-  // v0.30 — base UNIFIÉE b^ilvl à l'ilvl de difficulté du donjon (+ rampe douce par combat) ;
+  // base UNIFIÉE b^ilvl à l'ilvl de difficulté du donjon (+ rampe douce par combat) ;
   // l'identité (cfg.hp/dmg/armor) et la classe (boss/élite) restent des multiplicateurs.
   const diffIlvl = dungeonContentIlvl(level) + fightIndex * DUNGEON_FIGHT_RAMP_ILVL
-  // v0.36 — atténuation par NIVEAU (murSoftness sur la tranche du Chapitre N) : les bas niveaux sont
+  // atténuation par NIVEAU (murSoftness sur la tranche du Chapitre N) : les bas niveaux sont
   // adoucis (intro franchissable d'emblée), pleine puissance ensuite. Fixe par niveau, plus par record.
   const soft = murSoftness(level * CHAPITRE_SIZE)
   const classHp = isBoss ? DUNGEON_BOSS_HP_MULT : isElite ? DUNGEON_ELITE_HP_MULT : 1
@@ -448,11 +447,11 @@ export function makeDungeonEnemy(
     // Dégâts : MÊME base b que les PV ; identité (cfg.dmg) + boss ×1,8 en multiplicateurs.
     damage: Math.round(enemyDmg(diffIlvl, 'trash') * cfg.dmg * (isBoss ? 1.8 : 1) * soft),
     xp: Math.round(8 * Math.pow(1.12, effStage - 1) * (isBoss ? 5 : 1) * xpMult),
-    // v0.37 — AFFINITÉ ÉLÉMENTAIRE (pas de rampe en donjon → base 0) : résiste l'élément du donjon,
+    // AFFINITÉ ÉLÉMENTAIRE (pas de rampe en donjon → base 0) : résiste l'élément du donjon,
     // vulnérable à l'opposé. Amener le contre (ou le bon héros multi-classe) = un vrai levier de clear.
     resist: elementAffinityResist(def.element, 0),
     damageType: def.element,
-    // Exigence de résistance (v0.24) sur l'élément du donjon — modérée (cap ×2.1 à zéro résist).
+    // Exigence de résistance sur l'élément du donjon — modérée (cap ×2.1 à zéro résist).
     reqs: { [def.element]: dungeonReq(level) },
     ...(isElite ? { elite: true, dodge: ENEMY_DODGE.elite } : {}),
     ...(isBoss ? { boss: true, dodge: ENEMY_DODGE.boss, ccDur: 1.6, ccCd: 7 } : {}),
@@ -512,7 +511,7 @@ export function generateDungeon(dungeonId: DungeonId, level: number, bestStage: 
     : DUNGEONS[dungeonId]
   const totalFights = dungeonFights(level)
 
-  // 1 modificateur, +1 à partir du niveau 4. v0.25.x (C) : le tirage respecte l'identité du donjon —
+  // 1 modificateur, +1 à partir du niveau 4. Le tirage respecte l'identité du donjon —
   // pas d'Avare sur le donjon d'or, pas de double mur (excludeTraits), Érudit réservé à l'XP.
   const count = level >= 4 ? 2 : 1
   const pool = DUNGEON_MODIFIERS.filter((m) =>

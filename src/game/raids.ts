@@ -6,7 +6,7 @@ import { murBossHp, murBossDmg } from './enemies'
 import { ENEMY_DODGE } from './stats'
 
 /**
- * RAIDS — refonte v0.23 « un boss, dix tiers ».
+ * RAIDS — « un boss, dix tiers ».
  *
  * Chaque raid est désormais UN AFFRONTEMENT UNIQUE contre un boss (un duo pour l'Abîme),
  * et le boss CHANGE À CHAQUE TIER : 5 visages par raid, chacun avec son kit télégraphié et
@@ -14,8 +14,8 @@ import { ENEMY_DODGE } from './stats'
  *
  *  - une IDENTITÉ par raid (lore, couleur, mécaniques signature),
  *  - un BUTIN CIBLÉ par catégorie d'équipement (Armes / Bijoux / Armures / Résistances / Tout),
- *  - des TIERS montés indépendamment, à la courbe DOUCE ET CONSTANTE : chaque tier = +4 paliers
- *    de farm (×~1,9 PV) — fini le mur exponentiel ; ~10 tiers sont atteignables,
+ *  - des TIERS montés indépendamment, à la courbe DOUCE ET CONSTANTE : chaque tier = +10 vagues
+ *    de farm — fini le mur exponentiel ; ~10 tiers sont atteignables,
  *  - un VRAI GAP de récompense entre tiers : ~+19 iLvl et +1 rang de rareté plancher par tier,
  *  - des RESSOURCES TRÈS RARES (Fragments d'éternité + **Éclat cosmique 💫**, exclusif aux raids).
  *
@@ -57,23 +57,23 @@ export interface RaidDef {
   /** Catégorie d'équipement ciblée par le butin. */
   lootTypes: ItemType[]
   lootLabel: string
-  /** Palier de déblocage (bestStage requis) — porte d'ACCÈS uniquement. */
+  /** Vague de déblocage (bestStage requise) — porte d'ACCÈS uniquement. */
   unlockStage: number
   /**
-   * Ancre de DIFFICULTÉ (palier de farm de référence du Tier 1). Par défaut = unlockStage.
+   * Ancre de DIFFICULTÉ (vague de farm de référence du Tier 1). Par défaut = unlockStage.
    * L'Abîme s'en sert pour être calé sur un Tier ~6 des autres raids (accessible) tout en
-   * restant verrouillé derrière le palier 100.
+   * restant verrouillé derrière la vague 100.
    */
   anchorStage?: number
   /** Raid prérequis : doit avoir été clear (tier ≥ 1) au moins une fois. */
   requires?: RaidId
   /**
-   * v0.27 — décalage de TIER MONDIAL. Toutes les courbes de RÉCOMPENSE et de CHECK calculent
+   * Décalage de TIER MONDIAL. Toutes les courbes de RÉCOMPENSE et de CHECK calculent
    * `tier + tierOffset` (l'Abîme « commence » à un Tier 7 mondial). La DIFFICULTÉ (PV/dégâts, via
    * anchorStage) n'est PAS décalée — elle est déjà calée sur ce niveau.
    */
   tierOffset?: number
-  /** v0.27 — porte d'accès « avoir atteint le tier N sur TOUS ces raids » (Abîme = endgame). */
+  /** Porte d'accès « avoir atteint le tier N sur TOUS ces raids » (Abîme = endgame). */
   requiresAllTier?: { raids: RaidId[]; tier: number }
   /** Difficulté de base : multiplie PV et dégâts (≥1, monte d'un raid à l'autre). */
   baseDifficulty: number
@@ -85,7 +85,7 @@ export interface RaidDef {
   orbeCost: number
 }
 
-/** Palier (bestStage) qui débloque le PREMIER raid. */
+/** Vague (bestStage) qui débloque le PREMIER raid. */
 export const RAID_UNLOCK_STAGE = 50
 
 export const RAIDS: Record<RaidId, RaidDef> = {
@@ -117,7 +117,7 @@ export const RAIDS: Record<RaidId, RaidDef> = {
     id: 'abysse', name: 'L\'Abîme Primordial', icon: '🕳️', color: '#8a2be2',
     lore: 'Le gouffre d\'où tout est né et où tout retourne. Les horreurs y chassent PAR PAIRES : abats l\'une, l\'autre entre en furie. Seul endroit au monde où tombe la Régalia du Néant.',
     lootTypes: ['tete', 'epaules', 'torse', 'jambes', 'mains', 'taille', 'pieds', 'poignets', 'cape', 'cou', 'anneau', 'bijou', 'armePrincipale', 'armeSecondaire'], lootLabel: 'Tout + set Régalia du Néant',
-    // v0.36 : l'Abîme = ENDGAME pur, verrouillé derrière les 4 raids de base TOUS au Tier 10. Réduit à
+    // l'Abîme = ENDGAME pur, verrouillé derrière les 4 raids de base TOUS au Tier 10. Réduit à
     // 2 TIERS (cf. raidTierCap) dont le SEUL but est l'équipement : T1 lâche de l'ilvl 220, T2 de l'ilvl
     // 240 (au-dessus du cap 200 du contenu de base). Difficulté CALÉE sur son loot (raidDifficultyIlvl
     // spécial-casé) → un vrai cran au-dessus du T10 de base (186). tierOffset +6 (récompenses/checks).
@@ -134,7 +134,7 @@ export function getRaidDef(id: RaidId): RaidDef {
 }
 
 /**
- * v0.27 — TIER MONDIAL : tier affiché + décalage du raid. Pilote TOUTES les courbes de récompense
+ * TIER MONDIAL : tier affiché + décalage du raid. Pilote TOUTES les courbes de récompense
  * et de check (iLvl, rareté, exigences, trophées, fragments, éclats, enrage). Pour les raids de
  * base (offset 0) c'est l'identité ; pour l'Abîme (+6), son Tier 1 = Tier 7 mondial.
  */
@@ -142,7 +142,7 @@ export function globalTier(def: RaidDef, tier: number): number {
   return tier + (def.tierOffset ?? 0)
 }
 
-/** Un raid est-il accessible (palier requis + raid prérequis clear + tier requis sur d'autres raids) ? */
+/** Un raid est-il accessible (vague requise + raid prérequis clear + tier requis sur d'autres raids) ? */
 export function raidUnlocked(def: RaidDef, bestStage: number, progress: Record<RaidId, number>): boolean {
   if (bestStage < def.unlockStage) return false
   if (def.requires && (progress[def.requires] ?? 0) < 1) return false
@@ -150,34 +150,27 @@ export function raidUnlocked(def: RaidDef, bestStage: number, progress: Record<R
   return true
 }
 
-// ---- Constantes d'équilibrage (v0.30 — courbe UNIFIÉE) ----
+// ---- Constantes d'équilibrage (courbe UNIFIÉE) ----
 // PV/dégâts des boss = base commune b^ilvl (progression.ts) à l'ilvl du raid ; la classe 'raidboss'
 // (×13,3 PV / ×2 dégâts vs trash) donne le pool d'un vrai boss (~40 s à stuff calé). Plus de
-// premiums propres aux raids : l'ilvl (bande 230→700) ET la classe portent tout.
-
-/**
- * v0.30 — BANDE D'ILVL LINÉAIRE par raid (fini le ×1,22/tier exponentiel qui faisait le snowball).
- * Plancher ÉCHELONNÉ selon la difficulté du raid (Forge 230 … Nexus 500, Abîme 560) + pas CONSTANT
- * de +15 ilvl/tier → un rung ne saute jamais > +20 (jamais de trivialisation du tier précédent).
- * Les 4 raids de base se chevauchent (loot par type, faits en parallèle) en montant vers 700.
- */
-// v0.35.1 → v0.36 — DIFFICULTÉ FIXE par tier (ne scale PLUS avec bestStage — retour joueur : « le T1
-// scale avec la puissance de ma vague »). Le tier MONDIAL est ancré à une VAGUE ABSOLUE (chiffres
-// exacts ci-dessous), pas à la puissance courante du joueur : un joueur sur-stuffé out-gear les bas
-// tiers (voulu : il revient les farmer pour la rareté/les mats) ; un joueur calé trouve son tier.
+// premiums propres aux raids : l'ilvl ET la classe portent tout.
+//
+// DIFFICULTÉ FIXE par tier (ne scale PAS avec bestStage) : le tier MONDIAL est ancré à une VAGUE
+// ABSOLUE (chiffres ci-dessous), pas à la puissance courante du joueur — un joueur sur-stuffé out-gear
+// les bas tiers (voulu : il revient les farmer pour la rareté/les mats), un joueur calé trouve son tier.
 // L'Abîme (tierOffset +6) extrapole au-delà du Chapitre 14 → contenu de fin de jeu. La rareté et
 // l'exigence de résistance montent toujours avec le tier mondial.
-// v0.36 — l'ancre des raids suit les CHAPITRES qu'ils gatent (gate-raid §1) : le Raid T(k) ouvre le
-// mur du Chapitre 4+k ≈ vague 40+10k → T1 ancré au Chapitre 5 (vague 50), T10 au Chapitre 14 (vague 140),
-// soit +10 vagues/tier. raidIlvl = gear d'époque de la vague ancre (lootFarmIlvl, capé 200) → un build
-// calé sur le Chapitre rend un TTK ~40 s. Fini l'ancre 50→400 du monde ilvl-700.
+// L'ancre des raids suit les CHAPITRES qu'ils gatent : le Raid T(k) ouvre le mur du Chapitre 4+k →
+// T1 ancré au Chapitre 5 (vague 50), T10 au Chapitre 14 (vague 140), soit +10 vagues/tier. raidIlvl =
+// gear d'époque de la vague ancre (lootFarmIlvl, capé 200) → un build calé sur le Chapitre rend un
+// TTK ~40 s.
 const RAID_ANCHOR_LOW = 50    // stage ancre du Tier 1 MONDIAL (mur du Chapitre 5)
 const RAID_ANCHOR_HIGH = 140  // stage ancre du Tier 10 MONDIAL (mur du Chapitre 14)
 const RAID_ANCHOR_SPAN = 10   // nb de tiers mondiaux entre LOW et HIGH (= la pente : +10 stages/tier)
 const FORTRESS_ARMOR_MULT = 3.2   // 'fortress' : armure colossale
 const FORTRESS_RESIST_BONUS = 0.2 // 'fortress' : +résistance au thème
 
-// v0.40 — RAID = GARDIEN DU MUR. Le Raid T (mondial) garde le mur du Chapitre (T+4) : pour franchir ce
+// RAID = GARDIEN DU MUR. Le Raid T (mondial) garde le mur du Chapitre (T+4) : pour franchir ce
 // Chapitre il faut le clear. Le boss de raid doit donc être UN CRAN AU-DESSUS de ce mur — plus de PV
 // ET frappe plus fort — pour le feeling « je bats le mur, mais le raid me bloque » (il faut trouver
 // PLUS de dégâts/soin). Calé au FEELING, pas au TTK (assumé : le joueur trouvera des leviers non vus).
@@ -185,7 +178,7 @@ const FORTRESS_RESIST_BONUS = 0.2 // 'fortress' : +résistance au thème
 const RAID_HP_VS_MUR = 1.8   // PV du boss de raid = 1,8× le mur du Chapitre gardé
 const RAID_DMG_VS_MUR = 1.4  // DPS (auto) du boss de raid = 1,4× ce mur
 
-/** Stage du mur de Chapitre gardé par un tier MONDIAL : Raid T ↔ mur du Chapitre (T+4) (gate v0.36). */
+/** Stage du mur de Chapitre gardé par un tier MONDIAL : Raid T ↔ mur du Chapitre (T+4). */
 function murStageForTier(globalTierN: number): number {
   return (globalTierN + 4) * CHAPITRE_SIZE
 }
@@ -205,10 +198,11 @@ const VULN: Record<DamageType, DamageType> = {
 export interface ActiveRaid {
   raidId: RaidId
   tier: number
-  /** Record de farm au lancement (v0.35) : cale l'ilvl/difficulté du raid sur TA tranche. */
+  /** Record de farm au lancement. Conservé pour la compat de signature : la difficulté est FIXE par
+   *  tier, il ne la cale PAS. */
   bestStage: number
   name: string
-  /** Index du boss en cours (toujours 0 depuis la v0.23 — un seul affrontement). */
+  /** Index du boss en cours (toujours 0 — un seul affrontement). */
   current: number
   totalBosses: number
   /** enemies[0] = le boss (cible d'objectif) ; les suivants = jumeau d'Abîme / renforts (Déferlante). */
@@ -230,14 +224,14 @@ export interface ActiveRaid {
   repeatLeft?: number
 }
 
-/** Palier « effectif » du boss d'un tier — ne sert plus qu'au pacing de l'XP (les PV/dégâts passent
+/** Vague « effective » du boss d'un tier — ne sert qu'au pacing de l'XP (les PV/dégâts passent
  *  par l'ilvl unifié). Conservé pour ne pas casser la courbe d'XP. */
 function effStage(def: RaidDef, tier: number): number {
   return (def.anchorStage ?? def.unlockStage) + (globalTier(def, tier) - 1) * 4
 }
 
 /**
- * v0.25.x — SCALING MULTI-PERSO (tous les raids) : +55% de PV de boss par héros au-delà du premier
+ * SCALING MULTI-PERSO (tous les raids) : +55% de PV de boss par héros au-delà du premier
  * (×1,55 à 2 héros, ×2,1 à 3). Les DÉGÂTS ne scalent pas : la pression vient des capacités et du
  * check de résistance, le pool de PV garantit que le combat dure assez pour qu'ils s'expriment.
  */
@@ -245,7 +239,7 @@ export function raidPartyHpMult(partySize: number): number {
   return 1 + 0.55 * Math.max(0, partySize - 1)
 }
 
-/** Délai d'enrage dur (s). v0.36 : recalé pour le cap ilvl 200 (raids T1-T10 ∈ ~[65,186]). Aux ilvls
+/** Délai d'enrage dur (s). Calé pour le cap ilvl 200 (raids T1-T10 ∈ ~[65,186]). Aux ilvls
  *  plus bas qu'avant, les secondaires sont moins mûrs → le TTK à stuff CALÉ remonte (~62 s à T1 →
  *  ~45 s à T10) : l'enrage doit rester AU-DESSUS de cette courbe (sinon même le calé tape l'enrage).
  *  Pente douce 78 → plancher 56 → marge de clear positive à tous les tiers (le sous-optimisé échoue). */
@@ -260,13 +254,13 @@ export function raidAnchorPalier(globalTierN: number): number {
 }
 
 /**
- * iLvl de DIFFICULTÉ/butin d'un tier — v0.35.1 : FIXE, ancré à un palier de farm absolu (via le tier
- * MONDIAL), indépendant de bestStage. On GARDE l'argument `bestStage` (signature stable, ~8 appelants
- * + harnais) mais il N'EST PLUS LU : la difficulté ne suit plus le joueur. raidIlvl = gear d'époque du
- * palier ancre (lootFarmIlvl) → un joueur calé sur ce palier livre un TTK ~40 s ; un sur-palier out-gear.
+ * iLvl de DIFFICULTÉ/butin d'un tier — FIXE, ancré à une vague de farm absolue (via le tier MONDIAL),
+ * indépendant de bestStage. On GARDE l'argument `bestStage` (signature stable, ~8 appelants + harnais)
+ * mais il N'EST PAS LU : la difficulté ne suit pas le joueur. raidIlvl = gear d'époque de la vague
+ * ancre (lootFarmIlvl) → un joueur calé sur cette vague livre un TTK ~40 s ; un sur-stuffé out-gear.
  */
 export function raidIlvl(def: RaidDef, tier: number, _bestStage = 0): number {
-  // v0.36 — l'Abîme (endgame, 2 tiers) est la SEULE source d'ilvl > base : T1 = 220, T2 = 240
+  // l'Abîme (endgame, 2 tiers) est la SEULE source d'ilvl > base : T1 = 220, T2 = 240
   // (= ILVL_CAP_ENDGAME). C'est SON intérêt : l'équipement au-dessus du cap 200 du contenu de base.
   if (def.id === 'abysse') return Math.min(ILVL_CAP_ENDGAME, ILVL_CAP_BASE + tier * 20)
   // Base raids : ancrés sur le Chapitre gaté (lootFarmIlvl est déjà capé à ILVL_CAP_BASE = 200).
@@ -274,12 +268,12 @@ export function raidIlvl(def: RaidDef, tier: number, _bestStage = 0): number {
 }
 
 /**
- * v0.36 — ilvl de DIFFICULTÉ d'un boss de raid (PV / dégâts / armure) : NON CAPÉ → les PV montent à
+ * ilvl de DIFFICULTÉ d'un boss de raid (PV / dégâts / armure) : NON CAPÉ → les PV montent à
  * CHAQUE tier indéfiniment (les raids sont l'endgame infini gaté par les Trophées). Le LOOT (raidIlvl)
  * reste capé (200 base / 240 Abîme) ; seule la DIFFICULTÉ continue de grimper. Corrige le plateau de PV.
  */
 export function raidDifficultyIlvl(def: RaidDef, tier: number): number {
-  // v0.36 — l'Abîme se BAT à l'ilvl qu'il LÂCHE (220/240) : un vrai cran au-dessus du T10 de base (≈186),
+  // l'Abîme se BAT à l'ilvl qu'il LÂCHE (220/240) : un vrai cran au-dessus du T10 de base (≈186),
   // cohérent avec son gate (les 4 raids de base à T10). Tu pousses à 220 pour gagner du 220, puis 240.
   if (def.id === 'abysse') return raidIlvl(def, tier)
   const stage = Math.round(raidAnchorPalier(globalTier(def, tier)))
@@ -288,7 +282,7 @@ export function raidDifficultyIlvl(def: RaidDef, tier: number): number {
 
 /**
  * Rareté du butin de raid : FENÊTRE À PIC par tier (rollWindowRarity).
- * v0.40.2 — peak MOBILE tous les 2 tiers : Mythique (T1-T2) → Abyssal (T10, = peak de l'Abîme), pour que
+ * Peak MOBILE tous les 2 tiers : Mythique (T1-T2) → Abyssal (T10, = peak de l'Abîme), pour que
  * le sommet des raids de base REJOIGNE l'Abîme sans le dépasser. Fenêtre SYMÉTRIQUE (floor = peak−2,
  * cap = peak+2, 5 raretés). La traîne haute est RESSERRÉE au roll (shoulder/tail bas, cf. store.ts) →
  * Primordial/Transcendant restent rares (T10 : ~9,6% / ~1,2%) : l'Abîme reste LA source dense de ces deux.
@@ -298,7 +292,7 @@ export function raidDifficultyIlvl(def: RaidDef, tier: number): number {
 const RAID_WINDOW_PEAK = [9, 9, 10, 10, 11, 11, 12, 12, 13, 14]
 
 export function raidRarityWindow(def: RaidDef, tier: number): { floor: number; peak: number; cap: number } {
-  // v0.40.2 — Abîme : fenêtre RESSERRÉE au sommet (Cosmique → Abyssal → Transcendant). Les opts du roll
+  // Abîme : fenêtre RESSERRÉE au sommet (Cosmique → Abyssal → Transcendant). Les opts du roll
   // (store.ts : down 0.78 / shoulder 0.20 / tail 0.10) calent EXACTEMENT 39/50/10/1.
   if (def.id === 'abysse') return { floor: 13, peak: 14, cap: 16 }
   const i = Math.max(0, Math.min(RAID_WINDOW_PEAK.length - 1, globalTier(def, tier) - 1))
@@ -317,7 +311,7 @@ export function raidMaxTier(def: RaidDef, tier: number): number {
 }
 
 /**
- * Nombre d'objets du coffre (v0.24, DESIGN §4.4) : 1 GARANTI (2 pour l'Abîme) + tirages
+ * Nombre d'objets du coffre : 1 GARANTI (2 pour l'Abîme) + tirages
  * bonus indépendants dont la chance monte avec le tier — radin, mais juteux quand ça proc.
  *   T1 : +1 à 5% · +2 à 2.5%   ·   T5 : +1 à 25% · +2 à 12.5% · +3 à 5%   ·   T10 : 50/25/10%.
  */
@@ -331,12 +325,12 @@ export function rollRaidLootCount(def: RaidDef, tier: number): number {
   return n
 }
 
-// ---- 🏆 Trophées (v0.24, DESIGN §4.5) : la monnaie de PASSAGE DE TIER, par raid ----
+// ---- 🏆 Trophées : la monnaie de PASSAGE DE TIER, par raid ----
 // Chaque victoire au tier T rapporte T Trophées de CE raid ; débloquer le tier suivant coûte
 // ~5 clears du tier courant (ou plus de clears de tiers inférieurs). Chaque tier est un mur :
 // on farme le T(n) — stuff + Trophées — pour ouvrir le T(n+1).
 
-/** Trophées gagnés par victoire (= le tier MONDIAL vaincu — v0.27). */
+/** Trophées gagnés par victoire (= le tier MONDIAL vaincu). */
 export function raidTrophyGain(def: RaidDef, tier: number): number {
   return globalTier(def, tier)
 }
@@ -346,7 +340,7 @@ export function raidTierUnlockCost(def: RaidDef, next: number): number {
   return 5 * Math.max(1, globalTier(def, next) - 1)
 }
 
-// v0.36 — Fragments ✨ & Éclats cosmiques 💫 (matériaux EXCLUSIFS aux raids) suivent la MÊME courbe que
+// Fragments ✨ & Éclats cosmiques 💫 (matériaux EXCLUSIFS aux raids) suivent la MÊME courbe que
 // les donjons de matériaux : rendement/clear = coût d'un craft à la rareté ACCESSIBLE ÷ cadence, au
 // Chapitre CORRESPONDANT au tier. Le tier MONDIAL GT gate le mur du Chapitre (GT+4) → Chapitre = GT+4.
 // Déterministe (plus de tirage de chance) : cohérent avec le rendement déterministe des donjons.
@@ -371,7 +365,7 @@ export function raidCosmicQty(def: RaidDef, tier: number): number {
   return materialYieldAtChapter('cosmic', raidMatChapter(def, tier))
 }
 
-/** Tier MAXIMAL d'un raid. v0.36 : l'Abîme est verrouillé à 2 tiers (T1 ilvl 220, T2 ilvl 240) ; les 4 raids de base montent à 10. */
+/** Tier MAXIMAL d'un raid. L'Abîme est verrouillé à 2 tiers (T1 ilvl 220, T2 ilvl 240) ; les 4 raids de base montent à 10. */
 export function raidTierCap(def: RaidDef): number {
   return def.id === 'abysse' ? 2 : 10
 }
@@ -717,13 +711,13 @@ export function recommendedEhp(def: RaidDef, tier: number, bestStage: number): n
 }
 
 /** Multiplicateur de la Nova cataclysmique (AoE périodique) — partagé avec le tick de combat.
- *  v0.24 : 4.5 → 3.6 (compense la perte de la résist-réduction ; l'exigence fait le reste). */
+ *  Calé à 3.6 (compense la perte de la résist-réduction ; l'exigence fait le reste). */
 export const NOVA_MULT = 3.6
 
-// ---- Exigences de résistance (v0.24 — LE check de stuff par boss, voir resist.ts) ----
+// ---- Exigences de résistance (LE check de stuff par boss, voir resist.ts) ----
 
 /** Exigence de base d'un raid à un tier (sur ses types d'ATTAQUE).
- *  v0.25.x : relevée (~+30%) — le joueur battait les boss à ×2,3 subis sans une ligne de résist.
+ *  Relevée (~+30%) — sinon le joueur battait les boss à ×2,3 subis sans une ligne de résist.
  *  L'exigence doit être LE projet de stuff du tier, pas une taxe ignorable. */
 export function raidReq(def: RaidDef, tier: number): number {
   return Math.round(70 + def.baseDifficulty * 30 + (globalTier(def, tier) - 1) * 34)
@@ -750,7 +744,7 @@ export function raidReqs(def: RaidDef, tier: number): Partial<Record<DamageType,
 }
 
 function bossHp(def: RaidDef, tier: number, _bestStage: number, partySize = 1): number {
-  // v0.40 — PV calés AU-DESSUS du mur de Chapitre gardé (× RAID_HP_VS_MUR) → le raid est toujours plus
+  // PV calés AU-DESSUS du mur de Chapitre gardé (× RAID_HP_VS_MUR) → le raid est toujours plus
   // épais que le mur correspondant. L'Abîme (endgame, post-Ch15, plus de mur à garder) garde son
   // ancrage ilvl propre (220/240, non capé).
   const v = raidBossVariant(def, tier)
@@ -761,7 +755,7 @@ function bossHp(def: RaidDef, tier: number, _bestStage: number, partySize = 1): 
 }
 
 function bossDamage(def: RaidDef, tier: number, _bestStage: number): number {
-  // v0.40 — dégâts (DPS auto) calés au-dessus du mur gardé (× RAID_DMG_VS_MUR) → le raid frappe
+  // dégâts (DPS auto) calés au-dessus du mur gardé (× RAID_DMG_VS_MUR) → le raid frappe
   // toujours plus fort que le mur. Abîme : ancrage ilvl propre.
   const v = raidBossVariant(def, tier)
   const base = def.id === 'abysse'
@@ -788,13 +782,13 @@ export function makeRaidBoss(def: RaidDef, tier: number, element: DamageType, be
     name: `★ ${def.icon} ${v.name}`,
     maxHp,
     hp: maxHp,
-    // v0.30 — armure unifiée (scale b^ilvl → Pénétration pertinente ; fortress ×3,2).
+    // armure unifiée (scale b^ilvl → Pénétration pertinente ; fortress ×3,2).
     armor: Math.round(enemyArmor(raidDifficultyIlvl(def, tier), armorMult)),
     damage: bossDamage(def, tier, bestStage),
     xp: Math.round(8 * Math.pow(1.12, eff - 1) * 6),
     resist,
     damageType: element,
-    // Exigences de résistance du tier (v0.24) : LE check de stuff — affichées en fiche de boss.
+    // Exigences de résistance du tier : LE check de stuff — affichées en fiche de boss.
     reqs: raidReqs(def, tier),
     elite: true,
     // Boss de raid : esquive marquée (→ Précision, hit cap raid 2000) + étourdissement régulier (→ Résilience).
@@ -842,26 +836,26 @@ export function makeRaidEncounter(def: RaidDef, tier: number, element: DamageTyp
 }
 
 /** Plafond de rejetons SIMULTANÉS de la Déferlante — monte avec le tier (la « difficulté »).
- *  v0.25.x : les rejetons ne disparaissent plus tout seuls (plus de lifetime) → ils s'accumulent
+ *  Les rejetons ne disparaissent pas tout seuls (plus de lifetime) → ils s'accumulent
  *  jusqu'au plafond tant qu'on ne les tue pas. Les ignorer devient un vrai choix de pression. */
 export function raidMaxAdds(tier: number): number {
   return 2 + Math.floor(tier / 4) // T1-3 : 2 · T4-7 : 3 · T8+ : 4
 }
 
 /**
- * Crée un RENFORT de raid (mécanique Déferlante) : un add PERSISTANT (v0.25.x — il reste jusqu'à
+ * Crée un RENFORT de raid (mécanique Déferlante) : un add PERSISTANT (il reste jusqu'à
  * sa mort, plus d'expiration) qui frappe l'équipe. Le nombre simultané est plafonné (raidMaxAdds).
  */
 export function makeRaidAdd(def: RaidDef, tier: number, element: DamageType, bestStage: number, partySize = 1): Enemy {
   const ilvl = raidDifficultyIlvl(def, tier)
-  // v0.30 — renfort = ennemi de classe 'elite' à l'ilvl du raid (× scaling multi-perso) ; il frappe
+  // renfort = ennemi de classe 'elite' à l'ilvl du raid (× scaling multi-perso) ; il frappe
   // ~45 % d'un boss (pression de groupe, pas un second mur).
   const hp = Math.round(enemyHp(ilvl, 'elite') * raidPartyHpMult(partySize))
   // Les renforts exigent moitié moins que le boss (pression de groupe, pas un second check).
   const reqs: Partial<Record<DamageType, number>> = {}
   const br = raidReqs(def, tier)
   for (const t in br) reqs[t as DamageType] = Math.round((br[t as DamageType] ?? 0) * 0.5)
-  // v0.37 — les renforts portent une version LÉGÈRE du thème du boss (résiste son élément, vulnérable à
+  // les renforts portent une version LÉGÈRE du thème du boss (résiste son élément, vulnérable à
   // l'opposé) : nettoyables hors-élément, mais amener le contre les fait fondre. Mêmes paires que le boss.
   const home: DamageType = def.element === 'rotating' ? 'arcane' : def.element
   const resist: Partial<Record<DamageType, number>> = { [home]: 0.3, [VULN[home]]: -0.2 }
