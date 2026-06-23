@@ -915,9 +915,20 @@ export const CONSTELLATION_LIST: ConstellationId[] = [
 /* Accès & agrégation (API consommée par character.ts / UI).           */
 /* ------------------------------------------------------------------ */
 const BY_ID = new Map(TALENTS.map((t) => [t.id, t]))
+// v0.40.6 (perf, F6) — index nœuds par constellation, calculé UNE fois (données statiques), trié par
+// tier comme avant. Évite un `filter+sort` O(N log N) à chaque `talentsByConstellation` et le scan +
+// lookup par clé de `spentInConstellation`. Les tableaux sont traités en LECTURE SEULE (aucun appelant
+// ne les mute : vérifié) → le partage de la référence est sûr.
+const BY_CONSTELLATION = (() => {
+  const m = new Map<ConstellationId, TalentNode[]>()
+  for (const t of TALENTS) { const arr = m.get(t.constellation); if (arr) arr.push(t); else m.set(t.constellation, [t]) }
+  for (const arr of m.values()) arr.sort((a, b) => a.tier - b.tier)
+  return m
+})()
+const EMPTY_NODES: TalentNode[] = []
 export function getTalent(id: string): TalentNode | undefined { return BY_ID.get(id) }
 export function talentsByConstellation(c: ConstellationId): TalentNode[] {
-  return TALENTS.filter((t) => t.constellation === c).sort((a, b) => a.tier - b.tier)
+  return BY_CONSTELLATION.get(c) ?? EMPTY_NODES
 }
 
 export function talentStatMods(talents: Record<string, number>): StatBlock {
@@ -954,7 +965,7 @@ export function talentKeystones(talents: Record<string, number>): KeystoneEffect
 /** Points dépensés dans une constellation (pour les portes de budget `minSpent`). */
 export function spentInConstellation(talents: Record<string, number>, c: ConstellationId): number {
   let s = 0
-  for (const id in talents) { if (BY_ID.get(id)?.constellation === c) s += talents[id] }
+  for (const n of BY_CONSTELLATION.get(c) ?? EMPTY_NODES) s += talents[n.id] ?? 0
   return s
 }
 
