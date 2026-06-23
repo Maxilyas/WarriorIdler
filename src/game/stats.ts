@@ -2,8 +2,8 @@
  * STATS — méta des stats, agrégation (`computeTotalStats`) et stats dérivées de combat
  * (`computeDerived`). Chaque secondaire a une COURBE à soft cap (`softCap`, rendement décroissant,
  * jamais de mur). La MAÎTRISE a une identité par stat primaire dominante (Force=DR+Riposte,
- * Agi=Débordement crit, Int=Surcharge). Refonte majeure v0.38 (Esquive/Ténacité/Purge/Régén
- * dépréciées mais repliées pour la rétro-compat).
+ * Agi=Débordement crit, Int=Surcharge). Esquive/Ténacité/Purge/Régén sont dépréciées mais repliées
+ * pour la rétro-compat.
  *   → Doc : docs/systemes/02-stats-et-maitrises.md
  */
 import type { PrimaryStat, SecondaryStat, StatKey, StatBlock, Equipment, ConvSource } from './types'
@@ -42,7 +42,7 @@ export const SECONDARY_META: Record<SecondaryStat, StatMeta> = {
   reductionDegats: { key: 'reductionDegats', name: 'Réduction de dégâts', short: 'RÉD', color: '#74c0fc', desc: 'Réduction plate des dégâts subis (efficace contre les petits coups rapides).' },
   barriere: { key: 'barriere', name: 'Barrière', short: 'BARR', color: '#4dabf7', desc: 'Bouclier de départ : augmente tes PV effectifs. Excellent contre le burst.' },
   resilience: { key: 'resilience', name: 'Résilience', short: 'RÉSI', color: '#a9e34b', desc: 'Réduit la durée des contrôles ennemis ET la durée/intensité des altérations subies (saignement, poison, brûlure, malédiction).' },
-  // --- DÉPRÉCIÉES (v0.38) : ne sont plus rollées ni listées sur la fiche, mais restent FONCTIONNELLES
+  // --- DÉPRÉCIÉES : ne sont plus rollées ni listées sur la fiche, mais restent FONCTIONNELLES
   //     (vieux objets/talents) : Esquive comptée comme Réduction · Ténacité + Purge comptées comme
   //     Résilience · Régénération toujours active (l'archétype soigneur en dépend). ---
   esquive: { key: 'esquive', name: 'Réduction', short: 'RÉD', color: '#74c0fc', desc: 'Comptée comme Réduction de dégâts (Esquive dépréciée, plus rollée).' },
@@ -58,7 +58,7 @@ export const SECONDARY_META: Record<SecondaryStat, StatMeta> = {
 
 export const ALL_STAT_META: Record<StatKey, StatMeta> = { ...PRIMARY_META, ...SECONDARY_META }
 
-/** Libellé court + couleur d'une SOURCE de conversion (v0.39) : une stat OU `healPower` (puissance de soin). */
+/** Libellé court + couleur d'une SOURCE de conversion : une stat OU `healPower` (puissance de soin). */
 export function convSourceMeta(s: ConvSource): { short: string; color: string } {
   if (s === 'healPower') return { short: 'SOIN', color: '#51cf66' }
   const m = ALL_STAT_META[s]
@@ -66,7 +66,7 @@ export function convSourceMeta(s: ConvSource): { short: string; color: string } 
 }
 
 export const PRIMARY_STATS: PrimaryStat[] = ['force', 'agilite', 'intelligence', 'endurance']
-// v0.38 — liste AFFICHÉE/ROLLÉE : Esquive, Ténacité, Purge, Régén retirées ; Résilience (fusion Tén+Purge) ajoutée.
+// Liste AFFICHÉE/ROLLÉE : Esquive, Ténacité, Purge, Régén retirées ; Résilience (fusion Tén+Purge) en place.
 export const SECONDARY_STATS: SecondaryStat[] = [
   'critique', 'degatsCrit', 'hate', 'maitrise', 'penetration', 'precision', 'alteration', 'degatsBoss',
   'reductionDegats', 'barriere', 'resilience',
@@ -94,7 +94,7 @@ function addItemStats(acc: StatBlock, equipment: Equipment) {
         acc[key] = (acc[key] ?? 0) + (mods[key] ?? 0)
       }
     }
-    // (v0.22 : les runes ne gravent plus de stats — temps & règles uniquement, voir enchants.ts.)
+    // (les runes ne gravent pas de stats — temps & règles uniquement, voir enchants.ts.)
   }
 }
 
@@ -102,9 +102,9 @@ function addItemStats(acc: StatBlock, equipment: Equipment) {
 export function computeTotalStats(base: StatBlock, equipment: Equipment): StatBlock {
   const total: StatBlock = { ...base }
   addItemStats(total, equipment)
-  // v0.38 — RÉGÉNÉRATION RETIRÉE : tout reliquat de `regen` (vieux objets, uniques de soin, talents)
-  // est compté comme INTELLIGENCE — le soin scale désormais sur l'Int (cf. design Option B), donc les
-  // uniques/talents de soin restent pertinents (Int = soins plus gros) sans réécrire leurs données.
+  // RÉGÉNÉRATION RETIRÉE : tout reliquat de `regen` (vieux objets, uniques de soin, talents) est
+  // compté comme INTELLIGENCE — le soin scale sur l'Int, donc les uniques/talents de soin restent
+  // pertinents (Int = soins plus gros) sans réécrire leurs données.
   if (total.regen) { total.intelligence = (total.intelligence ?? 0) + total.regen; total.regen = 0 }
   return total
 }
@@ -133,13 +133,13 @@ export interface DerivedStats {
   precision: number // 0..1 (annule l'esquive ennemie)
   alterationMult: number // ≥1 multiplicateur des dégâts sur la durée (DoT)
   bossDamageMult: number // ≥1 multiplicateur de dégâts contre les boss/élites
-  resilience: number // 0..1 réduction durée CC + durée/intensité altérations (v0.38, ex-Ténacité+Purge fusionnées)
+  resilience: number // 0..1 réduction durée CC + durée/intensité altérations (ex-Ténacité+Purge fusionnées)
   flatDr: number // 0..1 réduction plate supplémentaire
-  /** 🤺 Chance de RIPOSTE du bruiser Force (v0.38) : % de contre-attaquer (frappe complète) quand on est touché. */
+  /** 🤺 Chance de RIPOSTE du bruiser Force : % de contre-attaquer (frappe complète) quand on est touché. */
   riposteChance: number
   /** Multiplicateur de dégâts SUBIS (Surcharge de l'Int glass cannon ; 1 = neutre). */
   damageTakenMult: number
-  /** Fraction de PV effectifs issue de la Barrière (v0.26 : sert à la Doctrine du bouclier). */
+  /** Fraction de PV effectifs issue de la Barrière (sert à la Doctrine du bouclier). */
   shieldPct: number
   // --- stats rares ---
   overpower: number // multiplicateur de dégâts (Surpuissance)
@@ -147,19 +147,19 @@ export interface DerivedStats {
   cdr: number // 0..1 réduction de cooldown (Récupération)
 }
 
-export const RATING_PER_PERCENT = 25 // v0.35 : 50→25 (les secondaires comptaient ~1/50 d'une ligne %type)
+export const RATING_PER_PERCENT = 25 // calé à 25 (à 50, les secondaires valaient ~1/50 d'une ligne %type)
 const PER_PCT = RATING_PER_PERCENT * 100 // ratings pour +1.0 (100%)
 
-/** v0.38 — ESQUIVE des ennemis (SOURCE UNIQUE, contrée par la Précision sur les AUTO-ATTAQUES seulement).
+/** ESQUIVE des ennemis (SOURCE UNIQUE, contrée par la Précision sur les AUTO-ATTAQUES seulement).
  *  Élite/champion 10% · boss 15% · boss de raid 20%. enemies/dungeons/raids importent ces valeurs. */
 export const ENEMY_DODGE = { elite: 0.10, boss: 0.15, raidboss: 0.20 } as const
-/** Précision : rating pour 100% d'esquive annulée (v0.38 : 100 rating/1%, abaissé de 200). C'est le « hit cap ». */
+/** Précision : rating pour 100% d'esquive annulée (100 rating/1%). C'est le « hit cap ». */
 export const PRECISION_DIVISOR = 10000
 /** Rating de Précision nécessaire pour annuler ENTIÈREMENT une esquive donnée (le hit cap exact). */
 export function precisionRatingToCancel(dodge: number): number {
   return Math.round(dodge * PRECISION_DIVISOR)
 }
-/** v0.27 (C5) — part de la 2e stat offensive reversée dans la puissance (knob d'équilibrage). */
+/** Part de la 2e stat offensive reversée dans la puissance (knob d'équilibrage). */
 export const SECOND_STAT_SHARE = 0.2
 
 /** Puissance issue d'une stat primaire offensive. */
@@ -201,20 +201,20 @@ export function computeDerived(total: StatBlock): DerivedStats {
   ]
   offensive.sort((a, b) => b[1] - a[1])
   const [mainStat, mainValue] = offensive[0]
-  // v0.27 (C5) — les hybrides 2-stats ne sont plus du poids mort : la 2e stat offensive compte
-  // pour SECOND_STAT_SHARE dans la puissance d'auto-attaque (le winner-take-all est adouci).
+  // Les hybrides 2-stats ne sont pas du poids mort : la 2e stat offensive compte pour
+  // SECOND_STAT_SHARE dans la puissance d'auto-attaque (le winner-take-all est adouci).
   const secondValue = offensive[1]?.[1] ?? 0
   const effMainValue = mainValue + SECOND_STAT_SHARE * secondValue
 
-  // === v0.38 — REFONTE DES STATS ===
-  // Critique : base 5% + 1% par 100 rating (rating/10000), soft cap 45% → asymptote 70% (fini les ~75% gratuits).
+  // === STATS DÉRIVÉES ===
+  // Critique : base 5% + 1% par 100 rating (rating/10000), soft cap 45% → asymptote 70%.
   const rawCrit = 0.05 + (total.critique ?? 0) / 10000
   const critChance = softCap(rawCrit, 0.45, 0.70)
-  // Dégâts crit : ×1,5 + rating/700 (700 rating = +100%), soft cap +400% (×5,5) → +700% (×8,5). Gros SPREAD
-  // (investir paie : ×1,9 à 300 → ×5,4 à 2700), contrairement à l'ancien ×2→×3 ultra-compressé.
+  // Dégâts crit : ×1,5 + rating/700 (700 rating = +100%), soft cap +400% (×5,5) → +700% (×8,5). Gros
+  // SPREAD : investir paie (×1,9 à 300 rating → ×5,4 à 2700).
   let critMult = 1.5 + softCap((total.degatsCrit ?? 0) / 700, 4.0, 7.0)
 
-  // --- MAÎTRISE (v0.38) : identité PAR ARCHÉTYPE, chacune avec sa mécanique « folle ». ---
+  // --- MAÎTRISE : identité PAR ARCHÉTYPE, chacune avec sa mécanique « folle ». ---
   // - Force        → bruiser : RÉDUCTION plate + dégâts PLATS nourris par la tankiness (« Riposte »).
   // - Agilité      → assassin : ×CRIT ; le crit AU-DELÀ du cap n'est plus gaspillé (« Débordement »).
   // - Intelligence → glass cannon : gros %dégâts MAIS +dégâts subis (« Surcharge »).
@@ -263,7 +263,7 @@ export function computeDerived(total: StatBlock): DerivedStats {
     damageTakenMult,
     leech: softCap((total.volDeVie ?? 0) / 20000, 0.5, 0.72), // 1% par 200 rating
     penetration: softCap((total.penetration ?? 0) / 20000, 0.70, 0.85), // 1% par 200 rating, pas de base
-    precision: softCap((total.precision ?? 0) / PRECISION_DIVISOR, 0.90, 0.99), // v0.38 : 100 rating/1% (abaissé de 200), pas de base
+    precision: softCap((total.precision ?? 0) / PRECISION_DIVISOR, 0.90, 0.99), // 100 rating/1%, pas de base
     alterationMult: 1 + (total.alteration ?? 0) / 4000, // +1% par 40 rating, linéaire (DoT-only)
     bossDamageMult: 1 + (total.degatsBoss ?? 0) / 5000, // +1% par 50 rating, linéaire
     resilience: softCap(resilienceRating / 2000, 0.85, 0.96),
@@ -324,7 +324,7 @@ export function describeStats(total: StatBlock): { primary: StatEffect[]; second
         : `+${pct(d.masteryMult - 1)} de dégâts · +${pct(d.damageTakenMult - 1)} subis (Surcharge)`; break
       case 'penetration': effect = `ignore ${pct(d.penetration)} des résistances/armure`; break
       case 'precision': {
-        // v0.38 — exprimé en CHANCE DE TOUCHER (auto-attaque) : lisible sans connaître l'esquive ennemie
+        // exprimé en CHANCE DE TOUCHER (auto-attaque) : lisible sans connaître l'esquive ennemie
         // (90% = 10% d'esquive). Monte vers 100% avec la Précision ; rating exact pour 0 raté en suffixe.
         const hit = (dodge: number) => Math.round(Math.min(1, 1 - dodge + d.precision) * 100)
         const caps = `${precisionRatingToCancel(ENEMY_DODGE.elite)}/${precisionRatingToCancel(ENEMY_DODGE.boss)}/${precisionRatingToCancel(ENEMY_DODGE.raidboss)}`

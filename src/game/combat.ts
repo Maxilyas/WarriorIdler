@@ -30,7 +30,7 @@ export interface HitOpts {
   execute?: { threshold: number; mult: number }
   /** 🎼 Métronome : critique GARANTI sur ce coup (ignore l'esquive ennemie aussi). */
   forceCrit?: boolean
-  /** 🎻 Ostinato (v0.26) : chance de critique ADDITIONNELLE sur ce coup (fraction). */
+  /** 🎻 Ostinato : chance de critique ADDITIONNELLE sur ce coup (fraction). */
   bonusCrit?: number
 }
 
@@ -54,7 +54,7 @@ export function rollHit(derived: DerivedStats, profile: DamageProfile, enemy: En
   if (opts.execute && enemy.maxHp > 0 && enemy.hp / enemy.maxHp <= opts.execute.threshold) raw *= opts.execute.mult
 
   const pen = derived.penetration
-  // 🥁 Tambour de siège (v0.26) : la Brèche ampute l'armure de l'ennemi.
+  // 🥁 Tambour de siège : la Brèche ampute l'armure de l'ennemi.
   const sunder = enemy.sunder && enemy.sunder.remaining > 0 ? enemy.sunder.pct : 0
   const armorMit = armorMitigation(enemy.armor * (1 - pen) * (1 - sunder), derived.power)
   let total = 0
@@ -76,12 +76,11 @@ export function rollHit(derived: DerivedStats, profile: DamageProfile, enemy: En
 }
 
 /**
- * v0.37 « Piste C » — réduction des dégâts d'un SORT par la RÉSISTANCE de type de l'ennemi.
- * Symétrique de rollHit côté résist : la Pénétration ampute la résist positive ; une vulnérabilité
- * (résist < 0) amplifie (la Pénétration n'y change rien). L'ARMURE n'entre PAS ici (elle reste une
- * défense d'auto-attaque physique) → les sorts physiques ne sont pas nerfés par l'armure.
- * Aujourd'hui la résist ennemie est UNIFORME par type : c'est donc une atténuation égale sur tous les
- * éléments, que la Pénétration contre (les casters cessent d'ignorer la résist comme avant v0.37).
+ * Réduction des dégâts d'un SORT par la RÉSISTANCE de type de l'ennemi. Symétrique de rollHit côté
+ * résist : la Pénétration ampute la résist positive ; une vulnérabilité (résist < 0) amplifie (la
+ * Pénétration n'y change rien). L'ARMURE n'entre PAS ici (elle reste une défense d'auto-attaque
+ * physique) → les sorts physiques ne sont pas nerfés par l'armure. La résist ennemie est UNIFORME par
+ * type : c'est donc une atténuation égale sur tous les éléments, que la Pénétration contre.
  */
 export function spellResistMult(enemy: Enemy, type: DamageType, penetration: number): number {
   let res = enemy.resist?.[type] ?? 0
@@ -106,8 +105,8 @@ export function theoreticalDps(derived: DerivedStats, profile: DamageProfile, bo
  * Plafond d'atténuation GÉNÉRIQUE (hors résistances de type) : le joueur encaisse
  * toujours au moins (1 − cap) des dégâts génériques. Empêche l'invincibilité par
  * empilement d'esquive / réduction / maîtrise → il faut survivre, pas juste tanker.
- * Les RÉSISTANCES de type (v0.24, modèle relatif — resist.ts) n'atténuent plus en % :
- * elles annulent le MULTIPLICATEUR d'exigence des attaques typées (×1 au cap → ×5 à nu).
+ * Les RÉSISTANCES de type (modèle relatif — resist.ts) n'atténuent pas en % : elles
+ * annulent le MULTIPLICATEUR d'exigence des attaques typées (×1 au cap → ×5 à nu).
  */
 export const EFFECTIVE_DR_CAP = 0.8
 
@@ -117,7 +116,7 @@ export const EFFECTIVE_DR_CAP = 0.8
  * (capacités passives, keystones) déjà sous forme (1 − x).
  */
 export function genericMitigation(derived: DerivedStats, extraMitigation = 1): number {
-  // v0.38 — Esquive retirée : ne reste que Réduction × Maîtrise-DR (Force). « Surcharge » de l'Int
+  // Pas d'esquive ici : ne reste que Réduction × Maîtrise-DR (Force). « Surcharge » de l'Int
   // (damageTakenMult) AUGMENTE les dégâts subis → appliquée ici (peut dépasser 1 = glass cannon).
   const g = (1 - derived.flatDr) * (1 - derived.masteryDr) * extraMitigation
   return Math.max(g, 1 - EFFECTIVE_DR_CAP) * derived.damageTakenMult
@@ -125,8 +124,8 @@ export function genericMitigation(derived: DerivedStats, extraMitigation = 1): n
 
 /**
  * Dégâts subis par le joueur (par seconde) :
- * - le MULTIPLICATEUR d'exigence du type s'applique d'abord (v0.24 : résist du héros en points
- *   vs `req` de l'ennemi — ×1 au cap, jusqu'à ×5 à zéro résist, voir resist.ts) ;
+ * - le MULTIPLICATEUR d'exigence du type s'applique d'abord (résist du héros en points vs `req`
+ *   de l'ennemi — ×1 au cap, jusqu'à ×5 à zéro résist, voir resist.ts) ;
  * - puis l'atténuation générique, BORNÉE (esquive/réduction/maîtrise + externes).
  */
 export function incomingDps(

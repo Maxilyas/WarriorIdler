@@ -30,7 +30,7 @@ export const DAMAGE_TYPES: Record<DamageType, DamageTypeMeta> = {
 export const DAMAGE_TYPE_LIST: DamageType[] = Object.keys(DAMAGE_TYPES) as DamageType[]
 
 /**
- * v0.37 « Triangle d'élément » — chaque élément/biome RÉSISTE son propre élément et est VULNÉRABLE à
+ * Triangle d'élément — chaque élément/biome RÉSISTE son propre élément et est VULNÉRABLE à
  * son opposé. Paires mutuelles (feu↔froid, foudre↔nature, arcane↔ombre) → rock-paper-scissors lisible.
  * Le Physique est NEUTRE (jamais bonus ni malus élémentaire ; il reste contré par l'armure). Donne du
  * sens à matcher l'élément de tes sorts AU CONTENU, et fait du multi-classe un levier (amène le contre).
@@ -64,8 +64,8 @@ export function elementAffinityResist(element: DamageType, base: number): Partia
 }
 
 /**
- * v0.24 : la résistance du héros est en POINTS, NON PLAFONNÉE (modèle relatif — voir resist.ts).
- * L'ancien cap dur de 75 % est supprimé ; 1 ancien % = 1 point.
+ * La résistance du héros est en POINTS, NON PLAFONNÉE (modèle relatif — voir resist.ts) :
+ * 1 ancien % = 1 point, sans cap dur.
  */
 
 export interface DamageProfile {
@@ -82,17 +82,16 @@ const WEAPON_BASE_WEIGHT = 1
 /** Part d'un affixe « +% type » reversée dans la RÉPARTITION du profil (diversification). */
 const AFFIX_PROFILE_SHARE = 0.7
 /**
- * Part d'un affixe « +% type » conservée en bonus multiplicatif brut (+% de dégâts).
- * v0.22 : 1.0 → 0.5, et le bonus CUMULÉ par type est SOFT-CAPÉ (voir TYPE_BONUS_SOFT/HARD).
- * Avant : seule famille de stats SANS cap → ×5-6 de DPS en empilant 16 lignes quand la meilleure
- * ligne secondaire valait ~5% (cf. scripts/stat-weights.mjs). Une ligne de type reste le levier
- * d'identité le plus fort À L'UNITÉ (~2-3× une secondaire), mais l'empilement plafonne (~×2).
+ * Part d'un affixe « +% type » conservée en bonus multiplicatif brut (+% de dégâts). Calée à 0.5, et le
+ * bonus CUMULÉ par type est SOFT-CAPÉ (voir TYPE_BONUS_SOFT/HARD) : sans cap, c'était la seule famille
+ * de stats illimitée → ×5-6 de DPS en empilant 16 lignes (cf. scripts/stat-weights.mjs). Une ligne de
+ * type reste le levier d'identité le plus fort À L'UNITÉ (~2-3× une secondaire), mais l'empilement
+ * plafonne (~×2).
  */
 const AFFIX_BONUS_SHARE = 0.5
-/** Soft cap du bonus multiplicatif CUMULÉ par type. v0.35 : 0,6/1,2 → 0,4/0,8 (retour joueur : un
- *  ilvl 10 maxé-%type battait un ilvl 40 sur ~3 tranches → l'ossature ilvl était diluée). Plein
- *  rendement → +40%, asymptote +80% : le %type reste le levier le plus fort à l'unité (~2× une
- *  secondaire), mais l'inversion d'ilvl est bornée à ~1 tranche (l'ilvl reste l'ossature de v0.35). */
+/** Soft cap du bonus multiplicatif CUMULÉ par type. Calé à 0,4/0,8 : plein rendement → +40%, asymptote
+ *  +80%. Le %type reste le levier le plus fort à l'unité (~2× une secondaire), mais l'inversion d'ilvl
+ *  est bornée à ~1 tranche → l'ilvl reste l'ossature de la progression. */
 const TYPE_BONUS_SOFT = 0.4
 const TYPE_BONUS_HARD = 0.8
 
@@ -120,7 +119,7 @@ export function computeDamageProfile(equipment: Equipment, keystones: KeystoneEf
         bonus[aff.type] = (bonus[aff.type] ?? 0) + (aff.value / 100) * AFFIX_BONUS_SHARE
       }
     }
-    // (v0.22 : les gemmes sont des CONDITIONS, plus aucune contribution de stats ici.)
+    // (les gemmes sont des CONDITIONS : aucune contribution de stats ici.)
   }
 
   // 2) Conversions (déplacent) puis éclaboussures (ajoutent sans retirer).
@@ -186,7 +185,7 @@ export function computeDamageProfile(equipment: Equipment, keystones: KeystoneEf
 }
 
 /**
- * Profil de résistances du héros, en POINTS (v0.24, non plafonné — modèle relatif, resist.ts).
+ * Profil de résistances du héros, en POINTS (non plafonné — modèle relatif, resist.ts).
  * Sources : lignes d'objet (1 ancien % = 1 point, telles quelles), talents et effets uniques
  * (données stockées en fractions → ×100 ici).
  */
@@ -216,8 +215,8 @@ export function effectiveTypeMult(p: DamageProfile): number {
 }
 
 /**
- * Multiplicateur de dégâts pondéré par TOUT le profil (répartition × bonus de type). C'est le
- * facteur des AUTO-ATTAQUES (rollHit). v0.37 : ce n'est PLUS le facteur des sorts — voir spellTypeMult.
+ * Multiplicateur de dégâts pondéré par TOUT le profil (répartition × bonus de type). C'est le facteur
+ * des AUTO-ATTAQUES (rollHit) ; ce n'est PAS celui des sorts — voir spellTypeMult.
  */
 export function profileDamageMult(p: DamageProfile): number {
   let m = 0
@@ -226,11 +225,11 @@ export function profileDamageMult(p: DamageProfile): number {
 }
 
 /**
- * v0.37 « Piste C » — part du multiplicateur d'un SORT qui suit le TYPE du sort (vs la moyenne du
- * profil, type-agnostique). 1 = matching pur (le hors-élément n'aide plus du tout) ; 0 = ancien
- * comportement (profileDamageMult). 0,7 : matcher l'élément de tes sorts est nettement payant, mais
- * un kit MULTI-ÉLÉMENT garde ~30 % de son investissement hors-type en valeur générique (multi-classe
- * protégé). Recalibrable via `npm run ttk`.
+ * Part du multiplicateur d'un SORT qui suit le TYPE du sort (vs la moyenne du profil, type-agnostique).
+ * 1 = matching pur (le hors-élément n'aide plus du tout) ; 0 = pondération par la moyenne du profil
+ * (profileDamageMult). Calé à 0,7 : matcher l'élément de tes sorts est nettement payant, mais un kit
+ * MULTI-ÉLÉMENT garde ~30 % de son investissement hors-type en valeur générique (multi-classe protégé).
+ * Recalibrable via `npm run ttk`.
  */
 export const SPELL_TYPE_MATCH = 0.7
 
@@ -247,10 +246,10 @@ export function spellElementTypes(tags: string[] | undefined, canonical: DamageT
 }
 
 /**
- * v0.37 « Piste C » — multiplicateur de TYPE pour un SORT. Blend entre la moyenne du profil (ancien,
- * type-agnostique) et le bonus du PROPRE type du sort (matching). Un sort multi-élément prend le bonus
- * du type le mieux stacké → stacker n'importe lequel de ses éléments le récompense. C'est ce qui donne
- * du SENS à matcher ton stuff à tes sorts : un sort feu profite de ton +% Feu, plus que d'un +% Givre.
+ * Multiplicateur de TYPE pour un SORT. Blend entre la moyenne du profil (type-agnostique) et le bonus
+ * du PROPRE type du sort (matching). Un sort multi-élément prend le bonus du type le mieux stacké →
+ * stacker n'importe lequel de ses éléments le récompense. C'est ce qui donne du SENS à matcher ton
+ * stuff à tes sorts : un sort feu profite de ton +% Feu, plus que d'un +% Givre.
  */
 export function spellTypeMult(p: DamageProfile, spellTypes: DamageType[]): number {
   const avg = profileDamageMult(p)

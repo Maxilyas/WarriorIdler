@@ -1,10 +1,10 @@
 import type { DamageType, Enemy } from './types'
 
 /**
- * RÉSISTANCES RELATIVES (DESIGN_v0.24 §5).
+ * RÉSISTANCES RELATIVES.
  *
- * La résistance du héros est désormais une stat en POINTS, NON PLAFONNÉE, par type.
- * Elle ne réduit plus les dégâts en % : elle ANNULE la punition des attaques typées.
+ * La résistance du héros est une stat en POINTS, NON PLAFONNÉE, par type. Elle ne réduit pas les
+ * dégâts en % : elle ANNULE la punition des attaques typées.
  *
  * Chaque attaque ennemie typée porte une EXIGENCE `req` (la « puissance » du monstre sur
  * ce type). Le multiplicateur de dégâts subis est :
@@ -15,20 +15,18 @@ import type { DamageType, Enemy } from './types'
  *  - résist = 0    → M monte avec l'AMPLEUR ABSOLUE du déficit, borné à ×(1+KMAX) :
  *      · farm (req ≈ 0-60)    → ×1 … ×1.7  (sensible sans être un mur)
  *      · donjon (req ≈ 25-120) → ×1.4 … ×2.9 (un vrai levier)
- *      · raid (req ≈ 100-430+) → ×2.5 … ×6  (LE check de stuff par boss — v0.25.x : OBLIGATOIRE)
+ *      · raid (req ≈ 100-430+) → ×2.5 … ×6  (LE check de stuff par boss : OBLIGATOIRE)
  *
- * Migration : 1 ancien % de résistance = 1 point (lignes d'objet inchangées ; talents,
- * uniques et sets ×100 à l'agrégation). L'ancien cap de 75 % est SUPPRIMÉ.
+ * Convention : 1 % de résistance = 1 point (lignes d'objet telles quelles ; talents,
+ * uniques et sets ×100 à l'agrégation). Pas de cap.
  */
 
-/** Punition maximale : ×(1+KMAX) à déficit total.
- *  v0.25.x : 4 → 5 (retour joueur : on clear les raids à ×2,3 sans une ligne de résist — le
- *  check doit OBLIGER à se stuffer). */
+/** Punition maximale : ×(1+KMAX) à déficit total. Calé à 5 pour que le check de résist soit un vrai
+ *  mur en raid (à 4, on clearait à ×2,3 sans une seule ligne de résist). */
 export const RESIST_KMAX = 5
-/** Forme de la courbe (>1 = indulgent : un peu de résist aide déjà beaucoup).
- *  v0.25.x : 1.6 → 1.35 — les déficits MOYENS piquent bien plus tôt (à mi-déficit : ×2,3 → ×3,4
- *  avec le nouveau KMAX). Impact farm contenu (req ≤ 60 → ×1,7 max au lieu de ×1,4) ;
- *  donjons à zéro résist : ×2,1 → ×2,9 max. */
+/** Forme de la courbe (>1 = indulgent : un peu de résist aide déjà beaucoup). Calé à 1.35 : les
+ *  déficits MOYENS piquent tôt (à mi-déficit ≈ ×3,4 avec KMAX=5). Farm (req ≤ 60) → ×1,7 max ;
+ *  donjons à zéro résist → ×2,9 max. */
 export const RESIST_P = 1.35
 /** Déficit (points) qui déclenche la punition maximale. */
 export const RESIST_DSCALE = 250
@@ -65,9 +63,9 @@ export function resistSurplus(enemy: Enemy, resist: Partial<Record<DamageType, n
   return surplus
 }
 
-/* ---- Exigences par contenu (gradation §5.2 : ≈0 farm < donjon < raid) ---- */
+/* ---- Exigences par contenu (gradation : ≈0 farm < donjon < raid) ---- */
 
-/** Farm : exigence sur l'élément du biome, nulle avant le palier 45 puis douce (cap 60 → ×1.7 max). */
+/** Farm : exigence sur l'élément du biome, nulle avant la vague 45 puis douce (cap 60 → ×1.7 max). */
 export function farmReq(stage: number): number {
   if (stage < 45) return 0
   return Math.min(60, Math.round((stage - 45) * 1.2))
