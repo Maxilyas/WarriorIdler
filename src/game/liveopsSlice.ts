@@ -43,7 +43,7 @@ export function createLiveopsSlice(set: GameSet, get: GameGet): Pick<GameState,
       const ecl = upgradeEclats(def, level)
       if (s.gold < cost || s.poussiere < pous || s.essence < ecl) return
       const upgrades = { ...s.upgrades, [id]: level + 1 }
-      // v0.36 — 'talentBonus' n'écrit plus de champ par-perso : le bonus est lu depuis upgrades.talentBonus
+      // 'talentBonus' n'écrit pas de champ par-perso : le bonus est lu depuis upgrades.talentBonus
       // par teamTalentPool (pool partagé), donc +1 au pool de COMPTE (pas +1 par perso).
       const characters = s.characters
       refreshGlobals(upgrades, s.maitrise, s.constellation, s.achievements)
@@ -74,7 +74,7 @@ export function createLiveopsSlice(set: GameSet, get: GameGet): Pick<GameState,
         shopStock: s.shopStock.filter((i) => i.id !== itemId),
         inventory: [item, ...s.inventory].slice(0, invMax),
         codex: discoverFromItems(s.codex, [item]),
-        tut: { ...s.tut, bought: true }, // v0.31 — quête tuto « Marché »
+        tut: { ...s.tut, bought: true }, // quête tuto « Marché »
         log: pushLog(s.log, `Acheté : ${item.name} (-${price} or).`, 'gold'),
       }
       persist(next)
@@ -282,7 +282,7 @@ export function createLiveopsSlice(set: GameSet, get: GameGet): Pick<GameState,
         metierMaxLevel: metierLevels.reduce((a, b) => Math.max(a, b), 0),
         metierMinLevel: metierLevels.reduce((a, b) => Math.min(a, b), Infinity),
         characters: s.characters,
-        // ---- v0.32 : étage Légende ----
+        // ---- étage Légende ----
         curStage: s.stage,
         maxEquippedIlvl: s.characters.reduce((m, ch) => Math.max(m, fullyEquippedMinIlvl(ch)), 0),
         minRaidWorldTier: RAID_LIST.reduce((m, def) => Math.min(m, globalTier(def, s.raidProgress[def.id] ?? 0)), Infinity),

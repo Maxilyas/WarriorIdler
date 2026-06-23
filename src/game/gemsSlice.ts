@@ -75,7 +75,7 @@ export function createGemsSlice(set: GameSet, get: GameGet): Pick<GameState,
       if (!mods.broyage) return // nœud « Broyage » de l'arbre du Joaillier
       const parsed = parseCondKey(key)
       if (!parsed || (s.gems[key] ?? 0) < 1) return
-      // 🧮 Économat (v0.26) : le broyage rend plus, la qualité joue (±30%).
+      // 🧮 Économat : le broyage rend plus, la qualité joue (±30%).
       const dust = Math.round(grindDust(parsed.rank, parsed.quality) * mods.grindMult)
       const gems = { ...s.gems, [key]: (s.gems[key] ?? 0) - 1 }
       if (gems[key] <= 0) delete gems[key]
@@ -95,7 +95,7 @@ export function createGemsSlice(set: GameSet, get: GameGet): Pick<GameState,
       const def = getCondGem(condId)
       const cost = Math.round(GEM_CUT_COST * mods.tailleCostMult)
       if (!def || s.gemDust < cost) return
-      // v0.26 : la taille roule la QUALITÉ (🤲 Main sûre), peut sortir au rang 2 (💡 Inspiration)
+      // la taille roule la QUALITÉ (🤲 Main sûre), peut sortir au rang 2 (💡 Inspiration)
       // et peut produire une 2e gemme de la même famille (✌️ Multitaille).
       const quality = rollCutQuality(mods.mainSure)
       const rank = Math.random() < mods.tailleRank2 ? Math.min(2, gemMaxRank(def)) : 1
@@ -121,7 +121,7 @@ export function createGemsSlice(set: GameSet, get: GameGet): Pick<GameState,
     },
 
     buyGem: (condId) => {
-      // 🛒 (v0.28 B2) Échoppe de base — accessible SANS le Joaillier, mais plus chère que la Taille
+      // 🛒 Échoppe de base — accessible SANS le Joaillier, mais plus chère que la Taille
       // (pas de qualité/rang/multitaille) : donne un usage à la Poussière de gemme aux non-joailliers.
       const s = get()
       const def = getCondGem(condId)

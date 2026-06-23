@@ -32,14 +32,14 @@ export function createOfficineSlice(set: GameSet, get: GameGet): Pick<GameState,
       const item = findItemById(s, itemId)
       if (!def || !item || item.enchant === enchantId) return
       if (def.rule && !mods.ruleRunes) return // runes de RÈGLE : nœud « Lois du monde »
-      // 🩸 Pactes (v0.26) : nœud « Sang d'encre » requis, et UN SEUL pacte actif par équipe
+      // 🩸 Pactes : nœud « Sang d'encre » requis, et UN SEUL pacte actif par équipe
       // (deux via « Double pacte ») — un pacte différent déjà porté bloque la gravure.
       if (def.pact) {
         if (!mods.pactes) return
         const worn = equippedPacts(s.characters).filter((p) => p !== def.pact)
         if (worn.length >= (mods.doublePacte ? 2 : 1)) return
       }
-      // v0.25 (option A) : la gravure CONSOMME une rune POSSÉDÉE (drop de raid/donjon).
+      // la gravure CONSOMME une rune POSSÉDÉE (drop de raid/donjon).
       if ((s.runesOwned[enchantId] ?? 0) < 1) return
       const raw = enchantCost(def, item)
       const cost = { eclats: Math.round(raw.eclats * mods.enchantCostMult), poussiere: Math.round(raw.poussiere * mods.enchantCostMult) }

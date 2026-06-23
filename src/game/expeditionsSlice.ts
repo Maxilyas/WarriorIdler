@@ -34,7 +34,7 @@ export function createExpeditionsSlice(set: GameSet, get: GameGet): Pick<GameSta
       if (level < 1 || level > (s.dungeonProgress[dungeonId] ?? 0) + 1) return
       const dungeon = generateDungeon(dungeonId, level, s.bestStage, wing)
       dungeon.repeatLeft = Math.max(0, Math.round(repeat) - 1)
-      // ⚗️ Potions de contenu ARMÉES (Officine v0.26) : consommées à l'entrée.
+      // ⚗️ Potions de contenu ARMÉES (Officine) : consommées à l'entrée.
       let log = s.log
       let armedChestBonus = s.armedChestBonus
       let armedXpBonus = s.armedXpBonus
@@ -74,7 +74,7 @@ export function createExpeditionsSlice(set: GameSet, get: GameGet): Pick<GameSta
       if (s.raid || s.dungeon) return
       const def = getRaidDef(raidId)
       if (!def || !raidUnlocked(def, s.bestStage, s.raidProgress)) return
-      // v0.24 : le tier doit être DÉBLOQUÉ (clear de la frontière + Trophées — voir unlockRaidTier).
+      // le tier doit être DÉBLOQUÉ (clear de la frontière + Trophées — voir unlockRaidTier).
       const maxTier = s.raidTierUnlocked[raidId] ?? 1
       if (tier < 1 || tier > maxTier) return
       if (s.orbes < def.orbeCost) return
@@ -87,7 +87,7 @@ export function createExpeditionsSlice(set: GameSet, get: GameGet): Pick<GameSta
       // On ENTRE frais : PV pleins + recharges remises à zéro (le boss se prépare à neuf).
       let healed = s.characters.map(fullHeal)
       resetAllCooldowns(healed)
-      // 🛡️ Potion de garde ARMÉE (Officine v0.26) : l'équipe entre bardée d'un bouclier.
+      // 🛡️ Potion de garde ARMÉE (Officine) : l'équipe entre bardée d'un bouclier.
       let log = s.log
       let armedRaidShield = s.armedRaidShield
       if (armedRaidShield) {
@@ -115,7 +115,7 @@ export function createExpeditionsSlice(set: GameSet, get: GameGet): Pick<GameSta
       const def = getRaidDef(raidId)
       if (!def) return
       const cur = s.raidTierUnlocked[raidId] ?? 1
-      // v0.36 — cap de tiers par raid (l'Abîme s'arrête à 2). Au-delà, plus de déblocage.
+      // cap de tiers par raid (l'Abîme s'arrête à 2). Au-delà, plus de déblocage.
       if (cur + 1 > raidTierCap(def)) return
       // Il faut avoir VAINCU la frontière actuelle (le mur se franchit, il ne s'achète pas seul)…
       if ((s.raidProgress[raidId] ?? 0) < cur) return
@@ -157,7 +157,7 @@ export function createExpeditionsSlice(set: GameSet, get: GameGet): Pick<GameSta
     chooseUnique: (itemId, effectId) => {
       const s = get()
       const mods = craftMods(s.metiers)
-      if (!mods.synth3) return // Synthèse III (arbre de l'Alchimiste, palier 100)
+      if (!mods.synth3) return // Synthèse III (arbre de l'Alchimiste, vague 100)
       const def = getUnique(effectId)
       if (!def) return
       const item = findItemById(s, itemId)

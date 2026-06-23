@@ -65,7 +65,7 @@ export function createHerosSlice(set: GameSet, get: GameGet): Pick<GameState,
       if (powerId && isBuilder(getPower(powerId))) return // un builder va en SOUTIEN (auto-cast pur)
       const powers = char.powers.map((x) => (x === powerId ? null : x)) // unicité
       powers[slot] = powerId
-      // MULTI-LANE (v0.39) : un bouclier/soin peut vivre en actif OU en soutien — jamais les deux.
+      // MULTI-LANE : un bouclier/soin peut vivre en actif OU en soutien — jamais les deux.
       const support = (char.support ?? [null, null, null]).map((x) => (x === powerId ? null : x))
       const nc = { ...char, powers, support }
       nc.hp = Math.min(nc.hp, charMaxHp(nc))
@@ -75,7 +75,7 @@ export function createHerosSlice(set: GameSet, get: GameGet): Pick<GameState,
       set(next)
     },
 
-    // v0.29.5 : équipe une capacité PASSIVE dans l'un des 3 slots dédiés.
+    // équipe une capacité PASSIVE dans l'un des 3 slots dédiés.
     setPassive: (slot, powerId) => {
       const s = get()
       const char = s.characters[s.activeChar]
@@ -92,7 +92,7 @@ export function createHerosSlice(set: GameSet, get: GameGet): Pick<GameState,
       set(next)
     },
 
-    // v0.39 : équipe un sort de SOUTIEN (builder OU bouclier/soin) dans l'un des 3 slots (auto-cast pur).
+    // équipe un sort de SOUTIEN (builder OU bouclier/soin) dans l'un des 3 slots (auto-cast pur).
     setSupport: (slot, powerId) => {
       const s = get()
       const char = s.characters[s.activeChar]
@@ -102,7 +102,7 @@ export function createHerosSlice(set: GameSet, get: GameGet): Pick<GameState,
       if (powerId && !isSupport(getPower(powerId))) return // builders + boucliers/soins uniquement
       const support = cur.map((x) => (x === powerId ? null : x)) // unicité
       support[slot] = powerId
-      // MULTI-LANE (v0.39) : retirer des actifs si le même sort y était (vit dans une seule lane).
+      // MULTI-LANE : retirer des actifs si le même sort y était (vit dans une seule lane).
       const powers = char.powers.map((x) => (x === powerId ? null : x))
       const nc = { ...char, support, powers }
       nc.hp = Math.min(nc.hp, charMaxHp(nc))
@@ -142,7 +142,7 @@ export function createHerosSlice(set: GameSet, get: GameGet): Pick<GameState,
       const char = s.characters[s.activeChar]
       if (!char) return
       const node = getTalent(nodeId)
-      // v0.36 — budget = POOL PARTAGÉ (teamTalentPool), pas char.talentPoints. Dépenser baisse le pool
+      // budget = POOL PARTAGÉ (teamTalentPool), pas char.talentPoints. Dépenser baisse le pool
       // (dérivé du total dépensé) → pas de champ à décrémenter, pas de désync.
       const pool = teamTalentPool(s.characters, s.upgrades.talentBonus ?? 0)
       if (!node || !canAllocate(node, char.talents, pool)) return
@@ -172,7 +172,7 @@ export function createHerosSlice(set: GameSet, get: GameGet): Pick<GameState,
       const powers = char.powers.map((p) => (p && unlockedPowers.includes(p) ? p : null))
       const passives = (char.passives ?? []).map((p) => (p && unlockedPowers.includes(p) ? p : null))
       const support = (char.support ?? []).map((p) => (p && unlockedPowers.includes(p) ? p : null))
-      // v0.36 — pas de champ talentPoints à rembourser : le pool partagé remonte tout seul (moins dépensé).
+      // pas de champ talentPoints à rembourser : le pool partagé remonte tout seul (moins dépensé).
       const nc = { ...char, talents, unlockedPowers, powers, passives, support }
       nc.hp = Math.min(nc.hp, charMaxHp(nc))
       const characters = s.characters.map((c, i) => (i === s.activeChar ? nc : c))
@@ -181,7 +181,7 @@ export function createHerosSlice(set: GameSet, get: GameGet): Pick<GameState,
       set(next)
     },
 
-    // v0.33 — PANTHÉON : alloue un nœud du 2e arbre avec le budget de Points d'Éveil (= prestigeRank × K,
+    // PANTHÉON : alloue un nœud du 2e arbre avec le budget de Points d'Éveil (= prestigeRank × K,
     // identique pour chaque perso). Pool & arbre SÉPARÉS de la base : ne touche jamais `talentPoints`.
     allocatePantheon: (nodeId) => {
       const s = get()
@@ -200,7 +200,7 @@ export function createHerosSlice(set: GameSet, get: GameGet): Pick<GameState,
       set(next)
     },
 
-    // v0.33 — réinitialise le Panthéon (gratuit : le joueur refait son build d'Éveil à chaque run).
+    // réinitialise le Panthéon (gratuit : le joueur refait son build d'Éveil à chaque run).
     respecPantheon: () => {
       const s = get()
       const char = s.characters[s.activeChar]
@@ -250,7 +250,7 @@ export function createHerosSlice(set: GameSet, get: GameGet): Pick<GameState,
       // un préset sauvegardé à plus haut niveau s'applique au mieux, jamais en triche.
       const target = preset.talents
       const talents: Record<string, number> = { co_start: 1 }
-      // v0.36 — budget = POOL PARTAGÉ + ce que CE perso avait dépensé (remboursé en repartant de zéro).
+      // budget = POOL PARTAGÉ + ce que CE perso avait dépensé (remboursé en repartant de zéro).
       let points = teamTalentPool(s.characters, s.upgrades.talentBonus ?? 0) + talentsSpent(char)
       let progressed = true
       while (progressed) {

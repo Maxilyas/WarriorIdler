@@ -59,7 +59,7 @@ export function createTickSlice(set: GameSet, get: GameGet): Pick<GameState,
         if (ar.completed) persistThrottled(s)
       }
 
-      // 🔥 Le Foyer (v0.41) : production idle d'XP + Lingots, en parallèle de tout (farm/donjon/raid).
+      // 🔥 Le Foyer : production idle d'XP + Lingots, en parallèle de tout (farm/donjon/raid).
       // Crédité par paquets toutes ~2 s (lissé) ; au retour d'absence, le grand écart est plafonné (12 h).
       if (foyerActive(s.metiers) && Date.now() - s.foyer.lastTick >= 2000) {
         const rate = foyerRate(s.metiers, s.automates.length, s.bestStage, s.foyer.masterworkKeys.length)
@@ -84,14 +84,14 @@ export function createTickSlice(set: GameSet, get: GameGet): Pick<GameState,
       }
 
       // Bonus de biome : Maîtrise des Zones partout + gemme d'ENVIRONNEMENT (🌩️ Orage en
-      // Surcharge) et 📯 Crescendo. (v0.25 : Élan du voyageur et gemme Nomade supprimés.)
+      // Surcharge) et 📯 Crescendo. (Élan du voyageur et gemme Nomade supprimés.)
       const cmodsTick = craftMods(s.metiers)
       const cond = condGemMods(s.characters, cmodsTick.gemSpec, teamGemOpts(s, cmodsTick))
       const runes = timeRuneMods(equippedTimeRunes(s.characters), cmodsTick.runisteTempo)
       const buffs = activeBrewBuffs(s)
       const pact = teamPactMods(s, cmodsTick, buffs)
       const surgedNow = surgeBiome() === s.activeBiome
-      // 🧗 Pied du mur (v0.26) : à ≤ 2 paliers du record, le push frappe plus fort.
+      // 🧗 Pied du mur : à ≤ 2 vagues du record, le push frappe plus fort.
       const nearRecord = s.stage >= s.bestStage - 2
       const heroMult = (1 + maitriseBonus(s.bestStage))
         * (1 + crescendoBonus(cond.crescendoCap))
@@ -101,7 +101,7 @@ export function createTickSlice(set: GameSet, get: GameGet): Pick<GameState,
         * (buffs.oil && buffs.oil.type === s.activeBiome ? 1 + buffs.oil.pct : 1)
       const res = partyCombatStep(s.characters, s.enemy, dt, {
         heroMult, cond, runes, pact,
-        // v0.36 — régén des murs Ch.6+ (sustain check) ; le tick l'applique à l'ennemi (mods.regen).
+        // régén des murs Ch.6+ (sustain check) ; le tick l'applique à l'ennemi (mods.regen).
         regen: s.enemy.mur?.regen,
         content: { surge: surgedNow, biomeType: s.activeBiome, nearRecord, antidote: buffs.antidote ?? undefined },
       })
@@ -113,8 +113,8 @@ export function createTickSlice(set: GameSet, get: GameGet): Pick<GameState,
 
       if (!res.anyAlive) {
         crescendoReset() // 📯 Crescendo : l'équipe tombe, le cumul retombe
-        // v0.35 — la mort ne fait JAMAIS retomber sous le PALIER courant : le dernier mur franchi est un
-        // CHECKPOINT. Repli de RETREAT_STAGES vagues, borné au plancher du Palier (1re vague du bloc de 10).
+        // la mort ne fait JAMAIS retomber sous le Chapitre courant : le dernier mur franchi est un
+        // CHECKPOINT. Repli de RETREAT_STAGES vagues, borné au plancher du Chapitre (1re vague du bloc de 10).
         const palierFloor = Math.floor((s.stage - 1) / 10) * 10 + 1
         const stage = Math.max(1, palierFloor, s.stage - RETREAT_STAGES)
         const healed = chars.map(fullHeal)
@@ -128,8 +128,8 @@ export function createTickSlice(set: GameSet, get: GameGet): Pick<GameState,
       if (enemy.hp <= 0) {
         let { stage, bestStage, gold, sceaux, inventory, poussiere, essence } = s
         const boss = isBossStage(stage)
-        // ⛑️ Résurrection au palier : un héros tombé (raid abandonné, mort isolée…) se relève à
-        // chaque palier RÉSOLU (gagné ici ; perdu = repli plus haut). La mort n'a aucun coût.
+        // ⛑️ Résurrection à la vague : un héros tombé (raid abandonné, mort isolée…) se relève à
+        // chaque vague RÉSOLUE (gagnée ici ; perdue = repli plus haut). La mort n'a aucun coût.
         chars = chars.map((c) => (c.hp <= 0 ? fullHeal(c) : c))
         // 📯 Crescendo & 🛡️ Trésorerie : chaque kill nourrit le cumul / blinde le bouclier.
         crescendoAdd(1)
@@ -143,7 +143,7 @@ export function createTickSlice(set: GameSet, get: GameGet): Pick<GameState,
         const rules = equippedRules(s.characters)
         const loi = cmodsTick.loiAmplifiee
         const amp = ruleAmp(cmodsTick.ruleAmpTier)
-        // v0.26 — règles économiques : 🫅 Mécène (or+/XP−), 🎓 Bourse (XP+/or−), 🎉 Saturnales
+        // règles économiques : 🫅 Mécène (or+/XP−), 🎓 Bourse (XP+/or−), 🎉 Saturnales
         // (dimanche réel), 👑 Hubris (pacte : récompenses de farm +).
         const dimanche = rules.has('saturnales') && new Date().getDay() === 0 ? 1 + 0.15 * amp : 1
         const hubris = 1 + (pact?.rewardBonus ?? 0)
@@ -163,7 +163,7 @@ export function createTickSlice(set: GameSet, get: GameGet): Pick<GameState,
         }
         log = pushLog(log, `${s.enemy.name} vaincu ! +${xpGain} XP, +${goldGain} or.`, 'kill')
 
-        // v0.18 : les ressources rares (Noyaux 💠, Orbes 🔮, Poussière 🌌) ne tombent PLUS sur les
+        // les ressources rares (Noyaux 💠, Orbes 🔮, Poussière 🌌) ne tombent PAS sur les
         // boss/élites de farm — elles se farment en DONJON dédié (mono-ressource). Le farm classique
         // reste une source de stuff, d'XP et d'un filet d'or.
         const elite = enemy.elite === true
@@ -175,7 +175,7 @@ export function createTickSlice(set: GameSet, get: GameGet): Pick<GameState,
         // Rune de Transmutation brute : les monstres NORMAUX ne droppent plus d'objets.
         const transmut = rules.has('transmutation')
         // Moins d'objets en combat classique (le farm de stuff se fait en donjon/raid).
-        // v0.31 — ONBOARDING : en tout début (palier < 15), CHAQUE kill normal droppe (au lieu de 30%)
+        // ONBOARDING : en tout début (vague < 15), CHAQUE kill normal droppe (au lieu de 30%)
         // → un perso nu se gear vite (couplé à l'auto-équip) et survit, au lieu d'enchaîner des kills
         // à vide et de mourir nu.
         const onboardDrop = s.bestStage < 15
@@ -190,7 +190,7 @@ export function createTickSlice(set: GameSet, get: GameGet): Pick<GameState,
           log = pushLog(log, '🦷 Loi du talion : le butin tombe DEUX fois !', 'loot')
         }
         const bias = pickBias(chars)
-        // v0.24 : FENÊTRE de rareté du farm (≤ Légendaire). Élite/champion/boss + karma/chance
+        // FENÊTRE de rareté du farm (≤ Légendaire). Élite/champion/boss + karma/chance
         // décalent la fenêtre — toujours sous le plafond (la chasse est en donjon/raid).
         const shift = (boss ? 1 : 0) + (elite ? 1 : 0) + (champion ? 2 : 0)
           + Math.min(2, Math.floor(eco.rarityLuck)) + Math.min(2, karmaBonus)
@@ -235,7 +235,7 @@ export function createTickSlice(set: GameSet, get: GameGet): Pick<GameState,
           log = pushLog(log, `Butin : ${it.name}`, 'loot')
         }
         if (autoRec) log = pushLog(log, `♻️ ${autoRec} butin recyclé automatiquement.`, 'craft')
-        // v0.31 — auto-équip des slots VIDES (onboarding) sur le perso ACTIF : un perso nu se gear
+        // auto-équip des slots VIDES (onboarding) sur le perso ACTIF : un perso nu se gear
         // tout seul depuis ses drops (les emplacements déjà remplis ne bougent pas).
         {
           const ai = s.activeChar ?? 0
@@ -259,7 +259,7 @@ export function createTickSlice(set: GameSet, get: GameGet): Pick<GameState,
         let quint = s.quint
         {
           const qBase = boss ? QUINT_DROP.boss : elite ? QUINT_DROP.elite : QUINT_DROP.normal
-          // 🪨 Quartzite (v0.26) : les quintessences du biome coulent plus volontiers.
+          // 🪨 Quartzite : les quintessences du biome coulent plus volontiers.
           const quartz = rules.has('quartzite') ? 1 + 0.4 * amp : 1
           const qChance = qBase * quintTierMult(stage) * (surged ? SURGE_QUINT_MULT : 1) * transmutMult * cmods.quintDropMult * quartz * philo
           if (Math.random() < qChance) {
@@ -275,7 +275,7 @@ export function createTickSlice(set: GameSet, get: GameGet): Pick<GameState,
         let gemsSeen = s.gemsSeen
         {
           const rank2 = boss ? 'boss' : elite ? 'elite' : 'normal'
-          // ⛏️ Veine mère + ⛏️ Prospecteur (v0.26) : les poussières coulent plus souvent/fort.
+          // ⛏️ Veine mère + ⛏️ Prospecteur : les poussières coulent plus souvent/fort.
           const prospecteur = rules.has('prospecteur')
           const dustC = GEM_DUST_DROP.chance[rank2] * transmutMult * cmods.gemDropMult * (1 + (cond.veineMerePct ?? 0)) * philo
           if (Math.random() < dustC) {
@@ -285,7 +285,7 @@ export function createTickSlice(set: GameSet, get: GameGet): Pick<GameState,
           }
           // Gemme de CONDITION : drop par FAMILLE selon le biome (Feu/Foudre → Rythme,
           // Ombre/Nature → Flux, Arcane/Froid → Environnement, Physique → Bastion).
-          // v0.26 : drops ×0,4 — le drop redevient un événement, la TAILLE/FUSION compensent.
+          // drops volontairement bas — le drop est un événement, la TAILLE/FUSION compensent.
           const gemC = COND_GEM_DROP[rank2] * transmutMult * cmods.gemDropMult * (prospecteur ? 0.5 : 1) * philo
           if (Math.random() < gemC) {
             const cg = rollCondGem(BIOME_GEM_FAMILY[s.activeBiome])
@@ -305,7 +305,7 @@ export function createTickSlice(set: GameSet, get: GameGet): Pick<GameState,
           }
         }
 
-        // 🌿 RÉACTIF de biome (v0.26, Officine) : l'herbe du coin, pour les cuves de l'Alchimiste.
+        // 🌿 RÉACTIF de biome (Officine) : l'herbe du coin, pour les cuves de l'Alchimiste.
         let reagents = s.reagents
         {
           const rank2 = boss ? 'boss' : elite ? 'elite' : 'normal'
@@ -317,7 +317,7 @@ export function createTickSlice(set: GameSet, get: GameGet): Pick<GameState,
           }
         }
 
-        // Gemme de CONDITION : les champions ✦ en lâchent parfois (v0.26 : 8%, toutes familles,
+        // Gemme de CONDITION : les champions ✦ en lâchent parfois (8%, toutes familles,
         // 👃 Nez du lapidaire : toujours rang 2 minimum).
         if (champion && Math.random() < CHAMPION_GEM_DROP * cmods.gemDropMult) {
           const cg = rollCondGem()
@@ -334,7 +334,7 @@ export function createTickSlice(set: GameSet, get: GameGet): Pick<GameState,
           if (boss) log = pushLog(log, '🏆 Fragment de Conquête : recharges réinitialisées !', 'info')
         }
 
-        // Le verrou de farm fige la progression. GATE DE RAID (v0.36) : franchir le mur d'un vrai
+        // Le verrou de farm fige la progression. GATE DE RAID : franchir le mur d'un vrai
         // Chapitre (5→14) exige le Raid T(c−4) ; tant qu'il n'est pas vaincu, on reste au mur (Prologue
         // 1-5 et Chapitre++ ≥ 16 libres). Le mur reste farmable, mais n'avance plus.
         const gateTier = raidGateForStage(stage)
@@ -347,9 +347,9 @@ export function createTickSlice(set: GameSet, get: GameGet): Pick<GameState,
           stage += 1
           biomeBest = { ...biomeBest, [s.activeBiome]: Math.max(biomeBest[s.activeBiome] ?? 0, stage) }
           bestStage = Math.max(bestStage, stage)
-          // (v0.25 : plus de Sceau tous les 5 paliers — l'Antre des Failles est LA source de Sceaux,
+          // (plus de Sceau toutes les 5 vagues — l'Antre des Failles est LA source de Sceaux,
           //  sinon le donjon ne sert à rien. Appoints payants : forge de Sceau, Trousseau du Pilleur.)
-          // 🏛️ Conseil : chaque palier gagné avance le contrat Conquérant.
+          // 🏛️ Conseil : chaque vague gagnée avance le contrat Conquérant.
           {
             const cp = conseilProgress({ conseil, maitrisePoints }, log, 'paliers')
             conseil = cp.conseil
@@ -367,7 +367,7 @@ export function createTickSlice(set: GameSet, get: GameGet): Pick<GameState,
           }
         }
 
-        // v0.39 — chaque VAGUE de farm démarre FRAÎCHE : PV pleins, bouclier purgé et recharges
+        // chaque VAGUE de farm démarre FRAÎCHE : PV pleins, bouclier purgé et recharges
         // remises à zéro (comme l'« entrée fraîche » en donjon). Le farm n'est plus une épreuve
         // d'attrition entre vagues ; les boucliers de départ (Réservoir/Doctrine, Égide) se
         // réarment au 1er tick face au nouvel ennemi via gemFightStart.
@@ -375,7 +375,7 @@ export function createTickSlice(set: GameSet, get: GameGet): Pick<GameState,
         resetAllCooldowns(characters)
 
         // L'échoppe ne se renouvelle plus au boss : rotation horaire gérée dans `tick`.
-        // 🍖 Appât à champions (v0.26) : les ✦ rôdent plus souvent.
+        // 🍖 Appât à champions : les ✦ rôdent plus souvent.
         const enemyNext = makeEnemy(stage, s.activeBiome, rules.has('appat') ? 1 + 0.35 * amp : 1)
         // 🌠 Étoile d'Overkill : l'excédent du coup fatal entame l'ennemi suivant.
         if (res.overkill > 0) enemyNext.hp = Math.max(1, enemyNext.maxHp - res.overkill)

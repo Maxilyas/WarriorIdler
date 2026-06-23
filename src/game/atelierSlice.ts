@@ -37,13 +37,13 @@ export function createAtelierSlice(set: GameSet, get: GameGet): Pick<GameState,
       const s = get()
       const mods = craftMods(s.metiers)
       const tier = RARITIES[opts.rarity].tier
-      // v0.25 : double horloge — la rareté craftable est bornée par le palier ET le tier de raid.
+      // double horloge — la rareté craftable est bornée par la vague ET le tier de raid.
       const craftCap = maxCraftTier(s.bestStage, bestRaidTier(s.raidProgress))
       if (tier > craftCap) return
-      // v0.28 E2 — bonus de création UNIVERSELS (Maître forgeron + Signature), plus de corps de métier.
+      // bonus de création UNIVERSELS (Maître forgeron + Signature), plus de corps de métier.
       const forge = forgeBonus(mods)
-      // v0.40.1 — la forge crée au niveau de ton FARM (palier) + bonus de métier — PLUS les donjons/raids,
-      // qui faisaient sauter l'ilvl bien au-dessus du farm (ex. donjon nv 8 / raid T4 = ilvl 105 à palier 50).
+      // la forge crée au niveau de ton FARM (vague) + bonus de métier — pas les donjons/raids, qui
+      // faisaient sauter l'ilvl bien au-dessus du farm (ex. donjon nv 8 / raid T4 = ilvl 105 à la vague 50).
       const ilvl = stageIlvl(Math.max(1, s.bestStage)) + forge.ilvlBonus
       // 🏆 Chef-d'œuvre (étage V) : 1/semaine, +1 cran GARANTI (capé), châsse garantie, coût ×1,5 + Lingots.
       const week = currentWeek()
@@ -258,7 +258,7 @@ export function createAtelierSlice(set: GameSet, get: GameGet): Pick<GameState,
       if (!canLearnNode(s.metiers, metier, nodeId, s.bestStage).ok) return
       const st = s.metiers[metier]
       const nodes = { ...st.nodes }
-      // v0.28 — SWITCH d'exclusive GRATUIT (no-regret) : choisir une autre spé rembourse la
+      // SWITCH d'exclusive GRATUIT (no-regret) : choisir une autre spé rembourse la
       // précédente (ses rangs redeviennent des points), au lieu d'exiger un respec payant.
       if (def.exclusive && (nodes[nodeId] ?? 0) === 0) {
         for (const n of METIER_NODES[metier]) {
@@ -321,7 +321,7 @@ export function createAtelierSlice(set: GameSet, get: GameGet): Pick<GameState,
       if (!mods.automates) return // nœud « Industrialisation » de l'arbre du Forgeron
       const idx = s.automates.length
       if (idx >= AUTOMATE_MAX) return
-      if (idx >= 3 && !mods.automate4) return // 🏭 la 4e machine exige « Manufacture » (v0.26)
+      if (idx >= 3 && !mods.automate4) return // 🏭 la 4e machine exige « Manufacture »
       if (levelFromXp(s.metiers.forgeron.xp) < AUTOMATE_FORGERON_LEVELS[idx]) return
       const c = AUTOMATE_COSTS[idx]
       if (s.gold < c.gold || s.poussiere < c.poussiere || s.fragments < c.fragments || s.cosmic < c.cosmic) return

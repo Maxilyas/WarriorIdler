@@ -29,7 +29,7 @@ export function createWorldSlice(set: GameSet, get: GameGet): Pick<GameState,
       // On ne peut farmer que jusqu'à son RECORD DANS LE BIOME ACTIF.
       const cap = Math.max(1, s.biomeBest[s.activeBiome] ?? 1)
       const stage = Math.max(1, Math.min(cap, Math.round(n)))
-      // v0.40.2 — chaque vague démarre FRAÎCHE (cf. passage de vague par kill) : changer manuellement
+      // chaque vague démarre FRAÎCHE (cf. passage de vague par kill) : changer manuellement
       // de vague soigne l'équipe à fond + RAZ les recharges (sinon la barre de vie restait à son niveau).
       const characters = s.characters.map(fullHeal)
       resetAllCooldowns(characters)
@@ -43,10 +43,10 @@ export function createWorldSlice(set: GameSet, get: GameGet): Pick<GameState,
       if (s.dungeon || s.raid) return
       if (!BIOME_IDS.includes(biome) || biome === s.activeBiome) return
       if (!biomeUnlocked(biome, s.bestStage, s.bestStage)) return
-      // v0.35 — progression GLOBALE : changer de biome GARDE ton Palier (le biome n'est qu'un CANAL
-      // d'élément/résistance, pas un monde séparé). Une seule zone, un seul Palier.
+      // progression GLOBALE : changer de biome GARDE ta vague (le biome n'est qu'un CANAL
+      // d'élément/résistance, pas un monde séparé). Une seule zone, une seule progression.
       const stage = s.stage
-      const characters = s.characters.map(fullHeal) // v0.40.2 — entrée fraîche (PV pleins + recharges RAZ)
+      const characters = s.characters.map(fullHeal) // entrée fraîche (PV pleins + recharges RAZ)
       resetAllCooldowns(characters)
       const next = {
         ...s, activeBiome: biome, characters,
@@ -57,7 +57,7 @@ export function createWorldSlice(set: GameSet, get: GameGet): Pick<GameState,
       set(next)
     },
 
-    // v0.28 — FORCE un biome contre des Fragments : il reste actif ~1 h, puis la rotation reprend.
+    // FORCE un biome contre des Fragments : il reste actif ~1 h, puis la rotation reprend.
     lockBiome: (biome) => {
       const s = get()
       if (s.dungeon || s.raid) return
@@ -67,7 +67,7 @@ export function createWorldSlice(set: GameSet, get: GameGet): Pick<GameState,
       const biomeStages = { ...s.biomeStages, [s.activeBiome]: s.stage }
       const stage = Math.max(1, biomeStages[biome] ?? 1)
       const until = Date.now() + BIOME_LOCK_MS
-      const characters = s.characters.map(fullHeal) // v0.40.2 — entrée fraîche (PV pleins + recharges RAZ)
+      const characters = s.characters.map(fullHeal) // entrée fraîche (PV pleins + recharges RAZ)
       resetAllCooldowns(characters)
       const next = {
         ...s,
@@ -82,7 +82,7 @@ export function createWorldSlice(set: GameSet, get: GameGet): Pick<GameState,
       set(next)
     },
 
-    // v0.35 — la ROTATION HORAIRE FORCÉE est DÉSACTIVÉE : le biome est un CHOIX du joueur (l'axe
+    // la ROTATION HORAIRE FORCÉE est DÉSACTIVÉE : le biome est un CHOIX du joueur (l'axe
     // élément/résistance du modèle à mur unique — on prépare le biome que le mur exige). On change de
     // zone via setBiome, jamais subi. (Lot 4 : progression de Palier GLOBALE au lieu de par-biome.)
     rotateBiomeIfDue: () => {
@@ -121,13 +121,13 @@ export function createWorldSlice(set: GameSet, get: GameGet): Pick<GameState,
       set({ ...get(), pendingOffline: null })
     },
 
-    // v0.27 (F3) — l'appli passe en arrière-plan : on horodate + persiste (couvre aussi la fermeture
+    // l'appli passe en arrière-plan : on horodate + persiste (couvre aussi la fermeture
     // dure, où le cold-start recalculera depuis lastSeen).
     markAway: () => {
       setAwaySince(Date.now())
       persist(get())
     },
-    // v0.27 (F3) — retour au premier plan : crédite les gains hors-ligne du temps en arrière-plan
+    // retour au premier plan : crédite les gains hors-ligne du temps en arrière-plan
     // (même logique que le cold-start : applique les gains À L'ÉTAT + récap pendingOffline).
     resumeAway: () => {
       const s = get()
@@ -146,7 +146,7 @@ export function createWorldSlice(set: GameSet, get: GameGet): Pick<GameState,
       if (report.quint) next.quint = addQuint(next.quint, { [report.quint.type]: report.quint.amount })
       next.characters = grantTeamXp(next.characters, report.xp).chars
       for (const it of report.items) next.inventory = [it, ...next.inventory].slice(0, invMax)
-      // v0.31.3 — récap dans la ✉ inbox (message « non lu ») au lieu du modal plein écran.
+      // récap dans la ✉ inbox (message « non lu ») au lieu du modal plein écran.
       next.inbox = [offlineMessage(report, Date.now()), ...next.inbox].slice(0, INBOX_CAP)
       persist(next)
       set(next)

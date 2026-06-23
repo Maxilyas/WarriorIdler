@@ -44,14 +44,14 @@ export function createMarketSlice(set: GameSet, get: GameGet): Pick<GameState,
       const cosmicCost = (box.costCosmic ?? 0) * qty
       if (s.gold < goldCost || s.fragments < fragCost || s.cosmic < cosmicCost) return
 
-      // v0.40.3 — l'ilvl du drop suit le PALIER DE FARM (comme la forge v0.40.1), plus les donjons/raids.
+      // l'ilvl du drop suit la VAGUE DE FARM (comme la forge), pas les donjons/raids.
       const ilvl = Math.max(1, stageIlvl(s.bestStage))
       // Karma du marchand 🍀 : la malchance accumulée gonfle la chance de jackpot, reset au proc.
       const pityBonus = Math.min(BOX_PITY_CAP, s.boxPity * BOX_PITY_STEP)
       let jackpotHit = false
       // Maillon Faible : cible l'emplacement le plus FAIBLE (vide ou au score le plus bas) du perso actif.
       const weakType = box.weakest ? weakestSlotType(s.characters[s.activeChar] ?? s.characters[0]) : undefined
-      // v0.43 — fenêtre de rareté = rareté DÉBLOQUÉE du compte, modulée PAR COFFRE (boxRarityWindow :
+      // fenêtre de rareté = rareté DÉBLOQUÉE du compte, modulée PAR COFFRE (boxRarityWindow :
       // capDelta/peakShift/shape). Base : pic au plancher (dump d'or) ; départ = budget, premium = pic monté.
       const rTop = unlockedRarityTier(bestRaidTier(s.raidProgress))
       const win = boxRarityWindow(box, rTop)
@@ -124,7 +124,7 @@ export function createMarketSlice(set: GameSet, get: GameGet): Pick<GameState,
         cosmic: s.cosmic - cosmicCost,
         boxPity,
         lastFreeBox: box.free ? Date.now() : s.lastFreeBox,
-        tut: { ...s.tut, bought: true }, // v0.31 — quête tuto « Marché »
+        tut: { ...s.tut, bought: true }, // quête tuto « Marché »
         log: pushLog(s.log, logLine, 'gold'),
       }
       // Coffre du Destin 🎭 : les objets partent dans le modal de CHOIX (un seul sera gardé).
@@ -201,7 +201,7 @@ export function createMarketSlice(set: GameSet, get: GameGet): Pick<GameState,
       set(next)
     },
 
-    // v0.27 (Lot 5) — ÉVEIL PRIMORDIAL : reset DUR contre des Échos. Conserve Échos + Constellation +
+    // ÉVEIL PRIMORDIAL : reset DUR contre des Échos. Conserve Échos + Constellation +
     // 1 Relique (slot choisi, iLvl plancher) + record de progression (gating) + XP des métiers.
     awaken: (relicSlot) => {
       const s = get()
@@ -247,7 +247,7 @@ export function createMarketSlice(set: GameSet, get: GameGet): Pick<GameState,
       set(logged)
     },
 
-    // v0.27 (Lot 5) — investit des Échos dans un nœud de Constellation.
+    // investit des Échos dans un nœud de Constellation.
     allocateConstellation: (nodeId) => {
       const s = get()
       const node = getConstNode(nodeId)

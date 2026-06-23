@@ -111,7 +111,7 @@ export function createStuffSlice(set: GameSet, get: GameGet): Pick<GameState,
       }
       const qLog = quintLogSuffix(refund)
       const g = gainMetierXp(s, 'alchimiste', metierXpGain(RARITIES[item.rarity].tier, 'modify'))
-      // v0.25 — XP implicite : fondre le métal nourrit AUSSI le Forgeron (≈30% du gain alchimiste).
+      // XP implicite : fondre le métal nourrit AUSSI le Forgeron (≈30% du gain alchimiste).
       const g2 = gainMetierXp({ metiers: g.metiers, log: g.log }, 'forgeron', Math.max(1, Math.round(metierXpGain(RARITIES[item.rarity].tier, 'modify') * 0.3)))
       const next = {
         ...s,
@@ -176,7 +176,7 @@ export function createStuffSlice(set: GameSet, get: GameGet): Pick<GameState,
       }
       const gained = essence - s.essence
       const g = count ? gainMetierXp(s, 'alchimiste', xp) : { metiers: s.metiers, log: s.log }
-      // v0.25 — XP implicite : la fonte de masse nourrit aussi le Forgeron (≈30%).
+      // XP implicite : la fonte de masse nourrit aussi le Forgeron (≈30%).
       const g2 = count ? gainMetierXp({ metiers: g.metiers, log: g.log }, 'forgeron', Math.max(1, Math.round(xp * 0.3))) : g
       const next = { ...s, essence, poussiere, quint, gems, essences, metiers: g2.metiers, inventory: keep, log: count ? pushLog(g2.log, `${count} objet(s) recyclé(s) (+${gained} éclats).`, 'craft') : g2.log }
       persist(next)
@@ -251,8 +251,8 @@ export function createStuffSlice(set: GameSet, get: GameGet): Pick<GameState,
       const item = findItemById(s, itemId)
       if (!item) return
       const mods = craftMods(s.metiers)
-      // v0.25 : le prix monte avec les VERROUS choisis (+100%/verrou) et les reforges déjà faites.
-      // v0.26 : 🔐 Verrous huilés — le surcoût des verrous est réduit (reforge ciblée moins chère).
+      // le prix monte avec les VERROUS choisis (+100%/verrou) et les reforges déjà faites.
+      // 🔐 Verrous huilés — le surcoût des verrous est réduit (reforge ciblée moins chère).
       const cost = Math.round(reforgeCost(item, locked.length * mods.verrousMult) * mods.costMult)
       if (s.essence < cost) return
       // Les lignes renforcées à la Quintessence sont protégées (jamais re-tirées, pas facturées).
@@ -273,7 +273,7 @@ export function createStuffSlice(set: GameSet, get: GameGet): Pick<GameState,
       if (!mods.surillvl) return // débloqué via l'arbre du Forgeron
       const item = findItemById(s, itemId)
       if (!item) return
-      // v0.25.x : plafond RELATIF au contenu débloqué (+ marge), sur-coût ×4 par pas au-dessus.
+      // plafond RELATIF au contenu débloqué (+ marge), sur-coût ×4 par pas au-dessus.
       const content = maxContentIlvl(s.bestStage, s.raidProgress)
       if (item.ilvl + mods.surillvlStep > content + SURILLVL_OVER_MARGIN) return
       const over = Math.max(0, Math.ceil((item.ilvl + mods.surillvlStep - content) / mods.surillvlStep))
@@ -294,7 +294,7 @@ export function createStuffSlice(set: GameSet, get: GameGet): Pick<GameState,
       if (!mods.ascend) return // débloqué via l'arbre du Forgeron
       const item = findItemById(s, itemId)
       if (!item) return
-      // v0.25 : verrou raid — ascensionner VERS un cran t exige un tier de raid ≥ t−8.
+      // verrou raid — ascensionner VERS un cran t exige un tier de raid ≥ t−8.
       if (craftRaidGate(RARITIES[item.rarity].tier + 1) > bestRaidTier(s.raidProgress)) return
       const patch = ascendItem(item)
       if (!patch) return
@@ -371,7 +371,7 @@ export function createStuffSlice(set: GameSet, get: GameGet): Pick<GameState,
       if (!item) return
       const res = enhanceTypedAffixes(item, type, kind)
       if (!res) return
-      // ◈ Catalyseur (v0.25) : les améliorations à la Quintessence coûtent −25%.
+      // ◈ Catalyseur : les améliorations à la Quintessence coûtent −25%.
       const cost = Math.max(1, Math.round(res.cost * mods.quintCostMult))
       const have = s.quint[type] ?? 0
       if (have < cost) return
