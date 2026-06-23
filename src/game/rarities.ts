@@ -7,12 +7,12 @@ import type { Rarity, RarityId } from './types'
  * Plus la rareté monte, plus l'objet a d'affixes, de budget de stats,
  * et plus il est rare au drop (weight décroissant).
  */
-// statMult : ⚠️ NE PILOTE PLUS le budget de stats depuis la v0.30 (ne sert QU'aux effets uniques, cf.
-// uniques.ts). Le budget primaire/endurance/lignes d'une rareté = +RARITY_ILVL_PER_TIER (8 depuis
-// v0.32.2) ilvl-équiv PAR CRAN (progression.ts) → ~+15 %/cran, un Transcendant à ilvl ÉGAL vaut ~×8,4
-// un Médiocre (et NON ×22 : la puissance vient surtout de l'ilvl). La rareté apporte AUSSI des LIGNES
-// en plus (affixCount, courbe v0.32.2 plus généreuse au sommet) + une chance d'unique relevée — pour
-// que monter d'une rareté SE SENTE. Garder statMult ~géométrique reste cohérent pour le scaling des uniques.
+// statMult : ⚠️ NE PILOTE PAS le budget de stats (ne sert QU'aux effets uniques, cf. uniques.ts). Le
+// budget primaire/endurance/lignes d'une rareté = +RARITY_ILVL_PER_TIER (8) ilvl-équiv PAR CRAN
+// (progression.ts) → ~+15 %/cran, un Transcendant à ilvl ÉGAL vaut ~×8,4 un Médiocre (et NON ×22 : la
+// puissance vient surtout de l'ilvl). La rareté apporte AUSSI des LIGNES en plus (affixCount) + une
+// chance d'unique relevée — pour que monter d'une rareté SE SENTE. statMult reste ~géométrique pour le
+// scaling des uniques.
 export const RARITIES: Record<RarityId, Rarity> = {
   mediocre: { id: 'mediocre', name: 'Médiocre', tier: 1, color: '#9d9d9d', affixCount: 1, statMult: 0.55, weight: 1000 },
   commun: { id: 'commun', name: 'Commun', tier: 2, color: '#ffffff', affixCount: 2, statMult: 0.70, weight: 700 },

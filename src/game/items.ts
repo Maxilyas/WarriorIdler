@@ -14,12 +14,12 @@ import { rollSockets } from './gems'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from './damage'
 import { itemBudget, effItemIlvl, clampIlvl, powerAt, RARITY_ILVL_PER_TIER, CHAPITRE_SIZE, lootFarmIlvl } from './progression'
 
-/** v0.30.1 — lignes de stat secondaire : PROPORTIONNELLES au budget exponentiel (poids SECONDARY_FRAC)
+/** Lignes de stat secondaire : PROPORTIONNELLES au budget exponentiel (poids SECONDARY_FRAC)
  *  → même échelle que le primaire à bas ilvl (fini « primaire 2 vs crit 66 »), MAIS plafonnées à
  *  SECONDARY_CAP (rating) une fois le mid-game atteint. Le plafond garde le % borné (compatible avec
  *  le /PER_PCT fixe dont dépendent talents/sets) et le TTL plat en endgame, tout en restant toujours
  *  < primaire (≈0,43× : SECONDARY_FRAC/offFrac). */
-export const SECONDARY_FRAC = 0.7 // v0.35 : 0,35→0,7 (reste < offFrac 0,82 → le nombre primaire domine encore)
+export const SECONDARY_FRAC = 0.7 // reste < offFrac 0,82 → le nombre primaire domine encore
 /** Soft cap du RATING d'une ligne secondaire : transition DOUCE vers SECONDARY_HARD (pas de saut net
  *  quand le budget dépasse le seuil, contrairement à un min() — évite le « kink » de DPS au mid-game). */
 export const SECONDARY_SOFT = 400
@@ -71,7 +71,7 @@ const STAT_WEIGHTS: Record<SecondaryStat, number> = {
   precision: 7, alteration: 6, degatsBoss: 6,
   reductionDegats: 8, barriere: 7, resilience: 8,
   volDeVie: 0.6, surpuissance: 0.3, multifrappe: 0.3, recuperation: 0.3,
-  // v0.38 — DÉPRÉCIÉES (poids 0 = ne rollent plus) : Esquive→Réduction, Ténacité+Purge→Résilience, Régén retirée.
+  // DÉPRÉCIÉES (poids 0 = ne rollent plus) : Esquive→Réduction, Ténacité+Purge→Résilience, Régén retirée.
   esquive: 0, tenacite: 0, purge: 0, regen: 0,
 }
 
@@ -96,7 +96,7 @@ function affixKey(a: Affix): string {
 
 /** Valeur d'une ligne « +% dégâts du type » : base aléatoire × croissance par tier de rareté.
  *  Exportées pour le harnais d'équilibrage (scripts/stat-weights.mjs).
- *  v0.22 : 10..25 ×(1+0.12·tier) → 8..20 ×(1+0.07·tier) — couplé au soft cap de damage.ts. */
+ *  Lignes de dégâts typés : 8..20 ×(1+0.07·tier) — couplé au soft cap de damage.ts. */
 export const DMG_LINE_BASE = 8
 export const DMG_LINE_RANGE = 12
 export const DMG_LINE_TIER_GROWTH = 0.07
@@ -104,15 +104,15 @@ export const DMG_LINE_TIER_GROWTH = 0.07
 function rollLineValue(spec: LineSpec, ilvl: number, qMult: number, tier: number): number {
   if (spec.kind === 'stat') {
     const soft = RARE_STATS.includes(spec.stat) ? 0.5 : 1 // stats rares modérées (rares mais fortes)
-    // v0.30.1 : PROPORTIONNEL au budget (poids SECONDARY_FRAC) puis SOFT-CAPÉ → à bas ilvl ça suit le
+    // PROPORTIONNEL au budget (poids SECONDARY_FRAC) puis SOFT-CAPÉ → à bas ilvl ça suit le
     // primaire (×0,43, lisible & proportionnel) ; au mid-game ça plafonne EN DOUCEUR (rating borné →
     // % borné → TTK plat, et toujours < primaire qui, lui, continue en b^ilvl).
     const base = softCap(itemBudget(ilvl, tier, SECONDARY_FRAC, qMult), SECONDARY_SOFT * qMult, SECONDARY_HARD * qMult) * soft
     return Math.max(1, Math.round(base * (0.7 + Math.random() * 0.6)))
   }
   if (spec.kind === 'dmgType') return Math.round((DMG_LINE_BASE + Math.random() * DMG_LINE_RANGE) * (1 + tier * DMG_LINE_TIER_GROWTH))
-  // Résistance en POINTS (v0.24, plus de cap %) : scale avec la rareté — la course à l'armement
-  // des raids se gagne en empilant ces lignes (Req des boss v0.25.x : ~100 au T1 → ~430 au T10).
+  // Résistance en POINTS (plus de cap %) : scale avec la rareté — la course à l'armement des raids
+  // se gagne en empilant ces lignes (Req des boss : ~100 au T1 → ~430 au T10).
   return Math.round((6 + Math.random() * 10) * (1 + tier * 0.09))
 }
 
@@ -170,15 +170,15 @@ export interface GenerateOptions {
   forceStat?: SecondaryStat
   /** Rareté minimale garantie (coffres) : remonte la rareté tirée si trop basse. */
   minTier?: number
-  /** 🕳️ Tisse-châsse (rune v0.26) : chance SUPPLÉMENTAIRE d'ajouter une châsse au drop. */
+  /** 🕳️ Tisse-châsse (rune) : chance SUPPLÉMENTAIRE d'ajouter une châsse au drop. */
   socketLuck?: number
-  /** v0.27 — qualité FORCÉE (1..5). Sinon roulée. */
+  /** Qualité FORCÉE (1..5). Sinon roulée. */
   stars?: number
-  /** v0.27 — décalage de distribution de qualité (forge « Main de maître »). */
+  /** Décalage de distribution de qualité (forge « Main de maître »). */
   starsFin?: number
-  /** v0.27 — qualité PLANCHER (raids/coffres : du bon stuff). */
+  /** Qualité PLANCHER (raids/coffres : du bon stuff). */
   minStars?: number
-  /** v0.39.1 — source du drop : pilote l'éligibilité des uniques TAGGÉS (donjon/raid seulement).
+  /** Source du drop : pilote l'éligibilité des uniques TAGGÉS (donjon/raid seulement).
    *  Omis = 'farm' (aucun unique taggé). Voir uniques.ts / TAGGED_DROP_RATE. */
   uniqueSource?: UniqueSource
 }
@@ -191,7 +191,7 @@ const ORIENTATION_FRAC: Record<ItemOrientation, number> = { offensif: 0.82, equi
 export function generateItem(opts: GenerateOptions): Item {
   const type = opts.type ?? pick(ITEM_TYPE_LIST)
   const typeMeta = ITEM_TYPES[type]
-  // v0.30 : cap DUR d'ilvl (aucun objet ne dépasse 700).
+  // cap DUR d'ilvl (aucun objet ne dépasse 700).
   const ilvl = clampIlvl(opts.ilvl)
   let rarityId = opts.rarity ?? rollRarity(opts.luckTier ?? 0)
   // Plancher d'iLvl par rareté (drops ALÉATOIRES uniquement) : une haute rareté ne peut pas
@@ -224,15 +224,15 @@ export function generateItem(opts: GenerateOptions): Item {
     opts.orientation ?? (isWeapon ? 'offensif' : isShield ? 'defensif' : pick(['offensif', 'equilibre', 'equilibre', 'defensif'] as ItemOrientation[]))
   const offFrac = ORIENTATION_FRAC[orientation]
 
-  // v0.27 — QUALITÉ unifiée : TOUT objet roule une qualité 1..5 (ex-⭐ Polissage, généralisé aux
-  // drops). Elle agit sur le BUDGET (starsMult) ET le NOMBRE de lignes (qualityBonusAffixes).
+  // QUALITÉ unifiée : TOUT objet roule une qualité 1..5. Elle agit sur le BUDGET (starsMult) ET le
+  // NOMBRE de lignes (qualityBonusAffixes).
   let stars = opts.stars ?? rollStars(opts.starsFin ?? 0)
   if (opts.minStars) stars = Math.max(stars, opts.minStars)
   stars = Math.max(1, Math.min(5, stars))
   const qMult = starsMult(stars)
 
-  // v0.30 — BUDGET EXPONENTIEL en ilvl effectif (= ilvl + rareté ×3/cran). La stat primaire le porte
-  // → DPS ∝ b^ilvl → TTK constant. La rareté n'est plus un multiplicateur de budget (qui se faisait
+  // BUDGET EXPONENTIEL en ilvl effectif (= ilvl + rareté +8/cran, RARITY_ILVL_PER_TIER). La stat
+  // primaire le porte → DPS ∝ b^ilvl → TTK constant. La rareté n'est pas un multiplicateur de budget (qui se faisait
   // « cuber » par le DPS convexe) : c'est un bonus d'ilvl-équiv borné (cf. progression.ts).
   const budget = itemBudget(ilvl, rarity.tier, typeMeta.weight, qMult)
   const primaryValue = Math.max(1, Math.round(budget * offFrac * (0.85 + Math.random() * 0.3)))
@@ -240,7 +240,7 @@ export function generateItem(opts: GenerateOptions): Item {
   const endurance = Math.max(1, Math.round(budget * (1 - offFrac) * 1.9 * (0.85 + Math.random() * 0.3)))
 
   // La qualité AJOUTE des lignes au-dessus du plancher FIXE de la rareté (+0/+0/+1/+1/+2).
-  // v0.32.2 : cap 7 → 9 (les hautes raretés montent jusqu'à 8 lignes de base ; +qualité au-dessus).
+  // cap à 9 lignes (les hautes raretés montent jusqu'à 8 lignes de base ; +qualité au-dessus).
   const affixCount = Math.min(9, rarity.affixCount + qualityBonusAffixes(stars))
   const affixes = rollAffixes(affixCount, ilvl, qMult, rarity.tier, opts)
   const unique = rollUnique(rarity.tier, opts.uniqueSource)
@@ -269,7 +269,7 @@ export function generateItem(opts: GenerateOptions): Item {
     orientation,
     affixes,
     stars,
-    // v0.25 : châsses RARES (roulées) · v0.26 : 🕳️ Tisse-châsse peut en ajouter une au drop.
+    // châsses RARES (roulées) · 🕳️ Tisse-châsse peut en ajouter une au drop.
     sockets: Math.min(3, rollSockets(rarity.tier) + (opts.socketLuck && Math.random() < opts.socketLuck ? 1 : 0)),
     ...(damageType ? { damageType } : {}),
     ...(unique ? { unique } : {}),
@@ -277,12 +277,12 @@ export function generateItem(opts: GenerateOptions): Item {
 }
 
 /**
- * FENÊTRE À PIC (v0.24, DESIGN §4.0) — LA fonction de rareté unifiée du jeu (farm / Cache /
+ * FENÊTRE À PIC — LA fonction de rareté unifiée du jeu (farm / Cache /
  * raids). Distribution « plancher → PIC → plafond » à DEUX PENTES géométriques :
  *  - sous le pic : `down` par cran (raide — le bas de fenêtre reste minoritaire),
  *  - au-dessus : « épaule » `shoulder` au premier cran, puis traîne `tail` par cran
  *    (TRÈS raide → le haut de fenêtre existe toujours, mais reste un événement).
- * Repère (fenêtre raid T1 v0.25.x, pic Légendaire) : ~56% Légendaire · 17% Artefact ·
+ * Repère (fenêtre raid T1, pic Légendaire) : ~56% Légendaire · 17% Artefact ·
  * 4% Patrimoine · 1% Mythique · … traîne infime jusqu'à Céleste.
  */
 export function rollWindowRarity(
@@ -330,8 +330,8 @@ export function windowRarityDist(
 }
 
 /**
- * Fenêtre de rareté du FARM (paliers classiques) : le pic glisse de Commun (palier 1) à
- * Épique (~palier 54), plafond DUR à Légendaire — le farm n'est PAS la chasse à la rareté
+ * Fenêtre de rareté du FARM (vagues classiques) : le pic glisse de Commun (vague 1) à
+ * Épique (~vague 54), plafond DUR à Légendaire — le farm n'est PAS la chasse à la rareté
  * (ça, c'est la Cache puis les raids). `shift` décale la fenêtre (élite +1, champion +2,
  * boss +1, karma/chance), toujours sous le plafond.
  */
@@ -341,7 +341,7 @@ export function rollFarmRarity(stage: number, shift = 0): RarityId {
   return rollWindowRarity(Math.max(1, peak - 2), peak, Math.min(FARM_RARITY_CAP, peak + 2))
 }
 
-// v0.36 — RARETÉ « DU CONTENU » = la rareté ATTEIGNABLE (tout contenu confondu), pas seulement le farm.
+// RARETÉ « DU CONTENU » = la rareté ATTEIGNABLE (tout contenu confondu), pas seulement le farm.
 // C'est l'ancre de l'over-content (×4/cran AU-DESSUS d'elle) ET du rendement des donjons. Plus de cap à
 // Légendaire : la Cache du Pilleur pousse à Artefact (~Ch.5), puis les raids montent vers Céleste+ (Ch.6+).
 // → crafter ce qu'on peut atteindre ≈ 10-30 runs ; seul AU-DELÀ de l'atteignable explose (le vrai chase).
@@ -357,7 +357,7 @@ export function contentRarityTier(bestStage: number, bestRaidTier = 0): number {
 }
 
 /**
- * v0.40.4 — RARETÉ DÉBLOQUÉE du compte = la plus haute rareté POTENTIELLE (palier / donjon / raid).
+ * RARETÉ DÉBLOQUÉE du compte = la plus haute rareté POTENTIELLE (farm / donjon / raid).
  * Ancre des COFFRES du marché : leur fenêtre = [Rmax−4 → Rmax], pic au plancher (dump d'or). Dès le
  * Chapitre 1 la Cache du Pilleur donne de l'Artefact → plancher Artefact(7) ; les raids montent ensuite
  * le plafond : T1-T2 Céleste(11) · T3-T4 Éternel(12) · T5-T6 Cosmique(13) · T7+ Abyssal(14). Séparée
@@ -369,7 +369,7 @@ export function unlockedRarityTier(bestRaidTier = 0): number {
 }
 
 /**
- * v0.36 — RARETÉ ACCESSIBLE à un CHAPITRE donné (Cache plafond Artefact + raid GATÉ au Chapitre).
+ * RARETÉ ACCESSIBLE à un CHAPITRE donné (Cache plafond Artefact + raid GATÉ au Chapitre).
  * Reproduit la table validée par le joueur : Cache→Artefact sur les chapitres tuto, puis les raids
  * (T1 au mur du Ch.5, T(c−4) au mur du Ch.c) montent la rareté — +1/tier jusqu'à Céleste, puis +1
  * tous les 2 tiers (règle « 2 tiers = 1 rareté »), plafond Abyssal (Primordial/Transcendant = chase).
@@ -442,7 +442,7 @@ export function itemStatBlock(item: Item): Record<string, number> {
     const mods = instanceMods(item.unique, item)
     for (const k in mods) block[k] = (block[k] ?? 0) + (mods[k as keyof typeof mods] ?? 0)
   }
-  // (v0.22 : les runes ne portent plus de stats — temps & règles uniquement.)
+  // (les runes ne portent pas de stats — temps & règles uniquement.)
   return block
 }
 
@@ -507,26 +507,26 @@ export function recyclePoussiere(item: Item): number {
 
 export const SURILLVL_STEP = 2
 
-/** Croissance du coût par USAGE répété sur le même objet (reforge/surillvl) — v0.25.
+/** Croissance du coût par USAGE répété sur le même objet (reforge/surillvl).
  *  Sans elle, spammer à coût constant jusqu'au god-roll était l'optimum sans fond :
  *  ×1,18 par usage ≈ ×27 au 20e — une borne naturelle, pas un mur. */
 export const CRAFT_REPEAT_GROWTH = 1.18
 
-/** Coût en éclats d'une reforge. v0.25 : chaque ligne VERROUILLÉE multiplie le prix (+100%/verrou —
+/** Coût en éclats d'une reforge : chaque ligne VERROUILLÉE multiplie le prix (+100%/verrou —
  *  cibler le god-roll se paie) et chaque reforge renchérit la suivante sur cet objet. */
 export function reforgeCost(item: Item, lockedCount = 0): number {
   return Math.round(item.ilvl * 2.5 * RARITIES[item.rarity].tier * (1 + lockedCount) * Math.pow(CRAFT_REPEAT_GROWTH, item.reforgeCount ?? 0))
 }
 
-/** Marge d'iLvl tolérée AU-DESSUS de l'iLvl max du contenu débloqué (paliers/donjons/raids).
- *  v0.25.x : le surillvl est PLAFONNÉ à contenu + marge — l'atelier suit la progression,
+/** Marge d'iLvl tolérée AU-DESSUS de l'iLvl max du contenu débloqué (vagues/donjons/raids).
+ *  Le surillvl est PLAFONNÉ à contenu + marge — l'atelier suit la progression,
  *  il ne la remplace pas (avant : +30 iLvl au-dessus de tout contenu était accessible). */
 export const SURILLVL_OVER_MARGIN = 6
 /** Sur-coût par pas AU-DESSUS de l'iLvl de contenu : ×4 par pas (×4 → ×16 → ×64) —
  *  les derniers iLvl de la marge sont un luxe hors de prix, pas une routine. */
 export const SURILLVL_OVER_COST_MULT = 4
 
-/** Coût en éclats d'un surillvl (+SURILLVL_STEP ilvl). v0.25 : géométrique par usage.
+/** Coût en éclats d'un surillvl (+SURILLVL_STEP ilvl) : géométrique par usage.
  *  `overSteps` = nb de pas du résultat AU-DESSUS de l'iLvl de contenu (sur-coût ×4 par pas). */
 export function surillvlCost(item: Item, overSteps = 0): number {
   return Math.round(
@@ -548,16 +548,15 @@ export function maxRarityTierForIlvl(ilvl: number): number {
 }
 
 /**
- * Coûts de MATÉRIAUX RARES de craft par tier de rareté (refonte v0.18). Indexés par tier.
+ * Coûts de MATÉRIAUX RARES de craft par tier de rareté. Indexés par tier.
  * - Noyaux 💠 dès Rare (t4) · Poussière 🌌 dès Légendaire (t6) · Fragments ✨ dès Mythique (t9)
  *   · Éclat cosmique 💫 dès Cosmique (t13). Les quantités montent FORT (les raids en crachent beaucoup).
  */
 const CRAFT_NOYAU: Record<number, number> = { 4: 10, 5: 50, 6: 200, 7: 600, 8: 1500, 9: 3500, 10: 7000, 11: 13000, 12: 24000, 13: 42000, 14: 70000, 15: 115000, 16: 180000 }
 const CRAFT_POUSSIERE: Record<number, number> = { 6: 10, 7: 30, 8: 80, 9: 200, 10: 450, 11: 900, 12: 1700, 13: 3000, 14: 5000, 15: 8000, 16: 13000 }
-// v0.25 — FRAGMENTS RECALÉS sur le principe « un craft de rareté r ≈ 5 clears du raid dont le PIC
-// de loot est r » (revenu ✨ ≈ tier+1/clear). Avant : t9 = 5 ✨ → ~2 clears T1 offraient un objet
-// 4 crans AU-DESSUS de la fenêtre du contenu (pic Épique). Démarre désormais à t8 (les fragments
-// n'existent qu'en raid → le craft t8+ est arrimé aux raids).
+// FRAGMENTS calés sur le principe « un craft de rareté r ≈ 5 clears du raid dont le PIC de loot est r »
+// (revenu ✨ ≈ tier+1/clear). Démarrent à t8 (les fragments n'existent qu'en raid → le craft t8+ est
+// arrimé aux raids).
 const CRAFT_FRAGMENTS: Record<number, number> = { 8: 15, 9: 40, 10: 70, 11: 120, 12: 200, 13: 320, 14: 500, 15: 750, 16: 1100 }
 const CRAFT_COSMIC: Record<number, number> = { 13: 5, 14: 20, 15: 50, 16: 120 }
 
@@ -591,7 +590,7 @@ function materialCost(tier: number, ilvl: number, factor: number): Omit<CraftCos
 }
 
 /**
- * Coût d'une ascension de rareté → calé sur le tier CIBLE, à un facteur MAJORÉ (v0.25.x).
+ * Coût d'une ascension de rareté → calé sur le tier CIBLE, à un facteur MAJORÉ.
  * Ascensionner GARDE l'objet (lignes, unique, gemmes, rune) et ajoute une ligne : c'est strictement
  * meilleur qu'une création ALÉATOIRE du même tier → ça doit coûter PLUS cher, pas moitié prix.
  * Avant : éclats ×0.7 / matériaux ×0.55 — monter son BiS coûtait ~2× moins que forger un inconnu.
@@ -602,14 +601,14 @@ export function ascendCost(item: Item, contentTier = Infinity): CraftCost {
     eclats: Math.round(craftEclats(nt, item.ilvl) * 1.15),
     ...materialCost(nt, item.ilvl, 1.35),
   }
-  // v0.35 — monter une rareté AU-DESSUS du contenu explose le coût (×4/cran) → dizaines→centaines de runs.
+  // monter une rareté AU-DESSUS du contenu explose le coût (×4/cran) → dizaines→centaines de runs.
   return scaleCraftCost(base, overContentMult(nt, contentTier))
 }
 
 // ---- Craft : créer un objet ----
 
 /**
- * v0.25 — VERROU RAID du craft (miroir du marché, boxRaidGate) : crafter/ascensionner un cran t
+ * VERROU RAID du craft (miroir du marché, boxRaidGate) : crafter/ascensionner un cran t
  * exige d'avoir vaincu un tier de raid ≥ t−8 (Mythique→T1 … Céleste→T3 … Transcendant→T8).
  * Même en STOCKANT des fragments, un tas de ✨ n'achète jamais un cran au-dessus de ton contenu.
  */
@@ -617,7 +616,7 @@ export function craftRaidGate(rarityTier: number): number {
   return Math.max(0, rarityTier - 8)
 }
 
-/** Rareté max forgeable : double horloge — palier de farm ET meilleur tier de raid vaincu. */
+/** Rareté max forgeable : double horloge — vague de farm ET meilleur tier de raid vaincu. */
 export function maxCraftTier(bestStage: number, bestRaidTier = 0): number {
   return Math.min(16, 8 + Math.floor(bestStage / 8), 8 + bestRaidTier)
 }
@@ -628,18 +627,18 @@ export function createCost(rarityTier: number, ilvl: number, contentTier = Infin
     eclats: craftEclats(rarityTier, ilvl),
     ...materialCost(rarityTier, ilvl, 1),
   }
-  // v0.35 — forger une rareté AU-DESSUS du contenu explose le coût (×4/cran) → c'est le chase, pas du farm.
+  // forger une rareté AU-DESSUS du contenu explose le coût (×4/cran) → c'est le chase, pas du farm.
   return scaleCraftCost(base, overContentMult(rarityTier, contentTier))
 }
 
-/* ---- ⭐ QUALITÉ unifiée (v0.27, ex-Polissage Forgeron) : 1–5 sur TOUT le stuff, drop & craft ----
+/* ---- ⭐ QUALITÉ unifiée : 1–5 sur TOUT le stuff, drop & craft ----
  * 1 Grossier · 2 Standard · 3 Fin · 4 Supérieur · 5 Chef-d'œuvre.
  * Agit sur le BUDGET (starsMult) ET le NOMBRE de lignes (qualityBonusAffixes). Le nombre de lignes
  * reste FIXE par rareté (plancher) ; la qualité est le SEUL levier qui en ajoute. */
 
 export const QUALITY_NAMES = ['Grossier', 'Standard', 'Fin', 'Supérieur', 'Chef-d\'œuvre']
 export const QUALITY_COLORS = ['#94a3b8', '#cbd5e1', '#86efac', '#5eead4', '#fcd34d']
-/** Index 0..4 borné (qualité absente = Standard, pour le stuff d'avant v0.27). */
+/** Index 0..4 borné (qualité absente = Standard, pour le stuff sans qualité). */
 function qIdx(stars?: number): number { return Math.max(0, Math.min(4, (stars ?? 2) - 1)) }
 export function qualityName(stars?: number): string { return QUALITY_NAMES[qIdx(stars)] }
 export function qualityColor(stars?: number): string { return QUALITY_COLORS[qIdx(stars)] }
@@ -647,13 +646,13 @@ export function qualityColor(stars?: number): string { return QUALITY_COLORS[qId
 export function qualityBonusAffixes(stars: number): number { return [0, 0, 1, 1, 2][qIdx(stars)] }
 
 /**
- * v0.27 (Lot 5) — RELIQUE de prestige : conserve l'objet (lignes / unique / gemmes / set / qualité)
+ * RELIQUE de prestige : conserve l'objet (lignes / unique / gemmes / set / qualité)
  * mais RAMÈNE son iLvl au plancher, stats rescalées au prorata. Re-grandira en jeu (surillvl/trempe).
  */
 export function relicFromItem(item: Item, floorIlvl: number): Item {
   const fl = Math.max(1, Math.min(item.ilvl, floorIlvl))
   const tier = RARITIES[item.rarity].tier
-  // v0.30 : primaire/endurance suivent le budget EXPONENTIEL (powerAt) ; les lignes de stat suivent
+  // primaire/endurance suivent le budget EXPONENTIEL (powerAt) ; les lignes de stat suivent
   // l'échelle linéaire (effItemIlvl) ; les lignes typées (% / points) ne scalent pas.
   const powK = powerAt(fl - item.ilvl)
   const statK = effItemIlvl(fl, tier) / effItemIlvl(item.ilvl, tier)
@@ -722,7 +721,7 @@ export function surillvlItem(item: Item, step = SURILLVL_STEP): Pick<Item, 'ilvl
   const newIlvl = clampIlvl(item.ilvl + step)
   const realStep = newIlvl - item.ilvl
   const tier = RARITIES[item.rarity].tier
-  // v0.30 : primaire/endurance EXPONENTIELS (powerAt(step)) ; lignes de stat linéaires (effItemIlvl).
+  // primaire/endurance EXPONENTIELS (powerAt(step)) ; lignes de stat linéaires (effItemIlvl).
   const powK = powerAt(realStep)
   const statK = effItemIlvl(newIlvl, tier) / effItemIlvl(item.ilvl, tier)
   return {
@@ -730,7 +729,7 @@ export function surillvlItem(item: Item, step = SURILLVL_STEP): Pick<Item, 'ilvl
     primaryValue: Math.round(item.primaryValue * powK),
     endurance: Math.round(item.endurance * powK),
     affixes: item.affixes.map((a) => (a.kind === 'stat' ? { ...a, value: Math.round(a.value * statK) } : a)),
-    surCount: (item.surCount ?? 0) + 1, // v0.25 : renchérit le prochain surillvl (×1,18)
+    surCount: (item.surCount ?? 0) + 1, // renchérit le prochain surillvl (×1,18)
   }
 }
 
@@ -740,7 +739,7 @@ export function ascendItem(item: Item): Partial<Item> | null {
   if (!nr) return null
   const ot = RARITIES[item.rarity].tier
   const nt = RARITIES[nr].tier
-  // v0.30 : +1 cran = +RARITY_ILVL_PER_TIER ilvl-équiv. Primaire/endurance ×powerAt(+3) ; lignes de
+  // +1 cran = +RARITY_ILVL_PER_TIER (8) ilvl-équiv. Primaire/endurance ×powerAt(+8/cran) ; lignes de
   // stat ×ratio linéaire d'effItemIlvl.
   const powK = powerAt(RARITY_ILVL_PER_TIER * (nt - ot))
   const statK = effItemIlvl(item.ilvl, nt) / effItemIlvl(item.ilvl, ot)

@@ -1,8 +1,8 @@
 import type { Equipment, ItemType } from './types'
 
 /**
- * SETS D'ÉQUIPEMENT (v0.21) — pièces nommées, exclusives à un contenu précis, dont le
- * PORT GROUPÉ octroie des bonus à paliers (2/4/6 pièces) volontairement énormes :
+ * SETS D'ÉQUIPEMENT — pièces nommées, exclusives à un contenu précis, dont le
+ * PORT GROUPÉ octroie des bonus à seuils (2/4/6 pièces) volontairement énormes :
  * c'est la chasse d'endgame par excellence (l'Abîme Primordial drop le premier set).
  * Les bonus sont multiplicatifs/additifs au niveau du MOTEUR (dégâts, PV, recharge,
  * résistances, vol de vie) — pas de simples ratings.
@@ -17,7 +17,7 @@ export interface SetBonusTier {
   hpMult?: number
   /** Réduction de recharge additionnelle (additive au cdr, capée par le moteur). */
   cdr?: number
-  /** Résistance à TOUS les types (fraction ; ×100 → points à l'agrégation, v0.24). */
+  /** Résistance à TOUS les types (fraction ; ×100 → points à l'agrégation). */
   resistAll?: number
   /** Vol de vie plat (fraction des dégâts). */
   leech?: number
@@ -68,7 +68,7 @@ export interface ActiveSetBonuses {
   counts: Record<string, number>
 }
 
-/** Agrège les bonus de set actifs d'un équipement (paliers cumulatifs, comme WoW). */
+/** Agrège les bonus de set actifs d'un équipement (seuils cumulatifs, comme WoW). */
 export function setBonuses(equipment: Equipment): ActiveSetBonuses {
   const counts: Record<string, number> = {}
   for (const slot in equipment) {

@@ -173,7 +173,7 @@ export const UNIQUE_EFFECTS: UniqueEffect[] = [
   { id: 'u_plume_de_phenix', name: 'Plume de phénix', role: 'utility', description: 'Une plume porte-bonheur.', mods: { regen: 35, maitrise: 30, hate: 15 }, active: 'Évite la mort une fois par combat.' },
   { id: 'u_dé_pipé', name: 'Dé pipé', role: 'utility', description: 'Le hasard vous obéit.', mods: { critique: 40, maitrise: 25 }, active: 'Force un résultat favorable périodiquement.' },
 
-  // ================= TAGS (v0.38) — uniques qui DÉFINISSENT un build en amplifiant un tag de sort =================
+  // ================= TAGS — uniques qui DÉFINISSENT un build en amplifiant un tag de sort =================
   // Le bonus s'applique au tagMult des sorts portant ce tag (dégâts) ET au soin pour [soin]. Monte au rang.
   { id: 'u_coeur_guerisseur', name: 'Cœur du guérisseur', role: 'heal', description: 'La vie déborde de tes mains : tes SOINS sont amplifiés (+30% au rang 1).', mods: { intelligence: 40 }, tagMods: [{ tag: 'soin', mult: 0.30 }], active: 'Tes soins critiques débordent en bouclier.' },
   { id: 'u_fleau_persistant', name: 'Fléau persistant', role: 'dps', description: 'Tes afflictions rongent sans répit : dégâts SUR LA DURÉE [dot] +30% (rang 1).', mods: { alteration: 40 }, tagMods: [{ tag: 'dot', mult: 0.30 }], active: 'Tes DoT se propagent à un ennemi proche.' },
@@ -189,7 +189,7 @@ export const UNIQUE_EFFECTS: UniqueEffect[] = [
   { id: 'u_apotheose', name: 'Apothéose', role: 'dps', description: 'Ton ultime devient cataclysme : ULTIMES [ultime] +45% (rang 1).', mods: { maitrise: 30 }, tagMods: [{ tag: 'ultime', mult: 0.45 }], active: 'Tes ultimes réduisent leurs propres recharges.' },
 
   // ================================================================
-  //   156 NOUVEAUX UNIQUES (v0.38) — un build autour de CHAQUE tag/aspect/classe
+  //   UNIQUES PAR TAG/ASPECT/CLASSE — un build autour de CHAQUE tag/aspect/classe
   //   Hybrides multi-tag (chaque tag plus modeste) + combos tag×secondaire + signatures de classe.
   // ================================================================
 
@@ -446,7 +446,7 @@ export function instanceResist(inst: UniqueInstance): Partial<Record<DamageType,
   return uniqueResistAtRank(inst.id, inst.rank)
 }
 
-/** v0.38 — bonus de TAG d'un effet à un rang donné (tag → fraction de bonus ; monte au rang seul). */
+/** Bonus de TAG d'un effet à un rang donné (tag → fraction de bonus ; monte au rang seul). */
 export function uniqueTagModsAtRank(id: string, rank: number): Record<string, number> {
   const def = BY_ID.get(id)
   if (!def?.tagMods) return {}
@@ -462,7 +462,7 @@ export function instanceTagMods(inst: UniqueInstance): Record<string, number> {
 }
 
 /**
- * v0.39.1 — Uniques TAGGÉS (signatures de conversion v0.38 : `tagMods`, ex. [feu]/[zone]/[finisseur]).
+ * Uniques TAGGÉS (signatures de conversion : `tagMods`, ex. [feu]/[zone]/[finisseur]).
  * Jugés trop puissants pour le farm : ils ne tombent QUE en donjon (traîne infime) et en raid
  * (la vraie source). Les uniques « simples » (stats/résist/actif, sans tag) tombent partout comme avant.
  */
@@ -485,7 +485,7 @@ export const TAGGED_DROP_RATE: Record<UniqueSource, number> = {
  */
 export function rollUnique(rarityTier: number, source: UniqueSource = 'farm'): UniqueInstance | undefined {
   if (rarityTier < 5) return undefined
-  // v0.32.2 : pente relevée (0.1 → 0.14/cran) + GARANTI au sommet (Céleste t11 ~98 %, Éternel+ = 100 %)
+  // pente 0.14/cran + GARANTI au sommet (Céleste t11 ~98 %, Éternel+ = 100 %)
   // — l'unique est LE pic d'euphorie ARPG : une très haute rareté doit quasi toujours en porter un.
   const chance = Math.min(1, (rarityTier - 4) * 0.14)
   if (Math.random() > chance) return undefined
