@@ -28,7 +28,7 @@ import type { CombatMods } from './store'
 
 // ---- État & constantes globaux de combat (déplacés de store.ts) ----
 let regenMult = 1 // ajusté par l'amélioration "Régénération"
-const REGEN_RATE = 0 // v0.38 — plus de DRIP passif en combat (soin = sorts/vol de vie/barrière). Voir choix design.
+const REGEN_RATE = 0 // plus de DRIP passif en combat (soin = sorts/vol de vie/barrière).
 const HEALCUT_REGEN_MULT = 0.25 // régén pendant le heal-cut (×0.25 : les soins ne suivent plus)
 const FARM_REZ_DELAY = 20
 const CC_INTERVAL = 8
@@ -71,7 +71,7 @@ const gemCounters = new Map<string, number>()
 let boucleAcc = 0
 const sursisReadyAt = new Map<string, number>()
 
-// ---- v0.24 : état transitoire des nouveaux archétypes (non persisté, comme les cooldowns) ----
+// ---- état transitoire des archétypes (non persisté, comme les cooldowns) ----
 
 // ÉGIDE « Aegis adaptatif » : stacks de résist par héros et par type (20 s glissantes).
 const adaptiveStacks = new Map<string, Partial<Record<DamageType, { pts: number; remaining: number }>>>()
@@ -201,7 +201,7 @@ export function tresorerieShield(chars: Character[], cap?: number) {
 }
 
 /* ================================================================== */
-/* v0.26 — état transitoire & helpers des 40 nouvelles gemmes          */
+/* état transitoire & helpers des gemmes de condition                  */
 /* (non persisté, comme les cooldowns — voir condGems.ts pour le pool) */
 /* ================================================================== */
 
@@ -211,7 +211,7 @@ let testamentLeft = 0     // 📜 Testament : +10% de dégâts après une mort
 let marcheCount = 0       // 🎺 Marche triomphale : combats gagnés sans mort
 let ancrageBroken = false // ⚓ Ancrage : un héros est tombé dans le combat courant
 let carillonReady = false // 🛎️ Carillon : la prochaine recharge est à moitié prix
-// v0.26 — runes de TEMPS & pactes (transitoire, non persisté).
+// runes de TEMPS & pactes (transitoire, non persisté).
 let hateFunebreLeft = 0   // 🪽 Hâte funèbre : fenêtre de vitesse après un kill
 let echoTempAcc = 0       // 🌀 Écho temporel : horloge des 30 s
 let lastCastGlobal: { charId: string; pid: string } | null = null // dernière capacité lancée (équipe)
@@ -231,7 +231,7 @@ function marcheBonus(cap?: number): number {
   return cap ? Math.min(cap, 0.005 * marcheCount) : 0
 }
 
-/** v0.26 : réactions d'équipe aux KILLS (🔔 Glas, 🦷 Fièvre, 🎺 Marche, 🪽 Hâte funèbre,
+/** réactions d'équipe aux KILLS (🔔 Glas, 🦷 Fièvre, 🎺 Marche, 🪽 Hâte funèbre,
  *  🍽️ Jeûne). À appeler aux mêmes endroits que crescendoAdd — `wins` = combats gagnés. */
 export function gemKillEvents(
   chars: Character[],
@@ -265,7 +265,7 @@ export function gemKillEvents(
   }
 }
 
-/** v0.26 : début de combat côté RUNES — 🔓 Ouverture (plus longue capacité prête),
+/** début de combat côté RUNES — 🔓 Ouverture (plus longue capacité prête),
  *  🎒 Préparation (recharges avancées), ⏪ Rembobinage réarmé. */
 function runeFightStart(chars: Character[], runes?: TimeRuneMods) {
   rembUsed.clear()
@@ -317,7 +317,7 @@ function runePactOffense(t: number, runes?: TimeRuneMods, pact?: PactMods): numb
   return m
 }
 
-/** v0.26 : début de combat — Égide rechargée, Ancrage réarmé, boucliers de départ
+/** début de combat — Égide rechargée, Ancrage réarmé, boucliers de départ
  *  (🫙 Réservoir pressurisé, 🔰 Doctrine du bouclier). Mute les copies de `chars`. */
 export function gemFightStart(
   chars: Character[],
@@ -351,7 +351,7 @@ export function gemFightStart(
   }
 }
 
-/** v0.26 : un héros est-il tombé pendant ce pas ? (⚓ Ancrage, 🎺 Marche, 📜 Testament).
+/** un héros est-il tombé pendant ce pas ? (⚓ Ancrage, 🎺 Marche, 📜 Testament).
  *  À appeler APRÈS le Sursis (un héros sauvé in extremis n'est pas « tombé »). */
 function gemDeathEvents(chars: Character[], aliveBefore: boolean[], cond?: CondMods, pact?: PactMods) {
   let died = false
@@ -370,7 +370,7 @@ function gemDeathEvents(chars: Character[], aliveBefore: boolean[], cond?: CondM
   }
 }
 
-/** v0.26 : multiplicateur de dégâts SUBIS des gemmes défensives (🪨 Granit, ⚓ Ancrage,
+/** multiplicateur de dégâts SUBIS des gemmes défensives (🪨 Granit, ⚓ Ancrage,
  *  💫 Sixième sens, 🌂 Paratonnerre, 🧱 Rempart, 🗿 Mémoire de la pierre). Plancher 0,1. */
 function gemDefenseMult(
   c: Character,
@@ -391,7 +391,7 @@ function gemDefenseMult(
   return Math.max(0.1, m)
 }
 
-/** v0.26 : chaîne défensive de BASTION autour d'un dégât héros — 🛡️ Égide (1er coup),
+/** chaîne défensive de BASTION autour d'un dégât héros — 🛡️ Égide (1er coup),
  *  🐢 Carapace (gros coup → bouclier), 🔃 Échangeur (dégâts → recharges), 🌵 Cilice (épines),
  *  🪟 Verre trempé (reset). `discrete` = vrai COUP (télégraphe, explosion), pas le flux continu. */
 function gemDamageHero(
@@ -448,7 +448,7 @@ function tourGardeSplit(chars: Character[], targetI: number, cond?: CondMods): {
   return tankI >= 0 ? { tankI, frac: cond.tourGardePct } : null
 }
 
-/** v0.26 : multiplicateur OFFENSIF par héros des nouvelles gemmes (🎺 Marche, 📜 Testament,
+/** multiplicateur OFFENSIF par héros des gemmes (🎺 Marche, 📜 Testament,
  *  ⚡ Sous tension, 🪟 Verre trempé, 🧭 Boussole vs champion, 🎯 Première impression). */
 function gemOffenseMult(
   c: Character,
@@ -499,7 +499,7 @@ function gemRiposte(
   return dealt
 }
 
-// 🤺 RIPOSTE de MAÎTRISE (v0.38, bruiser Force) : tant que tu es au combat, % de chance (riposteChance)
+// 🤺 RIPOSTE de MAÎTRISE (bruiser Force) : tant que tu es au combat, % de chance (riposteChance)
 // de renvoyer une FRAPPE COMPLÈTE. Modélisé en continu = un contre toutes les (RIPOSTE_INTERVAL / chance)
 // secondes → DPS ∝ chance × dégât d'une frappe. Zéro hors Force (riposteChance = 0).
 const mRiposteAcc = new Map<string, number>()
@@ -559,7 +559,7 @@ function gemAbilityHeal(t: Character, amount: number, cond: CondMods | undefined
   }
 }
 
-/** 🌗 COMMUNION D'OMBRE (v0.34) : les DoT du Prêtre soignent l'allié le plus blessé (somme des frac
+/** 🌗 COMMUNION D'OMBRE : les DoT du Prêtre soignent l'allié le plus blessé (somme des frac
  *  `dotHealsParty` de l'équipe × le tick de DoT). Sustain de groupe né de l'affliction (rôle Lumière). */
 function healDotParty(chars: Character[], info: ({ cmods: CharCombatMods } | null | undefined)[], dmg: number) {
   let pool = 0
@@ -572,7 +572,7 @@ function healDotParty(chars: Character[], info: ({ cmods: CharCombatMods } | nul
   low.hp = Math.min(charMaxHp(low), low.hp + pool)
 }
 
-/** 🌀 MÉTAMORPHE (v0.34) « Danse Primordiale » : multiplicateur de dégâts de la FORME active + Instinct.
+/** 🌀 MÉTAMORPHE « Danse Primordiale » : multiplicateur de dégâts de la FORME active + Instinct.
  *  Fauve/Ours/Hibou donnent chacun leur bonus tant qu'ils sont actifs ; la Chimère cumule les 3 ;
  *  la Mémoire des formes (echo) garde une part des deux autres formes ; l'Instinct ajoute son momentum.
  *  Tout est BORNÉ (% fixes, stacks plafonnés) → plat en ilvl. */
@@ -612,7 +612,7 @@ function enemyVuln(enemy: Enemy): number {
 }
 
 /**
- * AUTO « intelligent » (v0.29.4) : un SPENDER (finisseur / détonation) ne s'auto-lance qu'au-dessus
+ * AUTO « intelligent » : un SPENDER (finisseur / détonation) ne s'auto-lance qu'au-dessus
  * d'un seuil de ressource → l'idle reste correct. En MANUEL, le joueur décide (try-hard : timer le pic
  * à ressource pleine, dans une fenêtre de burst). C'est ça l'écart de skill idle ↔ try-hard.
  */
@@ -625,15 +625,15 @@ function autoSpenderReady(p: PowerDef, c: Character, enemy: Enemy | undefined, i
 
 /**
  * Lance une capacité active. Renvoie les DÉGÂTS infligés à l'ennemi (pour la « Vengeance différée »).
- * v0.37 « Piste C » : les dégâts d'un sort scalent sur le bonus de SON TYPE (matching — spellTypeMult,
+ * Les dégâts d'un sort scalent sur le bonus de SON TYPE (matching — spellTypeMult,
  * et non plus la moyenne type-agnostique profileDamageMult) et subissent la résist ennemie de ce type
  * (spellResistMult). Donc empiler l'élément de tes sorts les booste, et la Pénétration sert aux casters.
  */
 function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profile: DamageProfile, chars: Character[], enemy: Enemy, hotBonus: number, dmgMult = 1, healToDamage = 0, cond?: CondMods, pact?: PactMods): number {
   const base = (p.magnitude ?? 1) * abilityPower(derived, powerScale(p)) // soins (sans profil ni keystones)
-  // v0.29.4 : bonus par TAG (cross-classe) — un nœud « tes [dot] +12% » booste TOUT sort taggé dot.
+  // bonus par TAG (cross-classe) — un nœud « tes [dot] +12% » booste TOUT sort taggé dot.
   const cm = charCombatMods(caster)
-  // v0.37 « Piste C » — TYPE DU SORT. Un sort scale sur le bonus de SON type (matching : stacker l'élément
+  // TYPE DU SORT. Un sort scale sur le bonus de SON type (matching : stacker l'élément
   // de tes sorts les booste), avec une part résiduelle de la moyenne du profil (multi-élément protégé),
   // PUIS subit la résist ennemie de ce type (comme les auto-attaques ; uniforme aujourd'hui → contrée par
   // la Pénétration). Remplace l'ancienne moyenne type-agnostique (profileDamageMult) pour les sorts.
@@ -643,15 +643,15 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
     * spellResistMult(enemy, spellType, derived.penetration)
   let tagMult = 1
   if (p.tags) for (const t of p.tags) tagMult *= (cm.tagBonus[t] ?? 1)
-  // v0.38 — le bonus de tag [soin] (ex : Ferveur « sorts [soin] +15% ») booste enfin les SOINS eux-mêmes
+  // le bonus de tag [soin] (ex : Ferveur « sorts [soin] +15% ») booste les SOINS eux-mêmes
   // (avant : tagMult n'était appliqué qu'aux DÉGÂTS → le levier de soin par tag était mort).
   const healTagMult = cm.tagBonus['soin'] ?? 1
-  // CONTRÔLE (v0.29.6) : un sort [controle] gèle/ralentit ; SHATTER : +dégâts aux ennemis contrôlés.
+  // CONTRÔLE : un sort [controle] gèle/ralentit ; SHATTER : +dégâts aux ennemis contrôlés.
   if (p.tags?.includes('controle')) enemy.controlled = Math.max(enemy.controlled ?? 0, p.duration ?? 4)
-  // SHATTER : +dégâts vs gelé/contrôlé. v0.34 « Équilibre des sphères » : shatter +frac×(altMult−1), BORNÉ.
+  // SHATTER : +dégâts vs gelé/contrôlé. « Équilibre des sphères » : shatter +frac×(altMult−1), BORNÉ.
   const shatterTot = cm.shatter + cm.shatterFromAlteration * (derived.alterationMult - 1)
   const shatterMult = (enemy.controlled ?? 0) > 0 ? 1 + shatterTot : 1
-  // PYROMANCIEN « Hot Streak » (v0.31) : tes sorts [feu] chargent la Chaleur (montée pondérée par le Critique).
+  // PYROMANCIEN « Hot Streak » : tes sorts [feu] chargent la Chaleur (montée pondérée par le Critique).
   // Un sort [feu][direct] lancé à PLEINE Chaleur est SURPUISSANT (×mult) puis remet la Chaleur à 0.
   let hotMult = 1
   if (cm.hotStreak && p.tags?.includes('feu')) {
@@ -659,13 +659,13 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
     if (isNuke && p.tags.includes('direct') && (caster.heat ?? 0) >= cm.hotStreak.cap) {
       hotMult = cm.hotStreak.mult
       caster.heat = 0
-      // v0.34 « Combustion runique » : un déclenchement de Hot Streak octroie des Charges des arcanes (Feu→Arcane).
+      // « Combustion runique » : un déclenchement de Hot Streak octroie des Charges des arcanes (Feu→Arcane).
       if (cm.hotStreakCharges > 0) caster.combo = Math.min(5 + cm.comboCap, (caster.combo ?? 0) + cm.hotStreakCharges)
     } else {
       caster.heat = Math.min(cm.hotStreak.cap, (caster.heat ?? 0) + 1 + 2 * derived.critChance)
     }
   }
-  // v0.34 « TRINITÉ » (Convergence) : +frac de TOUS tes dégâts par état élémentaire ACTIF (embrasement /
+  // « TRINITÉ » (Convergence) : +frac de TOUS tes dégâts par état élémentaire ACTIF (embrasement /
   // gel / surcharge), borné à 3 états (indépendant de l'ilvl → pas de snowball).
   const elemStates = cm.elementalStates > 0
     ? (enemy.dot ? 1 : 0) + ((enemy.controlled ?? 0) > 0 ? 1 : 0) + ((caster.overload ?? 0) > 0 ? 1 : 0)
@@ -676,7 +676,7 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
   // l'Endurance obtient un énorme bouclier (levier de survie qui suit l'Endurance).
   const shieldBase = (p.magnitude ?? 1) * Math.max(abilityPower(derived, powerScale(p)), derived.endurancePower)
   const vm = enemyVuln(enemy)
-  // v0.34 « Lame Vénéneuse » : facteur crit du venin (gaté au seuil de Critique, BORNÉ) + application
+  // « Lame Vénéneuse » : facteur crit du venin (gaté au seuil de Critique, BORNÉ) + application
   // de venin par un finisseur/générateur (référence = coup NORMAL non amplifié).
   const venCrit = cm.poisonCanCrit > 0 && derived.critChance >= cm.poisonCanCrit
     ? 1 + derived.critChance * (derived.critMult - 1) : 1
@@ -701,7 +701,7 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
     }
     return done
   }
-  // v0.34 « Crépuscule » : amplis du CHÂTIMENT (atonement) — tous BORNÉS ou conditionnels.
+  // « Crépuscule » : amplis du CHÂTIMENT (atonement) — tous BORNÉS ou conditionnels.
   const folieActive = (caster.frenzy?.remaining ?? 0) > 0
   const folieDotMult = folieActive && cm.folieDot > 0 ? 1 + cm.folieDot : 1
   const atoneAmp = (cm.atonementIsShadow ? (cm.tagBonus['ombre'] ?? 1) : 1)
@@ -723,7 +723,7 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
     case 'cleave':
     case 'megaCleave': {
       const done = hit(magDmg * vm)
-      // v0.34 « Fracas ardent » (Convergence) : un coup [feu] sur un GELÉ pose un Embrasement (Givre→Feu).
+      // « Fracas ardent » (Convergence) : un coup [feu] sur un GELÉ pose un Embrasement (Givre→Feu).
       if (cm.frozenIgnites > 0 && (enemy.controlled ?? 0) > 0 && p.tags?.includes('feu') && enemy.hp > 0) {
         enemy.dot = { dps: Math.max(magDmg * cm.frozenIgnites * derived.alterationMult, enemy.dot?.dps ?? 0), remaining: 6 }
       }
@@ -758,7 +758,7 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
       if (allies.length && canHeal) {
         let low = allies[0]
         for (const a of allies) if (a.hp / charMaxHp(a) < low.hp / charMaxHp(low)) low = a
-        gemAbilityHeal(low, healed, cond, chars) // 🏆 Calice + ⚱️ Vases (v0.26)
+        gemAbilityHeal(low, healed, cond, chars) // 🏆 Calice + ⚱️ Vases
       }
       applyHealDot(healed) // DISSONANCE
       return bleedHeal(healed)
@@ -775,7 +775,7 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
       applyHealDot(healed)
       return bleedHeal(healed)
     }
-    // v0.34 « Crépuscule » — sorts hybrides : frappe d'ombre QUI SOIGNE.
+    // « Crépuscule » — sorts hybrides : frappe d'ombre QUI SOIGNE.
     case 'smiteHeal': {
       const done = hit(magDmg * vm)
       if (canHeal && done > 0) {
@@ -795,7 +795,7 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
       return done
     }
     case 'shield':
-      // Bouclier runique (v0.36) : REMPLACE (max, pas +) et borné aux PV max → relancer ne cumule pas,
+      // Bouclier runique : REMPLACE (max, pas +) et borné aux PV max → relancer ne cumule pas,
       // impossible d'empiler du bouclier à l'infini sur du trash avant le boss.
       caster.absorb = Math.min(charMaxHp(caster), Math.max(caster.absorb ?? 0, shieldBase))
       return 0
@@ -814,30 +814,30 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
     case 'frenzy':
       caster.frenzy = { mult: p.magnitude ?? 2, remaining: p.duration ?? 6 }
       return 0
-    // v0.34 « Avatar de guerre » (Juggernaut) : transe de dégâts (frenzy) + ÉNORME bouclier d'absorption.
+    // « Avatar de guerre » (Juggernaut) : transe de dégâts (frenzy) + ÉNORME bouclier d'absorption.
     case 'avatar': {
       caster.frenzy = { mult: p.magnitude ?? 1.8, remaining: p.duration ?? 8 }
       const grant = Math.min(charMaxHp(caster), shieldBase * 2.5) // bouclier scalé sur Endurance, ≤ PV max
       caster.absorb = Math.max(caster.absorb ?? 0, grant)
       return 0
     }
-    // v0.34 « Bond sauvage » (Métamorphe) : métamorphose-éclair (forme suivante + Instinct) puis frappe.
+    // « Bond sauvage » (Métamorphe) : métamorphose-éclair (forme suivante + Instinct) puis frappe.
     case 'shift': {
       caster.form = ((caster.form ?? 0) + 1) % 3
       caster.formClock = Math.max(2, 5 - cm.shiftHaste)
       caster.instinct = Math.min(cm.instinctMax || 0, (caster.instinct ?? 0) + 1)
       return hit(magDmg * vm)
     }
-    // v0.34 « Forme Chimère » (Métamorphe) : les 3 formes actives à la fois pendant `duration`.
+    // « Forme Chimère » (Métamorphe) : les 3 formes actives à la fois pendant `duration`.
     case 'chimera':
       caster.chimera = Math.max(caster.chimera ?? 0, p.duration ?? 10)
       return 0
-    // --- v0.29.2 : socle VOLEUR ---
+    // --- socle VOLEUR ---
     case 'poison': {
       // ASSASSIN : empile un STACK de venin ; le DoT (enemy.dot) monte avec les stacks.
       const stacks = Math.min(cm.poison.maxStacks, (enemy.venomStacks ?? 0) + 1)
       enemy.venomStacks = stacks
-      // v0.34 « Lame critique » : le venin hérite du critique (venCrit, borné, gaté au seuil).
+      // « Lame critique » : le venin hérite du critique (venCrit, borné, gaté au seuil).
       const dps = stacks * cm.poison.perStack * magDmg * derived.alterationMult * venCrit
       enemy.dot = { dps: Math.max(dps, enemy.dot?.dps ?? 0), remaining: 8 }
       return 0
@@ -848,7 +848,7 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
       const stacks = before * (cm.detonateDouble ? 2 : 1)
       if (stacks <= 0) return hit(magDmg * vm)
       const done = hit(magDmg * stacks * vm)
-      // v0.34 « Apothéose du fléau » : ré-applique une fraction des stacks consommés (détonation soutenue).
+      // « Apothéose du fléau » : ré-applique une fraction des stacks consommés (détonation soutenue).
       if (cm.detonateReapply > 0) {
         enemy.venomStacks = 0
         enemy.dot = undefined
@@ -863,13 +863,13 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
       // OMBRELAME : +`gen` Point(s) de Combo (défaut 1 ; un générateur INT lent peut en donner +2) (+ petit coup).
       const cap = 5 + cm.comboCap
       caster.combo = Math.min(cap, (caster.combo ?? 0) + (p.gen ?? 1) + cm.comboGen)
-      // v0.34 « Lames suintantes » : les générateurs appliquent aussi du venin (boucle venin↔combo).
+      // « Lames suintantes » : les générateurs appliquent aussi du venin (boucle venin↔combo).
       if (cm.builderPoison) applyVenom(1)
       // ARCANISTE « Surcharge instable » : au PLEIN de Charges, déclenche la fenêtre (et CONSOMME les Charges).
       if (cm.overload && (caster.overload ?? 0) <= 0 && (caster.combo ?? 0) >= cap) {
         caster.overload = cm.overload.window
         caster.combo = 0
-        // v0.34 « Gel arcanique » (Convergence) : entrer en Surcharge GÈLE le pack (Arcane→Givre).
+        // « Gel arcanique » (Convergence) : entrer en Surcharge GÈLE le pack (Arcane→Givre).
         if (cm.overloadFreezes) enemy.controlled = Math.max(enemy.controlled ?? 0, 3)
       }
       return hit(magDmg * vm)
@@ -879,18 +879,18 @@ function fireActive(p: PowerDef, caster: Character, derived: DerivedStats, profi
       const pts = Math.max(1, caster.combo ?? 0)
       const cap = 5 + cm.comboCap
       const venoms = enemy.venomStacks ?? 0
-      // v0.34 « Lame Vénéneuse » : amplis de finisseur conditionnels (tous BORNÉS / gatés par une condition).
+      // « Lame Vénéneuse » : amplis de finisseur conditionnels (tous BORNÉS / gatés par une condition).
       let finMult = 1 + cm.finisherMult
       if (cm.finisherIsDot) finMult *= (cm.tagBonus['dot'] ?? 1)                 // compte comme [dot]
       if (cm.finisherVsVenom > 0 && venoms > 0) finMult *= 1 + cm.finisherVsVenom // Verdict toxique
       if (cm.finisherFromAlteration > 0) finMult *= 1 + cm.finisherFromAlteration * (derived.alterationMult - 1) // Symbiose (borné)
       if (cm.finisherVenomBonus > 0) finMult *= 1 + Math.min(0.4, cm.finisherVenomBonus * venoms) // Pacte (capé 40 %)
-      // v0.34 « Bouclier offensif » (Juggernaut) : le finisseur frappe selon ton bouclier d'absorption (BORNÉ : ≤ PV).
+      // « Bouclier offensif » (Juggernaut) : le finisseur frappe selon ton bouclier d'absorption (BORNÉ : ≤ PV).
       if (cm.shieldToFinisher > 0 && (caster.absorb ?? 0) > 0) finMult *= 1 + cm.shieldToFinisher * Math.min(1, (caster.absorb ?? 0) / Math.max(1, charMaxHp(caster)))
       const done = hit(magDmg * pts * 0.55 * finMult * vm)
-      // v0.34 « Sang et acier » (Juggernaut) : un finisseur rafraîchit tes saignements (DoT physique).
+      // « Sang et acier » (Juggernaut) : un finisseur rafraîchit tes saignements (DoT physique).
       if (cm.finisherRefreshBleed && enemy.dot) enemy.dot.remaining = Math.max(enemy.dot.remaining, 5)
-      // v0.34 « Bond coordonné » (Symbiose) : un finisseur fait BONDIR le familier (pic ≈ N s de son DPS).
+      // « Bond coordonné » (Symbiose) : un finisseur fait BONDIR le familier (pic ≈ N s de son DPS).
       if (cm.petBurstOnFinisher > 0 && cm.petDps > 0) {
         const petMult = 1 + cm.petBonus + cm.petFromPrecision * derived.precision
         hit(theoreticalDps(derived, profile, cm.damageMult) * cm.petDps * petMult * cm.petBurstOnFinisher * vm)
@@ -951,7 +951,7 @@ interface AbilityCtx {
   resist: Partial<Record<DamageType, number>>
   passives: { threatMult: number; damageReduction: number }
   cmods: CharCombatMods
-  /** v0.26 : gemmes d'équipe + contexte (chaîne défensive sur les coups télégraphés). */
+  /** gemmes d'équipe + contexte (chaîne défensive sur les coups télégraphés). */
   cond?: CondMods
   surge?: boolean
   aliveEnemies?: number
@@ -964,7 +964,7 @@ interface AbilityCtx {
 /** Applique l'effet d'une technique ennemie à un héros cible (modèle d'exigence + Purge). */
 function applyEnemyAbility(ab: EnemyAbility, enemy: Enemy, t: Character, ctx: AbilityCtx) {
   const resist = ctx.resist[ab.element] ?? 0
-  const purge = ctx.derived.resilience // v0.38 — la Résilience couvre l'ex-Purge (intensité/durée des altérations)
+  const purge = ctx.derived.resilience // la Résilience couvre l'ex-Purge (intensité/durée des altérations)
   const extra = (1 - ctx.passives.damageReduction) * (1 - ctx.cmods.flatDr)
   const req = enemyReq(enemy, ab.element)
   // ÉGIDE « Aegis adaptatif » : tout type qui te frappe te rend plus résistant à ce type.
@@ -976,7 +976,7 @@ function applyEnemyAbility(ab: EnemyAbility, enemy: Enemy, t: Character, ctx: Ab
   switch (ab.kind) {
     case 'dot': {
       // DoT : ignore armure/esquive. La PURGE réduit intensité + durée ET ronge l'exigence du
-      // type sur les altérations (v0.24 §5.3 : Req_eff = Req − Purge×100 — la soupape anti-DoT).
+      // type sur les altérations (Req_eff = Req − Purge×100 — la soupape anti-DoT).
       const reqDot = Math.max(0, req - purge * 100)
       const dps = Math.max(0, enemy.damage * ab.magnitude * resistMult(reqDot, resist, ctx.cmods.reqReduction) * (1 - purge))
       const remaining = (ab.duration ?? 4) * (1 - purge * 0.5)
@@ -986,7 +986,7 @@ function applyEnemyAbility(ab: EnemyAbility, enemy: Enemy, t: Character, ctx: Ab
     case 'burst':
     case 'drain': {
       // Coup unique télégraphié : multiplicateur d'exigence + atténuation générique bornée,
-      // puis la chaîne défensive v0.26 (Sixième sens, Granit, Mémoire de la pierre, Égide,
+      // puis la chaîne défensive (Sixième sens, Granit, Mémoire de la pierre, Égide,
       // Carapace…) et enfin l'immunité/bouclier d'absorption du héros.
       let dmg = incomingDps(enemy.damage * ab.magnitude, ab.element, ctx.derived, ctx.resist, req, extra, ctx.cmods.reqReduction)
       dmg *= (ctx.pact?.dmgIn ?? 1)
@@ -1000,7 +1000,7 @@ function applyEnemyAbility(ab: EnemyAbility, enemy: Enemy, t: Character, ctx: Ab
       break
     }
     case 'cc': {
-      // Contrôle : durée réduite par la RÉSILIENCE (v0.38, ex-Ténacité).
+      // Contrôle : durée réduite par la RÉSILIENCE (ex-Ténacité).
       t.stun = Math.max(t.stun ?? 0, (ab.duration ?? 1) * (1 - ctx.derived.resilience))
       break
     }
@@ -1015,7 +1015,7 @@ function applyEnemyAbility(ab: EnemyAbility, enemy: Enemy, t: Character, ctx: Ab
 
 /** Fait progresser les techniques d'un ennemi (cooldown + télégraphe) et applique celles qui tombent.
  *  🐌 Dilatation : allonge les télégraphes · ⏳ Grain de sable : 1re incantation des non-boss coupée.
- *  v0.26 : 🗼 Tour de garde peut détourner le coup d'une cible fragile vers le plus endurant. */
+ *  🗼 Tour de garde peut détourner le coup d'une cible fragile vers le plus endurant. */
 function tickEnemyAbilities(enemy: Enemy, chars: Character[], info: (AbilityCtx | null)[], dt: number, runes?: TimeRuneMods) {
   if (!enemy.abilities || enemy.abilities.length === 0 || enemy.hp <= 0) return
   const alive = chars.map((_, i) => i).filter((i) => chars[i].hp > 0 && info[i])
@@ -1058,7 +1058,7 @@ function tickEnemyAbilities(enemy: Enemy, chars: Character[], info: (AbilityCtx 
 }
 
 /** Décompte des statuts transitoires du héros (étourdissement, malédiction, DoT subis).
- *  v0.26 : minute aussi les fenêtres des gemmes (Fièvre, Testament, Verre trempé, Carapace,
+ *  minute aussi les fenêtres des gemmes (Fièvre, Testament, Verre trempé, Carapace,
  *  Goutte-à-goutte) et soigne au Garrot quand une altération expire. */
 function tickHeroStatuses(chars: Character[], dt: number, cond?: CondMods, pact?: PactMods) {
   adaptiveTick(dt) // Égide : les stacks adaptatifs s'éventent (20 s glissantes)
@@ -1087,7 +1087,7 @@ function tickHeroStatuses(chars: Character[], dt: number, cond?: CondMods, pact?
       c.instinct = Math.max(0, (c.instinct ?? 0) - 0.05 * dt)             // décroît à l'arrêt (l'auto-cycle le maintient)
     }
     if (c.charge) c.charge.remaining -= dt // la frappe différée est résolue dans le pas de combat
-    // v0.26 : horloges par héros des gemmes de Bastion/Flux.
+    // horloges par héros des gemmes de Bastion/Flux.
     verreTimer.set(c.id, (verreTimer.get(c.id) ?? 0) + dt)
     const ccd = carapaceCdMap.get(c.id)
     if (ccd && ccd > 0) carapaceCdMap.set(c.id, Math.max(0, ccd - dt))
@@ -1125,7 +1125,7 @@ function tickHeroStatuses(chars: Character[], dt: number, cond?: CondMods, pact?
 }
 
 /** Un pas de combat de l'équipe contre un ennemi. Renvoie l'état mis à jour. */
-/** v0.35 — vitesse d'explosion des dégâts d'un MUR passé son enrage (fraction/s). Course au DPS. */
+/** vitesse d'explosion des dégâts d'un MUR passé son enrage (fraction/s). Course au DPS. */
 const MUR_ENRAGE_RAMP = 0.5
 export function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, mods?: CombatMods) {
   const enemy: Enemy = { ...enemyIn, dot: enemyIn.dot ? { ...enemyIn.dot } : undefined, abilities: enemyIn.abilities?.map((a) => ({ ...a })) }
@@ -1142,7 +1142,7 @@ export function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, 
   // Œil de l'Opportuniste : bonus pendant qu'une technique ennemie INCANTE (télégraphe visible).
   const enemyCasting = enemy.abilities?.some((a) => (a.cast ?? 0) > 0) ?? false
   const opportunisteMult = mods?.cond?.opportuniste && enemyCasting ? 1 + mods.cond.opportuniste : 1
-  // v0.26 : qui était debout AVANT ce pas (⚓ Ancrage / 🎺 Marche / 📜 Testament).
+  // qui était debout AVANT ce pas (⚓ Ancrage / 🎺 Marche / 📜 Testament).
   const aliveBefore = chars.map((c) => c.hp > 0)
   // Décompte des statuts transitoires (étourdissement, malédiction, DoT subis) avant d'agir.
   tickHeroStatuses(chars, dt, mods?.cond, mods?.pact)
@@ -1171,7 +1171,7 @@ export function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, 
       d.profile = { ...d.profile, profile: { [base]: 1 }, mainType: base }
     })
   }
-  // v0.26 : premier tick face à cet ennemi → Égide rechargée, boucliers de départ, runes d'ouverture.
+  // premier tick face à cet ennemi → Égide rechargée, boucliers de départ, runes d'ouverture.
   if ((enemy.age ?? 0) <= dt + 1e-9) {
     gemFightStart(chars, info, mods?.cond)
     runeFightStart(chars, mods?.runes)
@@ -1205,7 +1205,7 @@ export function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, 
     const surplusMult = d.cmods.surplusToDamage > 0
       ? 1 + Math.min(d.cmods.surplusToDamage, (resistSurplus(enemy, d.resist) / RESIST_DSCALE) * d.cmods.surplusToDamage)
       : 1
-    // v0.26 : 🎺 Marche, 📜 Testament, ⚡ Sous tension, 🪟 Verre trempé, 🧭 Boussole (champion)
+    // 🎺 Marche, 📜 Testament, ⚡ Sous tension, 🪟 Verre trempé, 🧭 Boussole (champion)
     // + 🪦 Usure / 🩸 pactes (dégâts, autos, focus — l'ennemi unique EST le focus).
     const gemMult = gemOffenseMult(c, mods?.cond, enemy, false)
     const pactAuto = (mods?.pact?.autoMult ?? 1) * (1 + (mods?.pact?.focusBonus ?? 0))
@@ -1269,7 +1269,7 @@ export function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, 
         if (hit.crit && d.cmods.igniteOnCrit) {
           enemy.dot = { dps: Math.max(hit.damage * d.cmods.igniteOnCrit.frac * d.derived.alterationMult, enemy.dot?.dps ?? 0), remaining: d.cmods.igniteOnCrit.duration }
         }
-        // 🩸 FURIE « Enrage » (v0.34) : un coup CRITIQUE déclenche/rafraîchit l'Enrage (frenzy) — sans jamais downgrader une transe plus forte.
+        // 🩸 FURIE « Enrage » : un coup CRITIQUE déclenche/rafraîchit l'Enrage (frenzy) — sans downgrader une transe plus forte.
         if (hit.crit && d.cmods.enrageOnCrit) {
           const e = d.cmods.enrageOnCrit
           c.frenzy = { mult: Math.max(e.mult, c.frenzy?.mult ?? 0), remaining: Math.max(e.duration, c.frenzy?.remaining ?? 0) }
@@ -1287,7 +1287,7 @@ export function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, 
     }
     // 🐾 INVOCATION : le familier inflige en continu une fraction de ton DPS d'auto-attaque.
     if (d.cmods.petDps > 0 && enemy.hp > 0) {
-      // v0.34 SYMBIOSE : le familier hérite de tes stats (petBonus + Précision, BORNÉ) et suit ta marque (vuln).
+      // SYMBIOSE : le familier hérite de tes stats (petBonus + Précision, BORNÉ) et suit ta marque (vuln).
       const petMult = (1 + d.cmods.petBonus + d.cmods.petFromPrecision * d.derived.precision) * (d.cmods.petBonus > 0 ? enemyVuln(enemy) : 1)
       const pet = theoreticalDps(d.derived, d.profile, d.cmods.damageMult) * d.cmods.petDps * petMult * dt
       enemy.hp = Math.max(0, enemy.hp - pet); dealtThis += pet
@@ -1328,10 +1328,10 @@ export function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, 
     const d = info[i]
     if (!d) return
     const stunned = (c.stun ?? 0) > 0
-    // ARCANISTE « Surcharge » (v0.31) : pendant la fenêtre, recharges ×2 et dégâts de sorts ×mult.
+    // ARCANISTE « Surcharge » : pendant la fenêtre, recharges ×2 et dégâts de sorts ×mult.
     const overloadOn = (c.overload ?? 0) > 0 && !!d.cmods.overload
     const overloadMult = overloadOn ? d.cmods.overload!.mult : 1
-    // v0.30 : le « deck » de combat = 5 actifs (auto/manuel) + 3 générateurs (auto pur, fabriquent la ressource).
+    // le « deck » de combat = 5 actifs (auto/manuel) + 3 générateurs (auto pur, fabriquent la ressource).
     const deck: { pid: string; auto: boolean }[] = []
     c.powers.forEach((pid, slot) => { if (pid) deck.push({ pid, auto: c.powerAuto?.[slot] !== false }) })
     for (const gid of c.support ?? []) if (gid) deck.push({ pid: gid, auto: true })
@@ -1339,13 +1339,13 @@ export function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, 
       const p = getPower(pid)
       if (!p || p.kind !== 'active') return
       const key = `${c.id}:${pid}`
-      // ⌛ Sabliers liés (v0.26) : les recharges défilent plus vite pendant une incantation ennemie.
+      // ⌛ Sabliers liés : les recharges défilent plus vite pendant une incantation ennemie.
       const cdTick = dt * (1 + (enemyCasting && mods?.runes?.sabliers ? mods.runes.sabliers : 0)) * (overloadOn ? 2 : 1)
       const cd = (cooldowns.get(key) ?? 0) - cdTick
       if (cd <= 0 && !stunned && (auto || manualFire.has(key)) && autoSpenderReady(p, c, enemy, manualFire.has(key))) {
         // 🩸 Pacte sanglant : recharges raccourcies, mais chaque lancement coûte 2% des PV max.
         const pacte = mods?.cond?.pacteCdr ?? 0
-        // 🛎️ Carillon (v0.26) : tous les N lancements, la recharge suivante est à moitié prix.
+        // 🛎️ Carillon : tous les N lancements, la recharge suivante est à moitié prix.
         cooldowns.set(key, (p.cooldown ?? 3) * (1 - d.derived.cdr) * (1 - pacte) * carillonMult(mods?.cond))
         if (pacte > 0) c.hp = Math.max(1, c.hp - 0.02 * charMaxHp(c))
         manualFire.delete(key)
@@ -1423,8 +1423,8 @@ export function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, 
     }
     // 🧊 Stase (rune) : la montée en puissance ennemie est gelée les X premières secondes.
     const rampT = Math.max(0, (mods?.fightTime ?? 0) - (mods?.runes?.staseSec ?? 0))
-    // v0.35 — ENRAGE DUR du MUR (boss de fin de Palier) : passé `mur.enrageAt`, les dégâts EXPLOSENT
-    // (+50 %/s) → course au DPS, l'ossature du mur (DESIGN_v0.35 §6). Depuis `enemy.age` (pas de
+    // ENRAGE DUR du MUR (boss de fin de Chapitre) : passé `mur.enrageAt`, les dégâts EXPLOSENT
+    // (+50 %/s) → course au DPS, l'ossature du mur. Depuis `enemy.age` (pas de
     // compounding) ; sans effet sur le farm normal / les packs (pas de `mur`).
     const murAge = enemy.age ?? 0
     const murEnrage = enemy.mur && murAge > enemy.mur.enrageAt
@@ -1433,7 +1433,7 @@ export function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, 
     // 🫧 Latence (rune) : les ennemis frappent moins fort en début de combat.
     if (mods?.runes?.latence && (enemy.age ?? 0) <= 8) effDmg *= 1 - mods.runes.latence
     // L'atténuation générique (esquive/réduction/maîtrise + passives/keystones) est BORNÉE
-    // dans incomingDps ; le multiplicateur d'exigence du type (v0.24) s'applique avant.
+    // dans incomingDps ; le multiplicateur d'exigence du type s'applique avant.
     let incoming = incomingDps(
       effDmg, enemy.damageType, td.derived, td.resist,
       enemyReq(enemy, enemy.damageType),
@@ -1443,7 +1443,7 @@ export function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, 
     // Réfléchissant : CAPÉ à 10% des PV max de la cible par seconde — sinon un héros à très gros
     // DPS et petits PV se one-shotait lui-même (400k DPS vs 12k PV…).
     if (mods?.reflect) incoming += Math.min(totalDealt * mods.reflect, charMaxHp(t) * 0.10 * dt)
-    // v0.26 : 🗼 Tour de garde — une part du flux part vers le plus endurant si la cible chancelle.
+    // 🗼 Tour de garde — une part du flux part vers le plus endurant si la cible chancelle.
     const split = tourGardeSplit(chars, targetI, mods?.cond)
     const parts: [number, number][] = split ? [[targetI, 1 - split.frac], [split.tankI, split.frac]] : [[targetI, 1]]
     for (const [ci, frac] of parts) {
@@ -1463,7 +1463,7 @@ export function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, 
       if (cd2.cmods.adaptiveResist && taken > 0) adaptiveAdd(cc.id, enemy.damageType, cd2.cmods.adaptiveResist.gain * dt, cd2.cmods.adaptiveResist.cap)
       // Épines (thorns) : renvoie une fraction de l'attaque à l'ennemi (basée sur le coup, bouclier inclus).
       if (cd2.cmods.thorns > 0 && enemy.hp > 0) enemy.hp = Math.max(0, enemy.hp - dmg * cd2.cmods.thorns)
-      // 🩸 VENGEANCE (v0.34, Juggernaut) : encaisser génère de la Rage (Combo) ∝ aux PV perdus.
+      // 🩸 VENGEANCE (Juggernaut) : encaisser génère de la Rage (Combo) ∝ aux PV perdus.
       if (cd2.cmods.damageToRage > 0 && taken > 0) cc.combo = Math.min(5 + cd2.cmods.comboCap, (cc.combo ?? 0) + cd2.cmods.damageToRage * Math.min(0.3, taken / Math.max(1, charMaxHp(cc))) * 8)
     }
     // 🤺 Riposte mesurée : le temps sous le feu se mue en contre-attaques.
@@ -1496,11 +1496,11 @@ export function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, 
 
   // 5b) 🕊️ Sursis : un héros qui vient de tomber survit à 25% PV (👑 Hubris : sans filet).
   const revived = applySursis(chars, mods?.pact?.noSursis ? undefined : mods?.runes?.sursisCd)
-  // v0.26 : morts restantes → ⚓ Ancrage brisé, 🎺 Marche perdue, 📜 Testament, 💀 Memento.
+  // morts restantes → ⚓ Ancrage brisé, 🎺 Marche perdue, 📜 Testament, 💀 Memento.
   gemDeathEvents(chars, aliveBefore, mods?.cond, mods?.pact)
 
   // 6) Régénération des persos (+ bonus de régén + Métaboliseur d'Égide) + clamp.
-  // v0.25.x — RELÈVE (farm uniquement, ce pas de combat ne sert qu'aux paliers) : un héros tombé
+  // RELÈVE (farm uniquement, ce pas de combat ne sert qu'aux vagues) : un héros tombé
   // se relève après FARM_REZ_DELAY à 35% de ses PV. Avant, hors wipe d'équipe, un mort restait
   // mort pour toujours (la régén ne touchait que les vivants) — c'était le « perso pas rez ».
   const rezzed: string[] = []
@@ -1508,12 +1508,12 @@ export function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, 
     const d = info[i]
     if (c.hp > 0 && d) {
       const mh = charMaxHp(c)
-      let regen = mh * REGEN_RATE * regenMult // v0.38 — base = 0 (REGEN_RATE) ; ne reste que les sources additives (métaboliseur…)
+      let regen = mh * REGEN_RATE * regenMult // base = 0 (REGEN_RATE) ; ne reste que les sources additives (métaboliseur…)
       // 🛡️ ÉGIDE « Métaboliseur » : le surplus de résist face aux exigences devient du soin/s.
       if (d.cmods.surplusRegen > 0) {
         regen += mh * Math.min(d.cmods.surplusRegen, (resistSurplus(enemy, d.resist) / RESIST_DSCALE) * d.cmods.surplusRegen)
       }
-      // 💉 Perfusion (v0.38) : sous 50% des PV, soin/s FORFAITAIRE (la Régén de base a disparu → plus de × sur 0).
+      // 💉 Perfusion : sous 50% des PV, soin/s FORFAITAIRE (la Régén de base a disparu → plus de × sur 0).
       if (mods?.cond?.perfusionBonus && c.hp / mh < 0.5) regen += mh * mods.cond.perfusionBonus * 0.05
       // 🍽️ Jeûne / 🧛 Sang vicié : la régénération est coupée.
       if (mods?.pact?.noHeal || mods?.pact?.noRegen) regen = 0
@@ -1553,7 +1553,7 @@ export function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt:
   // Œil de l'Opportuniste : bonus tant qu'au moins un ennemi du pack INCANTE (télégraphe).
   const anyCasting = enemies.some((e) => e.hp > 0 && e.abilities?.some((a) => (a.cast ?? 0) > 0))
   const opportunisteMult = mods?.cond?.opportuniste && anyCasting ? 1 + mods.cond.opportuniste : 1
-  // v0.26 : qui était debout AVANT ce pas (⚓ Ancrage / 🎺 Marche / 📜 Testament).
+  // qui était debout AVANT ce pas (⚓ Ancrage / 🎺 Marche / 📜 Testament).
   const aliveBefore = chars.map((c) => c.hp > 0)
   tickHeroStatuses(chars, dt, mods?.cond, mods?.pact)
   const info = chars.map((c) =>
@@ -1568,7 +1568,7 @@ export function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt:
   )
   // ÉGIDE : aura partagée + stacks adaptatifs → résistances effectives.
   enrichResists(chars, info)
-  // 🏅 Trophée de guerre (v0.26) : en raid, des points de résistance offerts à toute l'équipe.
+  // 🏅 Trophée de guerre : en raid, des points de résistance offerts à toute l'équipe.
   if (mods?.content?.resistBonus) {
     for (const d of info) {
       if (!d) continue
@@ -1586,7 +1586,7 @@ export function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt:
       d.profile = { ...d.profile, profile: { [base]: 1 }, mainType: base }
     })
   }
-  // v0.26 : premier tick de la RENCONTRE → Égide rechargée, boucliers de départ, runes d'ouverture.
+  // premier tick de la RENCONTRE → Égide rechargée, boucliers de départ, runes d'ouverture.
   if ((mods?.fightTime ?? 99) <= dt + 1e-9) {
     gemFightStart(chars, info, mods?.cond)
     runeFightStart(chars, mods?.runes)
@@ -1621,7 +1621,7 @@ export function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt:
     const surplusMult = d.cmods.surplusToDamage > 0 && fTarget
       ? 1 + Math.min(d.cmods.surplusToDamage, (resistSurplus(fTarget, d.resist) / RESIST_DSCALE) * d.cmods.surplusToDamage)
       : 1
-    // v0.26 : 🎺 Marche, 📜 Testament, ⚡ Sous tension, 🪟 Verre trempé, 🧭 Boussole (champion),
+    // 🎺 Marche, 📜 Testament, ⚡ Sous tension, 🪟 Verre trempé, 🧭 Boussole (champion),
     // 🎯 Première impression (le premier ennemi du pack, packs de 2+).
     const fTarget0 = focus()
     const firstOfPack = aliveAtStart >= 2 && !!fTarget0 && fTarget0 === enemies[0]
@@ -1692,7 +1692,7 @@ export function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt:
         if (hit.crit && d.cmods.igniteOnCrit) {
           t2.dot = { dps: Math.max(hit.damage * d.cmods.igniteOnCrit.frac * d.derived.alterationMult, t2.dot?.dps ?? 0), remaining: d.cmods.igniteOnCrit.duration }
         }
-        // 🩸 FURIE « Enrage » (v0.34) : un coup CRITIQUE déclenche/rafraîchit l'Enrage (frenzy).
+        // 🩸 FURIE « Enrage » : un coup CRITIQUE déclenche/rafraîchit l'Enrage (frenzy).
         if (hit.crit && d.cmods.enrageOnCrit) {
           const e = d.cmods.enrageOnCrit
           c.frenzy = { mult: Math.max(e.mult, c.frenzy?.mult ?? 0), remaining: Math.max(e.duration, c.frenzy?.remaining ?? 0) }
@@ -1789,10 +1789,10 @@ export function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt:
     const d = info[i]
     if (!d) return
     const stunned = (c.stun ?? 0) > 0
-    // ARCANISTE « Surcharge » (v0.31) : pendant la fenêtre, recharges ×2 et dégâts de sorts ×mult.
+    // ARCANISTE « Surcharge » : pendant la fenêtre, recharges ×2 et dégâts de sorts ×mult.
     const overloadOn = (c.overload ?? 0) > 0 && !!d.cmods.overload
     const overloadMult = overloadOn ? d.cmods.overload!.mult : 1
-    // v0.30 : deck = 5 actifs (auto/manuel) + 3 générateurs (auto pur).
+    // deck = 5 actifs (auto/manuel) + 3 générateurs (auto pur).
     const deck: { pid: string; auto: boolean }[] = []
     c.powers.forEach((pid, slot) => { if (pid) deck.push({ pid, auto: c.powerAuto?.[slot] !== false }) })
     for (const gid of c.support ?? []) if (gid) deck.push({ pid: gid, auto: true })
@@ -1800,13 +1800,13 @@ export function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt:
       const p = getPower(pid)
       if (!p || p.kind !== 'active') return
       const key = `${c.id}:${pid}`
-      // ⌛ Sabliers liés (v0.26) : les recharges défilent plus vite pendant une incantation ennemie.
+      // ⌛ Sabliers liés : les recharges défilent plus vite pendant une incantation ennemie.
       const cdTick = dt * (1 + (anyCasting && mods?.runes?.sabliers ? mods.runes.sabliers : 0)) * (overloadOn ? 2 : 1)
       const cd = (cooldowns.get(key) ?? 0) - cdTick
       if (cd <= 0 && !stunned && (auto || manualFire.has(key)) && autoSpenderReady(p, c, focus(), manualFire.has(key))) {
         // 🩸 Pacte sanglant : recharges raccourcies contre 2% des PV max par lancement.
         const pacte = mods?.cond?.pacteCdr ?? 0
-        // 🛎️ Carillon (v0.26) : tous les N lancements, la recharge suivante est à moitié prix.
+        // 🛎️ Carillon : tous les N lancements, la recharge suivante est à moitié prix.
         cooldowns.set(key, (p.cooldown ?? 3) * (1 - d.derived.cdr) * (1 - pacte) * carillonMult(mods?.cond))
         if (pacte > 0) c.hp = Math.max(1, c.hp - 0.02 * charMaxHp(c))
         manualFire.delete(key)
@@ -1834,7 +1834,7 @@ export function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt:
           return dd
         }
         let dealt = cast(1)
-        // 💥 Détonation arcanique (v0.26) : tous les N sorts, celui-ci éclabousse le pack (50%).
+        // 💥 Détonation arcanique : tous les N sorts, celui-ci éclabousse le pack (50%).
         if (mods?.cond?.detonationN && dealt > 0) {
           const n = (gemCounters.get('deto') ?? 0) + 1
           if (n >= mods.cond.detonationN) {
@@ -1901,8 +1901,8 @@ export function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt:
     }
     // 🧊 Stase (rune) : la montée en puissance ennemie est gelée les X premières secondes.
     const rampT = Math.max(0, (mods?.fightTime ?? 0) - (mods?.runes?.staseSec ?? 0))
-    // v0.35 — ENRAGE DUR du MUR (boss de fin de Palier) : passé `mur.enrageAt`, les dégâts EXPLOSENT
-    // (+50 %/s) → course au DPS, l'ossature du mur (DESIGN_v0.35 §6). Depuis `enemy.age` (pas de
+    // ENRAGE DUR du MUR (boss de fin de Chapitre) : passé `mur.enrageAt`, les dégâts EXPLOSENT
+    // (+50 %/s) → course au DPS, l'ossature du mur. Depuis `enemy.age` (pas de
     // compounding) ; sans effet sur le farm normal / les packs (pas de `mur`).
     const murAge = enemy.age ?? 0
     const murEnrage = enemy.mur && murAge > enemy.mur.enrageAt
@@ -1918,7 +1918,7 @@ export function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt:
     ) * dt
     // Même cap que le combat mono-cible : le renvoi ne dépasse jamais 10% des PV max/s.
     if (mods?.reflect && !reflectApplied) { incoming += Math.min(totalDealt * mods.reflect, charMaxHp(t) * 0.10 * dt); reflectApplied = true }
-    // v0.26 : 🗼 Tour de garde — une part du flux part vers le plus endurant si la cible chancelle.
+    // 🗼 Tour de garde — une part du flux part vers le plus endurant si la cible chancelle.
     const aliveE = enemies.filter((e) => e.hp > 0).length
     const split = tourGardeSplit(chars, targetI, mods?.cond)
     const parts: [number, number][] = split ? [[targetI, 1 - split.frac], [split.tankI, split.frac]] : [[targetI, 1]]
@@ -1939,7 +1939,7 @@ export function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt:
       // ÉGIDE « Aegis adaptatif » : être frappé par un type endurcit contre ce type.
       if (cd2.cmods.adaptiveResist && taken > 0) adaptiveAdd(cc.id, enemy.damageType, cd2.cmods.adaptiveResist.gain * dt, cd2.cmods.adaptiveResist.cap)
       if (cd2.cmods.thorns > 0 && enemy.hp > 0) enemy.hp = Math.max(0, enemy.hp - dmg * cd2.cmods.thorns)
-      // 🩸 VENGEANCE (v0.34, Juggernaut) : encaisser génère de la Rage (Combo) ∝ aux PV perdus.
+      // 🩸 VENGEANCE (Juggernaut) : encaisser génère de la Rage (Combo) ∝ aux PV perdus.
       if (cd2.cmods.damageToRage > 0 && taken > 0) cc.combo = Math.min(5 + cd2.cmods.comboCap, (cc.combo ?? 0) + cd2.cmods.damageToRage * Math.min(0.3, taken / Math.max(1, charMaxHp(cc))) * 8)
     }
     // Techniques signature de CET ennemi (sur la plus haute menace).
@@ -1963,7 +1963,7 @@ export function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt:
     }
   }
 
-  // 4c) 🤺 Riposte mesurée (v0.26) : le temps sous le feu du pack se mue en contre-attaques (focus).
+  // 4c) 🤺 Riposte mesurée : le temps sous le feu du pack se mue en contre-attaques (focus).
   if (mods?.cond?.riposteSec) {
     const liveNow = chars.map((_, i) => i).filter((i) => chars[i].hp > 0 && info[i])
     const ft = focus()
@@ -1985,7 +1985,7 @@ export function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt:
 
   // 5b) 🕊️ Sursis : un héros qui vient de tomber survit à 25% PV (👑 Hubris : sans filet).
   const revived = applySursis(chars, mods?.pact?.noSursis ? undefined : mods?.runes?.sursisCd)
-  // v0.26 : morts restantes → ⚓ Ancrage brisé, 🎺 Marche perdue, 📜 Testament, 💀 Memento.
+  // morts restantes → ⚓ Ancrage brisé, 🎺 Marche perdue, 📜 Testament, 💀 Memento.
   gemDeathEvents(chars, aliveBefore, mods?.cond, mods?.pact)
 
   // 6) Régénération des persos (+ Métaboliseur d'Égide face à la cible focus) + clamp.
@@ -1993,16 +1993,16 @@ export function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt:
     const d = info[i]
     if (c.hp > 0 && d) {
       const mh = charMaxHp(c)
-      // v0.27 (Lot 3) « Mal de l'abîme » : la régén de base est BRIDÉE en raid (content.regenMult)
+      // « Mal de l'abîme » : la régén de base est BRIDÉE en raid (content.regenMult)
       // → la vie redevient une ressource, fini le tank qui out-régène tout sans bouger.
-      let regen = mh * REGEN_RATE * regenMult * (mods?.content?.regenMult ?? 1) // v0.38 — base = 0 (REGEN_RATE) ; sources additives uniquement
+      let regen = mh * REGEN_RATE * regenMult * (mods?.content?.regenMult ?? 1) // base = 0 (REGEN_RATE) ; sources additives uniquement
       const ft = focus()
       if (d.cmods.surplusRegen > 0 && ft) {
         regen += mh * Math.min(d.cmods.surplusRegen, (resistSurplus(ft, d.resist) / RESIST_DSCALE) * d.cmods.surplusRegen)
       }
-      // 💉 Perfusion (v0.38) : sous 50% des PV, soin/s FORFAITAIRE (la Régén de base a disparu → plus de × sur 0).
+      // 💉 Perfusion : sous 50% des PV, soin/s FORFAITAIRE (la Régén de base a disparu → plus de × sur 0).
       if (mods?.cond?.perfusionBonus && c.hp / mh < 0.5) regen += mh * mods.cond.perfusionBonus * 0.05
-      // v0.27 (Lot 3) « Blessures mortelles » : pendant la fenêtre de heal-cut (posée par la Nova),
+      // « Blessures mortelles » : pendant la fenêtre de heal-cut (posée par la Nova),
       // la régén s'effondre → un tank ne peut plus éponger juste après une Nova.
       if ((c.healCut ?? 0) > 0) { regen *= HEALCUT_REGEN_MULT; c.healCut = Math.max(0, (c.healCut ?? 0) - dt) }
       // 🍽️ Jeûne / 🧛 Sang vicié : la régénération est coupée.

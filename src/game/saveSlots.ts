@@ -1,16 +1,16 @@
 /**
- * EMPLACEMENTS DE SAUVEGARDE & STOCKAGE DURABLE (Palier 2) — couche multi-slots IndexedDB au-dessus de
+ * EMPLACEMENTS DE SAUVEGARDE & STOCKAGE DURABLE — couche multi-slots IndexedDB au-dessus de
  * `save.ts`. (À ne pas confondre avec `slots.ts`, qui décrit les emplacements d'ÉQUIPEMENT.)
  *
  * IndexedDB tient N slots (`{ id, name, createdAt, updatedAt, data: SaveData }`) ; le POINTEUR de slot
  * actif + le drapeau anti-windfall vivent dans `localStorage` (lecture synchrone, nécessaire au filet de
- * `flushSave`). La save localStorage existante (palier 1) est MIGRÉE idempotemment en `slot-0` au premier
+ * `flushSave`). La save localStorage existante est MIGRÉE idempotemment en `slot-0` au premier
  * lancement. Si IndexedDB est indisponible (mode privé strict), REPLI mono-slot sur `localStorage`.
  *
  * Durabilité : `save.ts` écrit un FILET synchrone localStorage (`SAVE_KEY`) à chaque persist + reçoit un
  * SINK injecté (`registerDurableSink`) qui mirrore le slot ACTIF dans IndexedDB (debounce). Au boot on
  * RÉCONCILIE filet vs IDB (le `lastSeen` le plus récent gagne — le filet survit à un kill brutal pendant
- * qu'une écriture IDB async est abandonnée). Le relais d'import (`IMPORT_KEY`, palier 1) garde priorité.
+ * qu'une écriture IDB async est abandonnée). Le relais d'import (`IMPORT_KEY`) garde priorité.
  *
  * Acyclique : ce module importe `save.ts` ; `save.ts` ne l'importe JAMAIS (il reçoit le sink par
  * injection). Aucun accès à `indexedDB`/`window` au chargement du module (les sims Node restent saines).
@@ -183,7 +183,7 @@ export async function bootStorage(): Promise<BootResult> {
   let db: IDBDatabase | null = null
   try { db = await openDB() } catch { db = null }
   if (!db) {
-    // Repli mono-slot : la save vit dans localStorage (chemin palier 1, relais d'import compris).
+    // Repli mono-slot : la save vit dans localStorage (relais d'import compris).
     mode = 'local'
     return { save: loadSave(), activeId: SLOT0, mode, freshSwitch }
   }
@@ -213,7 +213,7 @@ export async function bootStorage(): Promise<BootResult> {
   const idbData = idbRec ? sanitizeRaw(idbRec.data) : null
 
   let chosen: SaveData | null = null
-  // 1) Relais d'import (palier 1) : priorité absolue, consommé ici.
+  // 1) Relais d'import : priorité absolue, consommé ici.
   let importRaw: string | null = null
   try { importRaw = localStorage.getItem(IMPORT_KEY) } catch { /* */ }
   if (importRaw) {
