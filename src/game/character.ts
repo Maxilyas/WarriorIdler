@@ -152,6 +152,10 @@ export function charAllocations(char: Character): Record<string, number> {
 
 /** Agrège les effets des capacités PASSIVES équipées (menace, réduction, mods, conversions v0.39). */
 export function charPassives(char: Character): { threatMult: number; damageReduction: number; mods: StatBlock; conversions: PassiveConversion[] } {
+  const e = cacheFor(char)
+  return (e.passivesOut ??= charPassivesUncached(char))
+}
+function charPassivesUncached(char: Character): { threatMult: number; damageReduction: number; mods: StatBlock; conversions: PassiveConversion[] } {
   let threatMult = 1
   let damageReduction = 0
   const mods: StatBlock = {}
@@ -221,9 +225,54 @@ export function charTotalStats(char: Character): StatBlock {
   return applyStatConversions(total, charKeystones(char), conversions)
 }
 
+// --- Cache des stats dérivées par perso (perf) -------------------------------------------------
+// charDerived/charDamageProfile/charPassives/charResist/charCombatMods sont des fonctions PURES de
+// { char.base, char.equipment, char.talents, char.pantheon, char.passives } + les globals module
+// GLOBAL/PACT/PRESTIGE_RESIST. En combat (5 Hz) le perso est RE-cloné chaque tick, mais ces cinq
+// RÉFÉRENCES restent stables tant que le joueur ne change pas son build (équiper/sertir/forger/allouer
+// produit toujours un NOUVEAU conteneur via applyItemPatch/{...c}). On mémoïse donc par char.id,
+// invalidé si une de ces références OU l'epoch des globals change.
+//   `statsEpoch` ne bouge QUE si un global change de VALEUR — pas à chaque setPactDerivedMods (appelé
+//   à chaque tick par le store mais quasi toujours avec la même valeur). Le moteur de combat traite
+//   les objets renvoyés en LECTURE SEULE (il réassigne d.profile/d.resist à de nouveaux objets, ne
+//   mute jamais l'objet caché) → mémoïser ne corrompt rien.
+let statsEpoch = 0
+
+interface StatCache {
+  epoch: number
+  base: Character['base']
+  equipment: Character['equipment']
+  talents: Character['talents']
+  pantheon: Character['pantheon']
+  passives: Character['passives']
+  derived?: DerivedStats
+  profile?: DamageProfile
+  passivesOut?: ReturnType<typeof charPassivesUncached>
+  resist?: Partial<Record<DamageType, number>>
+  cmods?: CombatMods
+}
+const statCache = new Map<string, StatCache>()
+
+/** Entrée de cache valide pour ce perso (mêmes références de build + même epoch), sinon entrée neuve. */
+function cacheFor(char: Character): StatCache {
+  const e = statCache.get(char.id)
+  if (e && e.epoch === statsEpoch
+    && e.base === char.base && e.equipment === char.equipment
+    && e.talents === char.talents && e.pantheon === char.pantheon && e.passives === char.passives) {
+    return e
+  }
+  const fresh: StatCache = {
+    epoch: statsEpoch, base: char.base, equipment: char.equipment,
+    talents: char.talents, pantheon: char.pantheon, passives: char.passives,
+  }
+  statCache.set(char.id, fresh)
+  return fresh
+}
+
 // Multiplicateurs globaux issus des améliorations marchand (mis à jour par le store).
 let GLOBAL = { power: 1, attackSpeed: 1, vitality: 1 }
 export function setGlobalCombatMods(m: { power: number; attackSpeed: number; vitality: number }) {
+  if (m.power !== GLOBAL.power || m.attackSpeed !== GLOBAL.attackSpeed || m.vitality !== GLOBAL.vitality) statsEpoch++
   GLOBAL = m
 }
 
@@ -231,14 +280,24 @@ export function setGlobalCombatMods(m: { power: number; attackSpeed: number; vit
 // même mécanique module-niveau que GLOBAL (les pactes portés changent rarement, latence ≤ 1 tick).
 let PACT = { hpMult: 1, apsMult: 1, apsForce: 0, leechBonus: 0, noRiposte: false }
 export function setPactDerivedMods(m: { hpMult: number; apsMult: number; apsForce: number; leechBonus: number; noRiposte: boolean }) {
+  if (m.hpMult !== PACT.hpMult || m.apsMult !== PACT.apsMult || m.apsForce !== PACT.apsForce
+    || m.leechBonus !== PACT.leechBonus || m.noRiposte !== PACT.noRiposte) statsEpoch++
   PACT = m
 }
 
 // ✨ PRESTIGE (v0.27) : résistance plate offerte par la Constellation (Acclimatation), mise à jour par le store.
 let PRESTIGE_RESIST = 0
-export function setGlobalPrestigeResist(v: number) { PRESTIGE_RESIST = Math.max(0, v) }
+export function setGlobalPrestigeResist(v: number) {
+  const nv = Math.max(0, v)
+  if (nv !== PRESTIGE_RESIST) statsEpoch++
+  PRESTIGE_RESIST = nv
+}
 
 export function charDerived(char: Character): DerivedStats {
+  const e = cacheFor(char)
+  return (e.derived ??= charDerivedUncached(char))
+}
+function charDerivedUncached(char: Character): DerivedStats {
   const d = computeDerived(charTotalStats(char))
   // Bonus de SET (Régalia du Néant…) : PV, recharge et vol de vie passent par le moteur dérivé
   // (le multiplicateur de dégâts de set passe par charCombatMods, comme les keystones).
@@ -305,7 +364,8 @@ export function powerScale(p: PowerDef): OffensiveStat | OffensiveStat[] | undef
 }
 
 export function charDamageProfile(char: Character): DamageProfile {
-  return computeDamageProfile(char.equipment, charKeystones(char))
+  const e = cacheFor(char)
+  return (e.profile ??= computeDamageProfile(char.equipment, charKeystones(char)))
 }
 
 /** IDs des capacités ACTIVES (actifs + soutien auto-cast) — pour le DPS de fiche et le combat. */
@@ -468,6 +528,10 @@ export function dpsBreakdown(char: Character): DpsBreakdown {
 
 /** Résistances du héros en POINTS (équipement + talents + sets) — non plafonnées (v0.24). */
 export function charResist(char: Character): Partial<Record<DamageType, number>> {
+  const e = cacheFor(char)
+  return (e.resist ??= charResistUncached(char))
+}
+function charResistUncached(char: Character): Partial<Record<DamageType, number>> {
   const r = computeResistProfile(char.equipment, talentResistMods(charAllocations(char)))
   const sb = setBonuses(char.equipment)
   if (sb.resistAll > 0) {
@@ -619,6 +683,10 @@ export interface CombatMods {
 }
 
 export function charCombatMods(char: Character): CombatMods {
+  const e = cacheFor(char)
+  return (e.cmods ??= charCombatModsUncached(char))
+}
+function charCombatModsUncached(char: Character): CombatMods {
   const out: CombatMods = {
     damageMult: 1, flatDr: 0, hot: 0, thorns: 0, multistrike: 0,
     healToDamage: 0, cleaveAuto: 0, perEnemyBonus: 0, dotLeech: 0, dotAoe: 0,
