@@ -1,7 +1,7 @@
 import type { DamageType } from './types'
 
 /**
- * ⚗️ OFFICINE DE L'ALCHIMISTE (v0.26) — le métier des CONSOMMABLES et du temps réel.
+ * ⚗️ OFFICINE DE L'ALCHIMISTE — le métier des CONSOMMABLES et du temps réel.
  *
  * Boucle : récolter des RÉACTIFS de biome (drop léger en farm) → DÉCOUVRIR des recettes par
  * EXPÉRIMENTATION (combiner 2 réactifs) → BRASSER en CUVES (maturation en temps réel, fenêtre

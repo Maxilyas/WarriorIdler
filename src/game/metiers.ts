@@ -1,5 +1,5 @@
 /**
- * MÉTIERS DE L'ATELIER (v0.22) — la refonte craft.
+ * MÉTIERS DE L'ATELIER — le système de craft.
  *
  * Quatre métiers, quatre verbes — chacun répond à une question que lui seul résout :
  *  - 🔨 FORGERON   « façonner la matière »   : création, reforge, surillvl, transmutation,
@@ -57,9 +57,9 @@ export const METIER_LIST: MetierDef[] = Object.values(METIERS)
 /* Niveaux & XP                                                        */
 /* ------------------------------------------------------------------ */
 
-// v0.26 : 25 → 50. La courbe reste IDENTIQUE jusqu'au niveau 25 (aucun joueur ne perd rien),
-// puis s'adoucit (×1,15/niv au lieu de ×1,22) — les nouveaux niveaux nourrissent des arbres
-// de 70-90 rangs où l'on ne peut PAS tout prendre (vrais choix, respec par branche).
+// Niveau max 50. La courbe est identique jusqu'au niveau 25, puis s'adoucit (×1,15/niv au lieu de
+// ×1,22) — les niveaux hauts nourrissent des arbres où l'on ne peut PAS tout prendre (vrais choix,
+// respec par branche).
 export const METIER_MAX_LEVEL = 50
 
 /** XP nécessaire pour passer du niveau `level` au suivant (géométrique, adoucie après 25). */
@@ -141,7 +141,7 @@ export function respecCost(state: MetierState): number {
 /* Arbres                                                              */
 /* ------------------------------------------------------------------ */
 
-/** Famille de synergie hexagonale (v0.41, pilote Forgeron) — base des Chaînes. */
+/** Famille de synergie hexagonale (pilote Forgeron) — base des Chaînes. */
 export type ForgeFamily = 'qualite' | 'ressource' | 'idle' | 'chance'
 /** Nature d'une tuile de la Forge hexagonale. */
 export type ForgeKind = 'stat' | 'function' | 'keystone' | 'junction'
@@ -161,21 +161,21 @@ export interface MetierNode {
   requires?: string
   /** Groupe d'exclusivité : un seul nœud du groupe peut être appris (spécialisation). */
   exclusive?: string
-  /** Branche de l'arbre (v0.26) — absent = tronc commun. Le respec se fait PAR branche. */
+  /** Branche de l'arbre — absent = tronc commun. Le respec se fait PAR branche. */
   branch?: string
   /** Rang minimal requis sur le nœud parent `requires` (lignes étagées I→V : 1 par défaut). */
   requiresRank?: number
-  /** Keystone (v0.28 E2) : nœud terminal à fort impact — rendu mis en avant (halo) dans l'arbre. */
+  /** Keystone : nœud terminal à fort impact — rendu mis en avant (halo) dans l'arbre. */
   keystone?: boolean
-  /** v0.41 — position axiale sur la Forge hexagonale (pilote Forgeron). */
+  /** Position axiale sur la Forge hexagonale (pilote Forgeron). */
   hex?: { q: number; r: number }
-  /** v0.41 — famille de synergie (Chaînes). Absent sur les jonctions. */
+  /** Famille de synergie (Chaînes). Absent sur les jonctions. */
   family?: ForgeFamily
-  /** v0.41 — nature de la tuile. */
+  /** Nature de la tuile. */
   kind?: ForgeKind
 }
 
-/** Une branche d'arbre (v0.26) : l'UI groupe les nœuds par branche, le respec est par branche. */
+/** Une branche d'arbre : l'UI groupe les nœuds par branche, le respec est par branche. */
 export interface MetierBranch {
   id: string
   name: string
@@ -212,17 +212,13 @@ export function pointsSpentInBranch(state: MetierState, metier: MetierId, branch
   return total
 }
 
-/** Coût (or) du respec d'UNE branche — 40% du respec complet (v0.26 : changer de voie sans tout raser). */
+/** Coût (or) du respec d'UNE branche — 40% du respec complet (changer de voie sans tout raser). */
 export function respecBranchCost(state: MetierState): number {
   return Math.round(respecCost(state) * 0.4)
 }
 
 export const METIER_NODES: Record<MetierId, MetierNode[]> = {
-  // v0.26 — arbre REFONDU : tronc + Compagnonnages (corps de métier) + Prodige + Procédés
-  // + Industrialisation. ~62 rangs dépensables. Les ARMES restent hors spé (bien réglées).
-  // v0.28 E2 — arbre RÉDUIT : 2 sections, ~14 nœuds. Atelier = les verbes de modif (3 premiers
-  // indispensables). Manufacture = idle + ressources + efficacité. Plus de Compagnonnage (lock-in retiré).
-  // v0.41 — Forge hexagonale (pilote) : chaque tuile porte sa position `hex`, sa `family` (Chaînes) et
+  // Forge hexagonale (pilote Forgeron) : chaque tuile porte sa position `hex`, sa `family` (Chaînes) et
   // son `kind`. Les `branch`/`requires` HISTORIQUES sont conservés pour l'ancienne UI (révélation Lot 1) :
   // les tuiles neuves (frappe/foyer/hautFourneau/jonctions) ont une branche de Voie absente de
   // METIER_BRANCHES.forgeron → invisibles/non-allouables tant que la planche hex n'est pas livrée.
@@ -292,9 +288,8 @@ export const METIER_NODES: Record<MetierId, MetierNode[]> = {
       hex: { q: 0, r: 1 }, kind: 'junction',
       desc: 'JONCTION (Fondeur↔Industriel) : +Lingots au Foyer.' },
   ],
-  // v0.26 — arbre REFONDU : ~62 rangs dépensables (tronc + 4 branches), specs étagées I→V.
-  // v0.28 E2 — arbre RÉDUIT : 2 sections, ~14 nœuds. Taillerie = les verbes gemme (3 premiers
-  // indispensables). Maîtrise & Sources = spé de famille (re-choix libre) + châsses + drop + troc.
+  // Arbre RÉDUIT : 2 sections, ~14 nœuds. Taillerie = les verbes gemme (3 premiers indispensables).
+  // Maîtrise & Sources = spé de famille (re-choix libre) + châsses + drop + troc.
   joaillier: [
     /* — 💎 TAILLERIE : faire & améliorer ses gemmes (3 premiers = indispensables) — */
     { id: 'sertissage', name: 'Sertissage', icon: '💎', maxRank: 1, branch: 'taillerie',
@@ -327,10 +322,8 @@ export const METIER_NODES: Record<MetierId, MetierNode[]> = {
     { id: 'marche', name: 'Marché aux pierres', icon: '⚖️', maxRank: 1, minLevel: 24, branch: 'maitrise',
       desc: '1 troc/jour : 3 gemmes → 1 au CHOIX (rang = min). + bonus de collection quand tu as possédé chaque gemme.' },
   ],
-  // v0.26 — arbre REFONDU : tronc (gravure, atelier runique) + Chronomancie + Législation
-  // + Pactes. Specs étagées I→V exclusives. ~45 rangs + fillers.
-  // v0.28 E2 — arbre RÉDUIT : 2 sections, 11 nœuds. Atelier runique = les verbes (graver/effacer/
-  // forger/surcharger). Voies = les 3 maîtrises exclusives (re-choix libre) + Pactes.
+  // Arbre RÉDUIT : 2 sections, 11 nœuds. Atelier runique = les verbes (graver/effacer/forger/
+  // surcharger). Voies = les 3 maîtrises exclusives (re-choix libre) + Pactes.
   runiste: [
     /* — 🪄 ATELIER RUNIQUE : les verbes (3 premiers = indispensables) — */
     { id: 'gravure', name: 'Gravure', icon: '🪄', maxRank: 1, branch: 'atelier',
@@ -357,11 +350,9 @@ export const METIER_NODES: Record<MetierId, MetierNode[]> = {
     { id: 'doublePacte', name: 'Double pacte', icon: '⛓️', maxRank: 1, minLevel: 50, requires: 'specPactiste', requiresRank: 5, branch: 'voies', keystone: true,
       desc: 'DEUX pactes actifs simultanément — mais leurs malus repassent ×1,5. Le nœud le plus dangereux du jeu.' },
   ],
-  // v0.26 — arbre REFONDU : l'Alchimiste devient le métier des CONSOMMABLES et du temps réel.
-  // Tronc + 🧪 Officine (cuves, recettes, brassins) + ⚗️ Grand Œuvre (quintessences, synthèses)
-  // + 🌿 Matière (recyclage, réactifs). ~58 rangs.
-  // v0.28 E2 — arbre RÉDUIT : 2 sections, 12 nœuds. Officine = consommables & cuves.
-  // Grand Œuvre = craft (quintessence/synthèses) + matière (Raffinage) + spé exclusive.
+  // L'Alchimiste est le métier des CONSOMMABLES et du temps réel. Arbre RÉDUIT : 2 sections, 12 nœuds.
+  // Officine = consommables & cuves. Grand Œuvre = craft (quintessence/synthèses) + matière (Raffinage)
+  // + spé exclusive.
   alchimiste: [
     /* — 🧪 OFFICINE : consommables & cuves — */
     { id: 'officine', name: 'Officine', icon: '🫖', maxRank: 3, minLevel: 2, branch: 'officine',
@@ -393,12 +384,12 @@ export const METIER_NODES: Record<MetierId, MetierNode[]> = {
 }
 
 /** Bonus de Compagnonnage applicables au craft d'un TYPE de pièce donné (majeur puis mineur). */
-/** v0.28 E2 — affixes proposables à la Signature (au choix, UNIVERSEL) : union des anciennes
+/** Affixes proposables à la Signature (au choix, UNIVERSEL) : union des anciennes
  *  listes de corps de métier, sans lock-in de spécialisation. */
-// v0.41 — vol de vie RETIRÉ des choix de Signature : stat rare et trop forte pour être garantie au choix.
+// vol de vie RETIRÉ des choix de Signature : stat rare et trop forte pour être garantie au choix.
 export const SIGNATURE_CHOICES: SecondaryStat[] = ['critique', 'resilience', 'reductionDegats', 'barriere', 'hate', 'alteration', 'precision']
 
-/** Bonus de CRÉATION universels (v0.28 E2) — dérivés de Maître forgeron + Signature, appliqués à
+/** Bonus de CRÉATION universels — dérivés de Maître forgeron + Signature, appliqués à
  *  TOUTES les pièces (le Compagnonnage par corps a été retiré : plus de lock-in). */
 export interface ForgeBonus {
   /** +iLvl plancher à la création (Maître forgeron R1). */
@@ -456,7 +447,7 @@ export function canLearnNode(
   if (bestStage < METIERS[metier].unlockStage) return { ok: false, reason: `Métier verrouillé (Chapitre ${chapitreOf(METIERS[metier].unlockStage)}).` }
   const rank = state.nodes[nodeId] ?? 0
   if (rank >= def.maxRank) return { ok: false, reason: 'Rang maximal.' }
-  // v0.28 — changer de spé exclusive est GRATUIT (no-regret) : les rangs de la rivale sont remboursés.
+  // changer de spé exclusive est GRATUIT (no-regret) : les rangs de la rivale sont remboursés.
   let exclusiveRefund = 0
   if (def.exclusive && rank === 0) {
     const rival = METIER_NODES[metier].find((n) => n.exclusive === def.exclusive && n.id !== nodeId && (state.nodes[n.id] ?? 0) > 0)
@@ -465,7 +456,7 @@ export function canLearnNode(
   if (pointsAvailable(state) + exclusiveRefund < 1) return { ok: false, reason: 'Aucun point disponible — pratique ton métier.' }
   if (def.minLevel && levelFromXp(state.xp) < def.minLevel) return { ok: false, reason: `Niveau de métier ${def.minLevel} requis.` }
   if (def.minStage && bestStage < def.minStage) return { ok: false, reason: `Chapitre ${chapitreOf(def.minStage)} requis.` }
-  // v0.41 — Forgeron : gating par ADJACENCE hexagonale (remplace requires/requiresRank). Le 1er rang
+  // Forgeron : gating par ADJACENCE hexagonale (remplace requires/requiresRank). Le 1er rang
   // exige une tuile voisine déjà possédée (ou le Creuset) ; monter un rang déjà placé reste libre.
   if (metier === 'forgeron' && def.hex) {
     if (rank === 0 && !forgeForgeable(metiers, nodeId)) {
@@ -478,12 +469,12 @@ export function canLearnNode(
       return { ok: false, reason: `Requiert « ${parent?.name ?? def.requires} »${needRank > 1 ? ` rang ${needRank}` : ''}.` }
     }
   }
-  // (v0.28 : plus de blocage exclusif — choisir une autre spé la remplace gratuitement, voir learnMetierNode.)
+  // (plus de blocage exclusif — choisir une autre spé la remplace gratuitement, voir learnMetierNode.)
   return { ok: true }
 }
 
 /* ------------------------------------------------------------------ */
-/* Forge hexagonale (v0.41) — géométrie & synergies (pilote Forgeron)  */
+/* Forge hexagonale — géométrie & synergies (pilote Forgeron)          */
 /* ------------------------------------------------------------------ */
 
 /** Les 6 directions de voisinage sur la grille axiale. */
@@ -494,7 +485,7 @@ export function hexNeighbors(q: number, r: number): { q: number; r: number }[] {
   return HEX_DIRS.map(([dq, dr]) => ({ q: q + dq, r: r + dr }))
 }
 
-/** Bonus de Chaîne par longueur de run connecté de même famille (v0.41 §4). */
+/** Bonus de Chaîne par longueur de run connecté de même famille. */
 export const CHAINE_BONUS = [0, 0, 0, 0.12, 0.20, 0.30, 0.42]
 /** Bonus du Creuset par tuile d'ENTRÉE possédée. */
 export const CREUSET_BONUS_PER_ENTRY = 0.06
@@ -566,7 +557,7 @@ export function forgeForgeable(metiers: MetiersState, tileId: string): boolean {
 }
 
 /* ------------------------------------------------------------------ */
-/* Le Foyer (v0.41, Lot 2) — production idle d'XP & de Lingots          */
+/* Le Foyer — production idle d'XP & de Lingots                         */
 /* ------------------------------------------------------------------ */
 
 /** État du Foyer : horloge d'accumulation + set des Chefs-d'œuvre UNIQUES forgés (indexe le rendement). */
@@ -584,7 +575,7 @@ export function emptyFoyer(): ForgeronFoyer {
   return { lastTick: Date.now(), masterworkKeys: [], xpAcc: 0, lingotAcc: 0 }
 }
 
-/** Knobs du Foyer (à éprouver en partie réelle, cf. DESIGN v0.41 §11). */
+/** Knobs du Foyer (à éprouver en partie réelle). */
 export const FOYER_BASE_XP = 0.15        // XP/s de base (≈ 1 niveau de métier / 15 min en early)
 export const FOYER_LINGOT_RATIO = 0.02   // Lingots/s = ratio × (XP/s)
 export const FOYER_MW_K = 0.10           // +10% de production par Chef-d'œuvre UNIQUE
@@ -605,7 +596,7 @@ export function foyerRate(
 ): { xp: number; lingots: number } {
   if (!foyerActive(metiers)) return { xp: 0, lingots: 0 }
   const stageFactor = 1 + Math.max(0, bestStage - METIERS.forgeron.unlockStage) * 0.01
-  // v0.41 Lot 4 — les synergies hexagonales nourrissent le Foyer : Chaîne « idle » → XP, Chaîne
+  // les synergies hexagonales nourrissent le Foyer : Chaîne « idle » → XP, Chaîne
   // « ressource » → Lingots, Creuset → les deux.
   const chains = forgeChainBonus(metiers)
   const cr = forgeCreuset(metiers)
@@ -637,10 +628,10 @@ export function masterworkKey(type: string, primary: string, element: string | u
 }
 
 /* ------------------------------------------------------------------ */
-/* La Frappe & la Chaleur (v0.41, Lot 3) — le geste actif de l'Armurier */
+/* La Frappe & la Chaleur — le geste actif de l'Armurier                */
 /* ------------------------------------------------------------------ */
 
-/** Knobs de la Frappe (à éprouver, cf. DESIGN v0.41 §6/§11). */
+/** Knobs de la Frappe (à éprouver). */
 export const CHALEUR_MAX = 100
 export const FRAPPE_HEAT_PERFECT = 12    // Chaleur gagnée sur une frappe PARFAITE
 export const FRAPPE_HEAT_GOOD = 5        // Chaleur gagnée sur une frappe BIEN
@@ -670,7 +661,7 @@ export interface CraftMods {
   /* Forgeron */
   /** Multiplicateur des coûts de craft (≤ 1). */
   costMult: number
-  /* — v0.41 Forge hexagonale : synergies additives (consommées par les lots ultérieurs) — */
+  /* — Forge hexagonale : synergies additives (consommées par les lots ultérieurs) — */
   /** Bonus de Chaîne « qualité » (fraction). */
   chainQualite: number
   /** Bonus de Chaîne « ressource » (fraction). */
@@ -696,9 +687,9 @@ export interface CraftMods {
   /** Multiplicateur de durée des runs d'automates (≤ 1). */
   automateDurMult: number
   forgeronXpMult: number
-  /** v0.28 E2 — Maître forgeron : rang 0–3 (bonus UNIVERSELS de création : +iLvl, +rareté, Chef-d'œuvre). */
+  /** Maître forgeron : rang 0–3 (bonus UNIVERSELS de création : +iLvl, +rareté, Chef-d'œuvre). */
   maitreForgeron: number
-  /** v0.28 E2 — Signature débloquée : affixe garanti AU CHOIX sur une création (coûte des Lingots). */
+  /** Signature débloquée : affixe garanti AU CHOIX sur une création (coûte des Lingots). */
   signature: boolean
   /** Inspiration : chance que le proc de rareté saute DEUX crans. */
   inspiration: number
@@ -726,7 +717,7 @@ export interface CraftMods {
   broyage: boolean
   taille: boolean
   recoupe: boolean
-  /** ◈ v0.26 — Maîtrise de famille étagée : famille choisie + étage I→V (null = aucune). */
+  /** ◈ Maîtrise de famille étagée : famille choisie + étage I→V (null = aucune). */
   gemSpec: { family: 'rythme' | 'flux' | 'environnement' | 'bastion'; tier: number } | null
   /** Double allégeance (niv 45) : une 2e famille (la plus portée) gagne +1 rang. */
   doubleAllegeance: boolean
@@ -796,7 +787,7 @@ export interface CraftMods {
   quintCostMult: number
   /** ◈ Catalyseur (étage ≥ 3) : remboursement à 100% des Quintessences au recyclage. */
   quintRefundFull: boolean
-  /* — Officine (v0.26) — */
+  /* — Officine — */
   alchimisteXpMult: number
   officine: boolean
   /** Nombre de cuves de brassage (0 sans Officine). */
@@ -837,9 +828,9 @@ function craftModsUncached(metiers: MetiersState): CraftMods {
   const chain = forgeChainBonus(metiers)
   const creuset = forgeCreuset(metiers)
   return {
-    // v0.28 E2 — Forgeron remappé sur l'arbre réduit (Atelier + Manufacture).
+    // Forgeron mappé sur l'arbre réduit (Atelier + Manufacture).
     costMult: Math.max(0.4, 1 - r('forgeron', 'econome') * 0.05),
-    // v0.41 — synergies hexagonales (additif, branché par les lots ultérieurs).
+    // synergies hexagonales (additif, branché par les lots ultérieurs).
     chainQualite: chain.qualite,
     chainRessource: chain.ressource,
     chainIdle: chain.idle,
@@ -868,7 +859,7 @@ function craftModsUncached(metiers: MetiersState): CraftMods {
     polissage: r('forgeron', 'polissage') > 0,
     polishFin: Math.max(0, r('forgeron', 'polissage') - 1),
     automate4: r('forgeron', 'automate4') > 0,
-    // v0.28 E2 — Joaillier remappé sur l'arbre réduit (Taillerie + Maîtrise & Sources).
+    // Joaillier mappé sur l'arbre réduit (Taillerie + Maîtrise & Sources).
     gems: r('joaillier', 'sertissage') > 0,
     unsocketCostMult: Math.max(0.5, 1 - r('joaillier', 'lapidaire') * 0.1),
     gemDropMult: 1 + r('joaillier', 'prospecteur') * 0.25,
@@ -918,7 +909,7 @@ function craftModsUncached(metiers: MetiersState): CraftMods {
     surchargeRunique: r('runiste', 'surchargeRunique') > 0,
     greffierMult: 1 + r('runiste', 'runologue') * 0.1,
     quint: r('alchimiste', 'quintessence') > 0,
-    // v0.28 E2 — Alchimiste remappé sur l'arbre réduit (Officine + Grand Œuvre). Raffinage fond
+    // Alchimiste mappé sur l'arbre réduit (Officine + Grand Œuvre). Raffinage fond
     // rendementQ/distillation/condensation/herboriste/doubleDistillation ; Maître brasseur fond
     // brassageRapide/brassageCritique/grandsCrus ; officine porte le nombre de cuves.
     // ◈ Distillateur I→V : +10/15/25/30/35% (étage III = ancien rang 1).
@@ -947,7 +938,7 @@ function craftModsUncached(metiers: MetiersState): CraftMods {
   }
 }
 
-// (v0.25 : les CONVERSIONS de ressources du ◈ Transmutateur ont été SUPPRIMÉES — même principe
+// (les CONVERSIONS de ressources du ◈ Transmutateur ont été SUPPRIMÉES — même principe
 //  que le Comptoir d'échange : la fongibilité cassait « chaque donjon est LA source de sa
 //  ressource ». La spécialisation est devenue ◈ Catalyseur, voir plus haut.)
 

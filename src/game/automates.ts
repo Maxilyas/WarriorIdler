@@ -4,7 +4,7 @@ import { DUNGEONS, dungeonRunYield, dungeonKeyYield, butinMinTier, geodeDustYiel
 import { RAIDS, raidFragments } from './raids'
 
 /**
- * AUTOMATES DE FORGE (v0.21) — le sommet du métier de forgeron.
+ * AUTOMATES DE FORGE — le sommet du métier de forgeron.
  *
  * Un automate est une machine de guerre craftée (TRÈS cher, 3 maximum) qui refait EN BOUCLE
  * un donjon ou un raid DÉJÀ BATTU, en parallèle de ton équipe (et hors-ligne).
@@ -41,7 +41,7 @@ export interface Automate {
   waiting?: boolean
 }
 
-/** v0.26 : 4 machines — la 4e exige le nœud « Manufacture » (arbre du Forgeron niv 40 + P80). */
+/** 4 machines — la 4e exige le nœud « Manufacture » (arbre du Forgeron niv 40 + vague 80). */
 export const AUTOMATE_MAX = 4
 export const AUTOMATE_NAMES = ['Rouage', 'Enclume', 'Vigile', 'Manufacture']
 
@@ -129,7 +129,7 @@ function runGains(m: AutomateMission, bestStage: number): Record<string, number>
 /** Pool de ressources sur lequel les automates opèrent (sous-ensemble du store). */
 export interface AutomateEconomy {
   automates: Automate[]
-  /** Record de farm (v0.35) : le rendement des automates suit ta tranche, comme un run manuel. */
+  /** Record de farm : le rendement des automates suit ta tranche, comme un run manuel. */
   bestStage: number
   gold: number
   essence: number
@@ -189,7 +189,7 @@ export function tickAutomates(input: AutomateEconomy, dt: number, keySaveChance 
       }
       a.progress -= duration
       runs++
-      // 🎁 Rune des Coffres doubles (v0.26) : ce run rapporte le double.
+      // 🎁 Rune des Coffres doubles : ce run rapporte le double.
       const chestMult = doubleChestChance > 0 && Math.random() < doubleChestChance ? 2 : 1
       const gains = runGains(a.mission, eco.bestStage)
       for (const k in gains) {
