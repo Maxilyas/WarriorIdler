@@ -818,7 +818,21 @@ export interface CraftMods {
   philosophaleUnlock: boolean
 }
 
+// Cache 1-entrée par RÉFÉRENCE `metiers` (même patron que `cacheFor`/`charDerived` dans character.ts).
+// `craftMods` est PURE de `metiers` seul et appelée 2×/tick dans le chemin chaud (boucle de combat),
+// or `metiers` ne change qu'à l'XP/allocation de métier (rare hors fin de donjon) → on renvoie le même
+// objet tant que la référence est inchangée. L'objet est traité en LECTURE SEULE par tous les appelants
+// (aucune mutation : vérifié), donc le partage est sûr.
+let craftModsKey: MetiersState | null = null
+let craftModsVal: CraftMods | null = null
 export function craftMods(metiers: MetiersState): CraftMods {
+  if (craftModsKey === metiers && craftModsVal) return craftModsVal
+  const v = craftModsUncached(metiers)
+  craftModsKey = metiers
+  craftModsVal = v
+  return v
+}
+function craftModsUncached(metiers: MetiersState): CraftMods {
   const r = (m: MetierId, id: string) => metiers[m].nodes[id] ?? 0
   const chain = forgeChainBonus(metiers)
   const creuset = forgeCreuset(metiers)
