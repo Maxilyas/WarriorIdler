@@ -188,14 +188,22 @@ const MIN_SCALE = 0.32
 // v0.24 : zoom max relevé (mobile : viser une node précise demandait trop de précision).
 const MAX_SCALE = 2.6
 
+/** Allocation vide stable (réf constante) — évite une nouvelle réf à chaque rendu dans les sélecteurs. */
+const EMPTY_ALLOC: Record<string, number> = {}
+
 export function TalentTree() {
-  const characters = useGame((s) => s.characters)
-  const activeChar = useGame((s) => s.activeChar)
-  const setActiveChar = useGame((s) => s.setActiveChar)
+  // v0.40.6 (perf, F1) — abonnements CIBLÉS & STABLES : ne plus re-render l'arbre à 5 Hz pendant le
+  // combat. `s.characters` change de réf à chaque tick (PV), mais l'arbre ne dépend que de réfs STABLES
+  // (talents/pantheon/équipement — préservées par le spread `{...c, hp}` du tick) + de primitives/nombres.
   const prestigeRank = useGame((s) => s.prestigeRank)
-  const upgrades = useGame((s) => s.upgrades)
-  const char = characters[activeChar] ?? characters[0]
-  const weaponType = charDamageProfile(char).mainType
+  // Pool de talents PARTAGÉ (compte) — sélecteur renvoyant un NOMBRE → stable hors allocation.
+  const basePoints = useGame((s) => teamTalentPool(s.characters, s.upgrades.talentBonus ?? 0))
+  // Champs du perso actif : réfs/valeurs stables hors allocation (les PV ne les touchent pas).
+  const talents = useGame((s) => (s.characters[s.activeChar] ?? s.characters[0])?.talents) ?? EMPTY_ALLOC
+  const pantheonAlloc = useGame((s) => (s.characters[s.activeChar] ?? s.characters[0])?.pantheon)
+  const charLevel = useGame((s) => (s.characters[s.activeChar] ?? s.characters[0])?.level ?? 1)
+  const weaponType = useGame((s) => { const c = s.characters[s.activeChar] ?? s.characters[0]; return c ? charDamageProfile(c).mainType : ('physique' as DamageType) })
+  const hasChar = useGame((s) => (s.characters[s.activeChar] ?? s.characters[0]) != null)
   const [tree, setTree] = useState<TalentTreeId>('base')
   const [selected, setSelected] = useState<string | null>(null)
   const [focus, setFocus] = useState<ConstellationId | null>(null)
@@ -310,14 +318,14 @@ export function TalentTree() {
     return () => el.removeEventListener('wheel', onWheel)
   }, [zoomBy])
 
-  if (!char) return null
-  // v0.33 : arbre actif. Base → points de niveau / `char.talents`. Panthéon → budget de Points
-  // d'Éveil (= prestigeRank × K, identique par perso) / `char.pantheon`.
+  if (!hasChar) return null
+  // v0.33 : arbre actif. Base → points de niveau / `talents`. Panthéon → budget de Points
+  // d'Éveil (= prestigeRank × K, identique par perso) / `pantheonAlloc`.
   const isPantheon = tree === 'pantheon'
-  const alloc = isPantheon ? (char.pantheon ?? { pa_start: 1 }) : char.talents
+  const alloc = isPantheon ? (pantheonAlloc ?? { pa_start: 1 }) : talents
   const budget = eveilBudget(prestigeRank)
   // v0.36 — arbre de DÉPART : pool de talents PARTAGÉ (compte), dérivé. Le Panthéon garde son budget propre.
-  const points = isPantheon ? Math.max(0, budget - spentInPantheon(alloc)) : teamTalentPool(characters, upgrades.talentBonus ?? 0)
+  const points = isPantheon ? Math.max(0, budget - spentInPantheon(alloc)) : basePoints
   const classesUnlocked = pantheonClassesUnlocked(prestigeRank)
   const pantheonLocked = isPantheon && classesUnlocked === 0
   const selectedNode = selected ? TALENTS.find((n) => n.id === selected) ?? null : null
@@ -374,22 +382,10 @@ export function TalentTree() {
         )}
       </div>
 
-      {characters.length > 1 && (
-        <div className="mb-2 flex gap-1">
-          {characters.map((c, i) => (
-            <button
-              key={c.id}
-              onClick={() => { setActiveChar(i); setSelected(null) }}
-              className={
-                'flex-1 truncate rounded px-2 py-1.5 text-[11px] font-medium ' +
-                (i === activeChar ? 'bg-orange-500/20 text-orange-200' : 'bg-slate-800 text-slate-400')
-              }
-            >
-              {c.name} <span className="text-slate-500">N{c.level}</span>
-            </button>
-          ))}
-        </div>
-      )}
+      {/* v0.40.6 (perf, F1) — la rangée de sélection s'abonne SEULE à `s.characters` (réf changée chaque
+          tick) → son re-render par tick reste ISOLÉ à ces quelques boutons ; le corps lourd de l'arbre
+          (liens + nœuds) ne s'abonne qu'à du slow-state et ne re-render plus en combat. */}
+      <HeroSelectorRow onPicked={() => setSelected(null)} />
 
       {/* Voies & archétypes : bouton → feuille (remplace la longue rangée scrollable) */}
       <div className="mb-2 flex items-center gap-1.5">
@@ -521,8 +517,34 @@ export function TalentTree() {
         <CtrlBtn onClick={() => zoomBy(1.25)} label="+" title="Zoomer" />
         <CtrlBtn onClick={() => zoomBy(0.8)} label="−" title="Dézoomer" />
         <CtrlBtn onClick={center} label="⌖" title="Recentrer" />
-        {isPantheon ? <PantheonRespecBar char={char} /> : (<><PresetsButton /><RespecBar char={char} /></>)}
+        {isPantheon ? <PantheonRespecBar char={{ pantheon: pantheonAlloc }} /> : (<><PresetsButton /><RespecBar char={{ level: charLevel, talents }} /></>)}
       </div>
+    </div>
+  )
+}
+
+/** Rangée de sélection de héros — composant ISOLÉ qui porte SEUL l'abonnement à `s.characters` (la seule
+ *  donnée par-tick dont l'arbre a besoin) : son re-render par tick ne touche pas le corps lourd de l'arbre.
+ *  `onPicked` ferme le détail ouvert dans le parent. */
+function HeroSelectorRow({ onPicked }: { onPicked: () => void }) {
+  const characters = useGame((s) => s.characters)
+  const activeChar = useGame((s) => s.activeChar)
+  const setActiveChar = useGame((s) => s.setActiveChar)
+  if (characters.length <= 1) return null
+  return (
+    <div className="mb-2 flex gap-1">
+      {characters.map((c, i) => (
+        <button
+          key={c.id}
+          onClick={() => { setActiveChar(i); onPicked() }}
+          className={
+            'flex-1 truncate rounded px-2 py-1.5 text-[11px] font-medium ' +
+            (i === activeChar ? 'bg-orange-500/20 text-orange-200' : 'bg-slate-800 text-slate-400')
+          }
+        >
+          {c.name} <span className="text-slate-500">N{c.level}</span>
+        </button>
+      ))}
     </div>
   )
 }
