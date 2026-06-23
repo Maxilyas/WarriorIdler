@@ -3,9 +3,11 @@
  *  - ids uniques, prérequis existants, capacités débloquées existantes ;
  *  - tout nœud atteignable depuis la racine `co_start` ;
  *  - verrous de palier finissables (gate ≤ points disponibles dans la constellation) ;
- *  - simulation gloutonne : un perso à N points peut-il réellement tout débloquer ?
+ *  - complétabilité PAR BUILD : chaque nœud est allouable dans au moins un build valide
+ *    (les choix `exclusive` ne se prennent pas en même temps — on teste la faisabilité, pas
+ *    une allocation simultanée totale).
  */
-import { TALENTS, CONSTELLATION_LIST, canAllocate, tierGate, getTalent } from '../src/game/talents'
+import { TALENTS, CONSTELLATION_LIST, isReachable, getTalent } from '../src/game/talents'
 import { POWERS } from '../src/game/powers'
 
 let errors = 0
@@ -33,35 +35,39 @@ while (grew) {
 }
 for (const t of TALENTS) if (!reached.has(t.id)) fail(`nœud inatteignable : ${t.id} (${t.name})`)
 
-// 3) Gates finissables : le besoin ne dépasse jamais les points disponibles dans le tier visé.
+// 3) Gates de budget finissables : `minSpent` ne dépasse jamais les points disponibles dans la
+//    constellation (modèle courant : la porte compte les points dépensés dans la MÊME constellation).
 for (const c of CONSTELLATION_LIST) {
   const nodes = TALENTS.filter((t) => t.constellation === c)
+  const totalPts = nodes.reduce((a, x) => a + x.maxRank, 0)
   for (const n of nodes) {
-    const g = tierGate(n)
-    if (g.need > 0) {
-      const avail = nodes.filter((x) => x.tier === g.tier).reduce((a, x) => a + x.maxRank, 0)
-      if (g.need > avail) fail(`${c}/${n.id} : gate ${g.need} > points disponibles au tier ${g.tier} (${avail})`)
+    const need = n.minSpent ?? 0
+    if (need > 0) {
+      const avail = totalPts - n.maxRank // points venant des AUTRES nœuds de la constellation
+      if (need > avail) fail(`${c}/${n.id} : minSpent ${need} > points disponibles dans la constellation (${avail})`)
     }
   }
 }
 
-// 4) Simulation gloutonne : avec beaucoup de points, tout l'arbre doit être complétable.
-const talents: Record<string, number> = { co_start: 1 }
-let progressed = true
-let spent = 0
-while (progressed) {
-  progressed = false
-  for (const t of TALENTS) {
-    while ((talents[t.id] ?? 0) < t.maxRank && canAllocate(t, talents, 9999)) {
-      talents[t.id] = (talents[t.id] ?? 0) + 1
-      spent++
-      progressed = true
-    }
+// 4) Complétabilité PAR BUILD : chaque nœud doit être allouable dans AU MOINS un build valide.
+//    On ne peut pas tout prendre à la fois (les `exclusive` l'interdisent), donc on teste la
+//    faisabilité individuelle : adjacence satisfaite, rang prérequis atteignable, gate `minSpent`
+//    couvrable par le budget de la constellation. `full` = toutes les prérequis « disponibles ».
+const full: Record<string, number> = {}
+for (const t of TALENTS) full[t.id] = t.maxRank
+for (const t of TALENTS) {
+  if (!isReachable(t, full)) fail(`inatteignable par adjacence : ${t.id} (${t.name}) — requires/requiresAll/links cassés`)
+  if (t.requiresRank) {
+    const dep = getTalent(t.requiresRank.id)
+    if (!dep || dep.maxRank < t.requiresRank.rank) fail(`${t.id} : requiert rang ${t.requiresRank.rank} sur ${t.requiresRank.id} (max ${dep?.maxRank ?? 0})`)
+  }
+  if (t.minSpent) {
+    const budget = TALENTS.filter((x) => x.constellation === t.constellation && x.id !== t.id).reduce((a, x) => a + x.maxRank, 0)
+    if (t.minSpent > budget) fail(`${t.id} : minSpent ${t.minSpent} > budget de la constellation (${budget})`)
   }
 }
-const unfinished = TALENTS.filter((t) => (talents[t.id] ?? 0) < t.maxRank)
-for (const t of unfinished) fail(`incomplétable même à points infinis : ${t.id} (${t.name}) — rang ${talents[t.id] ?? 0}/${t.maxRank}`)
 
-console.log(`\n${TALENTS.length} nœuds · ${spent} points dépensés en simulation gloutonne · ${errors} erreur(s).`)
+const totalPts = TALENTS.reduce((a, t) => a + t.maxRank, 0)
+console.log(`\n${TALENTS.length} nœuds · ${totalPts} points cumulés · ${CONSTELLATION_LIST.length} constellations · ${errors} erreur(s).`)
 if (errors > 0) process.exit(1)
 console.log('✓ Arbre de talents intègre.')
