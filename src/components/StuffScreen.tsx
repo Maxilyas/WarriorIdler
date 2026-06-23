@@ -841,12 +841,14 @@ function ManageSheet({
   bulkMode, onSelectionMode, onStopSelection,
 }: {
   recycleThreshold: number; setRecycleThreshold: (n: number) => void
-  sellAllBelow: (t: number) => void; recycleAllBelow: (t: number) => void
+  sellAllBelow: (t: number, uselessOnly?: boolean) => void; recycleAllBelow: (t: number, uselessOnly?: boolean) => void
   autoRecycle: boolean; toggleAutoRecycle: () => void
   autoRecycleUseless: boolean; toggleAutoRecycleUseless: () => void
   bulkMode: boolean; onSelectionMode: () => void; onStopSelection: () => void
 }) {
   const highTier = recycleThreshold >= 14
+  // Filtre manuel optionnel : ne cibler que le butin inutile (n'améliore ni DPS ni survie d'aucun héros).
+  const [uselessOnly, setUselessOnly] = useState(false)
   return (
     <div className="space-y-3 text-[11px]">
       <div>
@@ -864,17 +866,24 @@ function ManageSheet({
           </select>
           {highTier ? (
             <>
-              <ConfirmButton onConfirm={() => sellAllBelow(recycleThreshold)} className="rounded bg-yellow-900/40 px-3 py-1.5 text-yellow-300 hover:bg-yellow-900/60">💰 Vendre</ConfirmButton>
-              <ConfirmButton onConfirm={() => recycleAllBelow(recycleThreshold)} className="rounded bg-cyan-900/40 px-3 py-1.5 text-cyan-300 hover:bg-cyan-900/60">♻️ Recycler</ConfirmButton>
+              <ConfirmButton onConfirm={() => sellAllBelow(recycleThreshold, uselessOnly)} className="rounded bg-yellow-900/40 px-3 py-1.5 text-yellow-300 hover:bg-yellow-900/60">💰 Vendre</ConfirmButton>
+              <ConfirmButton onConfirm={() => recycleAllBelow(recycleThreshold, uselessOnly)} className="rounded bg-cyan-900/40 px-3 py-1.5 text-cyan-300 hover:bg-cyan-900/60">♻️ Recycler</ConfirmButton>
             </>
           ) : (
             <>
-              <button onClick={() => sellAllBelow(recycleThreshold)} className="rounded bg-yellow-900/40 px-3 py-1.5 text-yellow-300 hover:bg-yellow-900/60">💰 Vendre</button>
-              <button onClick={() => recycleAllBelow(recycleThreshold)} className="rounded bg-cyan-900/40 px-3 py-1.5 text-cyan-300 hover:bg-cyan-900/60">♻️ Recycler</button>
+              <button onClick={() => sellAllBelow(recycleThreshold, uselessOnly)} className="rounded bg-yellow-900/40 px-3 py-1.5 text-yellow-300 hover:bg-yellow-900/60">💰 Vendre</button>
+              <button onClick={() => recycleAllBelow(recycleThreshold, uselessOnly)} className="rounded bg-cyan-900/40 px-3 py-1.5 text-cyan-300 hover:bg-cyan-900/60">♻️ Recycler</button>
             </>
           )}
         </div>
+        {/* Case à cocher : restreint le tri de masse au butin inutile (cumulable avec le seuil ci-dessus).
+            Astuce : seuil au maximum + coché = recycler TOUT l'inutile, toutes raretés (verrou 🔒 / Cosmique+ épargnés). */}
+        <label className="mt-1.5 flex cursor-pointer items-center gap-1.5 text-[11px] text-slate-300">
+          <input type="checkbox" checked={uselessOnly} onChange={(e) => setUselessOnly(e.target.checked)} className="accent-cyan-500" />
+          <span>… et qui n'améliore <b>ni le DPS ni la survie</b> d'aucun héros</span>
+        </label>
         {highTier && <div className="mt-1 text-[10px] text-amber-300/80">⚠ Seuil élevé : engloutit du Cosmique+ (double confirmation requise).</div>}
+        {uselessOnly && <div className="mt-1 text-[10px] text-amber-300/80">⚠ Compare à TES héros recrutés : un objet utile à une autre classe / un héros non débloqué peut partir. Verrouille 🔒 ce que tu veux garder.</div>}
       </div>
 
       <button

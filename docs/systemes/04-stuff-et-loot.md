@@ -78,6 +78,10 @@ rollent plus). `+% type` : physique 4, autres 6 ; resist : 5 chacun.
   (`recycleThreshold`, uniques compris — essences créditées, Codex préservé : comme un drop puis un
   recyclage de masse) ; `autoRecycleUseless` recycle tout butin qui **n'améliore NI le DPS NI la survie**
   d'aucun héros recruté (`itemUsefulForAnyChar` → `charDps`/`charEhp`, comparé à l'emplacement occupé).
+- **Tri manuel de masse** (`sellAllBelow`/`recycleAllBelow`, écran Gérer) : tout ce qui est **sous le seuil
+  de rareté** ; option `uselessOnly` (case à cocher) qui RESTREINT en plus au butin **inutile** (même
+  `itemUsefulForAnyChar` que l'auto). Mêmes protections `bulkProtected`. Seuil au max + coché = recycler
+  tout l'inutile, toutes raretés.
 
 ## Craft — améliorer / créer / ascensionner
 

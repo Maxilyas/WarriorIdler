@@ -104,7 +104,7 @@ describe('tickSlice', () => {
       expect(off.kills).toBeGreaterThan(0)
       expect(on.kills).toBe(off.kills)              // même RNG → combat identique, seule la disposition change
       expect(off.inv).toBeGreaterThan(0)
-      expect(on.inv).toBeLessThan(off.inv)          // le butin inutile ne s'accumule plus
+      expect(on.inv).toBeLessThan(off.inv * 0.5)    // le héros est sur-gearé → l'ESSENTIEL du butin est inutile et part
       expect(on.ess).toBeGreaterThan(off.ess)       // il est converti en éclats (off n'en gagne aucun)
     })
   })

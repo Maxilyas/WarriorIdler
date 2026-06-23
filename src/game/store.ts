@@ -173,8 +173,8 @@ export interface GameState extends SaveData {
   unequip: (slot: EquipSlotId) => void
   sell: (itemId: string) => void
   recycle: (itemId: string) => void
-  sellAllBelow: (tier: number) => void
-  recycleAllBelow: (tier: number) => void
+  sellAllBelow: (tier: number, uselessOnly?: boolean) => void
+  recycleAllBelow: (tier: number, uselessOnly?: boolean) => void
   /** 🔒 (v0.28) Bascule le verrou anti-suppression d'un objet. */
   toggleLock: (itemId: string) => void
   /** (v0.28) Vend en lot une sélection d'objets (ignore les verrouillés). */

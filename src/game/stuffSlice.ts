@@ -19,7 +19,7 @@ import { equipSlotsForType, slotAccepts } from './slots'
 import { essenceGain, upgradeCost, getUnique, UNIQUE_MAX_RANK } from './uniques'
 import {
   addQuint, applyItemPatch, bestRaidTier, bulkProtected, findItemById, gainMetierXp, gemStockAdd, invMax,
-  maxContentIlvl, pushLog, quintLogSuffix
+  itemUsefulForAnyChar, maxContentIlvl, partyBaseStats, pushLog, quintLogSuffix
 } from './storeHelpers'
 import type { GameSet, GameGet } from './sliceTypes'
 import type { GameState } from './store'
@@ -128,14 +128,17 @@ export function createStuffSlice(set: GameSet, get: GameGet): Pick<GameState,
       set(next)
     },
 
-    sellAllBelow: (tier) => {
+    sellAllBelow: (tier, uselessOnly = false) => {
       const s = get()
+      // `uselessOnly` : ne cible QUE le butin qui n'améliore ni le DPS ni la survie d'aucun héros recruté
+      // (case à cocher du tri manuel) — mêmes bases DPS/survie précalculées une fois.
+      const bases = uselessOnly ? partyBaseStats(s.characters) : null
       let gold = s.gold
       let gems = s.gems
       let count = 0
       const keep: Item[] = []
       for (const item of s.inventory) {
-        if (RARITIES[item.rarity].tier < tier && !bulkProtected(item)) {
+        if (RARITIES[item.rarity].tier < tier && !bulkProtected(item) && (!bases || !itemUsefulForAnyChar(s.characters, bases, item))) {
           gold += sellValue(item)
           gems = gemStockAdd(gems, item)
           count++
@@ -147,9 +150,11 @@ export function createStuffSlice(set: GameSet, get: GameGet): Pick<GameState,
       set(next)
     },
 
-    recycleAllBelow: (tier) => {
+    recycleAllBelow: (tier, uselessOnly = false) => {
       const s = get()
       const mods = craftMods(s.metiers)
+      // `uselessOnly` : ne recycle QUE le butin qui n'améliore ni le DPS ni la survie d'aucun héros recruté.
+      const bases = uselessOnly ? partyBaseStats(s.characters) : null
       let essence = s.essence
       let poussiere = s.poussiere
       let quint = s.quint
@@ -159,7 +164,7 @@ export function createStuffSlice(set: GameSet, get: GameGet): Pick<GameState,
       const essences = { ...s.essences }
       const keep: Item[] = []
       for (const item of s.inventory) {
-        if (RARITIES[item.rarity].tier < tier && !bulkProtected(item)) {
+        if (RARITIES[item.rarity].tier < tier && !bulkProtected(item) && (!bases || !itemUsefulForAnyChar(s.characters, bases, item))) {
           essence += Math.round(recycleValue(item) * mods.recycleMult)
           poussiere += recyclePoussiere(item)
           quint = addQuint(quint, quintRefund(item, mods.quintRefundFull))

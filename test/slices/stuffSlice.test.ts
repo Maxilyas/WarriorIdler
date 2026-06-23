@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { g, reset, mkItem } from './_helpers'
 import { sellValue } from '../../src/game/items'
 import { RARITIES } from '../../src/game/rarities'
+import { makeCharacter } from '../../src/game/character'
 
 describe('stuffSlice', () => {
   beforeEach(() => reset())
@@ -61,5 +62,25 @@ describe('stuffSlice', () => {
     expect(ids).toContain(epique.id)
     expect(ids).not.toContain(commun.id)
     expect(g().gold).toBeGreaterThan(0)
+  })
+
+  // Tri manuel : la case « seulement l'inutile » (uselessOnly) restreint le recyclage de masse au butin
+  // qui n'améliore ni le DPS ni la survie d'aucun héros recruté — cumulé au seuil de rareté.
+  it('recycleAllBelow(tier, uselessOnly) épargne les objets utiles (héros nu → tout est un upgrade)', () => {
+    const inv = [
+      mkItem({ type: 'torse', ilvl: 50, rarity: 'rare' }),
+      mkItem({ type: 'mains', ilvl: 50, rarity: 'rare' }),
+      mkItem({ type: 'pieds', ilvl: 50, rarity: 'rare' }),
+    ]
+    // Héros NU : chaque objet remplit un emplacement vide → améliore → utile → ÉPARGNÉ par le filtre.
+    reset({ characters: [makeCharacter('H', 50, 'force')], inventory: inv, essence: 0 })
+    g().recycleAllBelow(16, true)
+    expect(g().inventory).toHaveLength(inv.length) // rien recyclé : tout est utile
+    expect(g().essence).toBe(0)
+    // Sans le filtre : tout ce qui est sous Transcendant (16) part normalement.
+    reset({ characters: [makeCharacter('H', 50, 'force')], inventory: inv, essence: 0 })
+    g().recycleAllBelow(16, false)
+    expect(g().inventory).toHaveLength(0)
+    expect(g().essence).toBeGreaterThan(0)
   })
 })
