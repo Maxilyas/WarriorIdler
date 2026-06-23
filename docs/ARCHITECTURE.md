@@ -176,7 +176,8 @@ patterns gardent le coût borné (tous **sans changer aucune formule** — véri
 Outils Node qui **transpilent le TS du jeu en mémoire** (esbuild) et exécutent la **vraie
 logique** — pas de copie de règles, donc pas de dérive. Voir [`scripts/README.md`](../scripts/README.md).
 Exemples : `npm run validate` (anti-régression arbre), `npm run sim`/`ttk`/`survival`/`dungeon`
-(équilibrage), `npm run eco` (économie), `npm run mur` (mur de progression).
+(équilibrage), `npm run eco`/`eco-craft` (économie de farm / de craft), `npm run uniques`
+(valeur marginale des uniques + sets), `npm run mur` (mur de progression).
 
 ## Conventions
 

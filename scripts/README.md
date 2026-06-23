@@ -59,6 +59,20 @@ caps (`TYPE_BONUS_*` dans `damage.ts`, `DMG_LINE_*` dans `items.ts`).
 Calcule `charDps` (le DPS affiché) pour comparer des configs — utile pour vérifier qu'un multiplicateur
 (keystone, profil) est bien pris en compte.
 
+### `uniques-sim.mjs` — `npm run uniques`
+**Couverture des effets uniques + sets.** Pose chaque unique sur une pièce de référence et mesure sa
+**valeur marginale** (ΔDPS% / ΔEHP% via `charDps`/`charMaxHp`/`charEhp`), le scaling rang×rareté, et
+les bonus de set par seuil (2/4/6). Intègre une **sonde de liveness** (chaque stat utilisée bouge-t-elle
+un axe joueur ?) qui détecte un mod mort/silencieux. Garde-fou : NaN, croissance par rang, paliers de
+set incohérents. Sépare les uniques **taggés** (valeur de tag annoncée — dépend du build porteur).
+
+### `eco-craft-sim.mjs` — `npm run eco-craft`
+**Couverture éco du craft** (3 puits) : courbe de coût + effet des **améliorations** du Marché
+(`computeGlobalMods`), **automates** de forge (rendement/heure via `tickAutomates` vs coût de
+construction), **alchimie** (courbe de qualité des brassins + économie des réactifs). Garde-fou
+d'intégrité : amélioration non câblée, coût non croissant, **paire de réactifs dupliquée** (recette
+masquée → inbrassable), fenêtre parfaite atteignable.
+
 ## Économie
 
 ### `eco-sim.mjs` — `npm run eco`

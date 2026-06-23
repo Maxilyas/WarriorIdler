@@ -17,6 +17,8 @@
     "mur": "node scripts/sim-mur.mjs",
     "eco": "node scripts/eco-sim.mjs",
     "weights": "node scripts/stat-weights.mjs",
+    "uniques": "node scripts/uniques-sim.mjs",
+    "eco-craft": "node scripts/eco-craft-sim.mjs",
     "forge-hex": "node scripts/verif-forge-hex.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
