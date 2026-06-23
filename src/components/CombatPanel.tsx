@@ -43,222 +43,49 @@ const LOG_COLORS: Record<LogKind, string> = {
   craft: 'text-cyan-300',
 }
 
+/**
+ * v0.40.5 (perf) — CombatPanel DÉCOUPÉ en 4 enfants abonnés CHACUN à SON état, pour ne plus
+ * re-render tout l'écran à 5 Hz :
+ *   - <LiveOpsCluster> : objectif + cluster (🎯/✉/📅/🎉), counts via sélecteurs PRIMITIFS → ne
+ *     re-render pas par tick (le compteur ne bouge pas à chaque frappe).
+ *   - <EnemyView> : ennemi/donjon/raid + résistances + techniques + métriques (re-render par tick, normal).
+ *   - <TeamView> : héros/actif + barres de sorts (état local controlMode).
+ *   - <CombatLog> : journal (état local journalOpen/logFilter ; ne re-render que sur nouvelle entrée).
+ * Le PARENT ne s'abonne qu'au SLOW-STATE (palier, biome, verrou, booléens d'instance) → il ne
+ * re-render pas par tick ; les enfants restent montés et se rafraîchissent indépendamment.
+ * Les <Sheet> passent par un portal (document.body) → leur position dans l'arbre n'affecte pas le
+ * layout flex, et les fragments laissent le `gap-3` du parent s'appliquer entre les blocs.
+ */
 export function CombatPanel() {
-  const characters = useGame((s) => s.characters)
-  const normalEnemy = useGame((s) => s.enemy)
-  const dungeon = useGame((s) => s.dungeon)
-  const raid = useGame((s) => s.raid)
-  const abandonDungeon = useGame((s) => s.abandonDungeon)
-  const abandonRaid = useGame((s) => s.abandonRaid)
+  const inDungeon = useGame((s) => s.dungeon !== null)
+  const inRaid = useGame((s) => s.raid !== null)
   const stage = useGame((s) => s.stage)
   const bestStage = useGame((s) => s.bestStage)
   const activeBiome = useGame((s) => s.activeBiome)
-  const biomeBest = useGame((s) => s.biomeBest)
   const setBiome = useGame((s) => s.setBiome)
-  const activeChar = useGame((s) => s.activeChar)
-  const setActiveChar = useGame((s) => s.setActiveChar)
-  const castPower = useGame((s) => s.castPower)
-  const togglePowerAuto = useGame((s) => s.togglePowerAuto)
-  const farmLock = useGame((s) => s.farmLock)
   const setStage = useGame((s) => s.setStage)
+  const farmLock = useGame((s) => s.farmLock)
   const toggleFarmLock = useGame((s) => s.toggleFarmLock)
-  const log = useGame((s) => s.log)
-  // v0.31 — tutoriel « Premiers Pas »
-  const inventory = useGame((s) => s.inventory)
-  const dungeonProgress = useGame((s) => s.dungeonProgress)
-  const tut = useGame((s) => s.tut)
-  const claimTutorialReward = useGame((s) => s.claimTutorialReward)
-  // ✉ Boîte de réception (v0.31.2) : gains à collecter, sortis de l'écran de combat.
-  const inbox = useGame((s) => s.inbox)
-  const claimInbox = useGame((s) => s.claimInbox)
-  const claimAllInbox = useGame((s) => s.claimAllInbox)
-  const markInboxSeen = useGame((s) => s.markInboxSeen)
-  // 📅 Quotidien (v0.31.4) : contrats du jour + connexion.
-  const daily = useGame((s) => s.daily)
-  const totalKills = useGame((s) => s.totalKills)
-  const totalDungeons = useGame((s) => s.totalDungeons)
-  const metiers = useGame((s) => s.metiers)
-  const claimDailyQuest = useGame((s) => s.claimDailyQuest)
-  const claimLogin = useGame((s) => s.claimLogin)
-  // 🎉 Event Invasion élémentaire (v0.31.5).
-  const event = useGame((s) => s.event)
-  const eventCosmetics = useGame((s) => s.eventCosmetics)
-  const claimEventMilestone = useGame((s) => s.claimEventMilestone)
-  // v0.36 — GATE DE RAID : franchir le mur d'un vrai Chapitre exige un tier de raid.
-  const raidProgress = useGame((s) => s.raidProgress)
 
   // Biome + palier + verrou fusionnés en une ligne « zone » : le détail s'ouvre en feuille
   // (libère un tiers d'écran pour le journal sur mobile).
   const [zoneOpen, setZoneOpen] = useState(false)
-  // v0.36 (lot 8) — Contrôle (défaut) = barres de sorts visibles ; Veille = vitaux seuls (idle épuré,
-  // fait tenir 3 persos sans scroll).
-  const [controlMode, setControlMode] = useState(true)
-  const [journalOpen, setJournalOpen] = useState(false)
-  const [questsOpen, setQuestsOpen] = useState(false)
-  const [inboxOpen, setInboxOpen] = useState(false)
-  const [dailyOpen, setDailyOpen] = useState(false)
-  const [eventOpen, setEventOpen] = useState(false)
-  const [logFilter, setLogFilter] = useState('tout')
 
-  // v0.36 (lot 8) — un seul NIVEAU DE COMPTE (les héros partagent le niveau) : un badge, plus un par perso.
-  const accountLevel = characters.reduce((m, c) => Math.max(m, c.level), 1)
-
+  const inInstance = inDungeon || inRaid
   const biomeDef = getBiomeDef(activeBiome)
-  const physiqueBest = biomeBest.physique ?? 0
   // v0.35 — Palier GLOBAL : le cap de farm = ton record global (le biome ne change pas ton Palier).
   const activeBiomeBest = Math.max(1, bestStage)
   // Bonus de biome : surcharge tournante + Maîtrise des Zones (v0.25 : Élan supprimé).
   const surge = surgeBiome()
   const maitrise = maitriseBonus(bestStage)
 
-  // Donjons/raids = combat à PLUSIEURS adversaires. En combat classique, un seul ennemi.
-  const enemies: Enemy[] = raid ? raid.enemies : dungeon ? dungeon.enemies : [normalEnemy]
-  const enemy = enemies.find((e) => e.hp > 0) ?? enemies[0]
-  const multi = enemies.length > 1
-  const enemyDmgTotal = enemies.filter((e) => e.hp > 0).reduce((a, e) => a + e.damage, 0)
-  const atkType = DAMAGE_TYPES[enemy.damageType]
-  // Objectif courant (tutoriel léger + signalisation des déblocages progressifs).
-  const maxLevel = characters.reduce((m, c) => Math.max(m, c.level), 1)
-  const objective = nextObjective(bestStage, maxLevel, physiqueBest)
-  // v0.31 — Journal « Premiers Pas » : actif tant que toutes les quêtes ne sont pas réclamées.
-  const tutCtx = tutContext({ characters, activeChar, bestStage, inventory, dungeonProgress, tut })
-  const tutActive = !tutAllClaimed(tut.claimed)
-  // Récompenses de tuto prêtes à réclamer → red-dot de l'icône 🎯 flottante (cf. cluster live-ops).
-  const tutClaimable = tutClaimableCount(tutCtx, tut.claimed)
-  // ✉ Inbox : récompenses à réclamer + messages non lus → red-dot de l'icône ✉.
-  const inboxAttention = inboxAttentionCount(inbox)
-  // 📅 Quotidien : contrats finis non réclamés + connexion du jour → red-dot de l'icône 📅.
-  const dailyMetricsNow = dailyMetrics({ totalKills, totalDungeons, metiers, bestStage })
-  const dailyClaim = dailyClaimableCount(daily, dailyMetricsNow, todayStr())
-  // 🎉 Event Invasion : paliers réclamables → red-dot 🎉. Icône débloquée avec les biomes élémentaires (palier 20).
-  const eventUnlocked = bestStage >= 20
-  const eventClaim = eventClaimableCount(event, totalKills)
-  // Le cluster s'affiche hors instance (🎯 selon tuto · ✉/📅 toujours · 🎉 dès palier 20).
-  const clusterVisible = !dungeon && !raid
-  const partyDps = characters
-    .filter((c) => c.hp > 0)
-    .reduce((sum, c) => sum + charDps(c), 0)
-  const resistEntries = Object.entries(enemy.resist ?? {}) as [DamageType, number][]
-  // Affichage : « résistance globale » = valeur MAJORITAIRE (rampe de palier) ; les écarts
-  // (thème de boss de raid) s'affichent en exceptions résiste/vulnérable.
-  let globalResist: number | null = null
-  let resistExceptions = resistEntries
-  if (resistEntries.length >= 5) {
-    const counts = new Map<number, number>()
-    for (const [, v] of resistEntries) counts.set(v, (counts.get(v) ?? 0) + 1)
-    let modeV = 0
-    let modeC = 0
-    for (const [v, c] of counts) if (c > modeC) { modeC = c; modeV = v }
-    if (modeC >= 5) { globalResist = modeV; resistExceptions = resistEntries.filter(([, v]) => v !== modeV) }
-  }
-  const enemyPct = (enemy.hp / enemy.maxHp) * 100
-  const boss = raid ? true : dungeon ? dungeon.current === dungeon.totalFights - 1 : isBossStage(stage)
-  // v0.36 — GATE DE RAID (farm uniquement) : au mur d'un vrai Chapitre, il faut le Raid T(c−4).
-  const gateTier = !raid && !dungeon ? raidGateForStage(stage) : 0
-  const gateLocked = gateTier > 0 && bestRaidTier(raidProgress) < gateTier
-
   return (
     <div className="flex h-full flex-col gap-3">
-      {/* Bandeau du haut : fil conducteur (objectif, 1 ligne) à gauche + cluster live-ops à droite.
-          Le cluster SORT de l'écran de combat le détail des quêtes (🎯) et la boîte de réception (✉) :
-          chaque icône porte un red-dot = gains à réclamer. Rangée en flux normal (zéro chevauchement
-          avec les contrôles de zone). Conçu pour s'étendre (events…). Masqué en donjon/raid. */}
-      {!dungeon && !raid && (objective || clusterVisible) && (
-        <div className="flex items-center gap-1.5 rounded-lg border border-slate-800 bg-[#0d111a] px-2 py-1">
-          {objective ? (
-            <button onClick={() => { if (tutActive) setQuestsOpen(true) }} title={objective} className="flex min-w-0 flex-1 items-center gap-1 text-left">
-              <span className="shrink-0 text-[12px]">🎯</span>
-              <span className="truncate text-[10px] leading-tight text-orange-100/80">{objective}</span>
-            </button>
-          ) : <span className="min-w-0 flex-1" />}
-          {clusterVisible && (
-            <div className="flex shrink-0 items-center gap-1">
-              {tutActive && (
-                <button onClick={() => setQuestsOpen(true)} aria-label={`Premiers Pas — ${tutClaimable} à réclamer`} className="relative flex h-7 w-7 items-center justify-center rounded-full border border-orange-700/50 bg-[#1a1320] text-base active:scale-95">
-                  🎯{tutClaimable > 0 && <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[8px] font-bold text-white ring-2 ring-[#0d111a]">{tutClaimable}</span>}
-                </button>
-              )}
-              {inbox.length > 0 && (
-                <button onClick={() => { setInboxOpen(true); markInboxSeen() }} aria-label={`Boîte de réception — ${inboxAttention} à consulter`} className="relative flex h-7 w-7 items-center justify-center rounded-full border border-sky-700/50 bg-[#101a26] text-base active:scale-95">
-                  ✉{inboxAttention > 0 && <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[8px] font-bold text-white ring-2 ring-[#0d111a]">{inboxAttention}</span>}
-                </button>
-              )}
-              <button onClick={() => setDailyOpen(true)} aria-label={`Quotidien — ${dailyClaim} à réclamer`} className="relative flex h-7 w-7 items-center justify-center rounded-full border border-emerald-700/50 bg-[#0d1a14] text-base active:scale-95">
-                📅{dailyClaim > 0 && <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[8px] font-bold text-white ring-2 ring-[#0d111a]">{dailyClaim}</span>}
-              </button>
-              {eventUnlocked && (
-                <button onClick={() => setEventOpen(true)} aria-label={`Invasion — ${eventClaim} à réclamer`} className="relative flex h-7 w-7 items-center justify-center rounded-full border text-base active:scale-95" style={{ borderColor: DAMAGE_TYPES[event.element].color + '80', background: '#160d14' }}>
-                  🎉{eventClaim > 0 && <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[8px] font-bold text-white ring-2 ring-[#0d111a]">{eventClaim}</span>}
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Bandeau donjon */}
-      {dungeon && (
-        <div className="rounded-xl border border-amber-700/50 bg-amber-950/20 p-3">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-semibold text-amber-300">🏰 {dungeon.name}</span>
-            <button onClick={abandonDungeon} className="rounded bg-red-900/50 px-2 py-0.5 text-[10px] text-red-300 hover:bg-red-900/70">
-              Abandonner
-            </button>
-          </div>
-          <div className="mt-1 text-[11px] text-slate-400">
-            Combat <span className="text-slate-200">{dungeon.current + 1}/{dungeon.totalFights}</span>
-            {(dungeon.repeatLeft ?? 0) > 0 && (
-              <span className="ml-2 rounded bg-amber-900/40 px-1.5 py-0.5 text-[10px] text-amber-200" title="Relances automatiques restantes">🔁 {dungeon.repeatLeft} run{dungeon.repeatLeft! > 1 ? 's' : ''} en file</span>
-            )}
-          </div>
-          {dungeon.modifiers.length > 0 && (
-            <div className="mt-1.5 flex flex-wrap gap-1">
-              {dungeon.modifiers.map((m) => (
-                <span key={m.id} title={m.description} className="rounded bg-amber-900/40 px-1.5 py-0.5 text-[10px] text-amber-200">
-                  {m.name}
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Bandeau raid */}
-      {raid && (
-        <div className="rounded-xl border border-rose-700/50 bg-rose-950/20 p-3">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-semibold text-rose-300">☠️ {raid.name}</span>
-            <button onClick={abandonRaid} className="rounded bg-red-900/50 px-2 py-0.5 text-[10px] text-red-300 hover:bg-red-900/70">
-              Abandonner
-            </button>
-          </div>
-          <div className="mt-1 flex items-center justify-between text-[11px] text-slate-400">
-            <span>
-              {raid.totalBosses > 1 && <>Boss <span className="text-slate-200">{raid.current + 1}/{raid.totalBosses}</span></>}
-              {(raid.repeatLeft ?? 0) > 0 && (
-                <span className="ml-2 rounded bg-rose-900/40 px-1.5 py-0.5 text-[10px] text-rose-200" title="Relances automatiques restantes">🔁 {raid.repeatLeft}</span>
-              )}
-            </span>
-            {raid.mechanics.includes('berserk') && (
-              <span className={raid.fightTime >= raid.berserkAt ? 'font-semibold text-rose-400' : 'text-amber-300'}>
-                ⏱️ {raid.fightTime >= raid.berserkAt ? 'ENRAGE MORTEL !' : `${Math.max(0, Math.ceil(raid.berserkAt - raid.fightTime))}s avant enrage`}
-              </span>
-            )}
-          </div>
-          <div className="mt-1.5 flex flex-wrap gap-1">
-            {raid.mechanics.map((m) => (
-              <span key={m} title={RAID_MECHANIC_META[m].desc} className="rounded bg-rose-900/40 px-1.5 py-0.5 text-[10px] text-rose-200">
-                {RAID_MECHANIC_META[m].icon} {RAID_MECHANIC_META[m].name}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Surcharge tournante : affichée uniquement dans la feuille Zone (cf. plus bas) pour ne pas encombrer l'écran sur mobile */}
+      {/* Bandeau du haut : fil conducteur (objectif) + cluster live-ops, isolé pour ne pas re-render par tick. */}
+      <LiveOpsCluster />
 
       {/* Ligne « zone » : biome (→ feuille) + stepper de palier + cadenas, le tout inline */}
-      {!dungeon && !raid && (
+      {!inInstance && (
         <div className="flex w-full items-center gap-1 rounded-xl border border-slate-800 bg-[#0d111a] px-2 py-1.5 text-xs">
           <button onClick={() => setZoneOpen(true)} className="flex min-w-0 flex-1 items-center gap-1.5 rounded-lg px-1 py-1.5 hover:bg-white/5">
             <span className="shrink-0 text-slate-500">🧭</span>
@@ -363,6 +190,259 @@ export function CombatPanel() {
             {farmLock ? '🔒 Verrouillé — le combat reste à cette vague' : '🔓 Libre — progression normale au fil des victoires'}
           </button>
         </Sheet>
+      )}
+
+      <EnemyView />
+      <TeamView />
+      <CombatLog />
+    </div>
+  )
+}
+
+/**
+ * Cluster live-ops (objectif + 🎯/✉/📅/🎉). Abonné à des SÉLECTEURS PRIMITIFS (compteurs, booléens) :
+ * les badges ne changent pas à chaque frappe → pas de re-render par tick. Les feuilles s'abonnent à
+ * leurs propres données (montées seulement à l'ouverture). Masqué en donjon/raid.
+ */
+function LiveOpsCluster() {
+  const inDungeon = useGame((s) => s.dungeon !== null)
+  const inRaid = useGame((s) => s.raid !== null)
+  // Objectif courant (tutoriel léger + signalisation des déblocages progressifs) — string stable.
+  const objective = useGame((s) => nextObjective(s.bestStage, s.characters.reduce((m, c) => Math.max(m, c.level), 1), s.biomeBest.physique ?? 0))
+  // v0.31 — Journal « Premiers Pas » : actif tant que toutes les quêtes ne sont pas réclamées.
+  const tutActive = useGame((s) => !tutAllClaimed(s.tut.claimed))
+  // Récompenses de tuto prêtes à réclamer → red-dot 🎯 (compteur primitif).
+  const tutClaimable = useGame((s) => tutClaimableCount(tutContext({ characters: s.characters, activeChar: s.activeChar, bestStage: s.bestStage, inventory: s.inventory, dungeonProgress: s.dungeonProgress, tut: s.tut }), s.tut.claimed))
+  const inboxLen = useGame((s) => s.inbox.length)
+  // ✉ Inbox : récompenses à réclamer + messages non lus → red-dot ✉.
+  const inboxAttention = useGame((s) => inboxAttentionCount(s.inbox))
+  // 📅 Quotidien : contrats finis non réclamés + connexion du jour → red-dot 📅.
+  const dailyClaim = useGame((s) => dailyClaimableCount(s.daily, dailyMetrics({ totalKills: s.totalKills, totalDungeons: s.totalDungeons, metiers: s.metiers, bestStage: s.bestStage }), todayStr()))
+  // 🎉 Event Invasion : icône débloquée avec les biomes élémentaires (palier 20).
+  const eventUnlocked = useGame((s) => s.bestStage >= 20)
+  const eventClaim = useGame((s) => eventClaimableCount(s.event, s.totalKills))
+  const eventElement = useGame((s) => s.event.element)
+  const markInboxSeen = useGame((s) => s.markInboxSeen)
+
+  const [questsOpen, setQuestsOpen] = useState(false)
+  const [inboxOpen, setInboxOpen] = useState(false)
+  const [dailyOpen, setDailyOpen] = useState(false)
+  const [eventOpen, setEventOpen] = useState(false)
+
+  // Le cluster s'affiche hors instance (🎯 selon tuto · ✉/📅 toujours · 🎉 dès palier 20).
+  const clusterVisible = !inDungeon && !inRaid
+
+  return (
+    <>
+      {clusterVisible && (objective || clusterVisible) && (
+        <div className="flex items-center gap-1.5 rounded-lg border border-slate-800 bg-[#0d111a] px-2 py-1">
+          {objective ? (
+            <button onClick={() => { if (tutActive) setQuestsOpen(true) }} title={objective} className="flex min-w-0 flex-1 items-center gap-1 text-left">
+              <span className="shrink-0 text-[12px]">🎯</span>
+              <span className="truncate text-[10px] leading-tight text-orange-100/80">{objective}</span>
+            </button>
+          ) : <span className="min-w-0 flex-1" />}
+          {clusterVisible && (
+            <div className="flex shrink-0 items-center gap-1">
+              {tutActive && (
+                <button onClick={() => setQuestsOpen(true)} aria-label={`Premiers Pas — ${tutClaimable} à réclamer`} className="relative flex h-7 w-7 items-center justify-center rounded-full border border-orange-700/50 bg-[#1a1320] text-base active:scale-95">
+                  🎯{tutClaimable > 0 && <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[8px] font-bold text-white ring-2 ring-[#0d111a]">{tutClaimable}</span>}
+                </button>
+              )}
+              {inboxLen > 0 && (
+                <button onClick={() => { setInboxOpen(true); markInboxSeen() }} aria-label={`Boîte de réception — ${inboxAttention} à consulter`} className="relative flex h-7 w-7 items-center justify-center rounded-full border border-sky-700/50 bg-[#101a26] text-base active:scale-95">
+                  ✉{inboxAttention > 0 && <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[8px] font-bold text-white ring-2 ring-[#0d111a]">{inboxAttention}</span>}
+                </button>
+              )}
+              <button onClick={() => setDailyOpen(true)} aria-label={`Quotidien — ${dailyClaim} à réclamer`} className="relative flex h-7 w-7 items-center justify-center rounded-full border border-emerald-700/50 bg-[#0d1a14] text-base active:scale-95">
+                📅{dailyClaim > 0 && <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[8px] font-bold text-white ring-2 ring-[#0d111a]">{dailyClaim}</span>}
+              </button>
+              {eventUnlocked && (
+                <button onClick={() => setEventOpen(true)} aria-label={`Invasion — ${eventClaim} à réclamer`} className="relative flex h-7 w-7 items-center justify-center rounded-full border text-base active:scale-95" style={{ borderColor: DAMAGE_TYPES[eventElement].color + '80', background: '#160d14' }}>
+                  🎉{eventClaim > 0 && <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[8px] font-bold text-white ring-2 ring-[#0d111a]">{eventClaim}</span>}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Feuille « Premiers Pas » : la liste détaillée des quêtes + récompenses, sortie de l'écran de combat. */}
+      {questsOpen && <QuestSheet onClose={() => setQuestsOpen(false)} />}
+      {/* Feuille ✉ Boîte de réception : les gains à collecter (cadeaux, hors-ligne, events). */}
+      {inboxOpen && <InboxSheet onClose={() => setInboxOpen(false)} />}
+      {/* Feuille 📅 Quotidien : contrats du jour + connexion. */}
+      {dailyOpen && <DailySheet onClose={() => setDailyOpen(false)} />}
+      {/* Feuille 🎉 Invasion élémentaire : event hebdomadaire (paliers → aura exclusive). */}
+      {eventOpen && <EventSheet onClose={() => setEventOpen(false)} />}
+    </>
+  )
+}
+
+/** Feuille 🎯 Premiers Pas — abonnée à son propre état (montée seulement à l'ouverture). */
+function QuestSheet({ onClose }: { onClose: () => void }) {
+  const characters = useGame((s) => s.characters)
+  const activeChar = useGame((s) => s.activeChar)
+  const bestStage = useGame((s) => s.bestStage)
+  const inventory = useGame((s) => s.inventory)
+  const dungeonProgress = useGame((s) => s.dungeonProgress)
+  const tut = useGame((s) => s.tut)
+  const claimTutorialReward = useGame((s) => s.claimTutorialReward)
+  const tutCtx = tutContext({ characters, activeChar, bestStage, inventory, dungeonProgress, tut })
+  return (
+    <Sheet title={`🎯 Premiers Pas — ${tut.claimed.length}/${TUT_QUESTS.length}`} onClose={onClose}>
+      <QuestList ctx={tutCtx} claimed={tut.claimed} onClaim={claimTutorialReward} />
+    </Sheet>
+  )
+}
+
+/** Feuille ✉ Boîte de réception. */
+function InboxSheet({ onClose }: { onClose: () => void }) {
+  const inbox = useGame((s) => s.inbox)
+  const claimInbox = useGame((s) => s.claimInbox)
+  const claimAllInbox = useGame((s) => s.claimAllInbox)
+  return (
+    <Sheet title="✉ Boîte de réception" onClose={onClose}>
+      <InboxList inbox={inbox} onClaim={claimInbox} onClaimAll={claimAllInbox} />
+    </Sheet>
+  )
+}
+
+/** Feuille 📅 Quotidien. */
+function DailySheet({ onClose }: { onClose: () => void }) {
+  const daily = useGame((s) => s.daily)
+  const totalKills = useGame((s) => s.totalKills)
+  const totalDungeons = useGame((s) => s.totalDungeons)
+  const metiers = useGame((s) => s.metiers)
+  const bestStage = useGame((s) => s.bestStage)
+  const claimDailyQuest = useGame((s) => s.claimDailyQuest)
+  const claimLogin = useGame((s) => s.claimLogin)
+  const metrics = dailyMetrics({ totalKills, totalDungeons, metiers, bestStage })
+  return (
+    <Sheet title="📅 Quotidien" onClose={onClose}>
+      <DailyPanel daily={daily} metrics={metrics} onClaimQuest={claimDailyQuest} onClaimLogin={claimLogin} />
+    </Sheet>
+  )
+}
+
+/** Feuille 🎉 Invasion élémentaire. */
+function EventSheet({ onClose }: { onClose: () => void }) {
+  const event = useGame((s) => s.event)
+  const totalKills = useGame((s) => s.totalKills)
+  const collected = useGame((s) => s.eventCosmetics.length)
+  const claimEventMilestone = useGame((s) => s.claimEventMilestone)
+  return (
+    <Sheet title="🎉 Invasion élémentaire" onClose={onClose}>
+      <EventPanel event={event} totalKills={totalKills} collected={collected} onClaim={claimEventMilestone} />
+    </Sheet>
+  )
+}
+
+/**
+ * Bloc ENNEMI : bandeau donjon/raid + ennemi (mono/multi) + résistances + techniques + métriques.
+ * S'abonne à enemy/dungeon/raid/characters → re-render par tick (les barres de PV bougent), c'est voulu.
+ */
+function EnemyView() {
+  const normalEnemy = useGame((s) => s.enemy)
+  const dungeon = useGame((s) => s.dungeon)
+  const raid = useGame((s) => s.raid)
+  const characters = useGame((s) => s.characters)
+  const stage = useGame((s) => s.stage)
+  const bestStage = useGame((s) => s.bestStage)
+  const raidProgress = useGame((s) => s.raidProgress)
+  const abandonDungeon = useGame((s) => s.abandonDungeon)
+  const abandonRaid = useGame((s) => s.abandonRaid)
+
+  // v0.36 (lot 8) — un seul NIVEAU DE COMPTE (les héros partagent le niveau) : un badge, plus un par perso.
+  const accountLevel = characters.reduce((m, c) => Math.max(m, c.level), 1)
+
+  // Donjons/raids = combat à PLUSIEURS adversaires. En combat classique, un seul ennemi.
+  const enemies: Enemy[] = raid ? raid.enemies : dungeon ? dungeon.enemies : [normalEnemy]
+  const enemy = enemies.find((e) => e.hp > 0) ?? enemies[0]
+  const multi = enemies.length > 1
+  const enemyDmgTotal = enemies.filter((e) => e.hp > 0).reduce((a, e) => a + e.damage, 0)
+  const atkType = DAMAGE_TYPES[enemy.damageType]
+  const partyDps = characters
+    .filter((c) => c.hp > 0)
+    .reduce((sum, c) => sum + charDps(c), 0)
+  const resistEntries = Object.entries(enemy.resist ?? {}) as [DamageType, number][]
+  // Affichage : « résistance globale » = valeur MAJORITAIRE (rampe de palier) ; les écarts
+  // (thème de boss de raid) s'affichent en exceptions résiste/vulnérable.
+  let globalResist: number | null = null
+  let resistExceptions = resistEntries
+  if (resistEntries.length >= 5) {
+    const counts = new Map<number, number>()
+    for (const [, v] of resistEntries) counts.set(v, (counts.get(v) ?? 0) + 1)
+    let modeV = 0
+    let modeC = 0
+    for (const [v, c] of counts) if (c > modeC) { modeC = c; modeV = v }
+    if (modeC >= 5) { globalResist = modeV; resistExceptions = resistEntries.filter(([, v]) => v !== modeV) }
+  }
+  const enemyPct = (enemy.hp / enemy.maxHp) * 100
+  const boss = raid ? true : dungeon ? dungeon.current === dungeon.totalFights - 1 : isBossStage(stage)
+  // v0.36 — GATE DE RAID (farm uniquement) : au mur d'un vrai Chapitre, il faut le Raid T(c−4).
+  const gateTier = !raid && !dungeon ? raidGateForStage(stage) : 0
+  const gateLocked = gateTier > 0 && bestRaidTier(raidProgress) < gateTier
+
+  return (
+    <>
+      {/* Bandeau donjon */}
+      {dungeon && (
+        <div className="rounded-xl border border-amber-700/50 bg-amber-950/20 p-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-semibold text-amber-300">🏰 {dungeon.name}</span>
+            <button onClick={abandonDungeon} className="rounded bg-red-900/50 px-2 py-0.5 text-[10px] text-red-300 hover:bg-red-900/70">
+              Abandonner
+            </button>
+          </div>
+          <div className="mt-1 text-[11px] text-slate-400">
+            Combat <span className="text-slate-200">{dungeon.current + 1}/{dungeon.totalFights}</span>
+            {(dungeon.repeatLeft ?? 0) > 0 && (
+              <span className="ml-2 rounded bg-amber-900/40 px-1.5 py-0.5 text-[10px] text-amber-200" title="Relances automatiques restantes">🔁 {dungeon.repeatLeft} run{dungeon.repeatLeft! > 1 ? 's' : ''} en file</span>
+            )}
+          </div>
+          {dungeon.modifiers.length > 0 && (
+            <div className="mt-1.5 flex flex-wrap gap-1">
+              {dungeon.modifiers.map((m) => (
+                <span key={m.id} title={m.description} className="rounded bg-amber-900/40 px-1.5 py-0.5 text-[10px] text-amber-200">
+                  {m.name}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Bandeau raid */}
+      {raid && (
+        <div className="rounded-xl border border-rose-700/50 bg-rose-950/20 p-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-semibold text-rose-300">☠️ {raid.name}</span>
+            <button onClick={abandonRaid} className="rounded bg-red-900/50 px-2 py-0.5 text-[10px] text-red-300 hover:bg-red-900/70">
+              Abandonner
+            </button>
+          </div>
+          <div className="mt-1 flex items-center justify-between text-[11px] text-slate-400">
+            <span>
+              {raid.totalBosses > 1 && <>Boss <span className="text-slate-200">{raid.current + 1}/{raid.totalBosses}</span></>}
+              {(raid.repeatLeft ?? 0) > 0 && (
+                <span className="ml-2 rounded bg-rose-900/40 px-1.5 py-0.5 text-[10px] text-rose-200" title="Relances automatiques restantes">🔁 {raid.repeatLeft}</span>
+              )}
+            </span>
+            {raid.mechanics.includes('berserk') && (
+              <span className={raid.fightTime >= raid.berserkAt ? 'font-semibold text-rose-400' : 'text-amber-300'}>
+                ⏱️ {raid.fightTime >= raid.berserkAt ? 'ENRAGE MORTEL !' : `${Math.max(0, Math.ceil(raid.berserkAt - raid.fightTime))}s avant enrage`}
+              </span>
+            )}
+          </div>
+          <div className="mt-1.5 flex flex-wrap gap-1">
+            {raid.mechanics.map((m) => (
+              <span key={m} title={RAID_MECHANIC_META[m].desc} className="rounded bg-rose-900/40 px-1.5 py-0.5 text-[10px] text-rose-200">
+                {RAID_MECHANIC_META[m].icon} {RAID_MECHANIC_META[m].name}
+              </span>
+            ))}
+          </div>
+        </div>
       )}
 
       {/* Ennemi */}
@@ -537,109 +617,137 @@ export function CombatPanel() {
         {/* (v0.36 lot 8) — le récap des RÉSISTANCES du héros est RETIRÉ de l'écran de combat (il vit dans
             le hub 🛡 Héros → onglet Résist). On garde le combat épuré ; seul l'essentiel reste à l'écran. */}
       </div>
+    </>
+  )
+}
 
-      {/* ÉQUIPE + CAPACITÉS fusionnées : une carte par héros (badge de niveau, PV, bouclier,
-          altérations) → tap pour piloter ce héros ; ses sorts s'affichent juste en dessous.
-          Posée bas d'écran : PV + sorts sous le pouce, à côté du journal (ergonomie mobile). */}
-      <div className="rounded-xl border border-slate-800 bg-gradient-to-br from-[#141a26] to-[#0d111a] p-2.5">
-        <div className="mb-2 flex items-center justify-between">
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">⚔️ Équipe</span>
-          <button
-            onClick={() => setControlMode((v) => !v)}
-            title="Veille : vitaux seuls (idle) · Contrôle : toutes les barres de sorts"
-            className={'rounded-full px-2.5 py-1 text-[10px] font-semibold ' + (controlMode ? 'bg-amber-600/30 text-amber-200' : 'bg-slate-800 text-slate-400')}
-          >
-            {controlMode ? '⚔ Contrôle' : '👁 Veille'}
-          </button>
-        </div>
-        <div className="space-y-2">
-          {characters.map((c, i) => {
-            const mh = charMaxHp(c)
-            const pct = Math.max(0, Math.min(100, (c.hp / mh) * 100))
-            const dead = c.hp <= 0
-            const active = i === activeChar
-            const single = characters.length === 1
-            const chips = statusChips(c)
-            const shieldPct = (c.absorb ?? 0) > 0 ? Math.max(0, Math.min(100 - pct, ((c.absorb ?? 0) / mh) * 100)) : 0
-            // v0.36 (lot 8) — chaque héros a SA barre de sorts : on lance n'importe quel sort de n'importe
-            // quel héros d'un tap (jeu manuel multi-perso). AUTO/MAN par SORT.
-            const cds = powerCooldowns(c)
-            const slots = c.powers
-              .map((pid, slot) => ({ slot, p: pid ? getPower(pid) : null }))
-              .filter((x): x is { slot: number; p: PowerDef } => !!x.p && x.p.kind === 'active')
-            return (
-              <div key={c.id} className={'rounded-lg border p-2 ' + (active && !single ? 'border-orange-500/50 bg-orange-500/[0.06]' : 'border-slate-800 bg-black/20')}>
-                <button onClick={() => setActiveChar(i)} disabled={single} title={single ? undefined : `Piloter ${c.name}`} className="flex w-full items-center gap-2.5 text-left">
-                  {(() => { const cg = resolveAvatar(c.primaryBias); return (
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-base" style={{ background: `linear-gradient(160deg, ${cg.pal.c1}, ${cg.pal.c2})` }} aria-hidden="true">{cg.emb.glyph}</span>
-                  ) })()}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-baseline justify-between gap-2 text-[11px]">
-                      <span className={'truncate font-semibold ' + (dead ? 'text-red-500/70 line-through' : 'text-slate-100')}>
-                        {c.name}
-                        {c.title && getAchievement(c.title)?.title && (
-                          <span className="ml-1 text-[8.5px] font-normal italic text-amber-300/80">🎖 {getAchievement(c.title)!.title}</span>
-                        )}
-                        {active && !single && <span className="ml-1 text-[8.5px] font-normal text-orange-400">● actif</span>}
-                      </span>
-                      <span className="shrink-0 tabular-nums text-slate-400">
-                        {dead ? (
-                          <span className="text-red-400">{(c.rez ?? 0) > 0 ? `↻ ${Math.ceil(c.rez!)} s` : 'K.O.'}</span>
-                        ) : (
-                          <>
-                            {Math.ceil(Math.max(0, c.hp)).toLocaleString('fr-FR')} <span className="text-slate-600">/ {Math.round(mh).toLocaleString('fr-FR')}</span>
-                            {(c.absorb ?? 0) > 0 && (
-                              <span className="ml-1 font-semibold text-sky-300" title={`Bouclier : ${Math.round(c.absorb!).toLocaleString('fr-FR')} PV`}>🛡 {fmtShield(c.absorb!)}</span>
-                            )}
-                          </>
-                        )}
-                      </span>
-                    </div>
-                    <div className="relative mt-1 h-2.5 w-full overflow-hidden rounded-full bg-slate-800">
-                      <div className={'absolute inset-y-0 left-0 transition-all duration-200 ' + (dead ? 'bg-red-900' : 'bg-gradient-to-r from-emerald-600 to-emerald-400')} style={{ width: `${pct}%` }} />
-                      {shieldPct > 0 && <div className="absolute inset-y-0 bg-sky-400/70" style={{ left: `${pct}%`, width: `${shieldPct}%` }} />}
-                    </div>
-                  </div>
-                </button>
-                {chips.length > 0 && (
-                  <div className="mt-1.5 flex flex-wrap gap-1">
-                    {chips.map((s) => (
-                      <span key={s.label} title={s.title} className={'rounded px-1 py-px text-[9px] leading-tight ' + s.cls}>{s.icon} {s.label}</span>
-                    ))}
-                  </div>
-                )}
-                {controlMode && slots.length > 0 && (
-                  <div className="mt-2 grid grid-cols-5 gap-1">
-                    {slots.map(({ slot, p }) => {
-                      const cd = cds[p.id] ?? 0
-                      const ready = cd <= 0
-                      const auto = c.powerAuto?.[slot] !== false
-                      const total = p.cooldown ?? 3
-                      const frac = ready ? 1 : Math.max(0, 1 - cd / total)
-                      const canTap = !auto && ready
-                      return (
-                        <div key={slot} className={'relative overflow-hidden rounded-lg border ' + (auto ? 'border-cyan-700/50 bg-cyan-950/20' : canTap ? 'border-amber-500 bg-amber-900/20' : 'border-slate-700 bg-black/20')}>
-                          <button onClick={() => togglePowerAuto(slot, i)} title="Auto / manuel (ce sort)" className={'absolute right-0.5 top-0.5 z-10 rounded px-1 py-0.5 text-[7.5px] font-bold ' + (auto ? 'bg-cyan-600/40 text-cyan-100' : 'bg-amber-600/40 text-amber-100')}>{auto ? 'AUTO' : 'MAN'}</button>
-                          <button disabled={!canTap} onClick={() => castPower(slot, i)} title={auto ? `${p.name} — auto` : ready ? `Lancer ${p.name}` : `${p.name} — ${cd.toFixed(1)} s`} className="flex w-full flex-col items-center gap-0.5 px-0.5 pb-1 pt-1.5">
-                            <span className="relative text-lg leading-none">{powerIcon(p)}{!ready && <span className="absolute inset-0 flex items-center justify-center rounded bg-black/60 text-[9px] font-bold text-slate-100">{Math.ceil(cd)}</span>}</span>
-                            <span className="w-full truncate text-center text-[8px] font-medium text-slate-400">{p.name}</span>
-                          </button>
-                          {!ready && <div className="absolute bottom-0 left-0 h-0.5 bg-cyan-500" style={{ width: `${frac * 100}%` }} />}
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
+/**
+ * Bloc ÉQUIPE + CAPACITÉS : une carte par héros (badge de niveau, PV, bouclier, altérations) →
+ * tap pour piloter ce héros ; ses sorts s'affichent juste en dessous. État local controlMode
+ * (Veille : vitaux seuls · Contrôle : barres de sorts). Posé bas d'écran (ergonomie mobile).
+ */
+function TeamView() {
+  const characters = useGame((s) => s.characters)
+  const activeChar = useGame((s) => s.activeChar)
+  const setActiveChar = useGame((s) => s.setActiveChar)
+  const castPower = useGame((s) => s.castPower)
+  const togglePowerAuto = useGame((s) => s.togglePowerAuto)
+  // v0.36 (lot 8) — Contrôle (défaut) = barres de sorts visibles ; Veille = vitaux seuls (idle épuré,
+  // fait tenir 3 persos sans scroll).
+  const [controlMode, setControlMode] = useState(true)
 
-        {/* (v0.36 lot 8) — les barres de sorts vivent désormais DANS chaque carte de héros ci-dessus :
-            on lance n'importe quel sort de n'importe quel héros sans changer de perso actif. */}
+  return (
+    <div className="rounded-xl border border-slate-800 bg-gradient-to-br from-[#141a26] to-[#0d111a] p-2.5">
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">⚔️ Équipe</span>
+        <button
+          onClick={() => setControlMode((v) => !v)}
+          title="Veille : vitaux seuls (idle) · Contrôle : toutes les barres de sorts"
+          className={'rounded-full px-2.5 py-1 text-[10px] font-semibold ' + (controlMode ? 'bg-amber-600/30 text-amber-200' : 'bg-slate-800 text-slate-400')}
+        >
+          {controlMode ? '⚔ Contrôle' : '👁 Veille'}
+        </button>
+      </div>
+      <div className="space-y-2">
+        {characters.map((c, i) => {
+          const mh = charMaxHp(c)
+          const pct = Math.max(0, Math.min(100, (c.hp / mh) * 100))
+          const dead = c.hp <= 0
+          const active = i === activeChar
+          const single = characters.length === 1
+          const chips = statusChips(c)
+          const shieldPct = (c.absorb ?? 0) > 0 ? Math.max(0, Math.min(100 - pct, ((c.absorb ?? 0) / mh) * 100)) : 0
+          // v0.36 (lot 8) — chaque héros a SA barre de sorts : on lance n'importe quel sort de n'importe
+          // quel héros d'un tap (jeu manuel multi-perso). AUTO/MAN par SORT.
+          const cds = powerCooldowns(c)
+          const slots = c.powers
+            .map((pid, slot) => ({ slot, p: pid ? getPower(pid) : null }))
+            .filter((x): x is { slot: number; p: PowerDef } => !!x.p && x.p.kind === 'active')
+          return (
+            <div key={c.id} className={'rounded-lg border p-2 ' + (active && !single ? 'border-orange-500/50 bg-orange-500/[0.06]' : 'border-slate-800 bg-black/20')}>
+              <button onClick={() => setActiveChar(i)} disabled={single} title={single ? undefined : `Piloter ${c.name}`} className="flex w-full items-center gap-2.5 text-left">
+                {(() => { const cg = resolveAvatar(c.primaryBias); return (
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-base" style={{ background: `linear-gradient(160deg, ${cg.pal.c1}, ${cg.pal.c2})` }} aria-hidden="true">{cg.emb.glyph}</span>
+                ) })()}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline justify-between gap-2 text-[11px]">
+                    <span className={'truncate font-semibold ' + (dead ? 'text-red-500/70 line-through' : 'text-slate-100')}>
+                      {c.name}
+                      {c.title && getAchievement(c.title)?.title && (
+                        <span className="ml-1 text-[8.5px] font-normal italic text-amber-300/80">🎖 {getAchievement(c.title)!.title}</span>
+                      )}
+                      {active && !single && <span className="ml-1 text-[8.5px] font-normal text-orange-400">● actif</span>}
+                    </span>
+                    <span className="shrink-0 tabular-nums text-slate-400">
+                      {dead ? (
+                        <span className="text-red-400">{(c.rez ?? 0) > 0 ? `↻ ${Math.ceil(c.rez!)} s` : 'K.O.'}</span>
+                      ) : (
+                        <>
+                          {Math.ceil(Math.max(0, c.hp)).toLocaleString('fr-FR')} <span className="text-slate-600">/ {Math.round(mh).toLocaleString('fr-FR')}</span>
+                          {(c.absorb ?? 0) > 0 && (
+                            <span className="ml-1 font-semibold text-sky-300" title={`Bouclier : ${Math.round(c.absorb!).toLocaleString('fr-FR')} PV`}>🛡 {fmtShield(c.absorb!)}</span>
+                          )}
+                        </>
+                      )}
+                    </span>
+                  </div>
+                  <div className="relative mt-1 h-2.5 w-full overflow-hidden rounded-full bg-slate-800">
+                    <div className={'absolute inset-y-0 left-0 transition-all duration-200 ' + (dead ? 'bg-red-900' : 'bg-gradient-to-r from-emerald-600 to-emerald-400')} style={{ width: `${pct}%` }} />
+                    {shieldPct > 0 && <div className="absolute inset-y-0 bg-sky-400/70" style={{ left: `${pct}%`, width: `${shieldPct}%` }} />}
+                  </div>
+                </div>
+              </button>
+              {chips.length > 0 && (
+                <div className="mt-1.5 flex flex-wrap gap-1">
+                  {chips.map((s) => (
+                    <span key={s.label} title={s.title} className={'rounded px-1 py-px text-[9px] leading-tight ' + s.cls}>{s.icon} {s.label}</span>
+                  ))}
+                </div>
+              )}
+              {controlMode && slots.length > 0 && (
+                <div className="mt-2 grid grid-cols-5 gap-1">
+                  {slots.map(({ slot, p }) => {
+                    const cd = cds[p.id] ?? 0
+                    const ready = cd <= 0
+                    const auto = c.powerAuto?.[slot] !== false
+                    const total = p.cooldown ?? 3
+                    const frac = ready ? 1 : Math.max(0, 1 - cd / total)
+                    const canTap = !auto && ready
+                    return (
+                      <div key={slot} className={'relative overflow-hidden rounded-lg border ' + (auto ? 'border-cyan-700/50 bg-cyan-950/20' : canTap ? 'border-amber-500 bg-amber-900/20' : 'border-slate-700 bg-black/20')}>
+                        <button onClick={() => togglePowerAuto(slot, i)} title="Auto / manuel (ce sort)" className={'absolute right-0.5 top-0.5 z-10 rounded px-1 py-0.5 text-[7.5px] font-bold ' + (auto ? 'bg-cyan-600/40 text-cyan-100' : 'bg-amber-600/40 text-amber-100')}>{auto ? 'AUTO' : 'MAN'}</button>
+                        <button disabled={!canTap} onClick={() => castPower(slot, i)} title={auto ? `${p.name} — auto` : ready ? `Lancer ${p.name}` : `${p.name} — ${cd.toFixed(1)} s`} className="flex w-full flex-col items-center gap-0.5 px-0.5 pb-1 pt-1.5">
+                          <span className="relative text-lg leading-none">{powerIcon(p)}{!ready && <span className="absolute inset-0 flex items-center justify-center rounded bg-black/60 text-[9px] font-bold text-slate-100">{Math.ceil(cd)}</span>}</span>
+                          <span className="w-full truncate text-center text-[8px] font-medium text-slate-400">{p.name}</span>
+                        </button>
+                        {!ready && <div className="absolute bottom-0 left-0 h-0.5 bg-cyan-500" style={{ width: `${frac * 100}%` }} />}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )
+        })}
       </div>
 
-      {/* Journal — zone réelle (min-height garanti) + plein écran filtrable au tap */}
+      {/* (v0.36 lot 8) — les barres de sorts vivent désormais DANS chaque carte de héros ci-dessus :
+          on lance n'importe quel sort de n'importe quel héros sans changer de perso actif. */}
+    </div>
+  )
+}
+
+/**
+ * Journal — zone réelle (min-height garanti) + plein écran filtrable au tap. S'abonne uniquement à
+ * `log` (ne re-render que sur nouvelle entrée, pas à chaque tick). État local journalOpen/logFilter.
+ */
+function CombatLog() {
+  const log = useGame((s) => s.log)
+  const [journalOpen, setJournalOpen] = useState(false)
+  const [logFilter, setLogFilter] = useState('tout')
+
+  return (
+    <>
       <div className="flex min-h-[120px] flex-1 flex-col rounded-xl border border-slate-800 bg-[#0d111a] p-3">
         <div className="mb-1 flex items-center justify-between">
           <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Journal</span>
@@ -659,34 +767,6 @@ export function CombatPanel() {
           ))}
         </div>
       </div>
-
-      {/* Feuille « Premiers Pas » : la liste détaillée des quêtes + récompenses, sortie de l'écran de combat. */}
-      {questsOpen && (
-        <Sheet title={`🎯 Premiers Pas — ${tut.claimed.length}/${TUT_QUESTS.length}`} onClose={() => setQuestsOpen(false)}>
-          <QuestList ctx={tutCtx} claimed={tut.claimed} onClaim={claimTutorialReward} />
-        </Sheet>
-      )}
-
-      {/* Feuille ✉ Boîte de réception : les gains à collecter (cadeaux, hors-ligne, events). */}
-      {inboxOpen && (
-        <Sheet title="✉ Boîte de réception" onClose={() => setInboxOpen(false)}>
-          <InboxList inbox={inbox} onClaim={claimInbox} onClaimAll={claimAllInbox} />
-        </Sheet>
-      )}
-
-      {/* Feuille 📅 Quotidien : contrats du jour + connexion. */}
-      {dailyOpen && (
-        <Sheet title="📅 Quotidien" onClose={() => setDailyOpen(false)}>
-          <DailyPanel daily={daily} metrics={dailyMetricsNow} onClaimQuest={claimDailyQuest} onClaimLogin={claimLogin} />
-        </Sheet>
-      )}
-
-      {/* Feuille 🎉 Invasion élémentaire : event hebdomadaire (paliers → aura exclusive). */}
-      {eventOpen && (
-        <Sheet title="🎉 Invasion élémentaire" onClose={() => setEventOpen(false)}>
-          <EventPanel event={event} totalKills={totalKills} collected={eventCosmetics.length} onClaim={claimEventMilestone} />
-        </Sheet>
-      )}
 
       {/* Journal plein écran */}
       {journalOpen && (
@@ -719,7 +799,7 @@ export function CombatPanel() {
           </div>
         </Sheet>
       )}
-    </div>
+    </>
   )
 }
 
