@@ -63,7 +63,16 @@ Store Zustand unique (`useGame`), 4 grands rôles :
 
 - **Clé** : `SAVE_KEY = 'warrior-idler-save-v030c'` ; sérialisation JSON dans `localStorage`.
 - **`persist(s)`** (dans [`save.ts`](../../src/game/save.ts)) : projette le `GameState` sur une forme `SaveData` (liste **explicite**
-  des champs persistés — les champs transitoires en sont **exclus**), horodate `lastSeen`.
+  des champs persistés — les champs transitoires en sont **exclus**), horodate `lastSeen`. Synchrone :
+  c'est le contrat des **actions joueur** (et du round-trip de test).
+- **`persistThrottled(s)`** : réservé au **chemin chaud** (boucle de combat 5 Hz — `tick`/`tickDungeon`/
+  `tickRaid`). Mémorise le dernier instantané et n'écrit qu'**au plus une fois / `SAVE_THROTTLE_MS` (2 s)** :
+  sans ça, jusqu'à 5 `JSON.stringify` de tout le save par seconde bloqueraient le thread UI. Aucune perte
+  au-delà de la fenêtre — `flushSave` (mise en veille/fermeture, `pagehide`/`visibilitychange`) et
+  `persist` (action joueur) écrivent le pending immédiatement, et la simulation hors-ligne recrédite
+  l'écart via `lastSeen`. **Cap d'inventaire** `INV_BASE = 5000` (`storeHelpers.ts`) : borne purement
+  technique qui plafonne la taille du save (corrige un throw silencieux de quota `localStorage` vers
+  ~15-18k objets) ; le tri reste à l'auto-recyclage et aux outils de masse.
 - **`load()`** : lit la clé, `JSON.parse`, puis `migrateOldSave(p)`.
 - **Migrations** : une série de fonctions rattrapent les vieilles saves —
   `migrateItem`/`migrateItemGems`/`migrateItemRune` (objets), `migrateLegacyForge` (arbres de

@@ -38,8 +38,10 @@ et des appels d'actions.
 1. Les composants lisent l'état via `useGame((s) => …)` (sélecteurs Zustand).
 2. Une interaction appelle une **action** du store (`useGame.getState().xxx()` ou via hook).
 3. L'action calcule le prochain état en appelant des fonctions pures de `game/`, fait
-   `set(next)`, puis `persist(next)` (écriture localStorage).
-4. Zustand notifie les abonnés → re-render ciblé.
+   `set(next)`, puis persiste : `persist(next)` (écriture localStorage synchrone, actions joueur) ou
+   `persistThrottled(next)` dans le **chemin chaud** (boucle de combat) — voir *Performance* ci-dessous.
+4. Zustand notifie les abonnés → re-render **ciblé** (chaque composant ne s'abonne qu'à l'état dont il
+   dépend ; les sélecteurs renvoyant des **primitives/nombres** évitent les re-renders par tick).
 
 ## La boucle de jeu (tick)
 
@@ -71,6 +73,34 @@ auto-lancées, altérations (DoT/HoT, voir `tickHeroStatuses`), capacités ennem
 - **Chargement** : `load()` lit la clé, et `migrateOldSave()` + une série de migrations ciblées
   (`migrateItem`, `migrateItemGems`, `migrateItemRune`, `migrateLegacyForge`…) rattrapent les
   vieilles saves. `metiersV` versionne les arbres de métiers.
+
+## Performance
+
+La boucle de combat tourne à 5 Hz et `set(next)` recrée des références d'état à chaque tick. Quelques
+patterns gardent le coût borné (tous **sans changer aucune formule** — vérifiés par sims byte-identiques) :
+
+- **Sauvegarde throttlée** (`save.ts`) : `persistThrottled` coalesce les écritures du chemin chaud en
+  **au plus une / 2 s** (`SAVE_THROTTLE_MS`) au lieu d'un `JSON.stringify` de tout le save à chaque kill.
+  `persist` (synchrone) reste le contrat des **actions joueur** ; `flushSave` force l'écriture au cycle
+  de vie (mise en veille / fermeture) → zéro perte. Le **cap d'inventaire** `INV_BASE = 5000`
+  (`storeHelpers.ts`) borne aussi la taille du save (évite le throw silencieux de quota `localStorage`) ;
+  `capPrepend` insère en tête sans recopie redondante sur les sites chauds (drop, donjon, raid).
+- **Caches de stats dérivées par référence** : `character.ts` (`cacheFor` → `charDerived`/`charMaxHp`/
+  `charResist`/`charCombatMods`) et `craftMods` (`metiers.ts`) mémoïsent leur résultat tant que les
+  **références** d'entrée (`base`/`equipment`/`talents`/`pantheon`, ou `metiers`) sont inchangées — ces
+  réfs sont préservées par le spread `{...c, hp}` du tick, donc le travail lourd ne tourne qu'au vrai
+  changement (allocation, équipement…). Invalidation globale via un `statsEpoch` quand les mods globaux
+  bougent. Les index talents par constellation (`talents.ts`, `BY_CONSTELLATION`) sont précalculés au
+  niveau module.
+- **Isolation des re-renders** : les écrans qui restent montés pendant le combat ne s'abonnent qu'à ce
+  dont ils dépendent. `CombatPanel` est découpé en 4 sous-composants abonnés **chacun à son état**
+  (`EnemyView`/`TeamView`/`CombatLog`/`LiveOpsCluster`, ce dernier via des **sélecteurs primitifs**) ;
+  `TalentTree` ne s'abonne qu'à du slow-state (la rangée de héros par-tick est isolée dans un enfant),
+  son layout radial et l'état visuel des liens/nœuds sont **mémoïsés** (`useMemo` + `React.memo`) hors du
+  chemin de pan/zoom.
+- **Code-splitting** (`App.tsx` + `vite.config.ts`) : les panneaux non-combat (Stuff/Atelier/Héros/
+  Expéditions/Marché/Grimoire) sont chargés en `React.lazy` + `Suspense` ; `react`/`react-dom` sont
+  isolés dans un chunk `react-vendor`. La PWA précache **tous** les chunks → hors-ligne OK.
 
 ## Carte des modules
 
@@ -124,12 +154,12 @@ auto-lancées, altérations (DoT/HoT, voir `tickHeroStatuses`), capacités ennem
 
 | Composant | Rôle |
 |---|---|
-| `CombatPanel.tsx` | Écran de combat : barres de vie, métriques, journal, capacités |
+| `CombatPanel.tsx` | Écran de combat, découpé en 4 sous-composants abonnés chacun à son état (`EnemyView`/`TeamView`/`CombatLog`/`LiveOpsCluster`) — cf. *Performance* |
 | `StuffScreen.tsx` | Paper-doll des 16 emplacements + inventaire filtré + comparaison |
 | `ItemRow.tsx` / `ComparePanel.tsx` | Ligne d'inventaire compacte / comparaison côte à côte + actions |
 | `CharacterPanel.tsx` | Fiche de perso : identité, ressources, effets des stats, spécialisation |
 | `AtelierPanel.tsx` | Atelier : les 4 métiers, Forge hexagonale, alchimie, automates (~1,8k lignes) |
-| `TalentTree.tsx` | Arbre de talents (constellations navigables) |
+| `TalentTree.tsx` | Arbre de talents (constellations navigables) : layout radial + état visuel liens/nœuds **mémoïsés**, abonnements stables (cf. *Performance*) |
 | `HerosHub.tsx` | Hub Héros (sous-onglets : talents, maîtrises, prestige…) |
 | `ExpedHub.tsx` / `DungeonPanel.tsx` / `RaidPanel.tsx` | Hub Expéditions → donjons / raids |
 | `MerchantPanel.tsx` | Marché : coffres, échoppe, comptoir, améliorations |
