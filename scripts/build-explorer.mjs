@@ -22,11 +22,12 @@ const M = await load(`
   export { RAID_LIST, makeRaidBoss, raidBerserkTime } from './src/game/raids.ts'
   export { makeDungeonEnemy, dungeonFights, DUNGEONS } from './src/game/dungeons.ts'
   export { partyCombatStep, resetAllCooldowns, fuelReset, crescendoReset } from './src/game/combatEngine.ts'
+  export { condGemMods } from './src/game/condGems.ts'
 `)
 const {
   makeCharacter, charDps, charMaxHp, charEhp, charDerived, charDamageProfile, charCombatMods, setGlobalCombatMods,
   profileDamageMult, generateItem, EQUIP_SLOTS, RAID_LIST, makeRaidBoss, raidBerserkTime,
-  makeDungeonEnemy, dungeonFights, DUNGEONS, partyCombatStep, resetAllCooldowns, fuelReset, crescendoReset,
+  makeDungeonEnemy, dungeonFights, DUNGEONS, partyCombatStep, resetAllCooldowns, fuelReset, crescendoReset, condGemMods,
 } = M
 setGlobalCombatMods({ power: 1, attackSpeed: 1, vitality: 1 }) // pas d'upgrades de compte (comparaison pure)
 
@@ -43,19 +44,29 @@ const ARCHETYPES = [
   { name: 'Mage (INT)', primary: 'intelligence', bias: 'intelligence', elem: 'feu',
     talents: ['cat_tissu', 'cl_mage', 'py_hub', 'py_pyromanie', 'py_hotstreak', 'py_combustion', 'id_mage'],
     support: [], powers: ['ma_eclair', 'py_boule', 'py_pyroblast', 'py_flammes', 'py_immolation'], passives: ['pas_cruaute', 'pas_perforation', 'pas_celerite'] },
+  // Chasseur voie MEUTE (familier) — keystones petDps (me_familier/me_meute) + me_frenesie (dmgMult) + capstone.
+  { name: 'Chasseur (AGI)', primary: 'agilite', bias: 'agilite', elem: 'physique',
+    talents: ['cat_mailles', 'cl_chasseur', 'me_hub', 'me_familier', 'me_meute', 'me_frenesie', 'me_coordination', 'id_chasseur'],
+    support: [], powers: ['ch_tir', 'me_cmd', 'me_morsure', 'me_saignee', 'me_curee'], passives: ['pas_cruaute', 'pas_perforation', 'pas_celerite'] },
 ]
 const ORIENTATIONS = ['offensif', 'equilibre', 'defensif']
+// Loadouts de gemmes de condition (id `cond` posé sur le stuff) — pour la section « impact des gemmes ».
+const GEMS_OFF = ['overkill', 'tambour', 'hemorragie']   // rythme : offensif
+const GEMS_DEF = ['sixieme', 'tresorerie', 'souffle']    // anti-télégraphe + bouclier + auto-soin
 
 // Bande de progression évaluée (un point fin de jeu, calé sur la table de ttk-sim/dungeon-sim).
 const ILVL = 200, RARITY = 'mythique', LEVEL = 75, BEST_STAGE = 300
 
-function gearedChar(arch, orientation) {
+function gearedChar(arch, orientation, gemIds = []) {
   const c = makeCharacter('Sim', LEVEL, arch.bias)
   const eq = {}
   for (const s of EQUIP_SLOTS) {
     eq[s.id] = generateItem({ ilvl: ILVL, rarity: RARITY, type: s.accepts, primary: arch.primary, stars: 3, orientation, ...(s.accepts === 'armePrincipale' ? { element: arch.elem } : {}) })
   }
   c.equipment = eq
+  // Pose les gemmes de condition sur les premiers emplacements (forme réelle : item.gems = [{cond,rank,quality}]).
+  const slotIds = EQUIP_SLOTS.map((s) => s.id)
+  gemIds.forEach((id, i) => { const it = eq[slotIds[i % slotIds.length]]; it.gems = [...(it.gems ?? []), { cond: id, rank: 5, quality: 2 }] })
   c.talents = { co_start: 1 }
   for (const t of arch.talents) c.talents[t] = 1
   c.powers = [...arch.powers]
@@ -80,32 +91,34 @@ function avgStats(arch, orient, n = 8) {
 }
 
 // Combat SOLO via le vrai moteur jusqu'au kill (gagné) ou wipe/temps (perdu).
-function simWin(arch, orientation, makeEnemy, timeLimit) {
-  let p = [gearedChar(arch, orientation)]
+// `gemIds` → gemmes de condition posées + `mods` (condGemMods) passés au moteur, comme tickRaid.
+function simWin(arch, orientation, gemIds, makeEnemy, timeLimit) {
+  let p = [gearedChar(arch, orientation, gemIds)]
+  const mods = gemIds.length ? { heroMult: 1, cond: condGemMods(p) } : undefined
   resetAllCooldowns(p); fuelReset(); crescendoReset()
   let enemy = makeEnemy(1)
   for (let t = 0; t < timeLimit && enemy.hp > 0 && p[0].hp > 0; t += 0.2) {
-    const r = partyCombatStep(p, enemy, 0.2)
+    const r = partyCombatStep(p, enemy, 0.2, mods)
     p = r.chars; enemy = r.enemy
   }
   return enemy.hp <= 0
 }
-const beats = (arch, orient, makeEnemy, timeLimit) => {
-  let w = 0; for (let i = 0; i < 3; i++) if (simWin(arch, orient, makeEnemy, timeLimit)) w++; return w >= 2 // majorité (2/3) : battable de façon fiable
+const beats = (arch, orient, gemIds, makeEnemy, timeLimit) => {
+  let w = 0; for (let i = 0; i < 3; i++) if (simWin(arch, orient, gemIds, makeEnemy, timeLimit)) w++; return w >= 2 // majorité (2/3) : battable de façon fiable
 }
 
 // Contenu de référence : 1er raid (Forge) pour le tier max, + un donjon « gros PV » pour le niveau max.
 const REF_RAID = RAID_LIST[0]
 const REF_RAID_EL = REF_RAID.element === 'rotating' ? 'arcane' : REF_RAID.element
 const REF_DUN = Object.values(DUNGEONS)[0]
-function maxRaidTier(arch, orient) {
+function maxRaidTier(arch, orient, gemIds = []) {
   let last = 0
-  for (let t = 1; t <= 15; t++) { if (beats(arch, orient, (n) => makeRaidBoss(REF_RAID, t, REF_RAID_EL, BEST_STAGE, n), raidBerserkTime(REF_RAID, t))) last = t; else break }
+  for (let t = 1; t <= 15; t++) { if (beats(arch, orient, gemIds, (n) => makeRaidBoss(REF_RAID, t, REF_RAID_EL, BEST_STAGE, n), raidBerserkTime(REF_RAID, t))) last = t; else break }
   return last
 }
-function maxDunLevel(arch, orient) {
+function maxDunLevel(arch, orient, gemIds = []) {
   let last = 0
-  for (let D = 1; D <= 25; D++) { const f = dungeonFights(D); if (beats(arch, orient, () => makeDungeonEnemy(REF_DUN, D, f - 1, f, [], BEST_STAGE), 180)) last = D; else break }
+  for (let D = 1; D <= 25; D++) { const f = dungeonFights(D); if (beats(arch, orient, gemIds, () => makeDungeonEnemy(REF_DUN, D, f - 1, f, [], BEST_STAGE), 180)) last = D; else break }
   return last
 }
 
@@ -147,4 +160,13 @@ for (const arch of ARCHETYPES) {
 console.log(forcedVotes >= 2
   ? '  → ⚠ Le défensif débloque nettement plus de contenu que l\'offensif : les monstres POUSSENT à la défense (« on est forcé »).'
   : '  → ✓ L\'offensif reste compétitif : tu peux jouer la puissance sans être muré par la survie.')
-console.log('\n(Solo, sans gemmes/runes/heal externe — comparaison RELATIVE. Étends ARCHETYPES/ORIENTATIONS pour plus de cas.)')
+// 3) Impact des GEMMES de condition (le « tous les composants ») sur un build de réf.
+console.log('\n=== Impact des gemmes de condition (réf : ' + ARCHETYPES[0].name + ' offensif, vs ' + REF_RAID.icon + ' ' + REF_RAID.name + ') ===')
+for (const [label, gems] of [['sans gemmes', []], ['gemmes OFFENSIVES', GEMS_OFF], ['gemmes DÉFENSIVES', GEMS_DEF]]) {
+  const rt = maxRaidTier(ARCHETYPES[0], 'offensif', gems), dl = maxDunLevel(ARCHETYPES[0], 'offensif', gems)
+  console.log(`  ${label.padEnd(18)} RaidTmax T${String(rt).padStart(2)} · DonjonMax ${String(dl).padStart(2)}   [${gems.join(', ') || '—'}]`)
+}
+console.log('  (Les gemmes agissent EN COMBAT via condGemMods — pas dans les colonnes DPS/EHP statiques. La défense')
+console.log('   anti-télégraphe « sixieme » + bouclier/auto-soin doit faire gagner du tier de raid si le mur est la survie.)')
+
+console.log('\n(Solo, sans heal externe — comparaison RELATIVE. Étends ARCHETYPES/ORIENTATIONS/GEMS pour plus de cas. Runes : couche suivante.)')

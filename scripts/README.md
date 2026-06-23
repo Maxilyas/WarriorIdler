@@ -99,10 +99,12 @@ sans buffs gemmes/runes/conso (plancher) et en supposant un jeu parfait (léger 
 ### `build-explorer.mjs` — `npm run explorer`
 **Matrice d'équilibrage des builds** via le vrai moteur. Croise des ARCHÉTYPES (chemins de classe réels)
 × une ORIENTATION de stuff (offensif/équilibré/défensif), fabrique le perso réel (`generateItem`) et
-simule (`partyCombatStep`, solo) le tier de raid / niveau de donjon MAX battable + DPS/EHP. Sort deux
-lectures : **écart de DPS entre classes** (déséquilibre) et **offensif vs défensif** (les monstres
-forcent-ils la défense ?). Extensible (ajouter des entrées à `ARCHETYPES`/`ORIENTATIONS`). Couche
-suivante : gemmes/runes par build.
+simule (`partyCombatStep`, solo) le tier de raid / niveau de donjon MAX battable + DPS/EHP. Sort trois
+lectures : **écart de DPS entre classes** (déséquilibre), **offensif vs défensif** (les monstres
+forcent-ils la défense ?) et **impact des gemmes** (loadout offensif vs défensif via `condGemMods` —
+la défense anti-télégraphe fait-elle gagner du tier ?). Extensible : ajoute des entrées à
+`ARCHETYPES` (4 classes : Guerrier/Voleur/Mage/Chasseur), `ORIENTATIONS`, `GEMS_OFF`/`GEMS_DEF`.
+Couche suivante : runes par build + loadouts de gemmes sur toute la matrice.
 
 ## Économie
 
