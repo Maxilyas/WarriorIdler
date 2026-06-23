@@ -1,8 +1,9 @@
 # 10 — État, store & sauvegarde
 
-> Source : [`store.ts`](../../src/game/store.ts) (~4.5k lignes : état + actions + orchestration),
+> Source : [`store.ts`](../../src/game/store.ts) (~3.4k lignes : état + actions + orchestration),
 > [`save.ts`](../../src/game/save.ts) (sauvegarde & migration), [`combatEngine.ts`](../../src/game/combatEngine.ts)
-> (moteur de combat) — tous deux extraits de `store.ts`,
+> (moteur de combat), [`storeHelpers.ts`](../../src/game/storeHelpers.ts) (helpers purs + consts partagés) —
+> tous extraits de `store.ts`,
 > [`types.ts`](../../src/game/types.ts) (vocabulaire de domaine), [`character.ts`](../../src/game/character.ts)
 > (modèle de perso dérivé). Pilotage du tick : [`App.tsx`](../../src/App.tsx). Voir aussi
 > [`ARCHITECTURE.md`](../ARCHITECTURE.md).
@@ -82,8 +83,9 @@ Store Zustand unique (`useGame`), 4 grands rôles :
 
 ## Dette / provisoire
 
-- `store.ts` est **volumineux** (~7.5k lignes) : la boucle de combat et les actions de craft/raid y
-  cohabitent. Toute extraction doit préserver l'invariant « logique pure dans `game/`, orchestration
-  dans le store ».
+- `store.ts` reste **volumineux** (~3.4k lignes) malgré le découpage (save/combatEngine/storeHelpers
+  extraits depuis un god-file de 7.5k lignes) : les ~120 actions Zustand y cohabitent encore. Toute
+  extraction doit préserver l'invariant « logique pure dans `game/`, orchestration dans le store ».
+  Suite possible : slicing des actions en slices Zustand par domaine (plus risqué — closures `set`/`get`).
 - La clé de save porte encore `v030c` : la **version de schéma** (clé) et la **version de jeu**
   (commits) sont découplées — voir la proposition d'`APP_VERSION` dans le [README](../../README.md).
