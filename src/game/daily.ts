@@ -1,5 +1,5 @@
 /**
- * QUOTIDIEN (v0.31.4) — starter de la boucle de rétention : 3 « Contrats du jour » + « Connexion ».
+ * QUOTIDIEN — starter de la boucle de rétention : 3 « Contrats du jour » + « Connexion ».
  *
  * Philosophie idle (cf. mémoire onboarding) : complétable EN JOUANT (pas de corvée active), catch-up
  * sans FOMO (rater un jour ne punit pas), canalise vers les boucles existantes (combat, donjons,
@@ -20,7 +20,7 @@ export interface DailyMetrics {
   dungeons: number
   /** XP de métier cumulée (somme des métiers). */
   metierXp: number
-  /** Record de palier. */
+  /** Record de vague. */
   bestStage: number
 }
 

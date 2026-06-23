@@ -1,12 +1,12 @@
 /**
- * PRESTIGE « Éveil Primordial » (v0.27, Lot 5).
+ * PRESTIGE « Éveil Primordial ».
  *
- * Reset DUR : on rend les paliers, le niveau, le stuff (SAUF 1 Relique) et les tiers de raid
+ * Reset DUR : on rend les vagues, le niveau, le stuff (SAUF 1 Relique) et les tiers de raid
  * tentables, contre des ÉCHOS PRIMORDIAUX 💠 — investis dans une CONSTELLATION (méta-arbre, séparé
  * de l'arbre de talents). Conservés à travers l'Éveil : Échos + Constellation, la Relique, le record
  * de progression (gating), et l'XP des métiers (choix A).
  *
- * La monnaie est indexée sur LE CONTENU le plus dur battu (tier de raid × palier × diversité),
+ * La monnaie est indexée sur LE CONTENU le plus dur battu (tier de raid × vague × diversité),
  * pas sur le temps farmé. La courbe s'accélère : Vélocité + Offline + Acclimatation rendent chaque
  * vie plus rapide et plus solide que la précédente.
  */
@@ -72,7 +72,7 @@ export function constellationMods(alloc: Record<string, number>): PrestigeMods {
 export const RELIC_BASE_ILVL = 24
 
 /**
- * Échos gagnés à l'Éveil : f(meilleur tier de raid, palier record, diversité de raids battus).
+ * Échos gagnés à l'Éveil : f(meilleur tier de raid, vague record, diversité de raids battus).
  * Indexé sur LE CONTENU vaincu, pas le temps farmé. `echosMult` = bonus « Résonance ».
  */
 export function echosGain(bestRaidTier: number, bestStage: number, raidsBeaten: number, echosMult: number): number {

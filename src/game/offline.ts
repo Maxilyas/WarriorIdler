@@ -24,8 +24,8 @@ export interface OfflineReport {
 
 /**
  * Simule la progression pendant l'absence : estime le rythme de kills (DPS de l'équipe
- * vs PV de l'ennemi du palier courant) à taux réduit, et renvoie un récap des gains.
- * Le palier ne progresse pas hors-ligne (farm sûr du palier courant).
+ * vs PV de l'ennemi de la vague courante) à taux réduit, et renvoie un récap des gains.
+ * La vague ne progresse pas hors-ligne (farm sûr de la vague courante).
  */
 export function simulateOffline(
   characters: Character[],
@@ -34,7 +34,7 @@ export function simulateOffline(
   elapsedMs: number,
   activeBiome: DamageType,
   maitrise: Record<string, number> = {},
-  /** v0.28 — bonus de hauts faits (rangs façon Maîtrise) à inclure dans l'éco. */
+  /** Bonus de hauts faits (rangs façon Maîtrise) à inclure dans l'éco. */
   achv: Record<string, number> = {},
 ): OfflineReport | null {
   if (elapsedMs < MIN_OFFLINE_MS) return null
@@ -52,8 +52,8 @@ export function simulateOffline(
   if (kills <= 0) return null
 
   const eco = computeGlobalMods(upgrades, maitrise, achv)
-  // v0.36 — le farm (online ET offline idle) est la SEULE source d'or → aligné sur CLASSIC_GOLD_MULT = 5.0.
-  const gold = Math.round(kills * enemy.xp * 5.0 * eco.goldGain) // aligné sur CLASSIC_GOLD_MULT (store, v0.36)
+  // le farm (online ET offline idle) est la SEULE source d'or → aligné sur CLASSIC_GOLD_MULT = 5.0.
+  const gold = Math.round(kills * enemy.xp * 5.0 * eco.goldGain) // aligné sur CLASSIC_GOLD_MULT (store)
   // Même boost d'XP que le combat classique en ligne (CLASSIC_XP_MULT = 8 dans le store).
   const xp = Math.round(kills * enemy.xp * eco.xpGain * 8)
 
@@ -63,11 +63,11 @@ export function simulateOffline(
   const items: Item[] = []
   for (let i = 0; i < dropCount; i++) items.push(generateItem({ ilvl: stageIlvl(stage), rarity: rollFarmRarity(stage, shift) }))
 
-  // v0.25 : plus de Sceaux en farm (en ligne comme hors-ligne) — l'Antre des Failles est LA source.
+  // plus de Sceaux en farm (en ligne comme hors-ligne) — l'Antre des Failles est LA source.
   const sceaux = 0
   const noyau = Math.floor(kills / 80)
 
-  // Quintessence du biome : ~1% des kills, AUGMENTÉ par le palier (même formule que le store :
+  // Quintessence du biome : ~1% des kills, AUGMENTÉ par la vague (même formule que le store :
   // QUINT_TIER_BONUS=0.012, plafond ×4) → farmer haut rapporte plus.
   const qTierMult = Math.min(4, 1 + Math.max(0, stage - 1) * 0.012)
   const qAmount = Math.floor(kills * 0.01 * qTierMult)

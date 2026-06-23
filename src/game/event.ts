@@ -1,9 +1,9 @@
 /**
- * ÉVÉNEMENT — INVASION ÉLÉMENTAIRE (v0.31.5). Premier event de la boucle live-ops.
+ * ÉVÉNEMENT — INVASION ÉLÉMENTAIRE. Premier event de la boucle live-ops.
  *
  * Une semaine = un élément envahit (rotation déterministe, SANS serveur). Le joueur accumule des
  * « points d'invasion » en jouant (= kills depuis le début de l'event, réutilise `totalKills` → aucun
- * hook combat), et réclame des paliers. Le capstone débloque une AURA élémentaire EXCLUSIVE (zéro
+ * hook combat), et réclame des seuils. Le capstone débloque une AURA élémentaire EXCLUSIVE (zéro
  * puissance, façon parures Légende) — collectionnable au fil des semaines. Reset hebdomadaire (le
  * grind + l'élément + l'aura tournent), d'où la pression « limité dans le temps » du genre.
  *
@@ -22,7 +22,7 @@ export interface EventState {
   element: DamageType
   /** `totalKills` au début de l'event → points = totalKills − baseline (remis à zéro chaque semaine). */
   baseline: number
-  /** Index des paliers déjà réclamés cette semaine. */
+  /** Index des seuils déjà réclamés cette semaine. */
   claimed: number[]
 }
 
@@ -85,7 +85,7 @@ export function eventClaimableCount(ev: EventState, totalKills: number): number 
 
 /**
  * Nouvel état d'event au passage de semaine (pur) : nouvel élément + baseline remise sur `totalKills`
- * + paliers remis à zéro. Inchangé si on est déjà dans la bonne semaine.
+ * + seuils remis à zéro. Inchangé si on est déjà dans la bonne semaine.
  */
 export function rollEvent(prev: EventState, totalKills: number, now: number = Date.now()): EventState {
   const wi = weekIndex(now)

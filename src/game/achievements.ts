@@ -8,7 +8,7 @@ import { AVATAR_PALETTES, AVATAR_EMBLEMS } from './avatar'
 import { chapitreOf } from './progression'
 
 /**
- * 🏆 HAUTS FAITS (v0.28, Lot D) — objectifs débloqués en jouant. Récompense : un TITRE (par héros)
+ * 🏆 HAUTS FAITS — objectifs débloqués en jouant. Récompense : un TITRE (par héros)
  * + un petit bonus PERMANENT exprimé dans les mêmes catégories que le 🏛️ Conseil des Maîtrises
  * (frappe/vigueur/celerite/fortune/savoir/flair) → réutilise directement les coefficients de
  * `computeGlobalMods` (1 « rang » de haut fait = 1 rang de Maîtrise). Pas de monnaie, pas de stats
@@ -40,8 +40,8 @@ export interface AchvCtx {
   metierMaxLevel: number
   metierMinLevel: number
   characters: Character[]
-  // ---- v0.32 : étage Légende (endgame + prestige) ----
-  /** Palier COURANT (≠ record) — pour les feats post-Éveil. */
+  // ---- étage Légende (endgame + prestige) ----
+  /** Vague COURANTE (≠ record) — pour les feats post-Éveil. */
   curStage: number
   /** Meilleur iLvl PORTÉ (min des 16 emplacements, 0 si un trou) — sur l'ensemble des héros. */
   maxEquippedIlvl: number
@@ -73,9 +73,9 @@ export interface AchievementDef {
   reward: Partial<Record<AchvBonusKey, number>>
   /** Titre affichable sous le nom du héros (jalons uniquement). */
   title?: string
-  /** 🏅 (v0.32) Bordure d'avatar débloquée — id du registre AVATAR_BORDERS (étage Légende). */
+  /** 🏅 Bordure d'avatar débloquée — id du registre AVATAR_BORDERS (étage Légende). */
   border?: string
-  /** 🏅 (v0.32) Aura d'avatar débloquée — id du registre AVATAR_AURAS (étage Légende). */
+  /** 🏅 Aura d'avatar débloquée — id du registre AVATAR_AURAS (étage Légende). */
   aura?: string
 }
 
@@ -88,7 +88,7 @@ const PACTS_FEAT = 4                      // 4 pactes distincts simultanés (sur
 const PERFECT_GEMS_SET = 8                // plein jeu de gemmes Parfaites
 const SYNERGY_GEMS = 3                    // ≥3 gemmes Parfaites pour le combo synergie
 const SYNERGY_RAID_TIER = 10              // combo synergie en raid de haut tier
-const FAST_RETURN_STAGE = 300             // re-palier visé après Éveil
+const FAST_RETURN_STAGE = 300             // vague visée après Éveil
 const FAST_RETURN_MS = 20 * 60 * 1000     // …en moins de 20 min
 const PERFECT_GEM_QUALITY = 2             // 2 = Parfaite (cf. condGems.ts GEM_QUALITIES)
 
@@ -111,7 +111,7 @@ export function fullyEquippedMinTier(char: Character): number {
 /** Un set est-il PORTÉ au complet (toutes ses pièces) par ce héros ? */
 function wornFullSet(char: Character): boolean {
   const counts = setBonuses(char.equipment).counts
-  // setBonuses ne connaît pas le total ; on considère « complet » dès le plus haut palier (6+).
+  // setBonuses ne connaît pas le total ; on considère « complet » dès le plus haut seuil (6+).
   return Object.values(counts).some((n) => n >= 6)
 }
 
@@ -210,8 +210,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'dungeon', category: 'combat', icon: '🏰', name: 'Explorateur', desc: 'Progresse dans les donjons-ressource.', check: (c) => c.dungeonLevels >= 10, reward: { celerite: 1 } },
 
   // ============================================================================
-  // 👑 LÉGENDE (v0.32) — l'étage endgame. Récompense = TITRE + PARURE (bordure ou
-  // aura d'avatar), JAMAIS de puissance (anti-snowball v0.30). Conçus pour pousser
+  // 👑 LÉGENDE — l'étage endgame. Récompense = TITRE + PARURE (bordure ou
+  // aura d'avatar), JAMAIS de puissance (anti-snowball). Conçus pour pousser
   // vers le très haut niveau ET la boucle de prestige (recommencer la save).
   // ============================================================================
   {

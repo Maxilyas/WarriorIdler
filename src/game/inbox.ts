@@ -1,5 +1,5 @@
 /**
- * BOÎTE DE RÉCEPTION ✉ (v0.31.2) — réceptacle des GAINS à collecter, sorti de l'écran de combat.
+ * BOÎTE DE RÉCEPTION ✉ — réceptacle des GAINS à collecter, sorti de l'écran de combat.
  *
  * Sépare la « collecte » (cadeaux, gains hors-ligne, récompenses d'évènement → un clic pour encaisser)
  * du « guidage » (quêtes Premiers Pas) et du combat lui-même. Pensé pour grandir : un daily, un event…
@@ -77,7 +77,7 @@ function fmtAway(ms: number): string {
 }
 
 /**
- * Récap des gains hors-ligne (v0.31.3) — INFORMATIF : les ressources sont déjà créditées par
+ * Récap des gains hors-ligne — INFORMATIF : les ressources sont déjà créditées par
  * `simulateOffline`/cold-start, donc `reward` est vide (pas de double-crédit, pas de bouton Réclamer).
  * `seen: false` → l'icône ✉ porte un red-dot « non lu » jusqu'à l'ouverture de la boîte.
  */

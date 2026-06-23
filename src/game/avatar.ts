@@ -1,7 +1,7 @@
 import type { PrimaryStat } from './types'
 
 /**
- * 🎨 PORTRAITS PROCÉDURAUX (v0.28, C1) — avatar 100% SVG, sans asset. Le joueur choisit une
+ * 🎨 PORTRAITS PROCÉDURAUX — avatar 100% SVG, sans asset. Le joueur choisit une
  * PALETTE (dégradé de fond) et un EMBLÈME (symbole central) par héros ; le défaut dérive de la
  * classe. Rendu par `LevelBadge`. Personnalisation = `Character.avatar`.
  */
@@ -12,7 +12,7 @@ export interface AvatarPalette {
   /** Dégradé du médaillon (haut → bas). */
   c1: string
   c2: string
-  /** Coût de déblocage en Poussière d'étoile 🌌 (v0.28 B2) — absent = gratuit dès le départ. */
+  /** Coût de déblocage en Poussière d'étoile 🌌 — absent = gratuit dès le départ. */
   cost?: number
 }
 
@@ -20,7 +20,7 @@ export interface AvatarEmblem {
   id: string
   name: string
   glyph: string
-  /** Coût de déblocage en Poussière d'étoile 🌌 (v0.28 B2) — absent = gratuit dès le départ. */
+  /** Coût de déblocage en Poussière d'étoile 🌌 — absent = gratuit dès le départ. */
   cost?: number
 }
 
@@ -69,7 +69,7 @@ const CLASS_DEFAULT_EMBLEM: Record<PrimaryStat, string> = { force: 'epee', agili
 const CLASS_DEFAULT_PALETTE: Record<PrimaryStat, string> = { force: 'sang', agilite: 'foret', intelligence: 'arcane', endurance: 'acier' }
 
 /**
- * 🏅 PARURES DE PRESTIGE (v0.32) — bordures (anneau décoratif) et auras (halo) débloquées par les
+ * 🏅 PARURES DE PRESTIGE — bordures (anneau décoratif) et auras (halo) débloquées par les
  * HAUTS FAITS endgame (pas d'achat : le haut fait obtenu EST le déblocage, comme les titres). Le
  * mapping haut-fait → cosmétique vit dans achievements.ts ; ici on ne décrit que le RENDU.
  */
@@ -110,7 +110,7 @@ export const AVATAR_AURAS: AvatarAura[] = [
   { id: 'arcenciel', name: 'Arc-en-ciel', color: '#f472b6', anim: true },
   { id: 'primordialePlus', name: 'Primordiale absolue', color: '#e879f9', anim: true },
   { id: 'flamme', name: 'Flamme', color: '#f97316', anim: true },
-  // 🎉 Auras d'INVASION (event élémentaire, v0.31.5) — débloquées au capstone de l'event de la semaine
+  // 🎉 Auras d'INVASION (event élémentaire) — débloquées au capstone de l'event de la semaine
   // (zéro puissance). Une par élément, à collectionner au fil des semaines. Id = `inv_<element>`.
   { id: 'inv_feu', name: 'Brasier', color: '#ff6b35', anim: true },
   { id: 'inv_froid', name: 'Blizzard', color: '#4dd0e1', anim: true },

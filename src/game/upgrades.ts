@@ -2,7 +2,7 @@
  * MARCHÉ & BONUS DE COMPTE — améliorations permanentes (`UPGRADES`, puits d'or/éclats) ET
  * l'AGRÉGATEUR CENTRAL `computeGlobalMods` où se cumulent améliorations + Conseil des Maîtrises +
  * hauts faits (mêmes clés/coefficients). Brancher ici tout nouveau bonus de compte. Le Marché est
- * volontairement VIDÉ de sa puissance (v0.25) : seule la Forge stellaire reste un puits de combat.
+ * volontairement VIDÉ de sa puissance : seule la Forge stellaire reste un puits de combat.
  *   → Doc : docs/systemes/08-metiers-et-craft.md
  */
 export type UpgradeCategory = 'economie' | 'progression' | 'combat' | 'confort'
@@ -34,7 +34,7 @@ export const UPGRADE_CATEGORIES: Record<UpgradeCategory, { name: string; color: 
 
 /**
  * Améliorations permanentes de compte (puits d'or + Éclats à coûts croissants). Data-driven.
- * v0.25 (DESIGN §1) — le Marché est VIDÉ de sa puissance : Puissance/Vivacité/Vitalité/Régénération
+ * Le Marché est VIDÉ de sa puissance : Puissance/Vivacité/Vitalité/Régénération
  * supprimées (pas chères + grosses différences = inéquilibrables), Sacoches supprimée (inventaire
  * illimité). La progression de compte passe au 🏛️ Conseil des Maîtrises (time-gaté, bonus minimes).
  * Seule puissance restante : la Forge stellaire — puits SOMMITAL infini, cher, gaté 🌌.
@@ -54,7 +54,7 @@ export const UPGRADES: UpgradeDef[] = [
   { id: 'forgeStellaire', name: 'Forge stellaire', description: 'Puits sommital infini : +4% de puissance/niveau (or + Poussière d\'étoile).', category: 'combat', icon: '🌌', baseCost: 50000, growth: 1.7, perLevel: 0.04, unit: 'pct', poussierePerLevel: 2, eclatsFrac: 0.4 },
 ]
 
-/** v0.25 — améliorations SUPPRIMÉES (migration : remboursement 100% or + éclats depuis ces formules). */
+/** Améliorations SUPPRIMÉES (migration : remboursement 100% or + éclats depuis ces formules). */
 export const REMOVED_UPGRADES: Record<string, { baseCost: number; growth: number; eclatsFrac?: number }> = {
   power: { baseCost: 1200, growth: 1.6, eclatsFrac: 0.35 },
   attackSpeed: { baseCost: 1500, growth: 1.62, eclatsFrac: 0.35 },
@@ -108,19 +108,19 @@ export interface GlobalMods {
 }
 
 /**
- * Calcule tous les multiplicateurs/bonus globaux issus des améliorations — et, v0.25, de l'arbre
+ * Calcule tous les multiplicateurs/bonus globaux issus des améliorations — et de l'arbre
  * du 🏛️ Conseil des Maîtrises (`maitrise` : rangs par nœud, bonus minimes appliqués partout).
  */
 export function computeGlobalMods(
   upgrades: Record<string, number>,
   maitrise: Record<string, number> = {},
-  /** v0.28 — rangs « façon Maîtrise » crédités par les hauts faits (mêmes clés, mêmes coefficients). */
+  /** Rangs « façon Maîtrise » crédités par les hauts faits (mêmes clés, mêmes coefficients). */
   achv: Record<string, number> = {},
 ): GlobalMods {
   const lv = (id: string) => upgrades[id] ?? 0
   const mr = (id: string) => (maitrise[id] ?? 0) + (achv[id] ?? 0)
   return {
-    // v0.25 : Puissance/Vivacité/Vitalité/Régénération supprimées — seule la Forge stellaire
+    // Puissance/Vivacité/Vitalité/Régénération supprimées — seule la Forge stellaire
     // (puits sommital) et la Maîtrise (minime) portent encore du combat.
     power: (1 + lv('forgeStellaire') * 0.04) * (1 + mr('frappe') * 0.004),
     attackSpeed: 1 + mr('celerite') * 0.003,
@@ -131,7 +131,7 @@ export function computeGlobalMods(
     eclatGain: 1 + lv('eclatGain') * 0.12,
     lootChance: lv('lootQty') * 0.08 + mr('flair') * 0.005,
     rarityLuck: lv('rarityLuck') * 0.3,
-    inventoryBonus: 0, // v0.25 : inventaire illimité (Sacoches supprimée)
+    inventoryBonus: 0, // inventaire illimité (Sacoches supprimée)
     talentBonus: lv('talentBonus'),
   }
 }

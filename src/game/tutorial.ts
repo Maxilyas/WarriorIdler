@@ -1,5 +1,5 @@
 /**
- * TUTORIEL « Premiers Pas » (v0.31) — chaîne de quêtes d'onboarding.
+ * TUTORIEL « Premiers Pas » — chaîne de quêtes d'onboarding.
  *
  * Chaque étape introduit UN système (combat → équiper → Marché → Forge → Talents → Donjon), se
  * COMPLÈTE depuis l'état de jeu observable (pas de tracking lourd, un seul flag `bought`), et donne
