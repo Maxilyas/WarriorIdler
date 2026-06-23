@@ -19,6 +19,7 @@ import { makeEnemy, isBossStage, stageIlvl } from './enemies'
 import { chapitreOf, vagueOf, raidGateForStage } from './progression'
 import { maitriseBonus, surgeBiome, SURGE_GOLD_XP_MULT, SURGE_QUINT_MULT } from './biomeBonus'
 import { RARITIES } from './rarities'
+import { essenceGain } from './uniques'
 import { persistThrottled, discoverFromItems } from './save'
 import {
   partyCombatStep, crescendoBonus, crescendoAdd, crescendoReset, resetAllCooldowns, resetLongestCooldown,
@@ -27,7 +28,7 @@ import {
 import { DAMAGE_TYPES } from './damage'
 import {
   CHAR2_STAGE, CHAR3_STAGE, CLASSIC_GOLD_MULT, CLASSIC_XP_MULT, QUINT_DROP, RECRUE_NAMES, RETREAT_STAGES,
-  activeBrewBuffs, autoEquipEmpties, bestRaidTier, capPrepend, conseilProgress, fullHeal, gainMetierXp, grantTeamXp,
+  activeBrewBuffs, autoEquipEmpties, bestRaidTier, bulkProtected, capPrepend, conseilProgress, fullHeal, gainMetierXp, grantTeamXp,
   highestLevel, invMax, pickBias, pushLog, quintTierMult, teamGemOpts, teamPactMods, tickDungeon, tickRaid
 } from './storeHelpers'
 import type { GameSet, GameGet } from './sliceTypes'
@@ -197,6 +198,7 @@ export function createTickSlice(set: GameSet, get: GameGet): Pick<GameState,
         // 🕳️ Tisse-châsse : les drops ont une chance accrue de porter une châsse.
         const socketLuck = rules.has('tisseChasse') ? 0.15 * amp : 0
         let codex = s.codex
+        let essences = s.essences
         let autoRec = 0
         let killsSinceEpic = s.killsSinceEpic + 1
         for (let dd = 0; dd < drops; dd++) {
@@ -206,10 +208,18 @@ export function createTickSlice(set: GameSet, get: GameGet): Pick<GameState,
           const it = generateItem({ ilvl: stageIlvl(stage), rarity: rollFarmRarity(stage, shift), primaryBias: bias, socketLuck, ...biomeOpts })
           // Rune du Karma : un drop Épique+ remet le compteur de pitié à zéro.
           if (RARITIES[it.rarity].tier >= 5) killsSinceEpic = 0
-          // Recyclage automatique : tout butin commun sous le seuil part directement en éclats (on garde les uniques).
-          if (s.autoRecycle && !it.unique && RARITIES[it.rarity].tier < s.recycleThreshold) {
+          // Recyclage automatique : tout butin sous le seuil part directement en éclats — MÊME protection
+          // que le recyclage de masse (`bulkProtected` : verrou joueur + uniques Cosmique+), pour que le
+          // seuil de rareté gouverne l'auto comme la masse (les uniques sous le seuil sont recyclés, leurs
+          // essences créditées et le Codex préservé, comme un drop puis un recyclage de masse).
+          if (s.autoRecycle && !bulkProtected(it) && RARITIES[it.rarity].tier < s.recycleThreshold) {
             essence += Math.round(recycleValue(it) * eco.eclatGain)
             poussiere += recyclePoussiere(it)
+            if (it.unique) {
+              codex = discoverFromItems(codex, [it])
+              const eg = essenceGain(RARITIES[it.rarity].tier, it.unique.rank) * (cmodsTick.distillateur ? 2 : 1)
+              essences = { ...essences, [it.unique.id]: (essences[it.unique.id] ?? 0) + eg }
+            }
             autoRec++
             continue
           }
@@ -364,7 +374,7 @@ export function createTickSlice(set: GameSet, get: GameGet): Pick<GameState,
         if (res.overkill > 0) enemyNext.hp = Math.max(1, enemyNext.maxHp - res.overkill)
         if (isBossStage(stage)) log = pushLog(log, `⚔ Un boss vous barre la route : ${enemyNext.name} !`, 'info')
 
-        const next = { ...s, characters, stage, bestStage, biomeBest, conseil, maitrisePoints, gold, sceaux, poussiere, quint, gems, gemDust, gemsSeen, reagents, essence, codex, inventory, killsSinceEpic, enemy: enemyNext, log, killCount: s.killCount + 1, totalKills: s.totalKills + 1 }
+        const next = { ...s, characters, stage, bestStage, biomeBest, conseil, maitrisePoints, gold, sceaux, poussiere, quint, gems, gemDust, gemsSeen, reagents, essence, essences, codex, inventory, killsSinceEpic, enemy: enemyNext, log, killCount: s.killCount + 1, totalKills: s.totalKills + 1 }
         persistThrottled(next)
         set(next)
         return
