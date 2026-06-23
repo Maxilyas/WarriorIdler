@@ -73,6 +73,13 @@ construction), **alchimie** (courbe de qualité des brassins + économie des ré
 d'intégrité : amélioration non câblée, coût non croissant, **paire de réactifs dupliquée** (recette
 masquée → inbrassable), fenêtre parfaite atteignable.
 
+### `maitrise-sim.mjs` — `npm run maitrise`
+**Couverture du 🏛️ Conseil des Maîtrises** (progression de compte time-gatée). Vérifie le **couplage à
+deux fichiers** signalé comme fragile : chaque nœud de `maitrise.ts` est-il **câblé** dans
+`computeGlobalMods` (`upgrades.ts`) et le **%/rang affiché** colle-t-il au coefficient réellement
+appliqué ? Quantifie l'effet total (tout maxé ≈ +12% de combat agrégé) et la cadence time-gate
+(56 points · 3 contrats/sem → ~19 semaines). Garde-fou : nœud non câblé, dérive display↔moteur.
+
 ## Économie
 
 ### `eco-sim.mjs` — `npm run eco`

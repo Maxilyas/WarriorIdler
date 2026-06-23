@@ -177,7 +177,8 @@ Outils Node qui **transpilent le TS du jeu en mémoire** (esbuild) et exécutent
 logique** — pas de copie de règles, donc pas de dérive. Voir [`scripts/README.md`](../scripts/README.md).
 Exemples : `npm run validate` (anti-régression arbre), `npm run sim`/`ttk`/`survival`/`dungeon`
 (équilibrage), `npm run eco`/`eco-craft` (économie de farm / de craft), `npm run uniques`
-(valeur marginale des uniques + sets), `npm run mur` (mur de progression).
+(valeur marginale des uniques + sets), `npm run maitrise` (câblage du Conseil), `npm run mur`
+(mur de progression).
 
 ## Conventions
 
