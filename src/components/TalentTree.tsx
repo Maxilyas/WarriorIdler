@@ -34,7 +34,9 @@ function sortKey(n: TalentNode): number {
 
 const isCarrefour = (id: string) => id.startsWith('xr_')
 
-interface Link { from: string; to: string; bridge?: boolean }
+// v0.40.6 (perf, F4) — `toNode`/`fromCid` PRÉCALCULÉS dans le layout mémoïsé : le rendu n'a plus à
+// faire un `TALENTS.find` O(N) par lien à chaque frame (pan/zoom + tick).
+interface Link { from: string; to: string; bridge?: boolean; toNode: TalentNode; fromCid?: ConstellationId }
 interface RadialLayout {
   pos: Map<string, { x: number; y: number }>
   links: Link[]
@@ -136,25 +138,27 @@ function computeRadialLayout(tree: TalentTreeId): RadialLayout {
   for (const { x, y } of pos.values()) radius = Math.max(radius, Math.hypot(x, y))
 
   // 5) Liens : arêtes de l'arbre (propres) + ponts de carrefours.
-  const links: Link[] = []
+  const raw: { from: string; to: string; bridge?: boolean }[] = []
   const parentOf = new Map<string, string>()
-  for (const [p, ch] of children) for (const c of ch) { links.push({ from: p, to: c }); parentOf.set(c, p) }
+  for (const [p, ch] of children) for (const c of ch) { raw.push({ from: p, to: c }); parentOf.set(c, p) }
   for (const t of nodes) {
     if (!isCarrefour(t.id)) continue
-    for (const r of t.requires ?? []) if (pos.has(r)) links.push({ from: r, to: t.id, bridge: true })
+    for (const r of t.requires ?? []) if (pos.has(r)) raw.push({ from: r, to: t.id, bridge: true })
   }
   // v0.35.2 : CONVERGENCE — un nœud `requiresAll` a DEUX parents, mais l'arbre couvrant n'en relie
   //   qu'un seul. On trace le(s) lien(s) manquant(s) en pont, sinon la 2e exigence est invisible.
   for (const t of nodes) {
     if (isCarrefour(t.id)) continue
     for (const r of t.requiresAll ?? []) {
-      if (pos.has(r) && pos.has(t.id) && parentOf.get(t.id) !== r) links.push({ from: r, to: t.id, bridge: true })
+      if (pos.has(r) && pos.has(t.id) && parentOf.get(t.id) !== r) raw.push({ from: r, to: t.id, bridge: true })
     }
   }
   // v0.29.3 : les `links` (anneau de navigation, routes croisées) sont tracés comme des ponts.
   for (const t of nodes) {
-    for (const l of t.links ?? []) if (pos.has(l) && pos.has(t.id)) links.push({ from: l, to: t.id, bridge: true })
+    for (const l of t.links ?? []) if (pos.has(l) && pos.has(t.id)) raw.push({ from: l, to: t.id, bridge: true })
   }
+  // Enrichit chaque lien avec les réfs résolues UNE fois (O(1) via `byId`) → plus de scan au rendu.
+  const links: Link[] = raw.map((l) => ({ ...l, toNode: byId.get(l.to)!, fromCid: byId.get(l.from)?.constellation }))
   return { pos, links, radius }
 }
 
@@ -439,8 +443,8 @@ export function TalentTree() {
         {/* Liens (SVG plein viewport) */}
         <svg width={size.w} height={size.h} className="pointer-events-none absolute left-0 top-0">
           {layout.links.map((l, i) => {
-            const toNode = TALENTS.find((n) => n.id === l.to)!
-            const fromCid = getTalent(l.from)?.constellation
+            const toNode = l.toNode
+            const fromCid = l.fromCid
             const filled = (alloc[l.from] ?? 0) > 0 && (alloc[l.to] ?? 0) > 0
             const reach = filled || isReachable(toNode, alloc)
             const dim = !!focus && toNode.constellation !== focus && fromCid !== focus
