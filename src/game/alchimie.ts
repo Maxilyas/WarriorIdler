@@ -87,7 +87,7 @@ export const BREWS: BrewDef[] = [
     desc: '+12% de dégâts quand l\'ÉLÉMENT du contenu (biome, donjon, raid) correspond au type choisi. 30 min.' },
   /* — Antidote (type CHOISI à l'application) — */
   { id: 'antidote', name: 'Antidote ciblé', icon: '🧴', kind: 'antidote',
-    recipe: ['froid', 'nature'], cost: 3, brewMin: 60, durMin: 30,
+    recipe: ['froid', 'arcane'], cost: 3, brewMin: 60, durMin: 30,
     desc: '−15% de dégâts SUBIS du type choisi pendant 30 min. La préparation avant un mur.' },
   /* — Mutagène (la chimie n'est pas une science exacte) — */
   { id: 'mutagene', name: 'Mutagène instable', icon: '☣️', kind: 'mutagene',
