@@ -60,10 +60,21 @@ import type { GameState, ChestReward, ForgeContractDef, BrewBuffs, MysteryBox, L
 // unifiée) rend les anciens objets/paliers incohérents sur la nouvelle courbe. On bumpe la clé →
 // les saves v1 ne sont plus chargées (reset propre, comme un gros prestige). Cf. DESIGN_v0.30.md.
 export const MAX_LOG = 40
-// v0.25 (DESIGN §2) : inventaire ILLIMITÉ (Sacoches supprimée) — borne purement technique.
-// Le tri se fait par l'auto-recyclage (seuil de rareté) et les outils de masse.
-export const INV_BASE = 100000
+// v0.25 (DESIGN §2) : pas de Sacoches — le tri se fait par l'auto-recyclage (seuil de rareté) et les
+// outils de masse. CAP technique = 5000 (perf : borne le re-render/scan d'inventaire et corrige un bug
+// latent de quota localStorage — la save mono-`setItem` throwait silencieusement vers ~15-18k objets).
+export const INV_BASE = 5000
 export let invMax = INV_BASE
+/**
+ * Insertion en tête bornée au `cap`, byte-identique à `[it, ...inv].slice(0, cap)` mais SANS la 2ᵉ
+ * copie du tableau quand on est au cap (cas le plus chaud : drop/donjon/raid à inventaire plein).
+ *   - inv.length < cap → `[it, ...inv]` (aucune troncature) ;
+ *   - inv.length ≥ cap → `[it, ...inv.slice(0, cap-1)]` (on garde le plus récent en tête).
+ * Ordre des objets inchangé (plus récent en tête).
+ */
+export function capPrepend<T>(inv: T[], it: T, cap: number): T[] {
+  return inv.length >= cap ? [it, ...inv.slice(0, cap - 1)] : [it, ...inv]
+}
 /* v0.27 (Lot 3) — socle ANTI-IMMORTALITÉ en RAID (knobs à éprouver). */
 export const RAID_REGEN_MULT = 0.5   // « Mal de l'abîme » : régén de base bridée de moitié en raid
 export const ESTOC_INTERVAL = 9      // s entre deux « Estocs primordiaux »
@@ -766,7 +777,7 @@ export function tickDungeon(s: GameState, dt: number, set: (s: GameState) => voi
     if (leveled) log = pushLog(log, '⬆ Niveau gagné !', 'level')
 
     let inventory = s.inventory
-    for (const it of fightItems) inventory = [it, ...inventory].slice(0, invMax)
+    for (const it of fightItems) inventory = capPrepend(inventory, it, invMax)
     const codex = fightItems.length ? discoverFromItems(s.codex, fightItems) : s.codex
 
     const nextIndex = d.current + 1
@@ -1200,7 +1211,7 @@ export function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) 
 /** Deltas d'état d'un coffre (ressources + inventaire + codex). XP exclue (déjà créditée par combat). */
 export function applyChestRewards(s: GameState, c: ChestReward): Pick<GameState, 'inventory' | 'codex' | 'essence' | 'noyau' | 'poussiere' | 'cosmic' | 'gold' | 'sceaux' | 'orbes' | 'fragments' | 'gemDust' | 'gems' | 'gemsSeen'> {
   let inventory = s.inventory
-  for (const it of c.items) inventory = [it, ...inventory].slice(0, invMax)
+  for (const it of c.items) inventory = capPrepend(inventory, it, invMax)
   let gems = s.gems
   let gemsSeen = s.gemsSeen
   if (c.gem) {

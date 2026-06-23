@@ -27,7 +27,7 @@ import {
 import { DAMAGE_TYPES } from './damage'
 import {
   CHAR2_STAGE, CHAR3_STAGE, CLASSIC_GOLD_MULT, CLASSIC_XP_MULT, QUINT_DROP, RECRUE_NAMES, RETREAT_STAGES,
-  activeBrewBuffs, autoEquipEmpties, bestRaidTier, conseilProgress, fullHeal, gainMetierXp, grantTeamXp,
+  activeBrewBuffs, autoEquipEmpties, bestRaidTier, capPrepend, conseilProgress, fullHeal, gainMetierXp, grantTeamXp,
   highestLevel, invMax, pickBias, pushLog, quintTierMult, teamGemOpts, teamPactMods, tickDungeon, tickRaid
 } from './storeHelpers'
 import type { GameSet, GameGet } from './sliceTypes'
@@ -213,7 +213,7 @@ export function createTickSlice(set: GameSet, get: GameGet): Pick<GameState,
             autoRec++
             continue
           }
-          inventory = [it, ...inventory].slice(0, invMax)
+          inventory = capPrepend(inventory, it, invMax)
           if (it.unique) codex = discoverFromItems(codex, [it])
           log = pushLog(log, `Butin : ${it.name}`, 'loot')
         }
