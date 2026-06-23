@@ -18,10 +18,10 @@ import { DAMAGE_TYPE_LIST } from './damage'
 import { randomUniqueInstance, undiscoveredUnique } from './uniques'
 import { getRaidDef, raidUnlocked } from './raids'
 import {
-  BOX_BULK_DISCOUNT, BOX_BULK_QTY, BOX_DUMP_SHAPE, BOX_PITY_CAP, BOX_PITY_STEP, BOX_RICH_SHAPE,
+  BOX_BULK_DISCOUNT, BOX_BULK_QTY, BOX_PITY_CAP, BOX_PITY_STEP, BOX_RICH_SHAPE,
   CURSED_WIN_CHANCE, FREE_BOX_COOLDOWN_MS, MYSTERY_BOXES, RECRUE_NAMES, RECRUIT_COST, RECRUIT_POUSSIERE,
-  bestRaidTier, boxGoldPrice, grantTeamXp, highestLevel, invMax, nextLogId, pickBias, pushLog, refreshGlobals,
-  weakestSlotType, xpForLevel
+  bestRaidTier, boxGoldPrice, boxRarityWindow, grantTeamXp, highestLevel, invMax, nextLogId, pickBias, pushLog,
+  refreshGlobals, weakestSlotType, xpForLevel
 } from './storeHelpers'
 import type { GameSet, GameGet } from './sliceTypes'
 import type { GameState, ChestReward } from './store'
@@ -51,16 +51,17 @@ export function createMarketSlice(set: GameSet, get: GameGet): Pick<GameState,
       let jackpotHit = false
       // Maillon Faible : cible l'emplacement le plus FAIBLE (vide ou au score le plus bas) du perso actif.
       const weakType = box.weakest ? weakestSlotType(s.characters[s.activeChar] ?? s.characters[0]) : undefined
-      // v0.40.4 — fenêtre de rareté = rareté DÉBLOQUÉE du compte (palier/donjon/raid), pic au plancher.
+      // v0.43 — fenêtre de rareté = rareté DÉBLOQUÉE du compte, modulée PAR COFFRE (boxRarityWindow :
+      // capDelta/peakShift/shape). Base : pic au plancher (dump d'or) ; départ = budget, premium = pic monté.
       const rTop = unlockedRarityTier(bestRaidTier(s.raidProgress))
-      const rFloor = Math.max(1, rTop - 4)
+      const win = boxRarityWindow(box, rTop)
 
       const rollOne = (): Item => {
         const proc = box.jackpot > 0 && Math.random() < Math.min(0.95, box.jackpot + pityBonus)
         if (proc) jackpotHit = true
-        // Standard : forme « dump » (sommet ~1,7%). Premium (richTail) ou jackpot : forme riche (~6%).
-        const shape = box.richTail || proc ? BOX_RICH_SHAPE : BOX_DUMP_SHAPE
-        const rarity = rollWindowRarity(rFloor, rFloor, rTop, shape)
+        // Forme du coffre (POOR/DUMP/RICH via boxRarityWindow) ; un jackpot force la forme riche ponctuellement.
+        const shape = proc ? BOX_RICH_SHAPE : win.shape
+        const rarity = rollWindowRarity(win.floor, win.peak, win.cap, shape)
         const type = weakType ?? box.type ?? (box.types ? box.types[Math.floor(Math.random() * box.types.length)] : undefined)
         return generateItem({
           ilvl, rarity, primaryBias: pickBias(s.characters),

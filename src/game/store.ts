@@ -35,7 +35,7 @@ import { addQuint, grantTeamXp, invMax, nextLogId, refreshGlobals } from './stor
 export {
   bestRaidTier, forgeContractsForDay, CONTRACT_LINGOTS, xpForLevel, tutContext, maxContentIlvl,
   referenceIlvl, FRAGMENT_INFUSE_COST, CHOOSE_UNIQUE_COST, SCEAU_COST, MYSTERY_BOXES, boxGoldPrice,
-  FREE_BOX_COOLDOWN_MS, BOX_BULK_QTY, BOX_BULK_DISCOUNT, BOX_PITY_STEP, BOX_PITY_CAP,
+  boxRarityWindow, FREE_BOX_COOLDOWN_MS, BOX_BULK_QTY, BOX_BULK_DISCOUNT, BOX_PITY_STEP, BOX_PITY_CAP,
   RECRUIT_COST, RECRUIT_POUSSIERE,
 } from './storeHelpers'
 import { createWorldSlice } from './worldSlice'
@@ -348,6 +348,14 @@ export interface MysteryBox {
   priceTier: number
   /** Forme « premium » (Cosmique/Néant) : traîne haute moins raide → ~6% de rareté débloquée (vs ~1.7%). */
   richTail?: boolean
+  /** Forme de tirage EXPLICITE (override) — ex. coffres de départ « budget » (POOR : haut effondré).
+   *  Si absent : RICH si `richTail`, sinon DUMP. Le jackpot force toujours RICH ponctuellement. */
+  shape?: { shoulder: number; tail: number }
+  /** Décale le PLAFOND de la fenêtre de rareté (le plancher suit, largeur fixe 4). Négatif = coffre
+   *  « budget » (départ : −1, jamais le dernier cran débloqué) ; positif = capBonus (au-dessus de l'unlock). */
+  capDelta?: number
+  /** Monte le PIC dans la fenêtre (premium : +1 → hautes raretés bien plus fréquentes, sans dépasser le cap). */
+  peakShift?: number
   jackpot: number
   /** Cible un type d'objet précis. */
   type?: ItemType

@@ -64,7 +64,7 @@ rollent plus). `+% type` : physique 4, autres 6 ; resist : 5 chacun.
 |---|---|
 | `rollWindowRarity(floor, peak, cap, {down, shoulder, tail})` | **LA** fonction de rareté unifiée : distribution « plancher → **PIC** → plafond » à deux pentes géométriques. Farm / Cache / raids. |
 | `rollFarmRarity(stage, shift)` | Farm : pic glisse Commun→Épique, **plafond dur `FARM_RARITY_CAP = 6`** (Légendaire). Le farm n'est pas la chasse à la rareté. |
-| `rollBoxRarity(min, max, jackpot, decay)` | Coffres du marché : favorise le bas de fourchette + **jackpot** (+1 à +4 crans). |
+| `boxRarityWindow(box, rTop)` | Fenêtre EFFECTIVE d'un coffre du marché : module l'ancre `unlockedRarityTier` via `shape` (POOR/DUMP/RICH), `capDelta` (départ −1 = budget ; >0 = capBonus) et `peakShift` (premium +1). Tire ensuite via `rollWindowRarity` ; `windowRarityDist` en donne le % par rareté (affiché au Marché). Jackpot = forme RICH ponctuelle. |
 | `contentRarityTier(bestStage, bestRaidTier)` | Rareté **du contenu** = ancre du craft / over-content (Cache→Artefact, raids +1/2 tiers, plafond Abyssal). |
 | `unlockedRarityTier(bestRaidTier)` | Rareté **débloquée du compte** = ancre des **coffres** (fenêtre [Rmax−4 → Rmax], pic au plancher = dump d'or). |
 | `accessibleRarityTier(chapter)` | Rareté **accessible** à un Chapitre = ancre des rendements donjon + fragments/cosmique raid. |

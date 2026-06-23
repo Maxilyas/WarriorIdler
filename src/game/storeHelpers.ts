@@ -464,15 +464,22 @@ export const BOX_ACCESSORIES: ItemType[] = ['anneau', 'bijou', 'cou']
  * un objet utile (ta stat) + des éclats → ils ne sont plus jamais « gâchés ».
  * id = index dans le tableau (utilisé par l'action mysteryBox).
  */
-// v0.40.4 — la RARETÉ de TOUS les coffres suit désormais la rareté DÉBLOQUÉE du compte (unlockedRarityTier,
-// fenêtre [top−4 → top], pic au plancher = dump d'or). Les coffres ne diffèrent plus que par leur EFFET,
-// leur count (2-4), leur `priceTier` (poids de prix) et `richTail` (forme premium). `maxTier` et le verrou
-// de raid (boxRaidGate) ont disparu : on ne peut de toute façon pas dropper au-dessus de ce qu'on a débloqué.
+// v0.40.4 — la RARETÉ des coffres s'ancre sur la rareté DÉBLOQUÉE du compte (unlockedRarityTier, fenêtre
+// [top−4 → top], pic au plancher = dump d'or). v0.43 : elle est MODULÉE par coffre (boxRarityWindow) —
+// `shape` (POOR/DUMP/RICH), `capDelta` (départ −1 = budget ; positif = capBonus), `peakShift` (premium +1).
+// Les coffres diffèrent aussi par leur EFFET, leur count (2-4) et leur `priceTier` (poids de prix).
+// v0.40.4/v0.43 — formes de tirage de rareté des coffres (rollWindowRarity, pic au PLANCHER → dump d'or).
+export const BOX_DUMP_SHAPE = { shoulder: 0.45, tail: 0.40 } // standard : rareté débloquée (sommet) ~1,7%
+export const BOX_RICH_SHAPE = { shoulder: 0.70, tail: 0.60 } // premium (richTail / jackpot) : sommet ~6%
+// forme « budget » des coffres de DÉPART (Guerrier/Rôdeur/Mage) : haut de fenêtre effondré (~0,07% au
+// sommet) → ils remplissent le plancher mais ne donnent quasi jamais le haut de rareté.
+export const BOX_POOR_SHAPE = { shoulder: 0.22, tail: 0.16 }
+
 export const MYSTERY_BOXES: MysteryBox[] = [
   // --- Coffres de BUILD : bon marché, stat primaire GARANTIE + éclats → toujours utiles ---
-  { id: 0, name: 'Coffre du Guerrier', icon: '🗡️', gold: 400, count: 2, priceTier: 3, jackpot: 0.03, primary: 'force', eclats: 80, desc: 'FORCE garantie sur chaque objet (+ éclats).' },
-  { id: 1, name: 'Coffre du Rôdeur', icon: '🏹', gold: 400, count: 2, priceTier: 3, jackpot: 0.03, primary: 'agilite', eclats: 80, desc: 'AGILITÉ garantie sur chaque objet (+ éclats).' },
-  { id: 2, name: 'Coffre du Mage', icon: '🔮', gold: 400, count: 2, priceTier: 3, jackpot: 0.03, primary: 'intelligence', eclats: 80, desc: 'INTELLIGENCE garantie sur chaque objet (+ éclats).' },
+  { id: 0, name: 'Coffre du Guerrier', icon: '🗡️', gold: 400, count: 2, priceTier: 3, jackpot: 0.03, primary: 'force', eclats: 80, shape: BOX_POOR_SHAPE, capDelta: -1, desc: 'FORCE garantie sur chaque objet (+ éclats). Budget : rareté basse, jamais le haut de gamme.' },
+  { id: 1, name: 'Coffre du Rôdeur', icon: '🏹', gold: 400, count: 2, priceTier: 3, jackpot: 0.03, primary: 'agilite', eclats: 80, shape: BOX_POOR_SHAPE, capDelta: -1, desc: 'AGILITÉ garantie sur chaque objet (+ éclats). Budget : rareté basse, jamais le haut de gamme.' },
+  { id: 2, name: 'Coffre du Mage', icon: '🔮', gold: 400, count: 2, priceTier: 3, jackpot: 0.03, primary: 'intelligence', eclats: 80, shape: BOX_POOR_SHAPE, capDelta: -1, desc: 'INTELLIGENCE garantie sur chaque objet (+ éclats). Budget : rareté basse, jamais le haut de gamme.' },
   // --- Coffres de SLOT : combler un emplacement précis ---
   { id: 3, name: 'Arsenal', icon: '⚔️', gold: 45000, count: 2, priceTier: 5, jackpot: 0.05, types: BOX_WEAPONS, desc: 'ARMES & boucliers uniquement.' },
   { id: 4, name: 'Armurerie', icon: '🥋', gold: 45000, count: 3, priceTier: 5, jackpot: 0.05, types: BOX_ARMOR, desc: 'PIÈCES D\'ARMURE uniquement.' },
@@ -483,8 +490,8 @@ export const MYSTERY_BOXES: MysteryBox[] = [
   // --- Matériaux & haut de gamme ---
   { id: 8, name: 'Coffre du forgeron', icon: '🔨', gold: 400000, count: 2, priceTier: 7, jackpot: 0.05, eclats: 3000, noyau: 12, poussiere: 8, desc: 'Matériaux de craft en MASSE (atelier/forge) + objets.' },
   { id: 9, name: 'Coffre légendaire', icon: '🟠', gold: 800000, count: 4, priceTier: 8, jackpot: 0.07, eclats: 1500, noyau: 5, poussiere: 3, costFragments: 2, desc: 'Gros lot d\'objets. Exige des Fragments de raid.' },
-  { id: 10, name: 'Coffre cosmique', icon: '🌟', gold: 2500000, count: 4, priceTier: 10, jackpot: 0.09, richTail: true, guaranteeUnique: true, eclats: 4000, noyau: 10, poussiere: 12, fragments: 2, costFragments: 6, desc: 'Hautes raretés plus généreuses + 1 unique garanti. Exige des Fragments.' },
-  { id: 11, name: 'Coffre du Néant', icon: '🕳️', gold: 10000000, count: 4, priceTier: 12, jackpot: 0.13, richTail: true, guaranteeUnique: true, eclats: 10000, noyau: 25, poussiere: 35, fragments: 8, costFragments: 18, costCosmic: 3, desc: 'Le pari ultime : hautes raretés généreuses + unique garanti. Exige Fragments ✨ ET Éclats cosmiques 💫.' },
+  { id: 10, name: 'Coffre cosmique', icon: '🌟', gold: 2500000, count: 4, priceTier: 10, jackpot: 0.09, richTail: true, peakShift: 1, guaranteeUnique: true, eclats: 4000, noyau: 10, poussiere: 12, fragments: 2, costFragments: 6, desc: 'Premium : pic de rareté MONTÉ (hautes raretés bien plus fréquentes) + 1 unique garanti. Exige des Fragments.' },
+  { id: 11, name: 'Coffre du Néant', icon: '🕳️', gold: 10000000, count: 4, priceTier: 12, jackpot: 0.13, richTail: true, peakShift: 1, guaranteeUnique: true, eclats: 10000, noyau: 25, poussiere: 35, fragments: 8, costFragments: 18, costCosmic: 3, desc: 'Le pari ultime : pic de rareté MONTÉ + unique garanti. Exige Fragments ✨ ET Éclats cosmiques 💫.' },
   // --- Nouveautés v0.23 (les ids sont des INDEX : on n'insère jamais, on AJOUTE) ---
   { id: 12, name: 'Coffre du Jour', icon: '🗓️', gold: 0, free: true, count: 2, priceTier: 4, jackpot: 0.06, eclats: 150, desc: 'GRATUIT toutes les 22 h. Des objets + des éclats. Reviens demain !' },
   { id: 13, name: 'Coffre Maudit', icon: '🎲', gold: 60000, count: 2, priceTier: 6, jackpot: 0.08, cursed: true, desc: '75% : contenu DOUBLÉ. 25% : la malédiction ne laisse qu\'un objet Commun.' },
@@ -498,9 +505,24 @@ export const MYSTERY_BOXES: MysteryBox[] = [
   { id: 20, name: 'Coffre du Chapitre', icon: '📦', gold: 50000, count: 3, priceTier: 6, jackpot: 0.05, desc: 'Objets à la rareté débloquée de ton chapitre (donjons/raids compris). Le dump d\'or polyvalent.' },
 ]
 
-// v0.40.4 — formes de tirage de rareté des coffres (rollWindowRarity, pic au PLANCHER → dump d'or).
-export const BOX_DUMP_SHAPE = { shoulder: 0.45, tail: 0.40 } // standard : rareté débloquée (sommet) ~1,7%
-export const BOX_RICH_SHAPE = { shoulder: 0.70, tail: 0.60 } // premium (richTail / jackpot) : sommet ~6%
+/**
+ * v0.43 — FENÊTRE DE RARETÉ EFFECTIVE d'un coffre, à partir de la rareté débloquée du compte (`rTop`).
+ * Base : [rTop−4 → rTop], pic au plancher (dump d'or). Modulée par coffre :
+ *  - `capDelta` décale le PLAFOND (le plancher suit, largeur fixe 4) — départ : −1 (jamais le dernier
+ *    cran débloqué) ; positif = capBonus (au-dessus de l'unlock) ;
+ *  - `peakShift` monte le PIC dans la fenêtre (premium : +1 → hautes raretés bien plus fréquentes) ;
+ *  - `shape` = forme explicite (POOR pour départ), sinon RICH si `richTail`, sinon DUMP.
+ * Le jackpot, lui, force ponctuellement la forme RICH (géré à l'appel, hors de cette fonction).
+ */
+export function boxRarityWindow(box: MysteryBox, rTop: number): {
+  floor: number; peak: number; cap: number; shape: { shoulder: number; tail: number }
+} {
+  const cap = Math.max(1, Math.min(16, rTop + (box.capDelta ?? 0)))
+  const floor = Math.max(1, cap - 4)
+  const peak = Math.min(cap, floor + (box.peakShift ?? 0))
+  const shape = box.shape ?? (box.richTail ? BOX_RICH_SHAPE : BOX_DUMP_SHAPE)
+  return { floor, peak, cap, shape }
+}
 
 /**
  * v0.25 — PRIX EN OR d'un coffre de stuff. Suit (a) la rareté ET (b) ton revenu d'or (record) :
@@ -509,7 +531,10 @@ export const BOX_RICH_SHAPE = { shoulder: 0.70, tail: 0.60 } // premium (richTai
  * runs, qui décroît LENTEMENT (rentable sur le temps, jamais instantané). Lots de ressources
  * (count 0) & coffres gratuits : prix fixe (l'équation, indexée rareté, ne les concerne pas).
  */
-export const BOX_PRICE_K = 400       // base (~4 runs du Donjon d'Or au niveau courant)
+// v0.43 — relevé 400 → 2000 (×5) : se stuffer aux coffres était trop facile (un coffre de départ
+// coûtait ~0,15% d'une réserve de mid-game). Le prix indexé palier (BOX_PRICE_STAGE) reste au-dessus
+// de la croissance du revenu/sec → les coffres ne redeviennent jamais triviaux.
+export const BOX_PRICE_K = 2000      // base (×5 vs v0.42)
 export const BOX_PRICE_RARITY = 2.5  // ×prix par cran de rareté moyenne (raide : « gonfle énormément » en haut)
 export const BOX_PRICE_STAGE = 1.06  // ×prix par palier de record (< revenu d'or → rentable sur le temps)
 export function boxGoldPrice(box: MysteryBox, bestStage: number): number {

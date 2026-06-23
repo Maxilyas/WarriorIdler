@@ -307,6 +307,29 @@ export function rollWindowRarity(
 }
 
 /**
+ * Distribution (probabilité par tier) de `rollWindowRarity` — MÊMES poids, sans tirage aléatoire.
+ * Sert à AFFICHER au joueur le % de chaque rareté d'un coffre (MerchantPanel). Garder synchronisé
+ * avec `rollWindowRarity` ci-dessus (même formule de poids à deux pentes).
+ */
+export function windowRarityDist(
+  floor: number, peak: number, cap: number,
+  opts?: { down?: number; shoulder?: number; tail?: number },
+): { tier: number; p: number }[] {
+  const down = opts?.down ?? 0.30
+  const shoulder = opts?.shoulder ?? 0.30
+  const tail = opts?.tail ?? 0.25
+  const lo = Math.max(1, Math.min(16, Math.round(floor)))
+  const hi = Math.max(lo, Math.min(16, Math.round(cap)))
+  const pk = Math.max(lo, Math.min(hi, Math.round(peak)))
+  const weights: number[] = []
+  for (let t = lo; t <= hi; t++) {
+    weights.push(t <= pk ? Math.pow(down, pk - t) : shoulder * Math.pow(tail, t - pk - 1))
+  }
+  const total = weights.reduce((a, b) => a + b, 0)
+  return weights.map((w, i) => ({ tier: lo + i, p: w / total }))
+}
+
+/**
  * Fenêtre de rareté du FARM (paliers classiques) : le pic glisse de Commun (palier 1) à
  * Épique (~palier 54), plafond DUR à Légendaire — le farm n'est PAS la chasse à la rareté
  * (ça, c'est la Cache puis les raids). `shift` décale la fenêtre (élite +1, champion +2,

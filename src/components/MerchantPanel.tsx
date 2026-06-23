@@ -2,10 +2,10 @@ import { useState } from 'react'
 import {
   useGame, MYSTERY_BOXES, FREE_BOX_COOLDOWN_MS,
   BOX_BULK_QTY, BOX_BULK_DISCOUNT, BOX_PITY_STEP, BOX_PITY_CAP,
-  boxGoldPrice, bestRaidTier,
+  boxGoldPrice, boxRarityWindow, bestRaidTier,
   RECRUIT_COST, RECRUIT_POUSSIERE, type MysteryBox,
 } from '../game/store'
-import { unlockedRarityTier } from '../game/items'
+import { unlockedRarityTier, windowRarityDist } from '../game/items'
 import { UPGRADES, UPGRADE_CATEGORIES, upgradeCost, upgradePoussiere, upgradeEclats, isMaxed, type UpgradeCategory } from '../game/upgrades'
 import { CONTRACTS, MAITRISE_NODES, MAITRISE_TOTAL_POINTS, conseilFresh, weekRemainingMs } from '../game/maitrise'
 import { RAID_UNLOCK_STAGE } from '../game/raids'
@@ -287,6 +287,7 @@ function BoxCard({ box: b, gold, fragments, cosmic, qty, bestStage, raidTier, la
   onBuy: (element?: DamageType) => void
 }) {
   const [el, setEl] = useState<DamageType>('feu')
+  const [showDist, setShowDist] = useState(false)
   const needsExotic = (b.costFragments ?? 0) > 0 || (b.costCosmic ?? 0) > 0
   const sealed = needsExotic && fragments === 0 && cosmic === 0
   if (sealed) {
@@ -309,10 +310,12 @@ function BoxCard({ box: b, gold, fragments, cosmic, qty, bestStage, raidTier, la
   const cosmicCost = (b.costCosmic ?? 0) * effQty
   const cooldownLeft = b.free ? Math.max(0, FREE_BOX_COOLDOWN_MS - (Date.now() - lastFreeBox)) : 0
   const affordable = gold >= goldCost && fragments >= fragCost && cosmic >= cosmicCost && cooldownLeft === 0
-  // v0.40.4 — fenêtre dynamique = rareté DÉBLOQUÉE du compte (palier/donjon/raid), pic au plancher.
+  // v0.43 — fenêtre dynamique = rareté DÉBLOQUÉE du compte, modulée PAR COFFRE (boxRarityWindow).
   const rTop = unlockedRarityTier(raidTier)
-  const minName = RARITY_LIST.find((r) => r.tier === Math.max(1, rTop - 4))
-  const maxName = RARITY_LIST.find((r) => r.tier === rTop)
+  const win = boxRarityWindow(b, rTop)
+  const minName = RARITY_LIST.find((r) => r.tier === win.floor)
+  const maxName = RARITY_LIST.find((r) => r.tier === win.cap)
+  const dist = showDist && b.count > 0 ? windowRarityDist(win.floor, win.peak, win.cap, win.shape) : []
   const tag = boxTag(b)
   return (
     <button
@@ -328,16 +331,38 @@ function BoxCard({ box: b, gold, fragments, cosmic, qty, bestStage, raidTier, la
           {tag && <span className={'shrink-0 rounded px-1 py-px text-[8px] font-bold uppercase tracking-wide ' + tag.cls}>{tag.label}</span>}
         </span>
         {b.count > 0 ? (
-          <span className="block truncate text-[9px]">
+          <span
+            onClick={(e) => { e.stopPropagation(); setShowDist((v) => !v) }}
+            title="Voir le taux de chaque rareté"
+            className="block cursor-pointer truncate text-[9px] hover:brightness-125"
+          >
             <span style={{ color: minName?.color }}>{minName?.name}</span>
             <span className="text-slate-600"> → </span>
             <span style={{ color: maxName?.color }}>{maxName?.name}</span>
             <span className="text-slate-500"> · {b.count * (b.cursed ? 2 : 1) * effQty} obj{b.cursed ? ' ou 1' : ''}{b.choice ? ' · 1 gardé' : ''}{b.guaranteeUnique ? ' · ✦' : ''}</span>
+            <span className="ml-0.5 text-slate-500">{showDist ? '▴' : '▾'}</span>
           </span>
         ) : (
           <span className="block truncate text-[9px] text-slate-400">
             {(b.sceaux ?? 0) > 0 && <>🔑 {(b.sceaux ?? 0) * effQty} + 🔮 {(b.orbes ?? 0) * effQty}</>}
             {(b.gemDust ?? 0) > 0 && <>🔹 ~{Math.round((b.gemDust ?? 0) * (1 + bestStage / 50)) * effQty} + {Math.round((b.gemChance ?? 0) * 100)}% 💎</>}
+          </span>
+        )}
+        {showDist && dist.length > 0 && (
+          <span onClick={(e) => e.stopPropagation()} className="mt-1 block cursor-default rounded bg-black/30 p-1">
+            {dist.map(({ tier, p }) => {
+              const r = RARITY_LIST.find((x) => x.tier === tier)
+              return (
+                <span key={tier} className="flex items-center gap-1 text-[9px] leading-tight">
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: r?.color }} />
+                  <span className="flex-1 truncate" style={{ color: r?.color }}>{r?.name}</span>
+                  <span className="tabular-nums text-slate-400">{(p * 100).toFixed(p < 0.1 ? 2 : 1)}%</span>
+                </span>
+              )
+            })}
+            {b.jackpot > 0 && (
+              <span className="mt-0.5 block text-[8px] text-slate-500">+ {Math.round(b.jackpot * 100)}% jackpot/objet → forme riche</span>
+            )}
           </span>
         )}
         {b.elementPick && (
