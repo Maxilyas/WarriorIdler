@@ -73,6 +73,11 @@ rollent plus). `+% type` : physique 4, autres 6 ; resist : 5 chacun.
 
 - `itemScore` : Σ stats + primaire (×1) + lignes type (×2) + résist (×3) + gemmes (60/gemme) + unique (150).
 - `sellValue` → Or ; `recycleValue` → Éclats d'arcane ; `recyclePoussiere` → Poussière d'étoile (Céleste+).
+- **Recyclage auto au drop** (`tickSlice`, deux critères CUMULABLES, `bulkProtected` épargne toujours
+  verrou 🔒 + uniques Cosmique+) : `autoRecycle` recycle tout butin **strictement sous le seuil de rareté**
+  (`recycleThreshold`, uniques compris — essences créditées, Codex préservé : comme un drop puis un
+  recyclage de masse) ; `autoRecycleUseless` recycle tout butin qui **n'améliore NI le DPS NI la survie**
+  d'aucun héros recruté (`itemUsefulForAnyChar` → `charDps`/`charEhp`, comparé à l'emplacement occupé).
 
 ## Craft — améliorer / créer / ascensionner
 

@@ -81,5 +81,30 @@ describe('tickSlice', () => {
       expect(g().inventory.every((it) => !it.unique)).toBe(true)             // AUCUN unique sous-Cosmique conservé (le fix)
       expect(Object.values(g().essences).some((v) => v > 0)).toBe(true)      // essences d'unique créditées (fidèle à la masse)
     })
+
+    // Nouvelle option : recyclage auto du butin « inutile » (n'améliore ni DPS ni survie d'aucun héros),
+    // cumulable et INDÉPENDANT du seuil de rareté (ici autoRecycle = false, seuil bas inactif).
+    it('le mode « inutile » recycle le butin qui n\'upgrade personne (sans toucher au seuil de rareté)', () => {
+      function farm(autoRecycleUseless: boolean) {
+        let out = { inv: 0, ess: 0, kills: 0 }
+        withSeededRandom(13371337, () => {
+          reset({
+            characters: [strongHero()], stage: 40, bestStage: 40, biomeBest: biomeRec(40),
+            autoRecycle: false, autoRecycleUseless, recycleThreshold: 2, // seuil rareté inactif
+            gold: 0, essence: 0, essences: {}, inventory: [], killCount: 0, enemy: makeEnemy(40),
+          })
+          for (let i = 0; i < 4000; i++) g().tick(0.2)
+          out = { inv: g().inventory.length, ess: g().essence, kills: g().killCount }
+        })
+        return out
+      }
+      const off = farm(false)  // mode désactivé : le butin (full stuff fort → drops inutiles) s'accumule
+      const on = farm(true)    // mode activé : le butin inutile part en éclats
+      expect(off.kills).toBeGreaterThan(0)
+      expect(on.kills).toBe(off.kills)              // même RNG → combat identique, seule la disposition change
+      expect(off.inv).toBeGreaterThan(0)
+      expect(on.inv).toBeLessThan(off.inv)          // le butin inutile ne s'accumule plus
+      expect(on.ess).toBeGreaterThan(off.ess)       // il est converti en éclats (off n'en gagne aucun)
+    })
   })
 })

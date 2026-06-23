@@ -93,6 +93,8 @@ export function StuffScreen() {
   const setRecycleThreshold = useGame((s) => s.setRecycleThreshold)
   const autoRecycle = useGame((s) => s.autoRecycle)
   const toggleAutoRecycle = useGame((s) => s.toggleAutoRecycle)
+  const autoRecycleUseless = useGame((s) => s.autoRecycleUseless)
+  const toggleAutoRecycleUseless = useGame((s) => s.toggleAutoRecycleUseless)
   const bestStage = useGame((s) => s.bestStage)
   const raidProgress = useGame((s) => s.raidProgress)
   const dungeonProgress = useGame((s) => s.dungeonProgress)
@@ -343,7 +345,7 @@ export function StuffScreen() {
               onClick={() => setSheet('manage')}
               className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-slate-800 px-2 py-2 text-xs font-medium text-slate-200 hover:bg-slate-700"
             >
-              ⚙ Gérer {autoRecycle && <span className="text-[10px] text-emerald-400" title="Recyclage auto actif">♻️</span>}
+              ⚙ Gérer {(autoRecycle || autoRecycleUseless) && <span className="text-[10px] text-emerald-400" title="Recyclage auto actif">♻️</span>}
             </button>
           </div>
 
@@ -480,6 +482,7 @@ export function StuffScreen() {
             recycleThreshold={recycleThreshold} setRecycleThreshold={setRecycleThreshold}
             sellAllBelow={sellAllBelow} recycleAllBelow={recycleAllBelow}
             autoRecycle={autoRecycle} toggleAutoRecycle={toggleAutoRecycle}
+            autoRecycleUseless={autoRecycleUseless} toggleAutoRecycleUseless={toggleAutoRecycleUseless}
             bulkMode={bulkMode}
             onSelectionMode={() => { setBulkMode(true); setSheet(null) }}
             onStopSelection={() => { setBulkMode(false); clearBulk() }}
@@ -834,11 +837,13 @@ function FiltersSheet({
 /** Feuille « Gérer » : ventes/recyclage de masse, recyclage auto, mode multi-sélection. */
 function ManageSheet({
   recycleThreshold, setRecycleThreshold, sellAllBelow, recycleAllBelow,
-  autoRecycle, toggleAutoRecycle, bulkMode, onSelectionMode, onStopSelection,
+  autoRecycle, toggleAutoRecycle, autoRecycleUseless, toggleAutoRecycleUseless,
+  bulkMode, onSelectionMode, onStopSelection,
 }: {
   recycleThreshold: number; setRecycleThreshold: (n: number) => void
   sellAllBelow: (t: number) => void; recycleAllBelow: (t: number) => void
   autoRecycle: boolean; toggleAutoRecycle: () => void
+  autoRecycleUseless: boolean; toggleAutoRecycleUseless: () => void
   bulkMode: boolean; onSelectionMode: () => void; onStopSelection: () => void
 }) {
   const highTier = recycleThreshold >= 14
@@ -874,12 +879,28 @@ function ManageSheet({
 
       <button
         onClick={toggleAutoRecycle}
-        title="Recycle automatiquement tout butin (non unique) sous le seuil, directement au drop."
+        title="Recycle automatiquement tout butin sous le seuil de rareté, directement au drop (verrou 🔒 et uniques Cosmique+ épargnés)."
         className={'flex w-full items-center justify-between rounded-lg px-3 py-2.5 font-medium ' + (autoRecycle ? 'bg-emerald-600 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700')}
       >
-        <span>♻️ Recyclage automatique au drop</span>
+        <span>♻️ Recyclage auto sous le seuil de rareté</span>
         <span>{autoRecycle ? '✓ Actif' : 'Inactif'}</span>
       </button>
+
+      <button
+        onClick={toggleAutoRecycleUseless}
+        title="Recycle au drop tout butin qui n'améliore NI le DPS NI la survie d'aucun héros recruté (comparé à l'équipement porté). Cumulable avec le seuil. Verrou 🔒 et uniques Cosmique+ épargnés."
+        className={'flex w-full items-center justify-between rounded-lg px-3 py-2.5 font-medium ' + (autoRecycleUseless ? 'bg-emerald-600 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700')}
+      >
+        <span>♻️ Recyclage auto du butin inutile (ni DPS ni survie)</span>
+        <span>{autoRecycleUseless ? '✓ Actif' : 'Inactif'}</span>
+      </button>
+
+      {autoRecycleUseless && (
+        <div className="text-[10px] leading-tight text-amber-300/80">
+          ⚠ Compare à TES héros recrutés. Un objet utile à une classe/un héros pas encore débloqué — ou à un
+          build futur — peut être recyclé. Verrouille 🔒 ce que tu veux garder.
+        </div>
+      )}
 
       <div className="border-t border-slate-800 pt-3">
         <div className="mb-1.5 text-[11px] font-semibold text-slate-500">Sélection multiple</div>

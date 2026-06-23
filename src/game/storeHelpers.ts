@@ -15,7 +15,7 @@ import { genericMitigation } from './combat'
 import { resistMult, enemyReq } from './resist'
 import {
   charDerived, charMaxHp, charPassives, charResist, charCombatMods, computeUnlockedPowers, setGlobalCombatMods,
-  setGlobalPrestigeResist, setPactDerivedMods
+  setGlobalPrestigeResist, setPactDerivedMods, charDps, charEhp
 } from './character'
 import { computeGlobalMods } from './upgrades'
 import { achievementBonuses } from './achievements'
@@ -42,7 +42,7 @@ import {
   tresorerieShield, gemKillEvents, setRegenMult, resetMemento
 } from './combatEngine'
 import { DAMAGE_TYPE_LIST, DAMAGE_TYPES } from './damage'
-import { slotAccepts, EQUIP_SLOTS } from './slots'
+import { slotAccepts, equipSlotsForType, EQUIP_SLOTS } from './slots'
 import { type TutCtx } from './tutorial'
 import {
   generateDungeon, makeDungeonPack, dungeonIlvl, dungeonRegen, getDungeonDef, dungeonLuckTier,
@@ -342,6 +342,32 @@ export function autoEquipEmpties(char: Character, inventory: Item[]): { char: Ch
 export function bulkProtected(item: Item): boolean {
   // 🔒 (v0.28) le verrou joueur protège de TOUTE suppression de masse/auto.
   return !!item.locked || (!!item.unique && RARITIES[item.rarity].tier >= 13)
+}
+
+/** DPS + survie (EHP) actuels de chaque héros, à PRÉCALCULER une fois avant une rafale de comparaisons
+ *  (recyclage « inutile » au drop) : l'équipement ne bouge pas entre les drops, on évite de recompter
+ *  la base par objet. */
+export function partyBaseStats(chars: Character[]): { dps: number; ehp: number }[] {
+  return chars.map((c) => ({ dps: charDps(c), ehp: charEhp(c) }))
+}
+
+/** Un objet est « utile » s'il améliore le DPS OU la survie d'AU MOINS un héros recruté, posé dans
+ *  l'emplacement qu'il occuperait (vide en priorité, sinon le plus faible par score — MÊME résolution
+ *  que la comparaison de l'écran Stuff). Réutilise `charDps`/`charEhp` ; `bases` = `partyBaseStats`
+ *  (mémoïsation). Sert au recyclage auto « ni DPS ni survie » : faux ⇒ candidat au recyclage. */
+export function itemUsefulForAnyChar(chars: Character[], bases: { dps: number; ehp: number }[], item: Item): boolean {
+  for (let i = 0; i < chars.length; i++) {
+    const c = chars[i]
+    const slots = equipSlotsForType(item.type)
+    const empty = slots.find((s) => !c.equipment[s.id])
+    // Emplacement cible : vide d'abord, sinon le plus faible (par score) — comme `targetSlotFor` côté UI.
+    const slot: EquipSlotId = empty
+      ? empty.id
+      : slots.map((s) => s.id).sort((a, b) => itemScore(c.equipment[a]!) - itemScore(c.equipment[b]!))[0]
+    const after: Character = { ...c, equipment: { ...c.equipment, [slot]: item } }
+    if (charDps(after) > bases[i].dps || charEhp(after) > bases[i].ehp) return true
+  }
+  return false
 }
 
 

@@ -37,6 +37,12 @@ describe('worldSlice', () => {
     g().toggleAutoRecycle(); expect(g().autoRecycle).toBe(before)
   })
 
+  it('toggleAutoRecycleUseless bascule (indépendant du seuil de rareté)', () => {
+    const before = g().autoRecycleUseless
+    g().toggleAutoRecycleUseless(); expect(g().autoRecycleUseless).toBe(!before)
+    g().toggleAutoRecycleUseless(); expect(g().autoRecycleUseless).toBe(before)
+  })
+
   describe('setBiome', () => {
     it('change de zone vers un biome débloqué (record suffisant)', () => {
       reset({ bestStage: 100000, biomeBest: biomeRec(100000) })

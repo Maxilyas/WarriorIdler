@@ -142,6 +142,7 @@ export interface GameState extends SaveData {
   toggleFarmLock: () => void
   setRecycleThreshold: (tier: number) => void
   toggleAutoRecycle: () => void
+  toggleAutoRecycleUseless: () => void
   insertEffect: (itemId: string, effectId: string) => void
   claimOffline: () => void
   /** v0.31 — réclame la récompense d'une quête du tutoriel « Premiers Pas » (si terminée et non réclamée). */

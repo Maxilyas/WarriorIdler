@@ -29,7 +29,7 @@ import { DAMAGE_TYPES } from './damage'
 import {
   CHAR2_STAGE, CHAR3_STAGE, CLASSIC_GOLD_MULT, CLASSIC_XP_MULT, QUINT_DROP, RECRUE_NAMES, RETREAT_STAGES,
   activeBrewBuffs, autoEquipEmpties, bestRaidTier, bulkProtected, capPrepend, conseilProgress, fullHeal, gainMetierXp, grantTeamXp,
-  highestLevel, invMax, pickBias, pushLog, quintTierMult, teamGemOpts, teamPactMods, tickDungeon, tickRaid
+  highestLevel, invMax, itemUsefulForAnyChar, partyBaseStats, pickBias, pushLog, quintTierMult, teamGemOpts, teamPactMods, tickDungeon, tickRaid
 } from './storeHelpers'
 import type { GameSet, GameGet } from './sliceTypes'
 import type { GameState } from './store'
@@ -201,6 +201,9 @@ export function createTickSlice(set: GameSet, get: GameGet): Pick<GameState,
         let essences = s.essences
         let autoRec = 0
         let killsSinceEpic = s.killsSinceEpic + 1
+        // Recyclage auto « inutile » : on précalcule UNE fois le DPS/survie de base de l'équipe
+        // (l'équipement ne change pas pendant la rafale de drops) pour ne pas recompter par objet.
+        const baseStats = s.autoRecycleUseless ? partyBaseStats(chars) : null
         for (let dd = 0; dd < drops; dd++) {
           // Identité de loot du biome : ~50% dégâts de l'élément, ~25% résistance à l'élément, ~25% neutre.
           const br = Math.random()
@@ -208,11 +211,15 @@ export function createTickSlice(set: GameSet, get: GameGet): Pick<GameState,
           const it = generateItem({ ilvl: stageIlvl(stage), rarity: rollFarmRarity(stage, shift), primaryBias: bias, socketLuck, ...biomeOpts })
           // Rune du Karma : un drop Épique+ remet le compteur de pitié à zéro.
           if (RARITIES[it.rarity].tier >= 5) killsSinceEpic = 0
-          // Recyclage automatique : tout butin sous le seuil part directement en éclats — MÊME protection
-          // que le recyclage de masse (`bulkProtected` : verrou joueur + uniques Cosmique+), pour que le
-          // seuil de rareté gouverne l'auto comme la masse (les uniques sous le seuil sont recyclés, leurs
-          // essences créditées et le Codex préservé, comme un drop puis un recyclage de masse).
-          if (s.autoRecycle && !bulkProtected(it) && RARITIES[it.rarity].tier < s.recycleThreshold) {
+          // Recyclage automatique au drop — MÊME protection que le recyclage de masse (`bulkProtected` :
+          // verrou joueur + uniques Cosmique+). Deux critères CUMULABLES :
+          //  • seuil de rareté : la rareté est strictement sous le seuil choisi ;
+          //  • « inutile » : l'objet n'améliore NI le DPS NI la survie d'aucun héros recruté.
+          // Les uniques sous le seuil/inutiles sont recyclés (essences créditées, Codex préservé), comme
+          // un drop suivi d'un recyclage de masse.
+          const tierRecycle = s.autoRecycle && RARITIES[it.rarity].tier < s.recycleThreshold
+          const uselessRecycle = baseStats !== null && !itemUsefulForAnyChar(chars, baseStats, it)
+          if (!bulkProtected(it) && (tierRecycle || uselessRecycle)) {
             essence += Math.round(recycleValue(it) * eco.eclatGain)
             poussiere += recyclePoussiere(it)
             if (it.unique) {

@@ -177,6 +177,9 @@ export interface SaveData {
   recycleThreshold: number
   /** Recyclage automatique : tout butin sous le seuil est recyclé directement au drop. */
   autoRecycle: boolean
+  /** Recyclage auto « inutile » : recycle au drop tout butin qui n'améliore NI le DPS NI la survie
+   *  d'aucun héros recruté (cumulable avec le seuil de rareté). Persisté. */
+  autoRecycleUseless: boolean
   /** v0.31 — tutoriel « Premiers Pas » : quêtes dont la récompense a été réclamée + flag d'achat marché. */
   tut: { claimed: string[]; bought: boolean }
   /** ✉ Boîte de réception (v0.31.2) : gains à collecter (cadeaux, hors-ligne, events) — sortis du combat. */
@@ -321,6 +324,7 @@ export function freshSave(): SaveData {
     inventory: [],
     recycleThreshold: 4,
     autoRecycle: false,
+    autoRecycleUseless: false,
     tut: { claimed: [], bought: false },
     // ✉ Boîte de réception semée d'un cadeau de bienvenue (montre OÙ atterrissent les gains). Pour les
     // saves existantes, le merge `{ ...freshSave(), ...p }` injecte ce message une fois (p.inbox absent).
@@ -655,6 +659,7 @@ function sanitize(save: SaveData): SaveData {
   }
   if (typeof save.recycleThreshold !== 'number') save.recycleThreshold = 4
   if (typeof save.autoRecycle !== 'boolean') save.autoRecycle = false
+  if (typeof save.autoRecycleUseless !== 'boolean') save.autoRecycleUseless = false
   if (typeof save.lastFreeBox !== 'number') save.lastFreeBox = 0
   if (typeof save.boxPity !== 'number') save.boxPity = 0
   if (save.pendingChoice && !Array.isArray(save.pendingChoice.items)) save.pendingChoice = null
@@ -1055,6 +1060,7 @@ export function buildSaveData(s: GameState): SaveData {
     event: s.event,
     eventCosmetics: s.eventCosmetics,
     autoRecycle: s.autoRecycle,
+    autoRecycleUseless: s.autoRecycleUseless,
     killsSinceEpic: s.killsSinceEpic,
     lastSeen: Date.now(),
     lastShopRefresh: s.lastShopRefresh,

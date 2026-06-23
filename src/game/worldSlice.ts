@@ -20,7 +20,7 @@ import type { GameState } from './store'
 
 export function createWorldSlice(set: GameSet, get: GameGet): Pick<GameState,
   | 'setStage' | 'setBiome' | 'lockBiome' | 'rotateBiomeIfDue' | 'toggleFarmLock'
-  | 'setRecycleThreshold' | 'toggleAutoRecycle' | 'claimOffline' | 'markAway' | 'resumeAway'
+  | 'setRecycleThreshold' | 'toggleAutoRecycle' | 'toggleAutoRecycleUseless' | 'claimOffline' | 'markAway' | 'resumeAway'
 > {
   return {
     setStage: (n) => {
@@ -106,6 +106,13 @@ export function createWorldSlice(set: GameSet, get: GameGet): Pick<GameState,
     toggleAutoRecycle: () => {
       const s = get()
       const next = { ...s, autoRecycle: !s.autoRecycle, log: pushLog(s.log, `Recyclage auto ${s.autoRecycle ? 'désactivé' : 'activé'} (sous ${RARITIES[RARITY_LIST.find((r) => r.tier === s.recycleThreshold)?.id ?? 'rare'].name}).`, 'info') }
+      persist(next)
+      set(next)
+    },
+
+    toggleAutoRecycleUseless: () => {
+      const s = get()
+      const next = { ...s, autoRecycleUseless: !s.autoRecycleUseless, log: pushLog(s.log, `Recyclage auto du butin inutile ${s.autoRecycleUseless ? 'désactivé' : 'activé'} (ni DPS ni survie pour aucun héros).`, 'info') }
       persist(next)
       set(next)
     },
