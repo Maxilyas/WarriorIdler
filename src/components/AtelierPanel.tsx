@@ -589,7 +589,7 @@ function FoyerPanel() {
       <div className="mt-1.5 flex flex-wrap gap-1.5 text-[10px]">
         <span className="rounded bg-violet-900/40 px-1.5 py-0.5 text-violet-200">🏆 Chefs-d'œuvre ×{mw} <span className="text-violet-300/70">+{mw * 10}%</span></span>
         <span className="rounded bg-violet-900/40 px-1.5 py-0.5 text-violet-200">🤖 Automates ×{automates.length} <span className="text-violet-300/70">+{automates.length * 15}%</span></span>
-        <span className="rounded bg-slate-800 px-1.5 py-0.5 text-slate-300">⛰ Palier {bestStage}</span>
+        <span className="rounded bg-slate-800 px-1.5 py-0.5 text-slate-300">⛰ Vague {bestStage}</span>
       </div>
     </div>
   )
@@ -851,7 +851,7 @@ function ForgeronWorkshop() {
 
       {/* Récapitulatif + coût */}
       <div className="mt-3 rounded-lg bg-black/30 p-3 text-xs text-slate-400">
-        <div>iLvl de l'objet : <span className="text-slate-200">{ilvl}</span> (au niveau de ton farm — palier {bestStage}{forge.ilvlBonus > 0 ? ` · 🛠️ +${forge.ilvlBonus}` : ''})</div>
+        <div>iLvl de l'objet : <span className="text-slate-200">{ilvl}</span> (au niveau de ton farm — vague {bestStage}{forge.ilvlBonus > 0 ? ` · 🛠️ +${forge.ilvlBonus}` : ''})</div>
         <div className="mt-1 flex flex-wrap items-center gap-3">
           <span>Coût :</span>
           <span className={essence >= cost.eclats ? 'text-cyan-300' : 'text-red-400'}>♦ {cost.eclats}</span>
