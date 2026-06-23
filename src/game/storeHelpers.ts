@@ -1227,3 +1227,9 @@ export function applyChestRewards(s: GameState, c: ChestReward): Pick<GameState,
 
 /** Compteur d'id de log, partagé (était module-privé du store ; `logId` reste interne ici). */
 export function nextLogId(): number { return logId++ }
+
+/** v0.27 (F3) — horodatage de la mise en arrière-plan (0 = au premier plan). État TRANSITOIRE
+ *  partagé store ↔ slices d'actions (markAway/resumeAway) via accesseurs — non persisté. */
+let awaySince = 0
+export function getAwaySince(): number { return awaySince }
+export function setAwaySince(v: number): void { awaySince = v }
