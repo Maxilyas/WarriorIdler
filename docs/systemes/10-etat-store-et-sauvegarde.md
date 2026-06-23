@@ -91,7 +91,8 @@ Store Zustand unique (`useGame`), 4 grands rôles :
 - Le découpage du god-file (7.5k lignes) est **terminé** : `store.ts` ≈ 500 lignes (assembleur), le
   reste réparti en `save.ts` / `combatEngine.ts` / `storeHelpers.ts` / 10 `*Slice.ts`. Toute extraction
   future doit préserver l'invariant « logique pure dans `game/`, orchestration dans les slices ».
-- Le **socle de tests** [`test/`](../../test/) (Vitest) couvre save (round-trip/migration), helpers purs
-  et invariants moteur ; à étoffer au fil des évolutions (`npm test`).
+- Le **socle de tests** [`test/`](../../test/) (Vitest, `npm test`) couvre save (round-trip/migration),
+  helpers purs, invariants moteur **et chaque slice d'actions** ([`test/slices/`](../../test/slices/) :
+  un fichier par slice, via le vrai store `useGame` réinitialisé entre tests). À étoffer au fil des évolutions.
 - La clé de save porte encore `v030c` : la **version de schéma** (clé) et la **version de jeu**
   (commits) sont découplées — voir la proposition d'`APP_VERSION` dans le [README](../../README.md).
