@@ -80,6 +80,21 @@ deux fichiers** signalé comme fragile : chaque nœud de `maitrise.ts` est-il **
 appliqué ? Quantifie l'effet total (tout maxé ≈ +12% de combat agrégé) et la cadence time-gate
 (56 points · 3 contrats/sem → ~19 semaines). Garde-fou : nœud non câblé, dérive display↔moteur.
 
+## Audit personnalisé (depuis ta sauvegarde)
+
+### `save-audit.mjs` — `npm run audit -- chemin/vers/ta-save.json`
+**Pas un garde-fou d'équilibrage global, mais un diagnostic PERSO** : charge un fichier JSON de save
+(export du jeu) via le vrai `sanitizeRaw` (migrations + validation), applique TES mods de compte
+(`computeGlobalMods` : améliorations + maîtrises + hauts faits), puis audite le perso ACTIF :
+1. **Donjons** : niveau max franchissable par donjon + facteur limitant (survie / vitesse).
+2. **Raids** : tier max battable + facteur limitant (enrage / survie).
+3. **Sorts équipés** : contribution DPS de chacun par retrait marginal (repère le poids mort).
+4. **Talents** : points dépensés/dispo, gain de DPS de l'arbre, nœuds alloués sans effet.
+
+Sans argument → **mode démo** (perso stuffé généré) qui prouve le pipeline. Modèle simplifié (DPS
+soutenu vs PV/enrage, survie = EHP burst) : une **estimation**, pas le combat tick-à-tick (ignore
+rotation fine et mécaniques signature de raid).
+
 ## Économie
 
 ### `eco-sim.mjs` — `npm run eco`
