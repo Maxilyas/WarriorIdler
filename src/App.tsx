@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, lazy, Suspense } from 'react'
 import { useGame } from './game/store'
 import { flushSave } from './game/save'
 import { chapitreOf } from './game/progression'
@@ -7,17 +7,27 @@ import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from './game/damage'
 import { TALENT_START_LEVEL, teamTalentPool } from './game/character'
 import { METIER_LIST, pointsAvailable } from './game/metiers'
 import { CombatPanel } from './components/CombatPanel'
-import { StuffScreen } from './components/StuffScreen'
-import { AtelierPanel } from './components/AtelierPanel'
-import { HerosHub } from './components/HerosHub'
-import { ExpedHub } from './components/ExpedHub'
-import { MerchantPanel } from './components/MerchantPanel'
-import { GrimoirePanel } from './components/GrimoirePanel'
 import { ResetButton } from './components/CharacterPanel'
 import { Sheet } from './components/ui'
 import { ChestModal } from './components/ChestModal'
 import { ChoiceModal } from './components/ChoiceModal'
 import { WelcomeScreen } from './components/WelcomeScreen'
+
+// v0.40.5 (perf, lot 8) — CODE-SPLITTING : les panneaux NON-combat sont chargés à la demande
+// (React.lazy) → ils sortent du bundle initial, qui ne garde que le combat + l'accueil (démarrage
+// plus rapide). Exports nommés → on remappe en `default` pour `import()`. La PWA (generateSW)
+// précache TOUS les chunks → hors-ligne OK même pour un onglet jamais ouvert.
+const StuffScreen = lazy(() => import('./components/StuffScreen').then((m) => ({ default: m.StuffScreen })))
+const AtelierPanel = lazy(() => import('./components/AtelierPanel').then((m) => ({ default: m.AtelierPanel })))
+const HerosHub = lazy(() => import('./components/HerosHub').then((m) => ({ default: m.HerosHub })))
+const ExpedHub = lazy(() => import('./components/ExpedHub').then((m) => ({ default: m.ExpedHub })))
+const MerchantPanel = lazy(() => import('./components/MerchantPanel').then((m) => ({ default: m.MerchantPanel })))
+const GrimoirePanel = lazy(() => import('./components/GrimoirePanel').then((m) => ({ default: m.GrimoirePanel })))
+
+/** Repli affiché le temps qu'un chunk d'onglet se charge (instantané une fois précaché/visité). */
+const panelFallback = (
+  <div className="flex h-full items-center justify-center text-sm text-slate-500">Chargement…</div>
+)
 
 const TICK_MS = 200
 
@@ -265,31 +275,35 @@ export default function App() {
                 ))}
               </div>
               <div className="min-h-0 flex-1">
-                {deskTab === 'heros' ? (
-                  <HerosHub talentsUnlocked={talentsUnlocked} />
-                ) : deskTab === 'exped' ? (
-                  <ExpedHub raidsUnlocked={raidsUnlocked} />
-                ) : deskTab === 'marche' ? (
-                  <MerchantPanel />
-                ) : deskTab === 'grimoire' ? (
-                  <GrimoirePanel />
-                ) : deskTab === 'atelier' ? (
-                  <AtelierPanel />
-                ) : (
-                  <StuffScreen />
-                )}
+                <Suspense fallback={panelFallback}>
+                  {deskTab === 'heros' ? (
+                    <HerosHub talentsUnlocked={talentsUnlocked} />
+                  ) : deskTab === 'exped' ? (
+                    <ExpedHub raidsUnlocked={raidsUnlocked} />
+                  ) : deskTab === 'marche' ? (
+                    <MerchantPanel />
+                  ) : deskTab === 'grimoire' ? (
+                    <GrimoirePanel />
+                  ) : deskTab === 'atelier' ? (
+                    <AtelierPanel />
+                  ) : (
+                    <StuffScreen />
+                  )}
+                </Suspense>
               </div>
             </div>
           </div>
         ) : (
           /* Mobile : un hub à la fois */
           <div className="h-full">
-            {tab === 'combat' && <CombatPanel />}
-            {tab === 'stuff' && <StuffScreen />}
-            {tab === 'atelier' && <AtelierPanel />}
-            {tab === 'heros' && <HerosHub talentsUnlocked={talentsUnlocked} />}
-            {tab === 'exped' && <ExpedHub raidsUnlocked={raidsUnlocked} />}
-            {tab === 'marche' && <MerchantPanel />}
+            <Suspense fallback={panelFallback}>
+              {tab === 'combat' && <CombatPanel />}
+              {tab === 'stuff' && <StuffScreen />}
+              {tab === 'atelier' && <AtelierPanel />}
+              {tab === 'heros' && <HerosHub talentsUnlocked={talentsUnlocked} />}
+              {tab === 'exped' && <ExpedHub raidsUnlocked={raidsUnlocked} />}
+              {tab === 'marche' && <MerchantPanel />}
+            </Suspense>
           </div>
         )}
       </main>
@@ -355,7 +369,9 @@ export default function App() {
       {sheet === 'codex' && (
         <Sheet title="📖 Codex" onClose={() => setSheet(null)}>
           <div className="h-[72vh]">
-            <GrimoirePanel />
+            <Suspense fallback={panelFallback}>
+              <GrimoirePanel />
+            </Suspense>
           </div>
         </Sheet>
       )}

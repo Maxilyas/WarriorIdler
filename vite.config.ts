@@ -7,6 +7,19 @@ export default defineConfig({
   base: '/WarriorIdler/',
   // Le harnais de preview assigne un port via $PORT (autoPort) — Vite ne le lit pas seul.
   server: { port: Number(process.env.PORT) || 5173 },
+  build: {
+    rollupOptions: {
+      output: {
+        // v0.40.5 (perf, lot 8) — on isole react/react-dom dans leur PROPRE chunk (vendor stable,
+        // mis en cache longtemps par le navigateur, jamais réinvalidé par une livraison de code app).
+        // Le reste (CombatPanel, modales, WelcomeScreen, ui) part dans le bundle d'entrée ; les
+        // panneaux non-combat sont déjà splittés par React.lazy (cf. App.tsx).
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom'],
+        },
+      },
+    },
+  },
   plugins: [
     react(),
     tailwindcss(),
