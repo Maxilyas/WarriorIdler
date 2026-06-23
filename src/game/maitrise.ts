@@ -1,5 +1,5 @@
 /**
- * 🏛️ CONSEIL DES MAÎTRISES (v0.25, DESIGN §3) — la progression de compte TIME-GATÉE.
+ * 🏛️ CONSEIL DES MAÎTRISES — la progression de compte TIME-GATÉE.
  *
  * Remplace la puissance achetable du Marché : 3 CONTRATS par semaine RÉELLE (fenêtres d'epoch
  * UTC, déterministes), chacun crédité automatiquement en jouant le contenu. Contrat rempli =

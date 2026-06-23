@@ -1,12 +1,11 @@
 import type { StatBlock, DamageType, OffensiveStat } from './types'
 
 /**
- * Socle de données partagé des CLASSES (refonte v0.29.2 — arbres HANDCRAFTED).
+ * Socle de données partagé des CLASSES — arbres HANDCRAFTED.
  *
- * v0.29.2 : on abandonne la génération par gabarit (trop linéaire/uniforme). Chaque archétype
- * a désormais un arbre DESSINÉ À LA MAIN dans talents.ts (topologie unique + nœuds intermédiaires).
- * Ce module ne garde que les TYPES partagés par le moteur — au premier rang KeystoneEffect, dont
- * combat.ts / character.ts dépendent (re-exporté par talents.ts).
+ * Chaque archétype a un arbre DESSINÉ À LA MAIN dans talents.ts (topologie unique + nœuds
+ * intermédiaires). Ce module ne garde que les TYPES partagés par le moteur — au premier rang
+ * KeystoneEffect, dont combat.ts / character.ts dépendent (re-exporté par talents.ts).
  */
 
 export type Role = 'dps' | 'tank' | 'heal'
@@ -50,7 +49,7 @@ export interface KeystoneEffect {
   reqReduction?: number
   multiTypeBonus?: { per: number; threshold: number }
 
-  /* ---- v0.29.2 : socle VOLEUR (mécaniques réutilisables) ---- */
+  /* ---- socle VOLEUR (mécaniques réutilisables) ---- */
   /** ASSASSIN : le venin s'empile plus haut (cap) et chaque stack frappe plus fort (perStack frac/s). */
   poison?: { perStack: number; maxStacks: number }
   /** OMBRELAME : relève le plafond de Points de Combo (au-delà de la base 5). */
@@ -60,7 +59,7 @@ export interface KeystoneEffect {
   /** OMBRELAME : amplifie les dégâts des FINISSEURS (+finisherMult). */
   finisherMult?: number
 
-  /* ---- v0.29.4 : socle TAGS + combos (réutilisable par TOUTES les classes) ---- */
+  /* ---- socle TAGS + combos (réutilisable par TOUTES les classes) ---- */
   /** Bonus de dégâts à TOUS les sorts portant ce tag (multi-classe : marche pour les sorts des autres classes). */
   tagBonus?: { tag: string; damageMult: number }
   /** ASSASSIN « Catalyse » : la Distillation DOUBLE le venin avant de détoner. */
@@ -68,23 +67,23 @@ export interface KeystoneEffect {
   /** OMBRELAME : un finisseur REND `comboRefund` Points de Combo (spam de finisseurs). */
   comboRefund?: number
 
-  /* ---- v0.29.6 : INVOCATION (pets) + CONTRÔLE (réutilisables) ---- */
+  /* ---- INVOCATION (pets) + CONTRÔLE (réutilisables) ---- */
   /** INVOCATION : un familier/totem/démon inflige en continu `petDps` × ton DPS d'auto-attaque. */
   petDps?: number
   /** CONTRÔLE « shatter » : +`shatter` de dégâts (mult) aux ennemis CONTRÔLÉS (gelés/ralentis). */
   shatter?: number
 
-  /* ---- v0.30 : PYROMANCIEN (crits embrasent) ---- */
+  /* ---- PYROMANCIEN (crits embrasent) ---- */
   /** PYROMANCIEN : un coup CRITIQUE pose/rafraîchit un Embrasement (DoT feu = `frac` du coup/s, `duration` s).
    *  Plusieurs nœuds cumulent leur `frac` (la durée prend le max). Amplifié par l'Altération. */
   igniteOnCrit?: { frac: number; duration: number }
 
-  /* ---- v0.30 : REMPART (tank Rage → bouclier) ---- */
+  /* ---- REMPART (tank Rage → bouclier) ---- */
   /** REMPART : un FINISSEUR accorde au lanceur un bouclier d'absorption = `finisherShield` × ses dégâts.
    *  Convertit la dépense de Rage en survie (Bloc/Ignore Pain). Somme entre keystones. */
   finisherShield?: number
 
-  /* ---- v0.31 : MAGE (mécaniques signature) ---- */
+  /* ---- MAGE (mécaniques signature) ---- */
   /** PYROMANCIEN « Hot Streak » : tes sorts [feu] accumulent de la Chaleur (montée pondérée par le Critique) ;
    *  à `cap`, ton prochain sort [feu][direct] inflige ×`mult` (puis Chaleur → 0). On garde le plus fort. */
   hotStreak?: { cap: number; mult: number }
@@ -92,12 +91,12 @@ export interface KeystoneEffect {
    *  (dégâts ×`mult`, recharges ×2) ; la Surcharge CONSOMME tes Charges. On garde la plus longue/forte. */
   overload?: { window: number; mult: number }
 
-  /* ---- v0.32 : PALADIN Aube (healer offensif) ---- */
+  /* ---- PALADIN Aube (healer offensif) ---- */
   /** PALADIN AUBE : une fraction de TES DÉGÂTS soigne l'allié le plus blessé (inverse de `healToDamage`).
    *  → un healer qui soigne en TAPANT (scale FORCE). Somme entre keystones. */
   damageToHeal?: number
 
-  /* ---- v0.34 : VOLEUR « Lame Vénéneuse » (synergie Assassin × Ombrelame, calibré par sim) ---- */
+  /* ---- VOLEUR « Lame Vénéneuse » (synergie Assassin × Ombrelame, calibré par sim) ---- */
   /** LAME VÉNÉNEUSE : un FINISSEUR applique ⌈PC × frac⌉ stacks de venin (combo → affliction). Somme. */
   finisherToPoison?: number
   /** LAME VÉNÉNEUSE : le finisseur bénéficie du tagBonus['dot'] (il « compte comme » un DoT). */
@@ -127,7 +126,7 @@ export interface KeystoneEffect {
   /** DANSE VÉNÉNEUSE : le finisseur génère +1 PC si la cible est au venin MAX. */
   venomFinisherGen?: boolean
 
-  /* ---- v0.34 : PRÊTRE « Crépuscule » (synergie Lumière × Vide, calibré par sim) ---- */
+  /* ---- PRÊTRE « Crépuscule » (synergie Lumière × Vide, calibré par sim) ---- */
   /** DISSONANCE : tes SOINS posent un DoT d'ombre sur la cible châtiée (= frac du DoT de base). Somme. */
   healAppliesDot?: number
   /** DISSONANCE : ton châtiment (atonement) compte comme [ombre] → ×tagBonus['ombre']. */
@@ -147,7 +146,7 @@ export interface KeystoneEffect {
   /** COMMUNION D'OMBRE : tes DoT soignent l'allié le plus blessé (frac du tick). Somme. */
   dotHealsParty?: number
 
-  /* ---- v0.34 : MAGE « Convergence » (tri-élément feu × givre × arcane, calibré par sim) ---- */
+  /* ---- MAGE « Convergence » (tri-élément feu × givre × arcane, calibré par sim) ---- */
   /** COMBUSTION RUNIQUE : un déclenchement de Hot Streak octroie N Charges des arcanes (Feu→Arcane). Somme. */
   hotStreakCharges?: number
   /** GEL ARCANIQUE : entrer en Surcharge GÈLE le pack (contrôle) (Arcane→Givre). */
@@ -159,7 +158,7 @@ export interface KeystoneEffect {
   /** ÉQUILIBRE DES SPHÈRES : shatter += frac×(alterationMult−1) — cross-scaling BORNÉ. Somme. */
   shatterFromAlteration?: number
 
-  /* ---- v0.34 : GUERRIER « Juggernaut » + « Furie » (calibré par sim) ---- */
+  /* ---- GUERRIER « Juggernaut » + « Furie » (calibré par sim) ---- */
   /** BOUCLIER OFFENSIF : finisseur +frac × (bouclier d'absorption actuel / PV max) — BORNÉ (bouclier ≤ PV). Somme. */
   shieldToFinisher?: number
   /** VENGEANCE : encaisser des dégâts génère de la Rage (Combo) ∝ aux PV perdus. Somme. */
@@ -169,7 +168,7 @@ export interface KeystoneEffect {
   /** FURIE : un coup CRITIQUE déclenche/rafraîchit l'ENRAGE (+mult de dégâts, durée). On garde le plus fort. */
   enrageOnCrit?: { mult: number; duration: number }
 
-  /* ---- v0.34 : CHASSEUR « Symbiose » (Meute × Œil de faucon, calibré par sim) ---- */
+  /* ---- CHASSEUR « Symbiose » (Meute × Œil de faucon, calibré par sim) ---- */
   /** SYMBIOSE : +frac de dégâts de FAMILIER (il hérite de tes stats) ET le familier respecte la marque/vuln. Somme. */
   petBonus?: number
   /** ŒIL ET CROC : +frac × Précision de dégâts de familier — cross-scaling BORNÉ (précision saturée). Somme. */
@@ -179,7 +178,7 @@ export interface KeystoneEffect {
   /** BOND COORDONNÉ : un FINISSEUR fait bondir le familier (pic = `petBurstOnFinisher` s de DPS de familier). Somme. */
   petBurstOnFinisher?: number
 
-  /* ---- v0.34 : DRUIDE « Métamorphe » — système de FORMES rotatives (calibré par sim) ---- */
+  /* ---- DRUIDE « Métamorphe » — système de FORMES rotatives (calibré par sim) ---- */
   /** DANSE PRIMORDIALE : active la rotation des formes (Fauve→Ours→Hibou toutes les ~5 s). */
   shifter?: boolean
   /** Bonus de dégâts (frac) tant que tu es en forme du FAUVE. Somme. */

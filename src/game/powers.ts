@@ -115,7 +115,7 @@ export const POWERS: PowerDef[] = [
     description: 'Coup mortel sur cible affaiblie. Scale FOR/AGI.',
     unlockLevel: 1, cooldown: 3.5, effect: 'nuke', magnitude: 5, scaleStats: ['force', 'agilite'],
   },
-  // --- Archétypes v0.24 ---
+  // --- Archétypes ---
   {
     id: 'arc_voltaique', name: 'Arc voltaïque', kind: 'active',
     description: 'Un éclair qui saute de cible en cible. Scale AGI/INT (la meilleure).',
@@ -171,7 +171,7 @@ export const POWERS: PowerDef[] = [
     unlockLevel: 1, cooldown: 3.5, effect: 'nuke', magnitude: 5, scaleStats: ['force', 'agilite'],
   },
 
-  // ================= ULTIMES (v0.19) : sorts surpuissants à long cooldown =================
+  // ================= ULTIMES : sorts surpuissants à long cooldown =================
   {
     id: 'verdict', name: 'Verdict', kind: 'active',
     description: 'Une sentence dévastatrice : +250% de dégâts selon les PV MANQUANTS de la cible (finisher anti-boss). Scale FOR/AGI.',
@@ -223,7 +223,7 @@ export const POWERS: PowerDef[] = [
     unlockLevel: 1, cooldown: 20, effect: 'mark', magnitude: 1.45, duration: 8, scaleStat: 'intelligence',
   },
 
-  /* ================= v0.29 : signatures des 36 noyaux de classe ================= */
+  /* ================= signatures des noyaux de classe ================= */
   // -- DPS mêlée / agilité --
   { id: 'griffes_meute', name: 'Griffes de la meute', kind: 'active', description: 'Ton familier lacère le pack (DPS passif idéal en idle). Scale ta stat principale.', unlockLevel: 1, cooldown: 3, effect: 'cleave', magnitude: 3.0, damageType: 'nature' },
   { id: 'saignement_sauvage', name: 'Saignement sauvage', kind: 'active', description: 'Des plaies de fauve qui saignent (DoT nature). Scale AGI.', unlockLevel: 1, cooldown: 4, effect: 'dot', magnitude: 2.4, scaleStat: 'agilite', damageType: 'nature' },
@@ -248,7 +248,7 @@ export const POWERS: PowerDef[] = [
   { id: 'brume_revigorante', name: 'Brume revigorante', kind: 'active', description: 'Frapper diffuse une brume qui soigne (fistweaving). Scale sur ta stat principale (soin AGI possible).', unlockLevel: 1, cooldown: 3, effect: 'heal', magnitude: 1.8 },
 ]
 
-/* ================= v0.29.1 : sorts GÉNÉRÉS depuis classData (39 specs × 3) ================= */
+/* ================= sorts GÉNÉRÉS depuis classData (specs × 3 rangs) ================= */
 const EFFECT_FR: Record<PowerEffect, string> = {
   nuke: 'frappe directe', cleave: 'frappe de zone', dot: 'altération sur la durée',
   heal: 'soin', hot: 'soin sur la durée', shield: 'bouclier', buffParty: 'soin de groupe',
@@ -271,8 +271,8 @@ function spellDescription(s: SpellSpec): string {
 function specToPower(s: SpellSpec): PowerDef {
   const scaleStats = Array.isArray(s.scale) ? s.scale : undefined
   const scaleStat = !Array.isArray(s.scale) ? s.scale : undefined
-  // v0.37 « Piste C » : l'ÉLÉMENT du sort devient un tag de première classe → les nœuds « +% [feu] »
-  // (tagBonus) s'appliquent à TOUS les sorts de ce type, cross-classe, comme leur libellé l'annonce.
+  // L'ÉLÉMENT du sort est un tag de première classe → les nœuds « +% [feu] » (tagBonus) s'appliquent
+  // à TOUS les sorts de ce type, cross-classe, comme leur libellé l'annonce.
   const tags = s.type
     ? (s.tags?.includes(s.type) ? s.tags : [...(s.tags ?? []), s.type])
     : s.tags
@@ -499,7 +499,7 @@ const PALADIN_SPELLS: SpellSpec[] = [
 ]
 for (const s of PALADIN_SPELLS) POWERS.push(specToPower(s))
 
-/* ================= PASSIFS UTILITAIRES (3 slots) — v0.42 =================
+/* ================= PASSIFS UTILITAIRES (3 slots) =================
  * Les passifs slottés sont désormais des BONUS DIRECTS, débloqués DANS L'ARBRE (cluster « Instincts »
  * du Cœur) — fini l'auto-déblocage par niveau. Le joueur en équipe 3 (loadout). Le moteur de
  * conversions (`convert` / applyStatConversions) reste en place mais DORMANT — réservé aux gemmes
@@ -533,7 +533,7 @@ const POWER_ICON: Record<string, string> = {
   // Ultimes
   verdict: '⚖️', soif_du_neant: '🦇', deluge_stellaire: '🌠', aube_salvatrice: '🌅', hemorragie_cosmique: '🧨',
   egide_titanesque: '🔰', phase_etheree: '🌫️', vengeance_differee: '⏳', furie_sanguinaire: '😡', sceau_faiblesse: '🔻',
-  // v0.29 — signatures de classe
+  // signatures de classe
   griffes_meute: '🐾', saignement_sauvage: '🩸', piege_explosif: '💣', paume_du_tigre: '🐯', lame_du_chaos: '😈',
   boule_de_feu: '🔥', eclat_de_glace: '🧊', nuee_demoniaque: '👹', ruine: '💥', fulguration: '⚡', souffle_ardent: '🐉', mot_de_lombre: '🗯️',
   coup_runique: '🩸', lacere_chaos: '👿',
@@ -583,17 +583,17 @@ export const POWER_EFFECT_META: Record<PowerEffect, PowerEffectMeta> = {
   lifeNuke: { label: 'Frappe vampirique', icon: '🦇', targets: 'Mono-cible + vol de vie', family: 'offense' },
   rupture: { label: 'Anti-régén + DoT', icon: '🧨', targets: 'Mono-cible · brise la régén', family: 'offense' },
   mark: { label: 'Vulnérabilité', icon: '🔻', targets: 'Mono-cible · amplifie les dégâts', family: 'offense' },
-  // v0.29.2 — socle Voleur
+  // socle Voleur
   poison: { label: 'Venin (cumulatif)', icon: '🧪', targets: 'Mono-cible · +1 stack', family: 'offense' },
   detonate: { label: 'Détonation', icon: '💥', targets: 'Mono-cible · consomme les stacks', family: 'offense' },
   builder: { label: 'Générateur', icon: '🗡️', targets: 'Mono-cible · +1 Point de Combo', family: 'offense' },
   finisher: { label: 'Finisseur', icon: '🔪', targets: 'Mono-cible · × Points de Combo', family: 'offense' },
-  // v0.34 — socle Prêtre « Crépuscule »
+  // socle Prêtre « Crépuscule »
   smiteHeal: { label: 'Châtiment soignant', icon: '🌗', targets: 'Mono-cible + soin de l\'allié blessé', family: 'offense' },
   eclipse: { label: 'Éclipse (zone)', icon: '🌘', targets: 'Tout le pack + soin de groupe', family: 'offense' },
-  // v0.34 — socle Guerrier « Juggernaut »
+  // socle Guerrier « Juggernaut »
   avatar: { label: 'Avatar de guerre', icon: '🗿', targets: 'Porteur · transe + bouclier', family: 'soutien' },
-  // v0.34 — socle Druide « Métamorphe »
+  // socle Druide « Métamorphe »
   shift: { label: 'Métamorphose-éclair', icon: '🌀', targets: 'Porteur · change de forme + frappe', family: 'offense' },
   chimera: { label: 'Forme Chimère', icon: '🐲', targets: 'Porteur · les 3 formes à la fois', family: 'offense' },
 }
@@ -616,8 +616,8 @@ export function scaleLabel(p: PowerDef): string | null {
 }
 
 /** Effets qui infligent des dégâts TYPÉS (les seuls qui portent un type de dégât affichable).
- *  v0.37 : les combos/venin/hybrides infligent aussi des dégâts typés (ils appellent hit()/posent un
- *  DoT dans fireActive) et bénéficient du matching Piste C → ils affichent leur type comme les nukes. */
+ *  Les combos/venin/hybrides infligent aussi des dégâts typés (ils appellent hit()/posent un DoT dans
+ *  fireActive) et bénéficient du matching de type → ils affichent leur type comme les nukes. */
 const TYPED_DAMAGE_EFFECTS: ReadonlySet<PowerEffect> = new Set<PowerEffect>([
   'nuke', 'cleave', 'dot', 'executeNuke', 'megaCleave', 'lifeNuke', 'rupture',
   'finisher', 'builder', 'detonate', 'poison', 'smiteHeal', 'eclipse', 'shift',

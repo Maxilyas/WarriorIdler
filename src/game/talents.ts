@@ -3,7 +3,7 @@ export type { KeystoneEffect } from './classData'
 import type { KeystoneEffect } from './classData'
 
 /**
- * ARBRE DE TALENTS v0.29.3 — ARBRES À CHOIX (façon Path of Exile), handcrafted classe par classe.
+ * ARBRE DE TALENTS — ARBRES À CHOIX (façon Path of Exile), handcrafted classe par classe.
  *
  *   RACINE (Éveil) → 4 CATÉGORIES (armure) → CLASSES → ARCHÉTYPES (webs de grappes).
  *
@@ -42,11 +42,11 @@ export interface ConstellationMeta {
   color: string
   icon: string
   archetype?: boolean
-  /** v0.33 : arbre d'appartenance. 'pantheon' = classes débloquées par l'Éveil (2e arbre). Défaut 'base'. */
+  /** Arbre d'appartenance. 'pantheon' = classes débloquées par l'Éveil (2e arbre). Défaut 'base'. */
   tree?: TalentTreeId
 }
 
-/** v0.33 : deux arbres. 'base' = 6 classes de départ (points de niveau). 'pantheon' = 4 classes
+/** Deux arbres. 'base' = 6 classes de départ (points de niveau). 'pantheon' = 4 classes
  *  débloquées par l'Éveil Primordial, dépensées avec le budget de Points d'Éveil. */
 export type TalentTreeId = 'base' | 'pantheon'
 
@@ -70,11 +70,11 @@ export interface TalentNode {
   exclusive?: string
   /** BUDGET : points à dépenser dans la constellation avant de pouvoir l'allouer. */
   minSpent?: number
-  /** RANG PRÉREQUIS (v0.30) : un nœud précis doit être à AU MOINS ce rang (souvent son maximum) avant
+  /** RANG PRÉREQUIS : un nœud précis doit être à AU MOINS ce rang (souvent son maximum) avant
    *  d'allouer celui-ci. Sert à GATER la puissance brute (DR/épines/+%dégâts) derrière un vrai
    *  investissement dans la node d'avant — « monte d'abord ce mineur au max ». */
   requiresRank?: { id: string; rank: number }
-  /** v0.33 : nœud d'ENTRÉE d'une classe du Panthéon — exige `prestigeRank` ≥ cette valeur (déblocage
+  /** Nœud d'ENTRÉE d'une classe du Panthéon — exige `prestigeRank` ≥ cette valeur (déblocage
    *  progressif, 1 classe par Éveil). Gate posée sur le nœud `cl_*`, héritée par tous ses descendants. */
   requiresPrestige?: number
   statMods?: StatBlock
@@ -94,7 +94,7 @@ const STAT_FR: Record<string, string> = {
   precision: 'Précision', alteration: 'Altération', degatsBoss: 'Dégâts boss',
   reductionDegats: 'Réduction', barriere: 'Barrière', resilience: 'Résilience',
   volDeVie: 'Vol de vie', surpuissance: 'Surpuissance', multifrappe: 'Multifrappe', recuperation: 'Récupération',
-  // v0.38 — clés DÉPRÉCIÉES (repliées) : libellé = la stat dans laquelle elles comptent.
+  // clés DÉPRÉCIÉES (repliées) : libellé = la stat dans laquelle elles comptent.
   esquive: 'Réduction', tenacite: 'Résilience', regen: 'Intelligence', purge: 'Résilience',
 }
 function sd(mods: StatBlock): string {
@@ -127,7 +127,7 @@ node('cat_cuir', 'coeur', 'gateway', 1, 1, 'Cuir', 'Catégorie Cuir (Voleur, Dru
 node('cat_tissu', 'coeur', 'gateway', 1, 1, 'Tissu', 'Catégorie Tissu (Mage, Prêtre). +40 Intelligence.', { requires: ['co_start'], statMods: { intelligence: 40 } })
 
 /* ------------------------------------------------------------------ */
-/* PANTHÉON (v0.33) — 2e arbre, racine. Les 4 classes avancées (Chaman, Paladin, Démoniste,
+/* PANTHÉON — 2e arbre, racine. Les 4 classes avancées (Chaman, Paladin, Démoniste,
 /* Chevalier de la mort) s'y branchent au lieu des catégories de base. Débloqué par l'Éveil
 /* Primordial (prestige) et dépensé avec le budget de Points d'Éveil. La racine est un simple
 /* ancrage (0 stat) : tant qu'aucune classe n'est débloquée, le Panthéon n'apporte rien. */
@@ -210,7 +210,7 @@ ks('om_fren', 'ombrelame', 3, 'Frénésie', 'CHOIX : +26 Hâte.', { stat: { hate
 ks('om_precis', 'ombrelame', 3, 'Précision létale', 'CHOIX : +24 Critique, +24 Dégâts crit.', { stat: { critique: 24, degatsCrit: 24 } }, { requires: ['om_jum'], exclusive: 'om_lames' })
 
 /* ================================================================== */
-/* LAME VÉNÉNEUSE (v0.34) — SECTION SYNERGIE Assassin × Ombrelame.
+/* LAME VÉNÉNEUSE — SECTION SYNERGIE Assassin × Ombrelame.
  * Pont entre les deux voies : le combo ARME la rampe de venin, le venin NOURRIT le combo.
  * Calibré par scripts/sim-voleur-hybride.mjs (≈ ×1,45 PLAT en endgame ; hybride ≤ ×1,17 vs build pur).
  * Identité : rampe → détone → re-rampe, exigeant Critique ET Altération ENSEMBLE (double-stat forcé).
@@ -329,7 +329,7 @@ ability('ar_barriere', 'arcaniste', 2, 'Bouclier des arcanes', 'bouclier_runique
 ks('ar_clignement', 'arcaniste', 3, 'Clignement', 'SURVIE : +30 Réduction, +18 Récupération (tu te téléportes hors de danger). Exige Voile arcanique au rang max (5).', { stat: { esquive: 30, recuperation: 18 } }, { requires: ['ar_voile'], requiresRank: { id: 'ar_voile', rank: 5 } })
 
 /* ================================================================== */
-/* CONVERGENCE (v0.34) — SOMMET ABSOLU DU MAGE : tri-élément feu × givre × arcane.
+/* CONVERGENCE — SOMMET ABSOLU DU MAGE : tri-élément feu × givre × arcane.
  * Ne part PAS du nœud de classe : se REJOINT sur les nœuds les plus profonds des 3 archétypes.
  * Calibré par scripts/sim-mage-convergence.mjs (convergence ≈ ×1,34 PLAT, tri ×1,45 vs pur).
  * La cascade : Hot Streak → Charges (Feu→Arcane) ; Surcharge → gel (Arcane→Givre) ; gel → embrasement
@@ -416,7 +416,7 @@ ability('fa_posture', 'faucon', 2, 'Posture défensive', 'posture_defensive', 'S
 ks('fa_retraite', 'faucon', 2, 'Retraite feinte', 'SURVIE : +30 Réduction, +12% de dégâts (tu frappes en reculant). Exige Camouflage au rang max (5).', { stat: { esquive: 30 }, ks: { damageMult: 1.12 } }, { requires: ['fa_camo'], requiresRank: { id: 'fa_camo', rank: 5 } })
 
 /* ================================================================== */
-/* SYMBIOSE (v0.34) — SECTION SYNERGIE Meneur de meute × Œil de faucon : le chasseur & sa bête.
+/* SYMBIOSE — SECTION SYNERGIE Meneur de meute × Œil de faucon : le chasseur & sa bête.
  * Le familier hérite de tes stats, tes tirs le font bondir, ses attaques nourrissent ta Concentration,
  * ta marque guide la mise à mort. Calibré par scripts/sim-chasseur-hybride.mjs (×1,41 plat ; hybride
  * ×1,25 vs build pur). Sorts : Marque du chasseur (mark), Assaut de la meute (ultime). */
@@ -490,7 +490,7 @@ ability('re_bouclier', 'rempart', 2, 'Bouclier runique', 'bouclier_runique', 'SU
 ks('re_colosse', 'rempart', 3, 'Colosse', 'À plus de 60% de PV, +20% de dégâts (un mur qui frappe). Profond : 10 pts dans la voie.', { stat: { force: 16 }, ks: { highHpBonus: { threshold: 0.6, mult: 1.2 } } }, { requires: ['re_inebranlable'], minSpent: 10 })
 
 /* ================================================================== */
-/* JUGGERNAUT (v0.34) — SECTION SYNERGIE Sentence × Rempart : DPS-TANK hybride.
+/* JUGGERNAUT — SECTION SYNERGIE Sentence × Rempart : DPS-TANK hybride.
  * Défense ⇄ offense fusionnées : Endurance → Force, le bouclier nourrit les finisseurs, encaisser
  * génère de la Rage. Calibré par scripts/sim-guerrier-hybride.mjs (×1,25 plat ; DPS ≈ spec pure,
  * mais BIEN plus tanky → l'edge est la survie). Sorts : Condamnation, Avatar de guerre. */
@@ -515,7 +515,7 @@ ks('ju_titan', 'juggernaut', 4, 'Cœur de titan', 'CAPSTONE : +10 % de dégâts 
 ability('ju_avatar', 'juggernaut', 5, 'Avatar de guerre', 'gu_avatar', 'ULTIME — tu deviens un titan : +80 % de dégâts 8 s ET un ÉNORME bouclier d\'absorption. Gaté : Cœur de titan + 14 pts.', { requires: ['ju_titan'], minSpent: 14 })
 
 /* ================================================================== */
-/* FURIE (v0.34) — BERSERKER (Fury) : DPS PUR, bi-arme + Enrage + vol de vie.
+/* FURIE — BERSERKER (Fury) : DPS PUR, bi-arme + Enrage + vol de vie.
  * Branche profonde de la Sentence. Gros dégâts soutenus, « tanky » par le SANG (vol de vie + Enrage),
  * pas l'armure. Calibré par scripts/sim-guerrier-hybride.mjs (×1,38 plat ; le DPS le plus haut des 3
  * voies, mais auto-sustain). Sorts : Rampage, Berserk. */
@@ -581,7 +581,7 @@ ks('vi_drain', 'vide', 2, 'Drain d\'ombre', 'SURVIE : tes DoT te soignent (25% d
 ks('vi_meta', 'vide', 3, 'Communion morbide', 'SURVIE : -8% de dégâts subis, +12 Vol de vie. Profond : 8 pts dans la voie.', { stat: { volDeVie: 12 }, ks: { flatDr: 0.08 } }, { requires: ['vi_drain'], minSpent: 8 })
 
 /* ================================================================== */
-/* CRÉPUSCULE (v0.34) — SECTION SYNERGIE Lumière × Vide (Prêtre).
+/* CRÉPUSCULE — SECTION SYNERGIE Lumière × Vide (Prêtre).
  * Boucle Light↔Void : soigner-en-châtiant (atonement) ↔ frapper-en-soignant. Calibré par
  * scripts/sim-pretre-hybride.mjs (≈ ×1,48 PLAT en endgame ; hybride ≤ ×1,33 vs build pur).
  * Identité : DoT d'ombre + châtiment qui se nourrissent ; force INT ET Altération ensemble.
@@ -757,7 +757,7 @@ minor('fo_buf3', 'floraison', 1, 'Carapace végétale', 5, { barriere: 12 }, { r
 ability('fo_bouclier', 'floraison', 2, 'Bouclier d\'écorce', 'bouclier_runique', 'SURVIE : bouclier d\'absorption.', { requires: ['fo_buf3'] })
 
 /* ================================================================== */
-/* MÉTAMORPHE (v0.34) — « La Danse Primordiale » : 4e voie AUTONOME du druide, mécanique NEUVE.
+/* MÉTAMORPHE — « La Danse Primordiale » : 4e voie AUTONOME du druide, mécanique NEUVE.
  * Le druide CHANGE DE FORME en boucle (Fauve→Ours→Hibou, ~5 s chacune) ; chaque forme transforme son
  * style, chaque métamorphose accumule l'INSTINCT (momentum), et la Mémoire des formes fait cumuler les
  * aspects. Calibré par scripts/sim-druide-metamorphe.mjs (×1,48 plat ; ≈ Lunaire pur en DPS).
@@ -816,7 +816,7 @@ ability('au_imposition', 'aube', 3, 'Imposition des mains', 'au_imposition', 'D�
 minor('au_buf3', 'aube', 1, 'Plaque sacrée', 5, { reductionDegats: 10 }, { requires: ['au_hub'] })
 ks('au_resist', 'aube', 2, 'Grâce protectrice', 'SURVIE : -10% de dégâts subis. Exige Plaque sacrée au max (5).', { stat: { endurance: 16 }, ks: { flatDr: 0.1 } }, { requires: ['au_buf3'], requiresRank: { id: 'au_buf3', rank: 5 } })
 
-/* ================= v0.42 : CAPSTONES D'IDENTITÉ DE CLASSE (classes de base) =================
+/* ================= CAPSTONES D'IDENTITÉ DE CLASSE (classes de base) =================
  * UNE node très forte par classe, TOUT AU FOND : gatée derrière les ULTIMES de ses archétypes
  * (`requires` = OR via isReachable → il suffit d'avoir bouclé N'IMPORTE quel archétype de la classe).
  * Toujours active une fois allouée (keystone, PAS un slot). Effets 100% sur des leviers `ks` existants.
@@ -834,7 +834,7 @@ ks('id_pretre', 'pretre', 2, 'Équilibre divin', 'IDENTITÉ — la boucle Lumiè
 ks('id_druide', 'druide', 2, 'Avatar primordial', 'IDENTITÉ — tu incarnes les trois aspects à la fois (Fauve + Ours + Hibou) : +12% de dégâts et un socle de stats des trois formes. Exige un ultime Druide.',
   { stat: { agilite: 18, endurance: 18, critique: 15, intelligence: 15 }, ks: { damageMult: 1.12 } }, { requires: ['ln_etoiles', 'fo_eclosion', 'mf_chimere'] })
 
-/* ================= v0.42 : INSTINCTS — passifs utilitaires (3 slots) =================
+/* ================= INSTINCTS — passifs utilitaires (3 slots) =================
  * Cluster universel du Cœur. LAYOUT : CHAÎNE (`requires` = le précédent) → le dendrogramme radial en
  * fait un ÉPI bien espacé (chaque node à une PROFONDEUR distincte = rayon distinct), au lieu d'un
  * éventail de 8 feuilles sœurs SUPERPOSÉES à faible rayon (incliquables). RÉACHABILITÉ : `links:
@@ -915,7 +915,7 @@ export const CONSTELLATION_LIST: ConstellationId[] = [
 /* Accès & agrégation (API consommée par character.ts / UI).           */
 /* ------------------------------------------------------------------ */
 const BY_ID = new Map(TALENTS.map((t) => [t.id, t]))
-// v0.40.6 (perf, F6) — index nœuds par constellation, calculé UNE fois (données statiques), trié par
+// index nœuds par constellation, calculé UNE fois (données statiques), trié par
 // tier comme avant. Évite un `filter+sort` O(N log N) à chaque `talentsByConstellation` et le scan +
 // lookup par clé de `spentInConstellation`. Les tableaux sont traités en LECTURE SEULE (aucun appelant
 // ne les mute : vérifié) → le partage de la référence est sûr.
@@ -993,7 +993,7 @@ export interface GateInfo {
   exclusiveBlocked?: string
   /** RANG PRÉREQUIS non atteint : nom du nœud + rang requis + rang actuel (pour l'UI). */
   rankReq?: { name: string; need: number; have: number }
-  /** v0.33 : nœud de classe du Panthéon verrouillé tant que `prestigeRank` < cette valeur. */
+  /** Nœud de classe du Panthéon verrouillé tant que `prestigeRank` < cette valeur. */
   prestigeLocked?: number
 }
 export function gateInfo(node: TalentNode, talents: Record<string, number>, prestigeRank?: number): GateInfo {
@@ -1026,7 +1026,7 @@ export function canAllocate(node: TalentNode, talents: Record<string, number>, p
 }
 
 /* ------------------------------------------------------------------ */
-/* PANTHÉON (v0.33) — 2e arbre : budget de Points d'Éveil + déblocage progressif des classes.  */
+/* PANTHÉON — 2e arbre : budget de Points d'Éveil + déblocage progressif des classes.  */
 /* ------------------------------------------------------------------ */
 
 /** Arbre d'appartenance d'un nœud (dérivé de sa constellation). 'base' par défaut. */
