@@ -96,19 +96,24 @@ function freshParty() {
   return p
 }
 // Un combat d'équipe vs `enemy` jusqu'au kill (gagné) ou wipe/temps écoulé (perdu). dt=0,2 s (5 Hz, comme le jeu).
+// Renvoie le détail : qui tombe en PREMIER et quand, PV restant du boss → diagnostic du mur.
 function simWin(makeEnemy, timeLimit) {
   let p = freshParty()
   let enemy = makeEnemy(p.length)
-  for (let t = 0; t < timeLimit && enemy.hp > 0 && p.some((x) => x.hp > 0); t += 0.2) {
+  const death = {}
+  let t = 0
+  for (; t < timeLimit && enemy.hp > 0 && p.some((x) => x.hp > 0); t += 0.2) {
     const r = partyCombatStep(p, enemy, 0.2)
     p = r.chars; enemy = r.enemy
+    for (const ch of p) if (ch.hp <= 0 && !(ch.name in death)) death[ch.name] = t
   }
-  return enemy.hp <= 0
+  const order = Object.entries(death).sort((a, b) => a[1] - b[1])
+  return { win: enemy.hp <= 0, dur: t, bossLeft: enemy.hp / enemy.maxHp, firstDead: order[0]?.[0], firstT: order[0]?.[1] ?? 0 }
 }
 // L'aléa (esquive/procs/sursis) rend un combat bruité → 3 essais, majorité (≥2 wins) = « battable ».
 function beats(makeEnemy, timeLimit) {
   let w = 0
-  for (let i = 0; i < 3; i++) if (simWin(makeEnemy, timeLimit)) w++
+  for (let i = 0; i < 3; i++) if (simWin(makeEnemy, timeLimit).win) w++
   return w >= 2
 }
 
@@ -154,8 +159,14 @@ for (const def of RAID_LIST) {
     else break
   }
   const verdict = last === 0 ? '⛔ T1 hors de portée' : last >= 15 ? '😴 tous tiers (≥15)' : `🧱 mur T${last + 1}`
-  const note = def.icon === '🕳️' ? '  (Abîme = DUO en réalité → un peu plus dur que cette sim mono-boss)' : ''
+  const note = def.icon === '🕳️' ? '  (Abîme = duo réel → un peu plus dur que cette sim mono-boss)' : ''
   console.log(`  ${def.icon} ${def.name.padEnd(22)} max T${String(last).padStart(2)}   ${verdict}${note}`)
+  // Diagnostic du mur : qui tombe en premier au tier échoué, et à combien de PV est le boss.
+  if (last < 15) {
+    const wt = last + 1
+    const d = simWin((n) => makeRaidBoss(def, wt, el, save.bestStage ?? 1, n), raidBerserkTime(def, wt))
+    if (d.firstDead) console.log(`        └─ T${wt} : ${d.firstDead} tombe à ${d.firstT.toFixed(0)}s · boss encore à ${(d.bossLeft * 100).toFixed(0)}% PV`)
+  }
 }
 
 /* ====================================================================== */
