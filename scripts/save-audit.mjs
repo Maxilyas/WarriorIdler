@@ -24,19 +24,25 @@ const M = await load(`
   export { generateItem } from './src/game/items.ts'
   export { makeDungeonEnemy, dungeonFights, DUNGEONS } from './src/game/dungeons.ts'
   export { RAID_LIST, makeRaidBoss, raidBerserkTime } from './src/game/raids.ts'
-  export { partyCombatStep, resetAllCooldowns, fuelReset, crescendoReset } from './src/game/combatEngine.ts'
+  export { partyCombatStep, resetAllCooldowns, fuelReset, crescendoReset, crescendoBonus } from './src/game/combatEngine.ts'
   export { computeGlobalMods } from './src/game/upgrades.ts'
   export { achievementBonuses } from './src/game/achievements.ts'
   export { sanitizeRaw, freshSave } from './src/game/save.ts'
   export { getPower } from './src/game/powers.ts'
   export { getTalent } from './src/game/talents.ts'
+  export { craftMods } from './src/game/metiers.ts'
+  export { condGemMods } from './src/game/condGems.ts'
+  export { equippedTimeRunes, timeRuneMods } from './src/game/enchants.ts'
+  export { activeBrewBuffs, teamPactMods, teamGemOpts } from './src/game/storeHelpers.ts'
+  export { maitriseBonus } from './src/game/biomeBonus.ts'
 `)
 const {
   makeCharacter, charDerived, charDamageProfile, charDps, charMaxHp, charEhp, charCombatMods,
   talentsSpent, teamTalentPool, setGlobalCombatMods, profileDamageMult, EQUIP_SLOTS, generateItem,
   makeDungeonEnemy, dungeonFights, DUNGEONS, RAID_LIST, makeRaidBoss, raidBerserkTime,
-  partyCombatStep, resetAllCooldowns, fuelReset, crescendoReset,
+  partyCombatStep, resetAllCooldowns, fuelReset, crescendoReset, crescendoBonus,
   computeGlobalMods, achievementBonuses, sanitizeRaw, freshSave, getPower, getTalent,
+  craftMods, condGemMods, equippedTimeRunes, timeRuneMods, activeBrewBuffs, teamPactMods, teamGemOpts, maitriseBonus,
 } = M
 
 const fmt = (n) => n >= 1e12 ? (n / 1e12).toFixed(2) + 'T' : n >= 1e9 ? (n / 1e9).toFixed(2) + 'Md' : n >= 1e6 ? (n / 1e6).toFixed(2) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : Math.round(n).toString()
@@ -75,6 +81,18 @@ setGlobalCombatMods({ power: eco.power, attackSpeed: eco.attackSpeed, vitality: 
 
 const c = save.characters[save.activeChar] ?? save.characters[0]
 
+// ---- KIT DE COMBAT DU JOUEUR (full-fidélité) : reconstruit le `mods` comme tickRaid/tickDungeon ----
+// gemmes de condition + runes de temps + pactes + consommables ACTIFS → passés à partyCombatStep.
+// (On omet la régén/drain/dmgMult d'escalade propres au contenu, et le bonus huile×élément, mineurs.)
+const craft = craftMods(save.metiers ?? {})
+const cond = condGemMods(save.characters, craft.gemSpec, teamGemOpts(save, craft))
+const runes = timeRuneMods(equippedTimeRunes(save.characters), craft.runisteTempo)
+const buffs = activeBrewBuffs(save)
+const pact = teamPactMods(save, craft, buffs)
+const heroMult = (1 + maitriseBonus(save.bestStage ?? 1)) * (1 + crescendoBonus(cond.crescendoCap)) * buffs.dmgMult
+const PLAYER_MODS = { heroMult, cond, runes, pact, content: { antidote: buffs.antidote ?? undefined } }
+const nRunes = equippedTimeRunes(save.characters).size
+
 // DPS total = auto+sorts (charDps) + DoT keystone des auto-attaques (non inclus dans charDps).
 function dotDps(ch) {
   const cm = charCombatMods(ch); if (!cm.dot) return 0
@@ -103,7 +121,7 @@ function simWin(makeEnemy, timeLimit) {
   const death = {}
   let t = 0
   for (; t < timeLimit && enemy.hp > 0 && p.some((x) => x.hp > 0); t += 0.2) {
-    const r = partyCombatStep(p, enemy, 0.2)
+    const r = partyCombatStep(p, enemy, 0.2, PLAYER_MODS)
     p = r.chars; enemy = r.enemy
     for (const ch of p) if (ch.hp <= 0 && !(ch.name in death)) death[ch.name] = t
   }
@@ -130,7 +148,8 @@ console.log(`  DPS ${fmt(dps)} · EHP ${fmt(ehp)} · PV ${fmt(hp)} · record de 
 console.log(`  Stuff : ${Object.entries(rar).map(([r, n]) => `${n}×${r}`).join(', ') || 'aucun'} · ${uniq} effet(s) unique(s)`)
 console.log(`  Mods de compte : puissance ×${eco.power.toFixed(2)} · vit. att. ×${eco.attackSpeed.toFixed(2)} · vitalité ×${eco.vitality.toFixed(2)}`)
 console.log(`  Équipe simulée (${TEAM}) : ${save.characters.map((x) => `${x.name} niv${x.level} ${x.primaryBias} (EHP ${fmt(charEhp(x))})`).join(' · ')}`)
-console.log('  → Donjons/Raids = COMBAT D\'ÉQUIPE réel (heal inclus) ; Sorts/Talents = perso actif.')
+console.log(`  Kit de combat (pris en compte) : heroMult ×${heroMult.toFixed(2)} · ${nRunes} rune(s) de temps · élixir ${buffs.dmgMult > 1 ? 'ACTIF' : 'non'} · gemmes de condition + pactes intégrés`)
+console.log('  → Donjons/Raids = COMBAT D\'ÉQUIPE réel (heal + gemmes/runes/pactes/conso inclus) ; Sorts/Talents = perso actif.')
 
 /* ====================================================================== */
 /* 1) DONJONS                                                            */
