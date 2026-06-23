@@ -161,17 +161,16 @@ export function raidUnlocked(def: RaidDef, bestStage: number, progress: Record<R
  * de +15 ilvl/tier → un rung ne saute jamais > +20 (jamais de trivialisation du tier précédent).
  * Les 4 raids de base se chevauchent (loot par type, faits en parallèle) en montant vers 700.
  */
-// v0.35.1 — DIFFICULTÉ FIXE par tier (ne scale PLUS avec bestStage — retour joueur : « le T1 scale
-// avec la puissance de mon palier »). Le tier MONDIAL est ancré à un PALIER de farm ABSOLU : T1 ≈
-// palier 50 (déblocage des raids) … T10 ≈ palier 400 (≈ prestige), soit ~+39 paliers/tier (≈ ×1,9 de
-// puissance/tier, la pente raid d'origine « +4 paliers/tier »). Un joueur SUR-palier out-gear les bas
+// v0.35.1 → v0.36 — DIFFICULTÉ FIXE par tier (ne scale PLUS avec bestStage — retour joueur : « le T1
+// scale avec la puissance de ma vague »). Le tier MONDIAL est ancré à une VAGUE ABSOLUE (chiffres
+// exacts ci-dessous), pas à la puissance courante du joueur : un joueur sur-stuffé out-gear les bas
 // tiers (voulu : il revient les farmer pour la rareté/les mats) ; un joueur calé trouve son tier.
-// L'Abîme (tierOffset +6) extrapole au-delà de 400 → contenu post-prestige. La rareté et l'exigence de
-// résist montent toujours avec le tier mondial. raidIlvl = gear d'époque du palier ancre (lootFarmIlvl).
+// L'Abîme (tierOffset +6) extrapole au-delà du Chapitre 14 → contenu de fin de jeu. La rareté et
+// l'exigence de résistance montent toujours avec le tier mondial.
 // v0.36 — l'ancre des raids suit les CHAPITRES qu'ils gatent (gate-raid §1) : le Raid T(k) ouvre le
-// mur du Chapitre 4+k ≈ stage 40+10k → T1 ancré au Chapitre 5 (stage 50), T10 au Chapitre 14 (stage 140).
-// raidIlvl = gear d'époque du palier ancre (lootFarmIlvl, capé 200) → un build calé sur le Chapitre rend
-// un TTK ~40 s. Fini l'ancre 50→400 du monde ilvl-700.
+// mur du Chapitre 4+k ≈ vague 40+10k → T1 ancré au Chapitre 5 (vague 50), T10 au Chapitre 14 (vague 140),
+// soit +10 vagues/tier. raidIlvl = gear d'époque de la vague ancre (lootFarmIlvl, capé 200) → un build
+// calé sur le Chapitre rend un TTK ~40 s. Fini l'ancre 50→400 du monde ilvl-700.
 const RAID_ANCHOR_LOW = 50    // stage ancre du Tier 1 MONDIAL (mur du Chapitre 5)
 const RAID_ANCHOR_HIGH = 140  // stage ancre du Tier 10 MONDIAL (mur du Chapitre 14)
 const RAID_ANCHOR_SPAN = 10   // nb de tiers mondiaux entre LOW et HIGH (= la pente : +10 stages/tier)
