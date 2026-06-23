@@ -30,7 +30,7 @@ import { GemBadges } from './ItemRow'
 function affixLabel(a: Affix): { name: string; color: string; pct: boolean } {
   if (a.kind === 'stat' && a.stat) { const m = ALL_STAT_META[a.stat]; return { name: m.name, color: m.color, pct: false } }
   if (a.kind === 'dmgType' && a.type) { const m = DAMAGE_TYPES[a.type]; return { name: `Dégâts ${m.name}`, color: m.color, pct: true } }
-  // v0.24 : la résistance est en POINTS (plus en %) → pas de suffixe « % ».
+  // la résistance est en POINTS (plus en %) → pas de suffixe « % ».
   if (a.kind === 'resist' && a.type) { const m = DAMAGE_TYPES[a.type]; return { name: `Résist. ${m.name}`, color: m.color, pct: false } }
   return { name: '?', color: '#94a3b8', pct: false }
 }
@@ -310,9 +310,9 @@ function CraftSection({ item }: { item: Item }) {
   const tCost = Math.round(transmuteCost(item) * cm)
   const OFFENSIVE: OffensiveStat[] = ['force', 'agilite', 'intelligence']
 
-  // v0.25 : le prix de la reforge suit les VERROUS posés et les reforges déjà faites sur l'objet.
+  // le prix de la reforge suit les VERROUS posés et les reforges déjà faites sur l'objet.
   const rCost = Math.round(reforgeCost(item, locked.length) * cm)
-  // v0.25.x : surillvl PLAFONNÉ à l'iLvl max du contenu débloqué (+ marge), sur-coût ×4/pas au-dessus.
+  // surillvl PLAFONNÉ à l'iLvl max du contenu débloqué (+ marge), sur-coût ×4/pas au-dessus.
   const contentIlvl = maxContentIlvl(bestStage, raidProgress)
   const surTarget = item.ilvl + mods.surillvlStep
   const surCapped = surTarget > contentIlvl + SURILLVL_OVER_MARGIN
@@ -321,7 +321,7 @@ function CraftSection({ item }: { item: Item }) {
   const rawA = ascendCost(item, contentRarityTier(bestStage, bestRaidTier(raidProgress)))
   const aCost = { eclats: Math.round(rawA.eclats * cm), noyau: Math.round(rawA.noyau * cm), fragments: Math.round((rawA.fragments ?? 0) * cm), poussiere: Math.round((rawA.poussiere ?? 0) * cm), cosmic: Math.round((rawA.cosmic ?? 0) * cm) }
   const nr = nextRarity(item.rarity)
-  // v0.25 : verrou raid sur l'Ascension (miroir du craft) — tier cible − 8.
+  // verrou raid sur l'Ascension (miroir du craft) — tier cible − 8.
   const ascGate = nr ? craftRaidGate(RARITIES[nr].tier) : 0
   const ascRaidOk = ascGate <= bestRaidTier(raidProgress)
   const Locked = ({ label, metier }: { label: string; metier: string }) => (
@@ -569,7 +569,7 @@ function GemSection({ item }: { item: Item }) {
   const drillSocket = useGame((s) => s.drillSocket)
   const mods = craftMods(useGame((s) => s.metiers))
   const [open, setOpen] = useState(false)
-  // v0.27 — APERÇU AVANT SERTISSAGE (mobile : plus de tooltip hover). 1er tap = sélection +
+  // APERÇU AVANT SERTISSAGE (mobile : plus de tooltip hover). 1er tap = sélection +
   // description ; 2e tap sur « Sertir » = pose la gemme.
   const [pickGem, setPickGem] = useState<string | null>(null)
 
@@ -652,7 +652,7 @@ function GemSection({ item }: { item: Item }) {
                     )
                   })}
                 </div>
-                {/* v0.27 — aperçu de la gemme sélectionnée + confirmation (lisible au tap, sans hover). */}
+                {/* aperçu de la gemme sélectionnée + confirmation (lisible au tap, sans hover). */}
                 {(() => {
                   const sel = condStock.find((g) => g.key === pickGem)
                   if (!sel) return <div className="text-[9px] italic text-slate-500">Touche une gemme pour voir son effet, puis sertis-la.</div>
@@ -674,7 +674,7 @@ function GemSection({ item }: { item: Item }) {
               </div>
             )
           )}
-          {/* 🪛 PERÇAGE (v0.26) : une châsse de plus, une seule fois par objet — très cher. */}
+          {/* 🪛 PERÇAGE : une châsse de plus, une seule fois par objet — très cher. */}
           {canDrill && (
             <button
               disabled={gemDust < dCost.dust || gold < dCost.gold}
@@ -692,7 +692,7 @@ function GemSection({ item }: { item: Item }) {
   )
 }
 
-/** Rune : se GRAVE depuis le stash (v0.25 : graver CONSOMME une rune possédée — drop de raid). */
+/** Rune : se GRAVE depuis le stash (graver CONSOMME une rune possédée — drop de raid). */
 function EnchantSection({ item }: { item: Item }) {
   const essence = useGame((s) => s.essence)
   const poussiere = useGame((s) => s.poussiere)
@@ -830,7 +830,7 @@ function RoleChip({ active, onClick, label }: { active: boolean; onClick: () => 
   )
 }
 
-/** Pièce de set : nom, pièces portées, paliers de bonus (actifs en vert). */
+/** Pièce de set : nom, pièces portées, seuils de bonus (actifs en vert). */
 function SetBlock({ item, char }: { item: Item; char: Character }) {
   const def = getSet(item.setId!)
   if (!def) return null

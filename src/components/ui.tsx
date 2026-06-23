@@ -63,7 +63,7 @@ export function ConfirmButton({ onConfirm, className = '', confirmLabel = '⚠ C
 }
 
 /**
- * Puces de CONVERSION (v0.39) d'un passif : « 25% FOR ➜ INT » (transfert) ou « +30% SOIN ⊕ RÉD »
+ * Puces de CONVERSION d'un passif : « 25% FOR ➜ INT » (transfert) ou « +30% SOIN ⊕ RÉD »
  * (additif). Source colorée par la stat d'origine, cible par la stat d'arrivée. Partagé fiche/Codex.
  */
 export function ConversionChips({ convert }: { convert?: PassiveConversion[] }) {

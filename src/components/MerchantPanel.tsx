@@ -310,7 +310,7 @@ function BoxCard({ box: b, gold, fragments, cosmic, qty, bestStage, raidTier, la
   const cosmicCost = (b.costCosmic ?? 0) * effQty
   const cooldownLeft = b.free ? Math.max(0, FREE_BOX_COOLDOWN_MS - (Date.now() - lastFreeBox)) : 0
   const affordable = gold >= goldCost && fragments >= fragCost && cosmic >= cosmicCost && cooldownLeft === 0
-  // v0.43 — fenêtre dynamique = rareté DÉBLOQUÉE du compte, modulée PAR COFFRE (boxRarityWindow).
+  // fenêtre dynamique = rareté DÉBLOQUÉE du compte, modulée PAR COFFRE (boxRarityWindow).
   const rTop = unlockedRarityTier(raidTier)
   const win = boxRarityWindow(b, rTop)
   const minName = RARITY_LIST.find((r) => r.tier === win.floor)

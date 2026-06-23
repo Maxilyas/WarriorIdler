@@ -25,7 +25,7 @@ interface Props {
   onToggleLock?: () => void
 }
 
-/** v0.27 — badge de QUALITÉ « ⭐X/5 » (indicateur chiffré, lisible sans clic). */
+/** Badge de QUALITÉ « ⭐X/5 » (indicateur chiffré, lisible sans clic). */
 export function QualityStars({ stars, className = '' }: { stars?: number; className?: string }) {
   if (stars == null) return null
   return (
@@ -47,7 +47,7 @@ function fmtDelta(n: number): string {
 }
 
 /** Badge gemmes/châsses : icônes des gemmes serties + ◇ par châsse vide.
- *  Les châsses sont RARES (v0.25) → l'indicateur fait ressortir les pièces précieuses d'un coup d'œil. */
+ *  Les châsses sont RARES → l'indicateur fait ressortir les pièces précieuses d'un coup d'œil. */
 export function GemBadges({ item }: { item: Item }) {
   const sockets = itemSockets(item)
   if (sockets <= 0) return null
@@ -101,7 +101,7 @@ export function ItemRow({ item, dpsDelta, ehpDelta, selected, bulkSelected, bulk
       className={'group relative flex w-full items-center gap-2.5 rounded-lg py-1.5 pr-2 text-left transition-colors ' + stateCls}
       style={{ borderLeft: `3px solid ${rarity.color}`, paddingLeft: 8 }}
     >
-      {/* v0.27 — qualité ⭐X/5 dans le coin HAUT-GAUCHE, lisible sans clic. */}
+      {/* qualité ⭐X/5 dans le coin HAUT-GAUCHE, lisible sans clic. */}
       <QualityStars stars={item.stars} className="absolute left-0 top-0 z-10" />
       {/* A3 — case de multi-sélection (mode Sélection mobile / repère visuel). */}
       {bulkMode && (

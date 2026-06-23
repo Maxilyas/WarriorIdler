@@ -3,12 +3,12 @@ import { xpForLevel } from '../game/store'
 import { resolveAvatar, type AvatarBorder } from '../game/avatar'
 
 /**
- * F4 (v0.27) — BADGE DE NIVEAU « à la Overwatch » : un AVATAR (portrait) cerné d'un ANNEAU D'XP,
+ * BADGE DE NIVEAU « à la Overwatch » : un AVATAR (portrait) cerné d'un ANNEAU D'XP,
  * surmonté d'un ÉCUSSON qui représente le niveau. Plus le niveau monte, plus l'écusson est ÉPIQUE
  * (couleurs + éclat + nombre de pointes de l'étoile). Affiché sur la page Combat et l'aperçu Héros.
  */
 
-/** Paliers d'écusson : le rang change tous les ~25 niveaux et devient plus beau (couleurs/éclat/pointes). */
+/** Crans d'écusson : le rang change tous les ~25 niveaux et devient plus beau (couleurs/éclat/pointes). */
 const LEVEL_TIERS = [
   { min: 1, name: 'Bronze', c1: '#7c4a13', c2: '#f0b250', spikes: 6, glow: 0 },
   { min: 10, name: 'Argent', c1: '#566173', c2: '#dbe4ee', spikes: 6, glow: 0 },
@@ -79,8 +79,8 @@ export function LevelBadge({ char, size = 64, showLevel = true }: { char: Charac
   const tier = levelTier(lvl)
   const need = xpForLevel(lvl)
   const progress = need > 0 ? Math.max(0, Math.min(1, char.xp / need)) : 1
-  // 🎨 (v0.28) portrait procédural : palette de fond + emblème central choisis (défaut par classe).
-  // 🏅 (v0.32) parures de prestige : bordure + aura débloquées par haut fait (étage Légende).
+  // 🎨 portrait procédural : palette de fond + emblème central choisis (défaut par classe).
+  // 🏅 parures de prestige : bordure + aura débloquées par haut fait (étage Légende).
   const { pal, emb, border, aura } = resolveAvatar(char.primaryBias, char.avatar)
   const glyph = emb.glyph
   const uid = String(char.id).replace(/[^a-z0-9]/gi, '') || 'x'
@@ -97,7 +97,7 @@ export function LevelBadge({ char, size = 64, showLevel = true }: { char: Charac
   const borderRad = ringR - ringW - 1
   const borderW = Math.max(1.5, size * 0.028)
   const auraSize = size * 1.18
-  // v0.36 — `showLevel=false` : portrait NU (sans écusson de niveau ni anneau d'XP). Le niveau étant
+  // `showLevel=false` : portrait NU (sans écusson de niveau ni anneau d'XP). Le niveau étant
   // désormais un NIVEAU DE COMPTE unique, on ne le répète plus sur chaque héros (cf. lot 8).
   const badgeH = showLevel ? totalH : size
 
@@ -130,7 +130,7 @@ export function LevelBadge({ char, size = 64, showLevel = true }: { char: Charac
       </svg>
       {/* Glyphe d'avatar (portrait de substitution) */}
       <div className="absolute left-0 top-0 flex items-center justify-center" style={{ width: size, height: size, fontSize: size * 0.38, paddingBottom: size * 0.04 }}>{glyph}</div>
-      {/* Écusson de niveau (étoile + hexagone), évolue avec le palier — masqué si showLevel=false */}
+      {/* Écusson de niveau (étoile + hexagone), évolue avec la vague — masqué si showLevel=false */}
       {showLevel && (
       <svg width={size} height={emblemH} className="absolute left-0" style={{ top: size - emblemH * 0.45, filter: tier.glow ? `drop-shadow(0 0 ${tier.glow}px ${tier.c2})` : undefined }}>
         <defs>

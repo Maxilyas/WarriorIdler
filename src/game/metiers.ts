@@ -11,7 +11,7 @@
  * Progression : le NIVEAU (1→25) monte par la PRATIQUE — chaque action du métier donne de l'XP,
  * proportionnelle à la difficulté. 1 niveau = 1 point d'arbre. Les nœuds mêlent déblocages de
  * fonctions et bonus passifs ; les spécialisations (groupes exclusifs) se respéc contre de l'or.
- * Double verrou : le PALIER (bestStage) ouvre le métier et ses nœuds de contenu, l'ARBRE ouvre
+ * Double verrou : la VAGUE (bestStage) ouvre le métier et ses nœuds de contenu, l'ARBRE ouvre
  * les fonctions — le Savoir-faire 🔧 d'antan devient l'XP du Forgeron (plus une monnaie).
  */
 
@@ -27,7 +27,7 @@ export interface MetierDef {
   color: string
   /** Le « verbe » du métier — son identité en une ligne. */
   verb: string
-  /** Palier (bestStage) qui ouvre le métier. */
+  /** Vague (bestStage) qui ouvre le métier. */
   unlockStage: number
 }
 
@@ -155,7 +155,7 @@ export interface MetierNode {
   maxRank: number
   /** Niveau de métier requis pour apprendre le 1er rang. */
   minLevel?: number
-  /** Palier (bestStage) requis — synchronise le craft avec le contenu du jeu. */
+  /** Vague (bestStage) requise — synchronise le craft avec le contenu du jeu. */
   minStage?: number
   /** Nœud parent requis (rang ≥ 1). */
   requires?: string

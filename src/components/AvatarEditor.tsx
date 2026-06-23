@@ -3,8 +3,8 @@ import { AVATAR_PALETTES, AVATAR_EMBLEMS, AVATAR_BORDERS, AVATAR_AURAS, resolveA
 import { unlockedCosmetics } from '../game/achievements'
 import { LevelBadge } from './LevelBadge'
 
-/** 🎨 Éditeur de portrait (v0.28, C1 + B2) — palette + emblème par héros, avec cosmétiques premium
- *  débloqués contre Poussière d'étoile 🌌. v0.32 : parures de prestige (bordure + aura) débloquées
+/** 🎨 Éditeur de portrait — palette + emblème par héros, avec cosmétiques premium
+ *  débloqués contre Poussière d'étoile 🌌. Parures de prestige (bordure + aura) débloquées
  *  par les hauts faits de l'étage Légende. Aperçu live via LevelBadge. */
 export function AvatarEditor() {
   const characters = useGame((s) => s.characters)
@@ -14,7 +14,7 @@ export function AvatarEditor() {
   const unlockCosmetic = useGame((s) => s.unlockCosmetic)
   const achievements = useGame((s) => s.achievements)
   const eventCosmetics = useGame((s) => s.eventCosmetics)
-  // v0.36 (lot 8) — apparence de COMPTE : éditée sur l'ancre characters[0], affichée par UN badge unique.
+  // apparence de COMPTE : éditée sur l'ancre characters[0], affichée par UN badge unique.
   const acct = characters[0]
   if (!acct) return null
   const { pal, emb, border, aura } = resolveAvatar(acct.primaryBias, acct.avatar)

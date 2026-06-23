@@ -10,7 +10,7 @@ import { QualityStars } from './ItemRow'
 import type { EquipSlotId } from '../game/types'
 
 /**
- * Lot 5 (v0.27) — ÉVEIL PRIMORDIAL : dépense des Échos dans la Constellation, et reset DUR contre
+ * ÉVEIL PRIMORDIAL : dépense des Échos dans la Constellation, et reset DUR contre
  * une moisson d'Échos (en gardant 1 Relique). Visible une fois l'Abîme débloqué.
  */
 export function PrestigePanel() {

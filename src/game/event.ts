@@ -33,7 +33,7 @@ export interface EventMilestone {
   aura?: boolean
 }
 
-/** Paliers d'invasion (points = kills de la semaine). Capstone = aura exclusive + grosse poussière. */
+/** Seuils d'invasion (points = kills de la semaine). Capstone = aura exclusive + grosse poussière. */
 export const EVENT_MILESTONES: EventMilestone[] = [
   { points: 200, reward: { poussiere: 40 } },
   { points: 600, reward: { eclats: 200, noyau: 8 } },
@@ -73,7 +73,7 @@ export function eventPoints(ev: EventState, totalKills: number): number {
   return Math.max(0, totalKills - ev.baseline)
 }
 
-/** Paliers atteints non réclamés → red-dot de l'icône 🎉. */
+/** Seuils atteints non réclamés → red-dot de l'icône 🎉. */
 export function eventClaimableCount(ev: EventState, totalKills: number): number {
   const pts = eventPoints(ev, totalKills)
   let n = 0

@@ -15,7 +15,7 @@ import { ChestModal } from './components/ChestModal'
 import { ChoiceModal } from './components/ChoiceModal'
 import { WelcomeScreen } from './components/WelcomeScreen'
 
-// v0.40.5 (perf, lot 8) — CODE-SPLITTING : les panneaux NON-combat sont chargés à la demande
+// CODE-SPLITTING : les panneaux NON-combat sont chargés à la demande
 // (React.lazy) → ils sortent du bundle initial, qui ne garde que le combat + l'accueil (démarrage
 // plus rapide). Exports nommés → on remappe en `default` pour `import()`. La PWA (generateSW)
 // précache TOUS les chunks → hors-ligne OK même pour un onglet jamais ouvert.
@@ -36,7 +36,7 @@ const TICK_MS = 200
 type Tab = 'combat' | 'stuff' | 'atelier' | 'heros' | 'exped' | 'marche'
 type DeskTab = 'stuff' | 'atelier' | 'heros' | 'exped' | 'marche' | 'grimoire'
 
-/** Paliers de déblocage (révélation progressive de l'UI). v0.31 — avancés pour l'onboarding : on
+/** Vagues de déblocage (révélation progressive de l'UI), avancées pour l'onboarding : on
  *  découvre les systèmes TÔT (pendant que le combat est encore lent), guidé par la chaîne « Premiers
  *  Pas ». Marché 3 · Atelier/Forge 6 · Donjons 12 · Raids 50 (endgame, inchangé). */
 const MARCHE_STAGE = 3
@@ -126,7 +126,7 @@ function GameApp() {
   })
 
   // Boucle de tick — suspendue en arrière-plan (F3) ET tant que l'écran d'accueil n'est pas franchi
-  // (sinon le combat lancerait les paliers — et le butin — avant le choix de spé).
+  // (sinon le combat lancerait les vagues — et le butin — avant le choix de spé).
   useEffect(() => {
     if (paused || !onboarded) return
     const id = setInterval(() => tick(TICK_MS / 1000), TICK_MS)
@@ -211,7 +211,7 @@ function GameApp() {
   const unlocked: Record<Tab, boolean> = { combat: true, stuff: true, atelier: atelierUnlocked, heros: true, exped: expedUnlocked, marche: marcheUnlocked }
   const mobileTabs = TABS.filter((t) => unlocked[t.id])
   const deskTabs = (['stuff', 'atelier', 'heros', 'exped', 'marche', 'grimoire'] as const).filter((t) => t === 'grimoire' || unlocked[t])
-  // v0.36 — pool de talents PARTAGÉ (compte), dérivé : badge non gonflé par les alts.
+  // pool de talents PARTAGÉ (compte), dérivé : badge non gonflé par les alts.
   const talentPoints = teamTalentPool(characters, upgrades.talentBonus ?? 0)
 
   // Monnaies : l'en-tête mobile n'en montre que 2 + un compteur ; le détail vit dans une feuille

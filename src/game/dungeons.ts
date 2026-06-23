@@ -40,7 +40,7 @@ export interface DungeonDef {
   traitLabel: string
   /** Type d'attaque des ennemis (flavor — PAS de mur de résistance). */
   element: DamageType
-  /** Palier de farm requis pour débloquer. */
+  /** Vague de farm requise pour débloquer. */
   unlockStage: number
   /**
    * Ancre de DIFFICULTÉ (sert au décalage de départ) quand elle diffère de la vague de déblocage —

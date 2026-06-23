@@ -399,7 +399,7 @@ export function materialYieldAtChapter(material: keyof CraftCost, chapter: numbe
   return cost > 0 ? Math.max(1, Math.round(cost / CRAFT_RUNS_TARGET)) : 0
 }
 /** Multiplicateur de coût « AU-DESSUS DU CONTENU » : ×OVER_CONTENT_STEEP par cran de rareté au-dessus
- *  de ce que le farm donne au Palier. +1 = ×4 (dizaines de runs), +2 = ×16 (centaines), +3 = ×64. */
+ *  de ce que le farm donne à la vague. +1 = ×4 (dizaines de runs), +2 = ×16 (centaines), +3 = ×64. */
 export const OVER_CONTENT_STEEP = 4
 export function overContentMult(targetTier: number, contentTier: number): number {
   return Math.pow(OVER_CONTENT_STEEP, Math.max(0, targetTier - contentTier))

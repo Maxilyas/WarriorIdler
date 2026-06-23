@@ -84,7 +84,7 @@ export function createWorldSlice(set: GameSet, get: GameGet): Pick<GameState,
 
     // la ROTATION HORAIRE FORCÉE est DÉSACTIVÉE : le biome est un CHOIX du joueur (l'axe
     // élément/résistance du modèle à mur unique — on prépare le biome que le mur exige). On change de
-    // zone via setBiome, jamais subi. (Lot 4 : progression de Palier GLOBALE au lieu de par-biome.)
+    // zone via setBiome, jamais subi. (progression GLOBALE au lieu de par-biome.)
     rotateBiomeIfDue: () => {
       /* no-op : plus de rotation automatique. */
     },

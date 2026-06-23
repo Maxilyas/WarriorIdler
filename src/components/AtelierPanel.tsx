@@ -52,7 +52,7 @@ const ORIENTATIONS: { id: ItemOrientation; label: string }[] = [
 type SubPage = { id: string; label: string; icon: string; hint: string; node: ReactNode }
 
 /**
- * L'Atelier des MÉTIERS (v0.22) — hub des 4 métiers de craft.
+ * L'Atelier des MÉTIERS — hub des 4 métiers de craft.
  * Chaque métier : un niveau monté par la pratique, un arbre (1 point/niveau), son atelier.
  * Forgeron (création + automates) · Joaillier (gemmes) · Runiste (runes) · Alchimiste (quintessences/uniques).
  */
@@ -104,7 +104,7 @@ export function AtelierPanel() {
       ) : (
         (() => {
           // E1 — chaque métier est découpé en SOUS-PAGES (moins dense, mobile-first). L'Arbre
-          // a sa propre page ; les pages non pertinentes (ex. Automates < palier 65) sont MASQUÉES.
+          // a sa propre page ; les pages non pertinentes (ex. Automates < vague 65) sont MASQUÉES.
           const treePage: SubPage = metier === 'forgeron'
             ? { id: 'arbre', label: 'Forge', icon: '⬡', hint: 'Pose tes tuiles : chaque tuile doit toucher une tuile déjà forgée (ou le Creuset central).', node: <ForgeBoard /> }
             : { id: 'arbre', label: 'Arbre', icon: '🌳', hint: 'Dépense tes points de métier dans les compétences.', node: <MetierTree metier={metier} alwaysOpen /> }
@@ -114,7 +114,7 @@ export function AtelierPanel() {
               { id: 'creer', label: 'Créer', icon: '🔨', hint: 'Forge une pièce neuve, au niveau de ton meilleur contenu.', node: <ForgeronWorkshop /> },
               { id: 'procedes', label: 'Procédés', icon: '⚙️', hint: 'Contrats de forge · Fonderie (→ Lingots) · Bac de trempe.', node: <ForgeProcedes /> },
               // Automates : page visible dès que le nœud Industrialisation est appris (survit au prestige,
-              // contrairement au palier qui reset) — ou au palier 65 (avant de l'avoir appris).
+              // contrairement à la vague qui reset) — ou à la vague 65 (avant de l'avoir appris).
               ...(nodeRank(metiers, 'forgeron', 'automates') > 0 || bestStage >= 65 ? [{ id: 'automates', label: 'Automates', icon: '🤖', hint: 'Envoie des automates farmer le contenu déjà vaincu.', node: <AutomateWorkshop /> }] : []),
               treePage,
               { id: 'build', label: 'Build', icon: '📊', hint: 'Synergies hexagonales : engagement par Voie, Chaînes, Creuset et effets cumulés.', node: <ForgeBuildPanel /> },
@@ -236,8 +236,8 @@ function orderBranch(nodes: MetierNode[]): { node: MetierNode; depth: number }[]
   return out
 }
 
-/** Arbre du métier (v0.26) : nœuds groupés PAR BRANCHE, respec ciblé par branche.
- *  v0.28 E2 (pilote Forgeron) : rendu en ARBRE À NŒUDS (dépendances visibles + keystones). */
+/** Arbre du métier : nœuds groupés PAR BRANCHE, respec ciblé par branche.
+ *  Rendu en ARBRE À NŒUDS (dépendances visibles + keystones). */
 function MetierTree({ metier, alwaysOpen }: { metier: MetierId; alwaysOpen?: boolean }) {
   const metiers = useGame((s) => s.metiers)
   const bestStage = useGame((s) => s.bestStage)
@@ -344,7 +344,7 @@ function MetierTree({ metier, alwaysOpen }: { metier: MetierId; alwaysOpen?: boo
 }
 
 /* ------------------------------------------------------------------ */
-/* ⬡ La Forge hexagonale (v0.41, Lot 1) — planche à tuiles du Forgeron */
+/* ⬡ La Forge hexagonale — planche à tuiles du Forgeron */
 /* ------------------------------------------------------------------ */
 
 const FAMILY_LABEL: Record<string, string> = { qualite: 'Qualité', ressource: 'Ressource', idle: 'Idle', chance: 'Chance' }
@@ -362,7 +362,7 @@ function tileColor(n: MetierNode): string {
 }
 
 /**
- * v0.41 — La Forge hexagonale : allocation par ADJACENCE (le build = le placement).
+ * La Forge hexagonale : allocation par ADJACENCE (le build = le placement).
  * Le Creuset (cœur) est acquis d'office ; une tuile se forge si elle touche une tuile possédée.
  * Remplace MetierTree pour le seul Forgeron ; les 3 autres métiers gardent la liste.
  */
@@ -493,7 +493,7 @@ function ForgeBoard() {
   )
 }
 
-/** v0.41 (Lot 4) — Le tableau de Build : engagement par Voie + synergies hexagonales + effets cumulés. */
+/** Le tableau de Build : engagement par Voie + synergies hexagonales + effets cumulés. */
 function ForgeBuildPanel() {
   const metiers = useGame((s) => s.metiers)
   const automates = useGame((s) => s.automates)
@@ -568,7 +568,7 @@ function ForgeBuildPanel() {
   )
 }
 
-/** v0.41 (Lot 2) — Le Foyer : carte de production idle d'XP + Lingots, indexée sur les Chefs-d'œuvre. */
+/** Le Foyer : carte de production idle d'XP + Lingots, indexée sur les Chefs-d'œuvre. */
 function FoyerPanel() {
   const metiers = useGame((s) => s.metiers)
   const foyer = useGame((s) => s.foyer)
@@ -595,7 +595,7 @@ function FoyerPanel() {
   )
 }
 
-/** v0.41 (Lot 3) — Le mini-jeu de Frappe : génère la Chaleur (ressource) + une série de PARFAITS. */
+/** Le mini-jeu de Frappe : génère la Chaleur (ressource) + une série de PARFAITS. */
 function FrappePanel() {
   const metiers = useGame((s) => s.metiers)
   const chaleur = useGame((s) => s.chaleur)
@@ -673,7 +673,7 @@ function ForgeronWorkshop() {
   const chaleurStreak = useGame((s) => s.chaleurStreak)
   const mods = craftMods(metiers)
 
-  // v0.25 : double horloge — le palier de farm ET le meilleur tier de raid bornent la rareté.
+  // double horloge — la vague de farm ET le meilleur tier de raid bornent la rareté.
   const raidTier = bestRaidTier(raidProgress)
   const maxTier = maxCraftTier(bestStage, raidTier)
   const raidCapped = maxTier < maxCraftTier(bestStage) // le raid est la borne ACTIVE
@@ -690,9 +690,9 @@ function ForgeronWorkshop() {
 
   const isWeapon = type === 'armePrincipale'
   const tier = RARITY_LIST.find((r) => r.id === rarity)!.tier
-  // v0.28 E2 — bonus de création UNIVERSELS (Maître forgeron + Signature) ; plus de corps de métier.
+  // bonus de création UNIVERSELS (Maître forgeron + Signature) ; plus de corps de métier.
   const forge = forgeBonus(mods)
-  // v0.40.1 — la forge crée au niveau de ton FARM (palier) + bonus de métier (plus les donjons/raids).
+  // la forge crée au niveau de ton FARM (vague) + bonus de métier (pas les donjons/raids).
   const ilvl = stageIlvl(Math.max(1, bestStage)) + forge.ilvlBonus
   const activeSignature = signature && forge.signatures?.includes(signature) ? signature : null
   const signCost = activeSignature ? Math.max(1, Math.round(signatureLingotCost(tier) * mods.signatureCostMult)) : 0
@@ -812,7 +812,7 @@ function ForgeronWorkshop() {
         )}
       </Section>
 
-      {/* ✒️ Signature (v0.28 E2) : affixe garanti AU CHOIX (universel, débloqué par le nœud Signature) */}
+      {/* ✒️ Signature : affixe garanti AU CHOIX (universel, débloqué par le nœud Signature) */}
       {forge.signatures && (
         <Section title={`✒️ Signature (${signCost > 0 ? `${signCost} 🧱` : 'choisis une ligne garantie'})`}>
           <div className="flex flex-wrap gap-1.5">
@@ -1083,7 +1083,7 @@ function AutomateWorkshop() {
   )
 }
 
-/** v0.27 — la fonderie/trempe ouvre la CARTE COMPLÈTE de l'objet au clic (cohérent avec le Stuff). */
+/** la fonderie/trempe ouvre la CARTE COMPLÈTE de l'objet au clic (cohérent avec le Stuff). */
 function ItemCardSheet({ item, onClose }: { item: Item; onClose: () => void }) {
   const characters = useGame((s) => s.characters)
   const activeChar = useGame((s) => s.activeChar)
@@ -1110,7 +1110,7 @@ function ItemCardSheet({ item, onClose }: { item: Item; onClose: () => void }) {
 }
 
 /**
- * v0.26 — Procédés du Forgeron : 📋 Contrats quotidiens (forge la pièce demandée → Lingots 🧱),
+ * Procédés du Forgeron : 📋 Contrats quotidiens (forge la pièce demandée → Lingots 🧱),
  * 🫕 Fonderie (objet Rare+ du sac → Lingots) et 🔥 Bac de trempe (+1 iLvl par 24 h réelles).
  */
 function ForgeProcedes() {
@@ -1127,7 +1127,7 @@ function ForgeProcedes() {
   const collectTempering = useGame((s) => s.collectTempering)
   const [fonderieOpen, setFonderieOpen] = useState(false)
   const [trempeOpen, setTrempeOpen] = useState(false)
-  // v0.27 — objet dont la CARTE COMPLÈTE est ouverte (clic sur une ligne fonderie/trempe).
+  // objet dont la CARTE COMPLÈTE est ouverte (clic sur une ligne fonderie/trempe).
   const [viewItem, setViewItem] = useState<Item | null>(null)
 
   if (!mods.contrats && !mods.fonderie && !mods.trempeLente) return null
@@ -1182,7 +1182,7 @@ function ForgeProcedes() {
               {smeltable.length === 0 && <div className="text-[9.5px] italic text-slate-500">Rien à fondre (Rare+ uniquement).</div>}
               {smeltable.map((it) => (
                 <div key={it.id} className="flex items-center gap-1.5 rounded bg-black/20 px-1.5 py-1 text-[10px]">
-                  {/* v0.27 — clic = carte complète de l'objet (pour décider de fondre). */}
+                  {/* clic = carte complète de l'objet (pour décider de fondre). */}
                   <button onClick={() => setViewItem(it)} className="flex min-w-0 flex-1 items-center gap-1 truncate text-left" style={{ color: RARITIES[it.rarity].color }}>
                     <QualityStars stars={it.stars} />
                     <span className="truncate hover:underline">{it.name}</span>
@@ -1240,7 +1240,7 @@ function ForgeProcedes() {
         </div>
       )}
 
-      {/* v0.27 — carte complète de l'objet (clic sur une ligne fonderie/trempe). */}
+      {/* carte complète de l'objet (clic sur une ligne fonderie/trempe). */}
       {viewItem && <ItemCardSheet item={viewItem} onClose={() => setViewItem(null)} />}
     </div>
   )
@@ -1255,7 +1255,7 @@ function qMark(q: 0 | 1 | 2) {
   return q !== 1 ? <span style={{ color: GEM_QUALITIES[q].color }}>{GEM_QUALITIES[q].mark}</span> : null
 }
 
-/** 💎 Mes gemmes (v0.28 E2 part 2) — stock en GRILLE DE CARTES par famille + actions (fusion/corruption/
+/** 💎 Mes gemmes — stock en GRILLE DE CARTES par famille + actions (fusion/corruption/
  *  broyage) et troc. Visuel, scannable, fini le scroll de lignes denses. */
 function GemStock() {
   const gems = useGame((s) => s.gems)
@@ -1365,7 +1365,7 @@ function GemStock() {
   )
 }
 
-/** ✂️ Créer (v0.28 E2 part 2) — Tailler + Acheter UNIFIÉS : choisis une famille, puis chaque gemme
+/** ✂️ Créer — Tailler + Acheter UNIFIÉS : choisis une famille, puis chaque gemme
  *  est une carte avec ses deux actions côte à côte. Fini les deux listes séparées. */
 function GemCreate() {
   const gems = useGame((s) => s.gems)
@@ -1434,7 +1434,7 @@ function RunisteWorkshop() {
   const mods = craftMods(metiers)
   const [forgeOpen, setForgeOpen] = useState(false)
 
-  // v0.28 E2 — carte de rune (visuel moderne, remplace les lignes denses).
+  // carte de rune (visuel moderne, remplace les lignes denses).
   const runeCard = (e: (typeof ENCHANTS)[number]) => {
     const n = runesOwned[e.id] ?? 0
     const cost = runeForgeCost(e, runeCrafted[e.id] ?? 0)
@@ -1539,7 +1539,7 @@ function AlchimisteWorkshop() {
     <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[9.5px] text-emerald-300">{label} · {remainingMin(until)} min</span>
   )
 
-  // v0.28 E2 — panneau réutilisable (sous-section moderne, encadrée).
+  // panneau réutilisable (sous-section moderne, encadrée).
   const Panel = ({ title, children }: { title: ReactNode; children: ReactNode }) => (
     <div className="rounded-lg border border-emerald-800/30 bg-black/20 p-2">
       <div className="mb-1.5 text-[10px] font-semibold text-emerald-300/80">{title}</div>

@@ -63,7 +63,7 @@ export function RaidPanel() {
         ses coups frappent jusqu'à ×5. Seule source de stuff <b className="text-slate-300">Céleste → Transcendant</b>.
       </p>
 
-      {/* v0.27 (Lot 3 · Préparation) — DPS/PV d'équipe + TIER « PRÊT » par raid débloqué (aperçu global). */}
+      {/* DPS/PV d'équipe + TIER « PRÊT » par raid débloqué (aperçu global). */}
       <div className="mb-2 rounded-lg border border-slate-800 bg-[#0d111a] px-2.5 py-1.5 text-[10.5px]">
         <div>
           <span className="text-slate-500">🧭 Préparation — </span>
@@ -87,7 +87,7 @@ export function RaidPanel() {
         <div className="mt-0.5 text-[9px] leading-snug text-slate-600">« prêt » = DPS ET PV au-dessus du conseillé. La résistance se vérifie par boss (fiche ci-dessous).</div>
       </div>
 
-      {/* v0.35.1 — les raids sont du contenu de GROUPE : on pousse explicitement le recrutement (le bouton
+      {/* les raids sont du contenu de GROUPE : on pousse explicitement le recrutement (le bouton
           vivait, caché, dans le Marché). Visible tant que l'équipe n'est pas pleine. */}
       {anyUnlocked && characters.length < 3 && (
         <div className="mb-2 rounded-lg border border-indigo-700/50 bg-indigo-950/20 px-2.5 py-1.5 text-[10.5px] leading-snug text-indigo-200">
@@ -136,7 +136,7 @@ export function RaidPanel() {
 }
 
 /**
- * FICHE DE BOSS (v0.24 §5.4) : exigences de résistance du tier, type par type, face au
+ * FICHE DE BOSS : exigences de résistance du tier, type par type, face au
  * MEMBRE LE PLUS FAIBLE de l'équipe (les novas frappent tout le monde). Vert = au cap (×1),
  * orange = proche, rouge = déficit (le multiplicateur subi est affiché).
  */
@@ -214,7 +214,7 @@ function RaidCard({ def, unlocked, progress, cleared, maxTier, trophies, bestSta
           <span className="text-[10px] text-slate-600">🔒 Verrouillé</span>
         </div>
         {gate ? (
-          // v0.27 — porte ENDGAME : atteindre le tier requis sur TOUS les raids de base.
+          // porte ENDGAME : atteindre le tier requis sur TOUS les raids de base.
           <div className="mt-1 text-[10.5px] text-slate-500">
             <div>Contenu endgame — requiert le <span className="text-rose-300">Tier {gate.tier}</span> sur chaque raid :</div>
             <div className="mt-1 flex flex-wrap gap-1.5">
@@ -241,7 +241,7 @@ function RaidCard({ def, unlocked, progress, cleared, maxTier, trophies, bestSta
     )
   }
 
-  // v0.25.x : les PV des boss scalent avec la TAILLE de l'équipe → le DPS conseillé aussi.
+  // les PV des boss scalent avec la TAILLE de l'équipe → le DPS conseillé aussi.
   const recDps = recommendedDps(def, t, bestStage, characters.length)
   const recEhp = recommendedEhp(def, t, bestStage)
   const dpsOk = partyDps >= recDps

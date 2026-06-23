@@ -42,7 +42,7 @@ export const IMPORT_KEY = SAVE_KEY + '.import'
 export interface SaveData {
   characters: Character[]
   activeChar: number
-  /** Palier courant DU BIOME ACTIF. */
+  /** Vague courante DU BIOME ACTIF. */
   stage: number
   /** Meilleure vague tous biomes confondus (= max sur biomeBest). */
   bestStage: number
@@ -52,7 +52,7 @@ export interface SaveData {
   nextRotateAt: number
   /** biome FORCÉ (payé en Fragments) jusqu'à cet horodatage (0 = rotation libre). */
   biomeLockUntil: number
-  /** Palier courant mémorisé par biome (le biome actif reflète `stage`). */
+  /** Vague courante mémorisée par biome (le biome actif reflète `stage`). */
   biomeStages: Record<BiomeId, number>
   /** Meilleure vague atteinte par biome. */
   biomeBest: Record<BiomeId, number>

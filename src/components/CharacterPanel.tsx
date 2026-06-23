@@ -25,14 +25,14 @@ const VALUE_EFFECTS: ReadonlySet<string> = new Set([
 function powerDetail(p: PowerDef, derived: DerivedStats, weaponType: DamageType) {
   const value = Math.round((p.magnitude ?? 0) * abilityPower(derived, powerScale(p)))
   const cd = (p.cooldown ?? 0) * (1 - derived.cdr)
-  // v0.37 : TOUS les sorts à dégâts typés (nukes, mais aussi finisseurs/générateurs/détonations/venins/
+  // TOUS les sorts à dégâts typés (nukes, mais aussi finisseurs/générateurs/détonations/venins/
   // hybrides — cf. powerHasDamageType) portent un type. Sans type explicite → celui de l'ARME équipée.
   const isDmg = powerHasDamageType(p)
   const type: DamageType | undefined = isDmg ? powerDamageType(p, weaponType) : p.damageType
   return { value, cd, type, dmg: isDmg, scale: scaleLabel(p), showValue: VALUE_EFFECTS.has(p.effect ?? '') }
 }
 
-/** Chip « type du sort + multiplicateur de matching RÉEL » (v0.37, Piste C). Texte VISIBLE (pas un
+/** Chip « type du sort + multiplicateur de matching RÉEL ». Texte VISIBLE (pas un
  *  simple hover) → lisible aussi sur mobile : le joueur voit que stacker l'élément de ses sorts les
  *  booste. Réutilisé par les actifs ET les générateurs. */
 function SpellTypeChip({ type, tags, profile }: { type: DamageType; tags?: string[]; profile: DamageProfile }) {
@@ -239,7 +239,7 @@ export function CharacterPanel({ view = 'apercu' }: { view?: CharacterView }) {
             )
           })()}
 
-          {/* Résistances (v0.24 : POINTS — annulent l'exigence des boss, voir resist.ts) */}
+          {/* Résistances (POINTS — annulent l'exigence des boss, voir resist.ts) */}
           <div className="rounded-xl border border-slate-800 bg-[#11151f] p-4">
             <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Résistances</div>
             {resistTypes.length === 0 ? (
@@ -368,7 +368,7 @@ export function CharacterPanel({ view = 'apercu' }: { view?: CharacterView }) {
 }
 
 /**
- * PANNEAU RÉSIST (v0.24, DESIGN §6) — la résistance est en POINTS et c'est LE check de stuff
+ * PANNEAU RÉSIST — la résistance est en POINTS et c'est LE check de stuff
  * des raids : ce panneau montre tes 7 résistances ET, en face, les EXIGENCES du boss choisi
  * (raid en cours par défaut) avec le multiplicateur que tu subirais. Boss-aware (option C).
  */
@@ -471,7 +471,7 @@ function PowersSection({ char }: { char: Character }) {
   const support = char.support ?? [null, null, null]
   const equipped = new Set([...char.powers, ...passives, ...support].filter(Boolean) as string[])
   const available = char.unlockedPowers.filter((id) => !equipped.has(id))
-  // MULTI-LANE (v0.39) : les builders ne vont QU'en Soutien ; les boucliers/soins apparaissent dans
+  // MULTI-LANE : les builders ne vont QU'en Soutien ; les boucliers/soins apparaissent dans
   // LES DEUX listes (actif pour le manuel, soutien pour l'auto) — l'unicité tranche au clic.
   const availActive = available.filter((id) => { const p = getPower(id); return p?.kind === 'active' && !isBuilder(p) })
   const availSupport = available.filter((id) => isSupport(getPower(id)))

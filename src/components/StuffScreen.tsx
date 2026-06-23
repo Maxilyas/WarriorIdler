@@ -167,7 +167,7 @@ export function StuffScreen() {
     return arr
   }, [filtered, sort, deltas])
 
-  // (Retiré v0.36) — la pastille « N objets meilleurs » par emplacement reposait sur `itemScore` BRUT
+  // (Retiré) — la pastille « N objets meilleurs » par emplacement reposait sur `itemScore` BRUT
   // (somme de stats) : un verdict mono-dimension trompeur (un objet « moins bon » en score peut être
   // meilleur pour la survie/résist). On garde les SEULS indicateurs honnêtes : les Δ DPS ⚔ / Δ Survie 🛡
   // par ligne d'inventaire (factuels, bi-dimensionnels).
@@ -616,7 +616,7 @@ function PaperDoll({ characters, activeChar, onSwitch, equipment, selectedSlot, 
               }
               style={item && rarity ? { borderColor: gemColor ?? rarity.color + '55', ...(gemColor ? { boxShadow: `0 0 9px 0 ${gemColor}aa` } : {}) } : undefined}
             >
-              {/* v0.27 — qualité ⭐X/5 dans le coin HAUT-GAUCHE, lisible sans clic. */}
+              {/* qualité ⭐X/5 dans le coin HAUT-GAUCHE, lisible sans clic. */}
               {item && <QualityStars stars={item.stars} className="pointer-events-none absolute -left-1.5 -top-1.5 z-10" />}
               {/* Gemme(s) INCRUSTÉE(S) + châsses VIDES (◇) dans le coin haut-droit. */}
               {(gems.length > 0 || emptySockets > 0) && (
@@ -647,7 +647,7 @@ function PaperDoll({ characters, activeChar, onSwitch, equipment, selectedSlot, 
                   ))}
                 </span>
               )}
-              {/* En-tête : nom du slot. (Pastille « ⬆N objets meilleurs » retirée v0.36 — verdict
+              {/* En-tête : nom du slot. (Pastille « ⬆N objets meilleurs » retirée — verdict
                   mono-dimension trompeur ; les Δ DPS/Survie par ligne restent l'arbitrage fiable.) */}
               <div className="flex items-center gap-1">
                 <span className="text-[9px] uppercase tracking-wide text-slate-500">{slot.name}</span>
@@ -675,7 +675,7 @@ function PaperDoll({ characters, activeChar, onSwitch, equipment, selectedSlot, 
                       ✕
                     </span>
                   </div>
-                  {/* v0.27 — rareté · iLvl LISIBLES SANS CLIC ; iLvl coloré selon le retard. */}
+                  {/* rareté · iLvl LISIBLES SANS CLIC ; iLvl coloré selon le retard. */}
                   <div className="mt-0.5 flex items-center gap-1 text-[9px] leading-none">
                     <span className="font-semibold tabular-nums" style={{ color: ilvlLagColor(item.ilvl, contentIlvl) }} title="iLvl — orange/rouge = en retard sur ton contenu actuel">i{item.ilvl}</span>
                     <span style={{ color: RARITIES[item.rarity].color }}>{RARITIES[item.rarity].name}</span>

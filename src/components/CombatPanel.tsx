@@ -44,14 +44,14 @@ const LOG_COLORS: Record<LogKind, string> = {
 }
 
 /**
- * v0.40.5 (perf) — CombatPanel DÉCOUPÉ en 4 enfants abonnés CHACUN à SON état, pour ne plus
+ * CombatPanel DÉCOUPÉ en 4 enfants abonnés CHACUN à SON état, pour ne plus
  * re-render tout l'écran à 5 Hz :
  *   - <LiveOpsCluster> : objectif + cluster (🎯/✉/📅/🎉), counts via sélecteurs PRIMITIFS → ne
  *     re-render pas par tick (le compteur ne bouge pas à chaque frappe).
  *   - <EnemyView> : ennemi/donjon/raid + résistances + techniques + métriques (re-render par tick, normal).
  *   - <TeamView> : héros/actif + barres de sorts (état local controlMode).
  *   - <CombatLog> : journal (état local journalOpen/logFilter ; ne re-render que sur nouvelle entrée).
- * Le PARENT ne s'abonne qu'au SLOW-STATE (palier, biome, verrou, booléens d'instance) → il ne
+ * Le PARENT ne s'abonne qu'au SLOW-STATE (vague, biome, verrou, booléens d'instance) → il ne
  * re-render pas par tick ; les enfants restent montés et se rafraîchissent indépendamment.
  * Les <Sheet> passent par un portal (document.body) → leur position dans l'arbre n'affecte pas le
  * layout flex, et les fragments laissent le `gap-3` du parent s'appliquer entre les blocs.
@@ -67,15 +67,15 @@ export function CombatPanel() {
   const farmLock = useGame((s) => s.farmLock)
   const toggleFarmLock = useGame((s) => s.toggleFarmLock)
 
-  // Biome + palier + verrou fusionnés en une ligne « zone » : le détail s'ouvre en feuille
+  // Biome + vague + verrou fusionnés en une ligne « zone » : le détail s'ouvre en feuille
   // (libère un tiers d'écran pour le journal sur mobile).
   const [zoneOpen, setZoneOpen] = useState(false)
 
   const inInstance = inDungeon || inRaid
   const biomeDef = getBiomeDef(activeBiome)
-  // v0.35 — Palier GLOBAL : le cap de farm = ton record global (le biome ne change pas ton Palier).
+  // Vague GLOBALE : le cap de farm = ton record global (le biome ne change pas ta progression).
   const activeBiomeBest = Math.max(1, bestStage)
-  // Bonus de biome : surcharge tournante + Maîtrise des Zones (v0.25 : Élan supprimé).
+  // Bonus de biome : surcharge tournante + Maîtrise des Zones (Élan supprimé).
   const surge = surgeBiome()
   const maitrise = maitriseBonus(bestStage)
 
@@ -84,7 +84,7 @@ export function CombatPanel() {
       {/* Bandeau du haut : fil conducteur (objectif) + cluster live-ops, isolé pour ne pas re-render par tick. */}
       <LiveOpsCluster />
 
-      {/* Ligne « zone » : biome (→ feuille) + stepper de palier + cadenas, le tout inline */}
+      {/* Ligne « zone » : biome (→ feuille) + stepper de vague + cadenas, le tout inline */}
       {!inInstance && (
         <div className="flex w-full items-center gap-1 rounded-xl border border-slate-800 bg-[#0d111a] px-2 py-1.5 text-xs">
           <button onClick={() => setZoneOpen(true)} className="flex min-w-0 flex-1 items-center gap-1.5 rounded-lg px-1 py-1.5 hover:bg-white/5">
@@ -125,7 +125,7 @@ export function CombatPanel() {
       {/* Feuille zone : choix du biome, chapitre/vague, verrou de farm */}
       {zoneOpen && (
         <Sheet title="🧭 Zone de chasse" onClose={() => setZoneOpen(false)}>
-          {/* v0.35 — UNE seule zone : le biome = canal d'élément/résistance, choix LIBRE (plus de rotation
+          {/* UNE seule zone : le biome = canal d'élément/résistance, choix LIBRE (plus de rotation
               ni de coût en Fragments). Le Chapitre est GLOBAL : on le garde en changeant de zone. */}
           <p className="mb-2 text-[10.5px] leading-snug text-slate-400">
             Une seule zone : choisis ton <b className="text-slate-200">élément</b> de chasse — le butin et la résistance du biome suivent (prépare l'élément du prochain mur). Ton <b className="text-slate-200">Chapitre</b> est <b className="text-slate-200">global</b>, conservé d'une zone à l'autre.
@@ -209,7 +209,7 @@ function LiveOpsCluster() {
   const inRaid = useGame((s) => s.raid !== null)
   // Objectif courant (tutoriel léger + signalisation des déblocages progressifs) — string stable.
   const objective = useGame((s) => nextObjective(s.bestStage, s.characters.reduce((m, c) => Math.max(m, c.level), 1), s.biomeBest.physique ?? 0))
-  // v0.31 — Journal « Premiers Pas » : actif tant que toutes les quêtes ne sont pas réclamées.
+  // Journal « Premiers Pas » : actif tant que toutes les quêtes ne sont pas réclamées.
   const tutActive = useGame((s) => !tutAllClaimed(s.tut.claimed))
   // Récompenses de tuto prêtes à réclamer → red-dot 🎯 (compteur primitif).
   const tutClaimable = useGame((s) => tutClaimableCount(tutContext({ characters: s.characters, activeChar: s.activeChar, bestStage: s.bestStage, inventory: s.inventory, dungeonProgress: s.dungeonProgress, tut: s.tut }), s.tut.claimed))
@@ -218,7 +218,7 @@ function LiveOpsCluster() {
   const inboxAttention = useGame((s) => inboxAttentionCount(s.inbox))
   // 📅 Quotidien : contrats finis non réclamés + connexion du jour → red-dot 📅.
   const dailyClaim = useGame((s) => dailyClaimableCount(s.daily, dailyMetrics({ totalKills: s.totalKills, totalDungeons: s.totalDungeons, metiers: s.metiers, bestStage: s.bestStage }), todayStr()))
-  // 🎉 Event Invasion : icône débloquée avec les biomes élémentaires (palier 20).
+  // 🎉 Event Invasion : icône débloquée avec les biomes élémentaires (vague 20).
   const eventUnlocked = useGame((s) => s.bestStage >= 20)
   const eventClaim = useGame((s) => eventClaimableCount(s.event, s.totalKills))
   const eventElement = useGame((s) => s.event.element)
@@ -229,7 +229,7 @@ function LiveOpsCluster() {
   const [dailyOpen, setDailyOpen] = useState(false)
   const [eventOpen, setEventOpen] = useState(false)
 
-  // Le cluster s'affiche hors instance (🎯 selon tuto · ✉/📅 toujours · 🎉 dès palier 20).
+  // Le cluster s'affiche hors instance (🎯 selon tuto · ✉/📅 toujours · 🎉 dès la vague 20).
   const clusterVisible = !inDungeon && !inRaid
 
   return (
@@ -273,7 +273,7 @@ function LiveOpsCluster() {
       {inboxOpen && <InboxSheet onClose={() => setInboxOpen(false)} />}
       {/* Feuille 📅 Quotidien : contrats du jour + connexion. */}
       {dailyOpen && <DailySheet onClose={() => setDailyOpen(false)} />}
-      {/* Feuille 🎉 Invasion élémentaire : event hebdomadaire (paliers → aura exclusive). */}
+      {/* Feuille 🎉 Invasion élémentaire : event hebdomadaire (seuils → aura exclusive). */}
       {eventOpen && <EventSheet onClose={() => setEventOpen(false)} />}
     </>
   )
@@ -353,7 +353,7 @@ function EnemyView() {
   const abandonDungeon = useGame((s) => s.abandonDungeon)
   const abandonRaid = useGame((s) => s.abandonRaid)
 
-  // v0.36 (lot 8) — un seul NIVEAU DE COMPTE (les héros partagent le niveau) : un badge, plus un par perso.
+  // un seul NIVEAU DE COMPTE (les héros partagent le niveau) : un badge, plus un par perso.
   const accountLevel = characters.reduce((m, c) => Math.max(m, c.level), 1)
 
   // Donjons/raids = combat à PLUSIEURS adversaires. En combat classique, un seul ennemi.
@@ -366,7 +366,7 @@ function EnemyView() {
     .filter((c) => c.hp > 0)
     .reduce((sum, c) => sum + charDps(c), 0)
   const resistEntries = Object.entries(enemy.resist ?? {}) as [DamageType, number][]
-  // Affichage : « résistance globale » = valeur MAJORITAIRE (rampe de palier) ; les écarts
+  // Affichage : « résistance globale » = valeur MAJORITAIRE (rampe de vague) ; les écarts
   // (thème de boss de raid) s'affichent en exceptions résiste/vulnérable.
   let globalResist: number | null = null
   let resistExceptions = resistEntries
@@ -380,7 +380,7 @@ function EnemyView() {
   }
   const enemyPct = (enemy.hp / enemy.maxHp) * 100
   const boss = raid ? true : dungeon ? dungeon.current === dungeon.totalFights - 1 : isBossStage(stage)
-  // v0.36 — GATE DE RAID (farm uniquement) : au mur d'un vrai Chapitre, il faut le Raid T(c−4).
+  // GATE DE RAID (farm uniquement) : au mur d'un vrai Chapitre, il faut le Raid T(c−4).
   const gateTier = !raid && !dungeon ? raidGateForStage(stage) : 0
   const gateLocked = gateTier > 0 && bestRaidTier(raidProgress) < gateTier
 
@@ -614,7 +614,7 @@ function EnemyView() {
           <Metric label={multi ? 'Dégâts pack/s' : 'Dégâts ennemi/s'} value={Math.round(enemyDmgTotal).toLocaleString('fr-FR')} accent="text-red-300" />
         </div>
 
-        {/* (v0.36 lot 8) — le récap des RÉSISTANCES du héros est RETIRÉ de l'écran de combat (il vit dans
+        {/* le récap des RÉSISTANCES du héros est RETIRÉ de l'écran de combat (il vit dans
             le hub 🛡 Héros → onglet Résist). On garde le combat épuré ; seul l'essentiel reste à l'écran. */}
       </div>
     </>
@@ -632,7 +632,7 @@ function TeamView() {
   const setActiveChar = useGame((s) => s.setActiveChar)
   const castPower = useGame((s) => s.castPower)
   const togglePowerAuto = useGame((s) => s.togglePowerAuto)
-  // v0.36 (lot 8) — Contrôle (défaut) = barres de sorts visibles ; Veille = vitaux seuls (idle épuré,
+  // Contrôle (défaut) = barres de sorts visibles ; Veille = vitaux seuls (idle épuré,
   // fait tenir 3 persos sans scroll).
   const [controlMode, setControlMode] = useState(true)
 
@@ -657,7 +657,7 @@ function TeamView() {
           const single = characters.length === 1
           const chips = statusChips(c)
           const shieldPct = (c.absorb ?? 0) > 0 ? Math.max(0, Math.min(100 - pct, ((c.absorb ?? 0) / mh) * 100)) : 0
-          // v0.36 (lot 8) — chaque héros a SA barre de sorts : on lance n'importe quel sort de n'importe
+          // chaque héros a SA barre de sorts : on lance n'importe quel sort de n'importe
           // quel héros d'un tap (jeu manuel multi-perso). AUTO/MAN par SORT.
           const cds = powerCooldowns(c)
           const slots = c.powers
@@ -731,7 +731,7 @@ function TeamView() {
         })}
       </div>
 
-      {/* (v0.36 lot 8) — les barres de sorts vivent désormais DANS chaque carte de héros ci-dessus :
+      {/* les barres de sorts vivent DANS chaque carte de héros ci-dessus :
           on lance n'importe quel sort de n'importe quel héros sans changer de perso actif. */}
     </div>
   )
@@ -824,7 +824,7 @@ function statusChips(c: Character): { icon: string; label: string; cls: string; 
   if (c.charge) out.push({ icon: '⚡', label: 'vengeance', cls: 'bg-amber-500/20 text-amber-300', title: 'Vengeance différée : la riposte frappe à expiration' })
   // RESSOURCE DE CLASSE (build/spend) — RÉSERVE UNIQUE partagée (char.combo) : TOUS les générateurs la
   // remplissent, TOUS les finisseurs la dépensent, MÊME entre classes. On scanne actifs ET soutien
-  // (les builders vivent dans c.support depuis v0.39) ; on affiche les libellés distincts équipés.
+  // (les builders vivent dans c.support) ; on affiche les libellés distincts équipés.
   const cmods = charCombatMods(c)
   const resNames = [...new Set(
     [...c.powers, ...(c.support ?? [])]
@@ -877,7 +877,7 @@ function nextObjective(bestStage: number, maxLevel: number, physiqueBest: number
   return null
 }
 
-/** v0.31 — Liste de quêtes « Premiers Pas » (rendue DANS une feuille : pas d'encadré ni de repli ici,
+/** Liste de quêtes « Premiers Pas » (rendue DANS une feuille : pas d'encadré ni de repli ici,
  *  la Sheet fournit déjà le conteneur + le titre). Chaîne d'onboarding avec récompenses à réclamer. */
 function QuestList({ ctx, claimed, onClaim }: { ctx: TutCtx; claimed: string[]; onClaim: (id: string) => void }) {
   return (
@@ -1026,7 +1026,7 @@ function DailyPanel({ daily, metrics, onClaimQuest, onClaimLogin }: { daily: Dai
   )
 }
 
-/** 🎉 Panneau Invasion élémentaire : header thématique + barre de points + paliers (capstone = aura). */
+/** 🎉 Panneau Invasion élémentaire : header thématique + barre de points + seuils (capstone = aura). */
 function EventPanel({ event, totalKills, collected, onClaim }: { event: EventState; totalKills: number; collected: number; onClaim: (index: number) => void }) {
   const el = DAMAGE_TYPES[event.element]
   const pts = eventPoints(event, totalKills)

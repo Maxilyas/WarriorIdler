@@ -178,7 +178,7 @@ export function waveStat(stage: number, metricBoss: (s: number) => number, acces
 export function makeEnemy(stage: number, biome: BiomeId = 'physique', championMult = 1): Enemy {
   const isBoss = stage % 10 === 0
   // Champion ✦ : rencontre rare et ALÉATOIRE — désormais un pic de BUTIN (jackpot), plus un pic de
-  // difficulté. Élite ◆ tous les N paliers : marqueur de butin lui aussi.
+  // difficulté. Élite ◆ toutes les N vagues : marqueur de butin lui aussi.
   const isChampion = !isBoss && stage > 10 && Math.random() < CHAMPION_CHANCE * championMult
   const isElite = !isBoss && !isChampion && stage % ELITE_EVERY === 0 && stage > ELITE_EVERY
 

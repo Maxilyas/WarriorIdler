@@ -25,7 +25,7 @@ function fmt(n: number): string {
 }
 
 /**
- * Hub Héros (v0.24, DESIGN §6 — option B+C) :
+ * Hub Héros :
  *  - DESKTOP : sous-onglets (Aperçu · Stats · Résist · Capacités · Talents).
  *  - MOBILE : « carte de perso » — identité en tête (nom, niveau, DPS, PV) + MINI-CARTES
  *    qui s'ouvrent en plein écran. CONTEXTUEL : les points de talent et les DÉFICITS de
@@ -41,7 +41,7 @@ export function HerosHub({ talentsUnlocked }: { talentsUnlocked: boolean }) {
   const bestStage = useGame((s) => s.bestStage)
   const raidProgress = useGame((s) => s.raidProgress)
   const isDesktop = useMediaQuery('(min-width: 1024px)')
-  // v0.36 — pool de talents PARTAGÉ (compte), dérivé : plus la somme des persos (qui doublait avec un alt).
+  // pool de talents PARTAGÉ (compte), dérivé : plus la somme des persos (qui doublait avec un alt).
   const upgrades = useGame((s) => s.upgrades)
   const talentPoints = teamTalentPool(characters, upgrades.talentBonus ?? 0)
   const prestigeUnlocked = prestigeRank > 0 || echos > 0 || raidUnlocked(getRaidDef('abysse'), bestStage, raidProgress)

@@ -172,7 +172,7 @@ export function farmDifficultyIlvl(stage: number): number {
 
 // ---- Cibles d'équilibrage (knobs centraux) ----
 
-/** Temps de kill cibles (s) à stuff CALÉ sur le contenu (DESIGN_v0.30 §7). */
+/** Temps de kill cibles (s) à stuff CALÉ sur le contenu. */
 export const TTK = { trash: 3, elite: 8, boss: 35, raidboss: 40 } as const
 /** Secondes d'auto-attaque de boss encaissables à stuff calé (avant burst/nova). */
 export const SURVIVE_SECONDS = 8

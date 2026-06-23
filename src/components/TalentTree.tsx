@@ -25,7 +25,7 @@ import type { DamageType, StatKey, PowerDef } from '../game/types'
 /*   d'écran noir au déplacement, quelle que soit la limite de texture du GPU.
 /* ------------------------------------------------------------------ */
 
-const RING = 82 // px par anneau de profondeur (v0.27 : aéré +25% — anti-chevauchement en zone dense)
+const RING = 82 // px par anneau de profondeur (aéré — anti-chevauchement en zone dense)
 
 const CIDX = new Map(CONSTELLATION_LIST.map((c, i) => [c, i]))
 function sortKey(n: TalentNode): number {
@@ -34,7 +34,7 @@ function sortKey(n: TalentNode): number {
 
 const isCarrefour = (id: string) => id.startsWith('xr_')
 
-// v0.40.6 (perf, F4) — `toNode`/`fromCid` PRÉCALCULÉS dans le layout mémoïsé : le rendu n'a plus à
+// `toNode`/`fromCid` PRÉCALCULÉS dans le layout mémoïsé : le rendu n'a plus à
 // faire un `TALENTS.find` O(N) par lien à chaque frame (pan/zoom + tick).
 interface Link { from: string; to: string; bridge?: boolean; toNode: TalentNode; fromCid?: ConstellationId }
 interface RadialLayout {
@@ -43,7 +43,7 @@ interface RadialLayout {
   radius: number
 }
 
-// v0.40.6 (perf, F2a) — état VISUEL d'un nœud précalculé hors du chemin de rendu par-frame : ne dépend
+// état VISUEL d'un nœud précalculé hors du chemin de rendu par-frame : ne dépend
 // que de [tree, alloc, prestigeRank], jamais de `view`. Pendant le pan/zoom, CanvasNode ne fait plus
 // que de la mise en forme (taille/label) au lieu de recalculer isReachable/exclusiveBlocker/powerSummary.
 interface NodeView {
@@ -57,7 +57,7 @@ interface NodeView {
   glyph: string
 }
 
-/** Construit la disposition radiale d'UN arbre (v0.33 : 'base' = 6 classes de départ, 'pantheon' =
+/** Construit la disposition radiale d'UN arbre ('base' = 6 classes de départ, 'pantheon' =
  *  4 classes de l'Éveil). Mémoïsée par arbre — ne dépend que des données statiques. */
 function computeRadialLayout(tree: TalentTreeId): RadialLayout {
   const nodes = TALENTS.filter((t) => nodeTree(t) === tree)
@@ -72,7 +72,7 @@ function computeRadialLayout(tree: TalentTreeId): RadialLayout {
   }
   for (const t of nodes) {
     if (isCarrefour(t.id)) continue // les carrefours sont posés à part (pont entre voies)
-    // v0.29.3 : requires (parent de layout) + requiresAll (convergence) construisent l'arbre couvrant.
+    // requires (parent de layout) + requiresAll (convergence) construisent l'arbre couvrant.
     for (const r of [...(t.requires ?? []), ...(t.requiresAll ?? [])]) if (byId.has(r) && !isCarrefour(r)) addEdge(r, t.id)
   }
 
@@ -159,7 +159,7 @@ function computeRadialLayout(tree: TalentTreeId): RadialLayout {
     if (!isCarrefour(t.id)) continue
     for (const r of t.requires ?? []) if (pos.has(r)) raw.push({ from: r, to: t.id, bridge: true })
   }
-  // v0.35.2 : CONVERGENCE — un nœud `requiresAll` a DEUX parents, mais l'arbre couvrant n'en relie
+  // CONVERGENCE — un nœud `requiresAll` a DEUX parents, mais l'arbre couvrant n'en relie
   //   qu'un seul. On trace le(s) lien(s) manquant(s) en pont, sinon la 2e exigence est invisible.
   for (const t of nodes) {
     if (isCarrefour(t.id)) continue
@@ -167,7 +167,7 @@ function computeRadialLayout(tree: TalentTreeId): RadialLayout {
       if (pos.has(r) && pos.has(t.id) && parentOf.get(t.id) !== r) raw.push({ from: r, to: t.id, bridge: true })
     }
   }
-  // v0.29.3 : les `links` (anneau de navigation, routes croisées) sont tracés comme des ponts.
+  // les `links` (anneau de navigation, routes croisées) sont tracés comme des ponts.
   for (const t of nodes) {
     for (const l of t.links ?? []) if (pos.has(l) && pos.has(t.id)) raw.push({ from: l, to: t.id, bridge: true })
   }
@@ -197,20 +197,20 @@ const KIND_ICON: Record<TalentNode['kind'], string> = {
 const KIND_LABEL: Record<TalentNode['kind'], string> = {
   minor: 'Passif mineur', notable: 'Passif notable', keystone: 'Keystone', ability: 'Capacité', gateway: 'Passerelle',
 }
-/** Diamètre (px) d'un nœud selon son importance (v0.24 : cibles tactiles agrandies). */
+/** Diamètre (px) d'un nœud selon son importance (cibles tactiles agrandies). */
 const KIND_SIZE: Record<TalentNode['kind'], number> = {
   minor: 22, notable: 32, ability: 36, keystone: 40, gateway: 36,
 }
 
 const MIN_SCALE = 0.32
-// v0.24 : zoom max relevé (mobile : viser une node précise demandait trop de précision).
+// zoom max relevé (mobile : viser une node précise demandait trop de précision).
 const MAX_SCALE = 2.6
 
 /** Allocation vide stable (réf constante) — évite une nouvelle réf à chaque rendu dans les sélecteurs. */
 const EMPTY_ALLOC: Record<string, number> = {}
 
 export function TalentTree() {
-  // v0.40.6 (perf, F1) — abonnements CIBLÉS & STABLES : ne plus re-render l'arbre à 5 Hz pendant le
+  // abonnements CIBLÉS & STABLES : ne plus re-render l'arbre à 5 Hz pendant le
   // combat. `s.characters` change de réf à chaque tick (PV), mais l'arbre ne dépend que de réfs STABLES
   // (talents/pantheon/équipement — préservées par le spread `{...c, hp}` du tick) + de primitives/nombres.
   const prestigeRank = useGame((s) => s.prestigeRank)
@@ -227,7 +227,7 @@ export function TalentTree() {
   const [focus, setFocus] = useState<ConstellationId | null>(null)
   const [voiesOpen, setVoiesOpen] = useState(false)
 
-  // v0.33 : deux arbres mémoïsés. On bascule entre eux ; tout le pan/zoom est réutilisé tel quel.
+  // deux arbres mémoïsés. On bascule entre eux ; tout le pan/zoom est réutilisé tel quel.
   const baseLayout = useMemo(() => computeRadialLayout('base'), [])
   const pantheonLayout = useMemo(() => computeRadialLayout('pantheon'), [])
   const layout = tree === 'pantheon' ? pantheonLayout : baseLayout
@@ -337,17 +337,17 @@ export function TalentTree() {
   }, [zoomBy])
 
   if (!hasChar) return null
-  // v0.33 : arbre actif. Base → points de niveau / `talents`. Panthéon → budget de Points
+  // arbre actif. Base → points de niveau / `talents`. Panthéon → budget de Points
   // d'Éveil (= prestigeRank × K, identique par perso) / `pantheonAlloc`.
   const isPantheon = tree === 'pantheon'
   const alloc = isPantheon ? (pantheonAlloc ?? { pa_start: 1 }) : talents
   const budget = eveilBudget(prestigeRank)
-  // v0.36 — arbre de DÉPART : pool de talents PARTAGÉ (compte), dérivé. Le Panthéon garde son budget propre.
+  // arbre de DÉPART : pool de talents PARTAGÉ (compte), dérivé. Le Panthéon garde son budget propre.
   const points = isPantheon ? Math.max(0, budget - spentInPantheon(alloc)) : basePoints
   const classesUnlocked = pantheonClassesUnlocked(prestigeRank)
   const pantheonLocked = isPantheon && classesUnlocked === 0
   const selectedNode = selected ? TALENTS.find((n) => n.id === selected) ?? null : null
-  // v0.25 : si le nœud sélectionné est verrouillé par un PALIER, surligner sur l'arbre les nœuds
+  // si le nœud sélectionné est verrouillé par un SEUIL, surligner sur l'arbre les nœuds
   // où les points comptent (même constellation, tiers ≤ tier-plafond) — fini le « où investir ? ».
   const gateTarget = useMemo(() => {
     if (!selectedNode) return null
@@ -359,7 +359,7 @@ export function TalentTree() {
   const sy = (id: string) => view.panY + (layout.pos.get(id)?.y ?? 0) * view.scale
   const showLabels = view.scale >= 0.55
 
-  // v0.40.6 (perf, F2a) — état visuel précalculé : ne dépend QUE de [layout/tree, alloc, focus,
+  // état visuel précalculé : ne dépend QUE de [layout/tree, alloc, focus,
   // prestigeRank], PAS de `view`. Pendant le pan/zoom, ces memos ne se recalculent pas → seules les
   // coordonnées (sx/sy) bougent, et le travail lourd (isReachable/exclusiveBlocker/powerSummary) ne
   // tourne plus par frame.
@@ -434,7 +434,7 @@ export function TalentTree() {
         )}
       </div>
 
-      {/* v0.40.6 (perf, F1) — la rangée de sélection s'abonne SEULE à `s.characters` (réf changée chaque
+      {/* la rangée de sélection s'abonne SEULE à `s.characters` (réf changée chaque
           tick) → son re-render par tick reste ISOLÉ à ces quelques boutons ; le corps lourd de l'arbre
           (liens + nœuds) ne s'abonne qu'à du slow-state et ne re-render plus en combat. */}
       <HeroSelectorRow onPicked={() => setSelected(null)} />
@@ -555,7 +555,7 @@ export function TalentTree() {
         />
       )}
 
-      {/* Barre d'outils SOUS l'arbre (v0.24) : le zoom ne recouvre plus jamais une node. */}
+      {/* Barre d'outils SOUS l'arbre : le zoom ne recouvre plus jamais une node. */}
       <div className="mt-2 flex gap-1.5">
         <CtrlBtn onClick={() => zoomBy(1.25)} label="+" title="Zoomer" />
         <CtrlBtn onClick={() => zoomBy(0.8)} label="−" title="Dézoomer" />
@@ -627,7 +627,7 @@ function CtrlBtn({ onClick, label, title }: { onClick: () => void; label: string
 }
 
 /** Nœud sur le canevas : pastille colorée + libellé (pour les nœuds marquants / sélectionné).
- *  v0.40.6 (perf, F2a) — l'état VISUEL (`view`: reachable/exclBlocked/dmg/sum/color/glyph) est PRÉCALCULÉ
+ *  L'état VISUEL (`view`: reachable/exclBlocked/dmg/sum/color/glyph) est PRÉCALCULÉ
  *  par le parent (nodeViews) ; ce composant ne fait plus que la mise en forme dépendante de `view`/zoom.
  *  Mémoïsé : sur un re-render parent sans changement de props (ex. sélection d'un autre nœud, vue
  *  inchangée), les nœuds non concernés sont sautés. */
@@ -641,7 +641,7 @@ const CanvasNode = memo(function CanvasNode({
   scale: number
   selected: boolean
   dimmed: boolean
-  /** v0.25 : nœud où investir pour ouvrir le palier du nœud sélectionné (surligné ambre + tier). */
+  /** nœud où investir pour ouvrir le seuil du nœud sélectionné (surligné ambre + tier). */
   gateHighlight: boolean
   showLabel: boolean
   onSelect: (id: string) => void
@@ -649,7 +649,7 @@ const CanvasNode = memo(function CanvasNode({
   const { rank, allocated, reachable, exclBlocked, dmg, sum, color, glyph } = view
   const meta = CONSTELLATIONS[node.constellation]
   // La pastille SUIT (en partie) le zoom : dézoomer ne crée plus un mur de pastilles qui se
-  // chevauchent, zoomer grossit la cible tactile (v0.24).
+  // chevauchent, zoomer grossit la cible tactile.
   const size = KIND_SIZE[node.kind] * Math.min(1.2, Math.max(0.5, scale * 0.9 + 0.25))
   const emphatic = node.kind !== 'minor'
   const labelShown = (emphatic && showLabel) || selected
@@ -683,7 +683,7 @@ const CanvasNode = memo(function CanvasNode({
       >
         {exclBlocked ? '⊘' : !reachable && !allocated ? '🔒' : glyph}
       </span>
-      {/* Surlignage de palier : tier affiché sous les nœuds éligibles (même sans libellé). */}
+      {/* Surlignage de seuil : tier affiché sous les nœuds éligibles (même sans libellé). */}
       {gateHighlight && !labelShown && (
         <span className="pointer-events-none mt-0.5 rounded bg-amber-500/20 px-1 text-[8px] font-bold leading-tight text-amber-300">
           T{node.tier}{node.maxRank > 1 ? ` · ${rank}/${node.maxRank}` : ''}
@@ -773,7 +773,7 @@ function NodeDetail({
   const maxed = rank >= node.maxRank
   const meta = CONSTELLATIONS[node.constellation]
   const power = node.unlockPower ? getPower(node.unlockPower) : undefined
-  // v0.29.3 : verrou de BUDGET (pts dans la voie) + CHOIX EXCLUSIF + v0.33 : gate de prestige.
+  // verrou de BUDGET (pts dans la voie) + CHOIX EXCLUSIF + gate de prestige.
   const gate = gateInfo(node, alloc, prestigeRank)
   const prestigeLocked = !!gate.prestigeLocked
   const reachable = !prestigeLocked && isReachable(node, alloc)
@@ -783,7 +783,7 @@ function NodeDetail({
   const gateLocked = gate.need > 0 && gate.spent < gate.need
   const exclLocked = !!gate.exclusiveBlocked
   const rankLocked = !!gate.rankReq
-  // v0.35.2 : CONVERGENCE (requiresAll) — un pivot hybride exige DEUX nœuds précis (souvent dans des
+  // CONVERGENCE (requiresAll) — un pivot hybride exige DEUX nœuds précis (souvent dans des
   //   voies opposées). On les NOMME (✓/✗) au lieu du générique « nœud voisin », sinon il paraît injouable.
   const convergence = node.requiresAll && node.requiresAll.length
     ? node.requiresAll.map((r) => ({ name: getTalent(r)?.name ?? r, have: (alloc[r] ?? 0) > 0 }))
@@ -901,7 +901,7 @@ function RespecBar({ char }: { char: { level: number; talents: Record<string, nu
   const respecCost = 200 * char.level
   const refundable = Object.values(char.talents).reduce((a, b) => a + b, 0) - (char.talents.co_start ?? 0)
   if (refundable <= 0) return null
-  // v0.24 : CONFIRMATION (double-tap) — une erreur de clic ne vide plus l'arbre.
+  // CONFIRMATION (double-tap) — une erreur de clic ne vide plus l'arbre.
   return (
     <ConfirmButton
       onConfirm={respecTalents}
@@ -914,7 +914,7 @@ function RespecBar({ char }: { char: { level: number; talents: Record<string, nu
   )
 }
 
-/** v0.33 — réinitialisation du Panthéon : GRATUITE (le joueur refait son build d'Éveil librement). */
+/** réinitialisation du Panthéon : GRATUITE (le joueur refait son build d'Éveil librement). */
 function PantheonRespecBar({ char }: { char: { pantheon?: Record<string, number> } }) {
   const respecPantheon = useGame((s) => s.respecPantheon)
   const refundable = spentInPantheon(char.pantheon ?? {})
@@ -982,7 +982,7 @@ function PresetsButton() {
                     <span className="text-[9.5px] text-slate-500">{pts} pts · {nPowers} capacité{nPowers > 1 ? 's' : ''} · spé {p.primaryBias}</span>
                   </div>
                   <div className="mt-1.5 flex gap-1.5 text-[10px]">
-                    {/* v0.24 : appliquer = respec payant → CONFIRMATION (double-tap). */}
+                    {/* appliquer = respec payant → CONFIRMATION (double-tap). */}
                     <ConfirmButton
                       disabled={gold < applyCost}
                       onConfirm={() => { applyBuildPreset(slot); setOpen(false) }}

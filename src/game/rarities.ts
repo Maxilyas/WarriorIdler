@@ -1,9 +1,9 @@
 import type { Rarity, RarityId } from './types'
 
 /**
- * RARETÉS — 16 paliers + tirage pondéré (`rollRarity`).  → Doc : docs/systemes/04-stuff-et-loot.md
+ * RARETÉS — 16 crans + tirage pondéré (`rollRarity`).  → Doc : docs/systemes/04-stuff-et-loot.md
  *
- * 16 paliers de rareté : les 8 de WoW + 8 au-delà.
+ * 16 crans de rareté : les 8 de WoW + 8 au-delà.
  * Plus la rareté monte, plus l'objet a d'affixes, de budget de stats,
  * et plus il est rare au drop (weight décroissant).
  */
