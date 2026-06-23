@@ -490,8 +490,11 @@ export const MYSTERY_BOXES: MysteryBox[] = [
   // --- Matériaux & haut de gamme ---
   { id: 8, name: 'Coffre du forgeron', icon: '🔨', gold: 400000, count: 2, priceTier: 7, jackpot: 0.05, eclats: 3000, noyau: 12, poussiere: 8, desc: 'Matériaux de craft en MASSE (atelier/forge) + objets.' },
   { id: 9, name: 'Coffre légendaire', icon: '🟠', gold: 800000, count: 4, priceTier: 8, jackpot: 0.07, eclats: 1500, noyau: 5, poussiere: 3, costFragments: 2, desc: 'Gros lot d\'objets. Exige des Fragments de raid.' },
-  { id: 10, name: 'Coffre cosmique', icon: '🌟', gold: 2500000, count: 4, priceTier: 10, jackpot: 0.09, richTail: true, peakShift: 1, guaranteeUnique: true, eclats: 4000, noyau: 10, poussiere: 12, fragments: 2, costFragments: 6, desc: 'Premium : pic de rareté MONTÉ (hautes raretés bien plus fréquentes) + 1 unique garanti. Exige des Fragments.' },
-  { id: 11, name: 'Coffre du Néant', icon: '🕳️', gold: 10000000, count: 4, priceTier: 12, jackpot: 0.13, richTail: true, peakShift: 1, guaranteeUnique: true, eclats: 10000, noyau: 25, poussiere: 35, fragments: 8, costFragments: 18, costCosmic: 3, desc: 'Le pari ultime : pic de rareté MONTÉ + unique garanti. Exige Fragments ✨ ET Éclats cosmiques 💫.' },
+  // v0.43 — gamme PRESTIGE : dégatée du raid (OR seul, plus de costFragments/costCosmic). En échange,
+  // pic monté (peakShift) ET plafond +1 (capDelta : chance de rareté AU-DESSUS de l'unlock) → le vrai
+  // chase + le grand puits d'or. priceTier calé pour un gros achat atteignable (~500M au Néant à Ch.8).
+  { id: 10, name: 'Coffre cosmique', icon: '🌟', gold: 2500000, count: 4, priceTier: 7.5, jackpot: 0.09, richTail: true, peakShift: 1, capDelta: 1, guaranteeUnique: true, eclats: 4000, noyau: 10, poussiere: 12, fragments: 2, desc: 'Premium (or seul) : pic de rareté MONTÉ + plafond +1 (chance de rareté AU-DESSUS de ton unlock) + 1 unique garanti.' },
+  { id: 11, name: 'Coffre du Néant', icon: '🕳️', gold: 10000000, count: 4, priceTier: 8.5, jackpot: 0.13, richTail: true, peakShift: 1, capDelta: 1, guaranteeUnique: true, eclats: 10000, noyau: 25, poussiere: 35, fragments: 8, desc: 'Le pari ultime (or seul) : pic MONTÉ + plafond +1 (rareté au-dessus de ton unlock) + unique garanti. Le grand puits d\'or.' },
   // --- Nouveautés v0.23 (les ids sont des INDEX : on n'insère jamais, on AJOUTE) ---
   { id: 12, name: 'Coffre du Jour', icon: '🗓️', gold: 0, free: true, count: 2, priceTier: 4, jackpot: 0.06, eclats: 150, desc: 'GRATUIT toutes les 22 h. Des objets + des éclats. Reviens demain !' },
   { id: 13, name: 'Coffre Maudit', icon: '🎲', gold: 60000, count: 2, priceTier: 6, jackpot: 0.08, cursed: true, desc: '75% : contenu DOUBLÉ. 25% : la malédiction ne laisse qu\'un objet Commun.' },
