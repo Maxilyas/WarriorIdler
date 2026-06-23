@@ -1,4 +1,4 @@
-import { useState, useRef, useLayoutEffect, useEffect, useMemo, useCallback } from 'react'
+import { useState, useRef, useLayoutEffect, useEffect, useMemo, useCallback, memo } from 'react'
 import { useGame } from '../game/store'
 import { teamTalentPool } from '../game/character'
 import {
@@ -41,6 +41,20 @@ interface RadialLayout {
   pos: Map<string, { x: number; y: number }>
   links: Link[]
   radius: number
+}
+
+// v0.40.6 (perf, F2a) — état VISUEL d'un nœud précalculé hors du chemin de rendu par-frame : ne dépend
+// que de [tree, alloc, prestigeRank], jamais de `view`. Pendant le pan/zoom, CanvasNode ne fait plus
+// que de la mise en forme (taille/label) au lieu de recalculer isReachable/exclusiveBlocker/powerSummary.
+interface NodeView {
+  rank: number
+  allocated: boolean
+  reachable: boolean
+  exclBlocked: boolean
+  dmg: DamageType[]
+  sum: ReturnType<typeof powerSummary> | null
+  color: string
+  glyph: string
 }
 
 /** Construit la disposition radiale d'UN arbre (v0.33 : 'base' = 6 classes de départ, 'pantheon' =
@@ -345,6 +359,40 @@ export function TalentTree() {
   const sy = (id: string) => view.panY + (layout.pos.get(id)?.y ?? 0) * view.scale
   const showLabels = view.scale >= 0.55
 
+  // v0.40.6 (perf, F2a) — état visuel précalculé : ne dépend QUE de [layout/tree, alloc, focus,
+  // prestigeRank], PAS de `view`. Pendant le pan/zoom, ces memos ne se recalculent pas → seules les
+  // coordonnées (sx/sy) bougent, et le travail lourd (isReachable/exclusiveBlocker/powerSummary) ne
+  // tourne plus par frame.
+  const linkViews = useMemo(() => layout.links.map((l) => {
+    const filled = (alloc[l.from] ?? 0) > 0 && (alloc[l.to] ?? 0) > 0
+    const reach = filled || isReachable(l.toNode, alloc)
+    const dim = !!focus && l.toNode.constellation !== focus && l.fromCid !== focus
+    const color = filled ? CONSTELLATIONS[l.toNode.constellation].color : reach ? '#475569' : '#283449'
+    return { from: l.from, to: l.to, bridge: l.bridge, filled, dim, color }
+  }), [layout, alloc, focus])
+  const nodeViews = useMemo(() => {
+    const m = new Map<string, NodeView>()
+    for (const node of TALENTS) {
+      if (nodeTree(node) !== tree) continue
+      const forceLock = !!node.requiresPrestige && prestigeRank < node.requiresPrestige
+      const rank = alloc[node.id] ?? 0
+      const allocated = rank > 0
+      const reachable = !forceLock && isReachable(node, alloc)
+      const exclBlocked = !allocated && !forceLock && !!exclusiveBlocker(node, alloc)
+      const meta = CONSTELLATIONS[node.constellation]
+      const dmg = nodeDamageTypes(node)
+      const power = node.unlockPower ? getPower(node.unlockPower) : undefined
+      const sum = power ? powerSummary(power) : null
+      const color = allocated || reachable ? meta.color : '#475569'
+      const glyph = power ? powerIcon(power) : KIND_ICON[node.kind]
+      m.set(node.id, { rank, allocated, reachable, exclBlocked, dmg, sum, color, glyph })
+    }
+    return m
+  }, [tree, alloc, prestigeRank])
+  // Callback de sélection STABLE (référence constante) → permet à React.memo(CanvasNode) d'éviter de
+  // re-render les nœuds dont les props n'ont pas changé (ex. sélection d'un seul nœud, vue inchangée).
+  const onSelectNode = useCallback((id: string) => { if (!drag.current?.moved) setSelected(id) }, [])
+
   return (
     <div className="flex h-full flex-col">
       {/* En-tête : sélecteur d'arbre (Départ / Panthéon) + points de l'arbre actif */}
@@ -440,44 +488,35 @@ export function TalentTree() {
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
       >
-        {/* Liens (SVG plein viewport) */}
+        {/* Liens (SVG plein viewport) — visuel précalculé (linkViews), seules les coords viennent de `view`. */}
         <svg width={size.w} height={size.h} className="pointer-events-none absolute left-0 top-0">
-          {layout.links.map((l, i) => {
-            const toNode = l.toNode
-            const fromCid = l.fromCid
-            const filled = (alloc[l.from] ?? 0) > 0 && (alloc[l.to] ?? 0) > 0
-            const reach = filled || isReachable(toNode, alloc)
-            const dim = !!focus && toNode.constellation !== focus && fromCid !== focus
-            const color = filled ? CONSTELLATIONS[toNode.constellation].color : reach ? '#475569' : '#283449'
-            return (
-              <line
-                key={i}
-                x1={sx(l.from)} y1={sy(l.from)} x2={sx(l.to)} y2={sy(l.to)}
-                stroke={color}
-                strokeWidth={filled ? 3 : 1.5}
-                strokeDasharray={l.bridge ? '4 4' : undefined}
-                strokeLinecap="round"
-                opacity={dim ? 0.1 : filled ? 0.9 : l.bridge ? 0.45 : 0.55}
-              />
-            )
-          })}
+          {linkViews.map((l, i) => (
+            <line
+              key={i}
+              x1={sx(l.from)} y1={sy(l.from)} x2={sx(l.to)} y2={sy(l.to)}
+              stroke={l.color}
+              strokeWidth={l.filled ? 3 : 1.5}
+              strokeDasharray={l.bridge ? '4 4' : undefined}
+              strokeLinecap="round"
+              opacity={l.dim ? 0.1 : l.filled ? 0.9 : l.bridge ? 0.45 : 0.55}
+            />
+          ))}
         </svg>
 
-        {/* Nœuds (de l'arbre actif uniquement) */}
+        {/* Nœuds (de l'arbre actif uniquement) — visuel précalculé (nodeViews). */}
         {TALENTS.filter((node) => nodeTree(node) === tree).map((node) => (
           <CanvasNode
             key={node.id}
             node={node}
+            view={nodeViews.get(node.id)!}
             x={sx(node.id)}
             y={sy(node.id)}
             scale={view.scale}
-            talents={alloc}
             selected={selected === node.id}
             dimmed={!!focus && node.constellation !== focus}
             gateHighlight={!!gateTarget && node.constellation === gateTarget.c}
-            forceLock={!!node.requiresPrestige && prestigeRank < node.requiresPrestige}
             showLabel={showLabels}
-            onSelect={() => { if (!drag.current?.moved) setSelected(node.id) }}
+            onSelect={onSelectNode}
           />
         ))}
 
@@ -587,44 +626,37 @@ function CtrlBtn({ onClick, label, title }: { onClick: () => void; label: string
   )
 }
 
-/** Nœud sur le canevas : pastille colorée + libellé (pour les nœuds marquants / sélectionné). */
-function CanvasNode({
-  node, x, y, scale, talents, selected, dimmed, gateHighlight, forceLock, showLabel, onSelect,
+/** Nœud sur le canevas : pastille colorée + libellé (pour les nœuds marquants / sélectionné).
+ *  v0.40.6 (perf, F2a) — l'état VISUEL (`view`: reachable/exclBlocked/dmg/sum/color/glyph) est PRÉCALCULÉ
+ *  par le parent (nodeViews) ; ce composant ne fait plus que la mise en forme dépendante de `view`/zoom.
+ *  Mémoïsé : sur un re-render parent sans changement de props (ex. sélection d'un autre nœud, vue
+ *  inchangée), les nœuds non concernés sont sautés. */
+const CanvasNode = memo(function CanvasNode({
+  node, view, x, y, scale, selected, dimmed, gateHighlight, showLabel, onSelect,
 }: {
   node: TalentNode
+  view: NodeView
   x: number
   y: number
   scale: number
-  talents: Record<string, number>
   selected: boolean
   dimmed: boolean
   /** v0.25 : nœud où investir pour ouvrir le palier du nœud sélectionné (surligné ambre + tier). */
   gateHighlight: boolean
-  /** v0.33 : classe du Panthéon pas encore débloquée par l'Éveil → cadenas franc (gate de prestige). */
-  forceLock: boolean
   showLabel: boolean
-  onSelect: () => void
+  onSelect: (id: string) => void
 }) {
-  const rank = talents[node.id] ?? 0
-  const allocated = rank > 0
-  const reachable = !forceLock && isReachable(node, talents)
-  const exclBlocked = !allocated && !forceLock && !!exclusiveBlocker(node, talents)
+  const { rank, allocated, reachable, exclBlocked, dmg, sum, color, glyph } = view
   const meta = CONSTELLATIONS[node.constellation]
   // La pastille SUIT (en partie) le zoom : dézoomer ne crée plus un mur de pastilles qui se
   // chevauchent, zoomer grossit la cible tactile (v0.24).
   const size = KIND_SIZE[node.kind] * Math.min(1.2, Math.max(0.5, scale * 0.9 + 0.25))
   const emphatic = node.kind !== 'minor'
   const labelShown = (emphatic && showLabel) || selected
-  const dmg = nodeDamageTypes(node)
-  const power = node.unlockPower ? getPower(node.unlockPower) : undefined
-  const sum = power ? powerSummary(power) : null
-
-  const color = allocated || reachable ? meta.color : '#475569'
-  const glyph = power ? powerIcon(power) : KIND_ICON[node.kind]
 
   return (
     <button
-      onClick={(e) => { e.stopPropagation(); onSelect() }}
+      onClick={(e) => { e.stopPropagation(); onSelect(node.id) }}
       onPointerDown={(e) => e.stopPropagation()}
       className="absolute flex flex-col items-center"
       style={{
@@ -676,7 +708,7 @@ function CanvasNode({
       )}
     </button>
   )
-}
+})
 
 /** Fiche de sort détaillée dans le panneau de nœud : type, recharge, scaling, cibles, valeur ≈. */
 function SpellCard({ power, weaponType }: { power: PowerDef; weaponType: DamageType }) {
