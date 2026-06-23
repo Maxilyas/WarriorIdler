@@ -19,7 +19,7 @@ import { makeEnemy, isBossStage, stageIlvl } from './enemies'
 import { chapitreOf, vagueOf, raidGateForStage } from './progression'
 import { maitriseBonus, surgeBiome, SURGE_GOLD_XP_MULT, SURGE_QUINT_MULT } from './biomeBonus'
 import { RARITIES } from './rarities'
-import { persist, discoverFromItems } from './save'
+import { persistThrottled, discoverFromItems } from './save'
 import {
   partyCombatStep, crescendoBonus, crescendoAdd, crescendoReset, resetAllCooldowns, resetLongestCooldown,
   tresorerieShield, gemKillEvents
@@ -55,7 +55,7 @@ export function createTickSlice(set: GameSet, get: GameGet): Pick<GameState,
         let characters = s.characters
         if (ar.xpEach > 0) characters = grantTeamXp(characters, ar.xpEach).chars
         s = { ...s, ...ar.eco, characters, log }
-        if (ar.completed) persist(s)
+        if (ar.completed) persistThrottled(s)
       }
 
       // 🔥 Le Foyer (v0.41) : production idle d'XP + Lingots, en parallèle de tout (farm/donjon/raid).
@@ -119,7 +119,7 @@ export function createTickSlice(set: GameSet, get: GameGet): Pick<GameState,
         const healed = chars.map(fullHeal)
         log = pushLog(log, `💀 Équipe vaincue ! Repli au Chapitre ${chapitreOf(stage)} · Vague ${vagueOf(stage)}.`, 'death')
         const next = { ...s, characters: healed, stage, enemy: makeEnemy(stage, s.activeBiome), log }
-        persist(next)
+        persistThrottled(next)
         set(next)
         return
       }
@@ -365,7 +365,7 @@ export function createTickSlice(set: GameSet, get: GameGet): Pick<GameState,
         if (isBossStage(stage)) log = pushLog(log, `⚔ Un boss vous barre la route : ${enemyNext.name} !`, 'info')
 
         const next = { ...s, characters, stage, bestStage, biomeBest, conseil, maitrisePoints, gold, sceaux, poussiere, quint, gems, gemDust, gemsSeen, reagents, essence, codex, inventory, killsSinceEpic, enemy: enemyNext, log, killCount: s.killCount + 1, totalKills: s.totalKills + 1 }
-        persist(next)
+        persistThrottled(next)
         set(next)
         return
       }

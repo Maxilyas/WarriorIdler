@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useGame } from './game/store'
+import { flushSave } from './game/save'
 import { chapitreOf } from './game/progression'
 import { useMediaQuery } from './useMediaQuery'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from './game/damage'
@@ -124,7 +125,9 @@ export default function App() {
 
   // F3 — cycle de vie mobile : arrière-plan → suspend le tick + horodate ; retour → gains hors-ligne.
   useEffect(() => {
-    const onHide = () => { markAway(); setPaused(true) }
+    // markAway persiste déjà (synchrone) en horodatant lastSeen ; flushSave force en plus l'écriture
+    // d'un éventuel instantané throttlé encore en attente (boucle de combat) → zéro perte à la fermeture.
+    const onHide = () => { markAway(); flushSave(); setPaused(true) }
     const onVis = () => {
       if (document.visibilityState === 'hidden') onHide()
       else { resumeAway(); setPaused(false) }

@@ -36,7 +36,7 @@ import { stageIlvl } from './enemies'
 import { lootFarmIlvl } from './progression'
 import { maitriseBonus } from './biomeBonus'
 import { RARITIES, RARITY_LIST } from './rarities'
-import { persist, discoverFromItems } from './save'
+import { persistThrottled, discoverFromItems } from './save'
 import {
   partyCombatStepMulti, crescendoBonus, crescendoAdd, crescendoReset, fuelReset, resetLongestCooldown,
   tresorerieShield, gemKillEvents, setRegenMult, resetMemento
@@ -705,7 +705,7 @@ export function tickDungeon(s: GameState, dt: number, set: (s: GameState) => voi
     const healed = chars.map(fullHeal)
     log = pushLog(log, `💀 Échec dans ${d.name} ! L'équipe bat en retraite.`, 'death')
     const next = { ...s, characters: healed, dungeon: null, log }
-    persist(next)
+    persistThrottled(next)
     set(next)
     return
   }
@@ -879,7 +879,7 @@ export function tickDungeon(s: GameState, dt: number, set: (s: GameState) => voi
           ndun.repeatLeft = repeatLeft - 1
           const log3 = pushLog(log, `🔁 Auto-farm : run encaissé · ${repeatLeft} relance${repeatLeft > 1 ? 's' : ''} restante${repeatLeft > 1 ? 's' : ''}.`, 'info')
           const next = { ...base, ...credited, characters: healed, dungeonProgress, sceaux: credited.sceaux - def.sceauCost, dungeon: ndun, log: log3 }
-          persist(next)
+          persistThrottled(next)
           set(next)
           return
         }
@@ -887,7 +887,7 @@ export function tickDungeon(s: GameState, dt: number, set: (s: GameState) => voi
 
       const log2 = pushLog(log, `🎉 ${d.name} vaincu ! Un coffre t'attend (bonus de fin).`, 'kill')
       const next = { ...base, characters: healed, dungeon: null, dungeonProgress, pendingChest: chest, log: log2 }
-      persist(next)
+      persistThrottled(next)
       set(next)
       return
     }
@@ -904,7 +904,7 @@ export function tickDungeon(s: GameState, dt: number, set: (s: GameState) => voi
     }
     if (nextIndex === d.championAt) log = pushLog(log, '✦ Un Champion vous barre la route !', 'death')
     const next = { ...s, characters: chars, gold, essence, noyau, poussiere, sceaux, orbes, gemDust, inventory, codex, dungeon: nd, log }
-    persist(next)
+    persistThrottled(next)
     set(next)
     return
   }
@@ -1072,7 +1072,7 @@ export function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) 
     const why = mech.includes('berserk') && overtime > 0 ? ' (enrage mortel — il fallait plus de DPS)' : ''
     log = pushLog(log, `💀 Raid échoué : ${r.name}${why}. L'équipe est anéantie.`, 'death')
     const next = { ...s, characters: healed, raid: null, log }
-    persist(next)
+    persistThrottled(next)
     set(next)
     return
   }
@@ -1180,7 +1180,7 @@ export function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) 
           nr.repeatLeft = repeatLeft - 1
           const log3 = pushLog(log, `🔁 Auto-raid : trésor encaissé${cosmic ? ` (💫 ×${cosmic})` : ''} · ${repeatLeft} relance${repeatLeft > 1 ? 's' : ''} restante${repeatLeft > 1 ? 's' : ''}.`, 'kill')
           const next = { ...s, ...credited, gems, gemsSeen, runesOwned, metiers: pm.metiers, conseil: cp.conseil, maitrisePoints: cp.maitrisePoints, characters: healed, raidProgress, raidTrophies, orbes: credited.orbes - def.orbeCost, raid: nr, log: log3 }
-          persist(next)
+          persistThrottled(next)
           set(next)
           return
         }
@@ -1188,7 +1188,7 @@ export function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) 
 
       log = pushLog(log, `🏆 RAID VAINCU : ${def.name} (Tier ${tier}) !${cosmic ? ` 💫 Éclat cosmique ×${cosmic} !` : ''} Un trésor t'attend.`, 'kill')
       const next = { ...s, gems, gemsSeen, runesOwned, metiers: pm.metiers, conseil: cp.conseil, maitrisePoints: cp.maitrisePoints, characters: healed, raid: null, raidProgress, raidTrophies, pendingChest: chest, log }
-      persist(next)
+      persistThrottled(next)
       set(next)
       return
     }

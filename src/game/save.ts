@@ -935,7 +935,9 @@ export function loadSave(): SaveData {
   return freshSave()
 }
 
-export function persist(s: GameState) {
+/** Construit le payload `SaveData` à partir de l'état runtime (sans les champs transitoires). Pur :
+ *  appelé au moment du `persist`/`persistThrottled` — `lastSeen` reflète donc l'instant de l'appel. */
+function buildSaveData(s: GameState): SaveData {
   const data: SaveData = {
     characters: s.characters,
     activeChar: s.activeChar,
@@ -1025,10 +1027,58 @@ export function persist(s: GameState) {
     lastShopRefresh: s.lastShopRefresh,
     onboarded: s.onboarded,
   }
+  return data
+}
+
+/** Écriture brute (encapsule l'accès `localStorage`, qui peut échouer : quota, mode privé…). */
+function writeSave(data: SaveData) {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify(data))
   } catch {
     /* ignore */
   }
+}
+
+// --- Sauvegarde throttlée (perf) ---------------------------------------------------------------
+// Le chemin chaud (boucle de combat 5 Hz : `tick`/`tickDungeon`/`tickRaid`) peut persister à chaque
+// kill — soit jusqu'à 5 `JSON.stringify` de TOUT le save par seconde, bloquant sur le thread UI.
+// `persistThrottled` coalesce ces écritures en AU PLUS une par fenêtre ; `persist` (synchrone) reste
+// le contrat des actions joueur + round-trip ; `flushSave` force l'écriture au cycle de vie (veille).
+const SAVE_THROTTLE_MS = 2000
+let pendingSnapshot: SaveData | null = null
+let saveTimer: ReturnType<typeof setTimeout> | null = null
+
+/** Annule le write throttlé en attente (un write synchrone vient le superséder). */
+function clearPending() {
+  if (saveTimer !== null) { clearTimeout(saveTimer); saveTimer = null }
+  pendingSnapshot = null
+}
+
+/** Sauvegarde SYNCHRONE immédiate — actions joueur, contrat round-trip, cycle de vie. Supersède tout
+ *  write throttlé en attente (l'état passé est le plus récent → le pending serait périmé). */
+export function persist(s: GameState) {
+  clearPending()
+  writeSave(buildSaveData(s))
+}
+
+/** Sauvegarde THROTTLÉE — réservée au chemin chaud (boucle de combat). Mémorise l'instantané le plus
+ *  récent et n'écrit qu'au plus une fois par `SAVE_THROTTLE_MS`. Aucune perte au-delà de cette fenêtre :
+ *  `flushSave` (mise en veille/fermeture) et `persist` (action joueur) écrivent le pending immédiatement,
+ *  et le cold-start recrédite tout écart via `lastSeen` (simulation hors-ligne). */
+export function persistThrottled(s: GameState) {
+  pendingSnapshot = buildSaveData(s) // immuabilité du store ⇒ l'instantané reste valide jusqu'au flush
+  if (saveTimer === null) {
+    saveTimer = setTimeout(() => {
+      saveTimer = null
+      if (pendingSnapshot) { writeSave(pendingSnapshot); pendingSnapshot = null }
+    }, SAVE_THROTTLE_MS)
+  }
+}
+
+/** Force l'écriture immédiate d'un éventuel instantané throttlé en attente (cycle de vie : passage en
+ *  arrière-plan / fermeture). Idempotent : ne fait rien si rien n'est en attente. */
+export function flushSave() {
+  if (saveTimer !== null) { clearTimeout(saveTimer); saveTimer = null }
+  if (pendingSnapshot) { writeSave(pendingSnapshot); pendingSnapshot = null }
 }
 
