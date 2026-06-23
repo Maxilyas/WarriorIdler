@@ -18,14 +18,13 @@ const load = async (entry) => {
   return import('data:text/javascript;base64,' + Buffer.from(res.outputFiles[0].text).toString('base64'))
 }
 const M = await load(`
-  export { makeCharacter, charDerived, charDamageProfile, charDps, charMaxHp, charEhp, charResist, charCombatMods, charPassives, talentsSpent, talentPointsForLevel, teamTalentPool, setGlobalCombatMods } from './src/game/character.ts'
-  export { incomingDps, armorMitigation } from './src/game/combat.ts'
+  export { makeCharacter, charDerived, charDamageProfile, charDps, charMaxHp, charEhp, charCombatMods, talentsSpent, teamTalentPool, setGlobalCombatMods } from './src/game/character.ts'
   export { profileDamageMult } from './src/game/damage.ts'
   export { EQUIP_SLOTS } from './src/game/slots.ts'
   export { generateItem } from './src/game/items.ts'
   export { makeDungeonEnemy, dungeonFights, DUNGEONS } from './src/game/dungeons.ts'
-  export { RAID_LIST, raidIlvl, raidBerserkTime } from './src/game/raids.ts'
-  export { enemyHp, enemyDmg } from './src/game/progression.ts'
+  export { RAID_LIST, makeRaidBoss, raidBerserkTime } from './src/game/raids.ts'
+  export { partyCombatStep, resetAllCooldowns, fuelReset, crescendoReset } from './src/game/combatEngine.ts'
   export { computeGlobalMods } from './src/game/upgrades.ts'
   export { achievementBonuses } from './src/game/achievements.ts'
   export { sanitizeRaw, freshSave } from './src/game/save.ts'
@@ -33,10 +32,10 @@ const M = await load(`
   export { getTalent } from './src/game/talents.ts'
 `)
 const {
-  makeCharacter, charDerived, charDamageProfile, charDps, charMaxHp, charEhp, charResist, charCombatMods, charPassives,
-  talentsSpent, talentPointsForLevel, teamTalentPool, setGlobalCombatMods,
-  incomingDps, armorMitigation, profileDamageMult, EQUIP_SLOTS, generateItem,
-  makeDungeonEnemy, dungeonFights, DUNGEONS, RAID_LIST, raidIlvl, raidBerserkTime, enemyHp, enemyDmg,
+  makeCharacter, charDerived, charDamageProfile, charDps, charMaxHp, charEhp, charCombatMods,
+  talentsSpent, teamTalentPool, setGlobalCombatMods, profileDamageMult, EQUIP_SLOTS, generateItem,
+  makeDungeonEnemy, dungeonFights, DUNGEONS, RAID_LIST, makeRaidBoss, raidBerserkTime,
+  partyCombatStep, resetAllCooldowns, fuelReset, crescendoReset,
   computeGlobalMods, achievementBonuses, sanitizeRaw, freshSave, getPower, getTalent,
 } = M
 
@@ -75,7 +74,6 @@ const eco = computeGlobalMods(save.upgrades ?? {}, save.maitrise ?? {}, achievem
 setGlobalCombatMods({ power: eco.power, attackSpeed: eco.attackSpeed, vitality: eco.vitality })
 
 const c = save.characters[save.activeChar] ?? save.characters[0]
-const REGEN_RATE = 0.05
 
 // DPS total = auto+sorts (charDps) + DoT keystone des auto-attaques (non inclus dans charDps).
 function dotDps(ch) {
@@ -86,18 +84,32 @@ function dotDps(ch) {
 }
 const totalDps = (ch) => charDps(ch) + dotDps(ch)
 
-// DPS effectif vs un ennemi (armure + résist) — comme dungeon-sim.
-function effectiveDps(ch, enemy) {
-  const dps = totalDps(ch), prof = charDamageProfile(ch), d = charDerived(ch)
-  const physFrac = prof.profile.physique ?? 0
-  const resE = enemy.resist?.[ch.equipment.armePrincipale?.damageType ?? 'physique'] ?? 0
-  return dps * (1 - physFrac * armorMitigation(enemy.armor, d.power)) * (1 - Math.max(0, resE))
+// ---- Simulation de combat d'ÉQUIPE via le VRAI moteur (heal, cooldowns et mécaniques de boss inclus) ----
+// Équipe = TOUS les persos de la save (le DPS + le heal), comme le tick du jeu (partyCombatStep(s.characters)).
+// Pas de buffs gemmes/runes/consommables (mods omis) → estimation CONSERVATRICE (plancher réaliste).
+const party0 = save.characters
+const TEAM = party0.length
+function freshParty() {
+  // copies neuves à PV pleins, sans état transitoire ; module-state (cooldowns/fuel/crescendo) remis à zéro.
+  const p = party0.map((ch) => ({ ...ch, hp: charMaxHp(ch), dots: undefined, weaken: undefined, stun: 0, rez: undefined }))
+  resetAllCooldowns(p); fuelReset(); crescendoReset()
+  return p
 }
-function ttd(ch, enemy) {
-  const d = charDerived(ch), res = charResist(ch), pass = charPassives(ch), cm = charCombatMods(ch)
-  const taken = incomingDps(enemy.damage, enemy.damageType, d, res, (1 - pass.damageReduction) * (1 - cm.flatDr))
-  const net = taken - charMaxHp(ch) * REGEN_RATE
-  return net <= 0 ? Infinity : charMaxHp(ch) / net
+// Un combat d'équipe vs `enemy` jusqu'au kill (gagné) ou wipe/temps écoulé (perdu). dt=0,2 s (5 Hz, comme le jeu).
+function simWin(makeEnemy, timeLimit) {
+  let p = freshParty()
+  let enemy = makeEnemy(p.length)
+  for (let t = 0; t < timeLimit && enemy.hp > 0 && p.some((x) => x.hp > 0); t += 0.2) {
+    const r = partyCombatStep(p, enemy, 0.2)
+    p = r.chars; enemy = r.enemy
+  }
+  return enemy.hp <= 0
+}
+// L'aléa (esquive/procs/sursis) rend un combat bruité → 3 essais, majorité (≥2 wins) = « battable ».
+function beats(makeEnemy, timeLimit) {
+  let w = 0
+  for (let i = 0; i < 3; i++) if (simWin(makeEnemy, timeLimit)) w++
+  return w >= 2
 }
 
 /* ====================================================================== */
@@ -112,45 +124,38 @@ for (const s of EQUIP_SLOTS) { const it = c.equipment[s.id]; if (it) { rar[it.ra
 console.log(`  DPS ${fmt(dps)} · EHP ${fmt(ehp)} · PV ${fmt(hp)} · record de farm (stage) ${save.bestStage ?? '?'}`)
 console.log(`  Stuff : ${Object.entries(rar).map(([r, n]) => `${n}×${r}`).join(', ') || 'aucun'} · ${uniq} effet(s) unique(s)`)
 console.log(`  Mods de compte : puissance ×${eco.power.toFixed(2)} · vit. att. ×${eco.attackSpeed.toFixed(2)} · vitalité ×${eco.vitality.toFixed(2)}`)
-if (save.characters.length > 1) console.log(`  (${save.characters.length} persos dans la save — audit du perso ACTIF ; relance en changeant activeChar pour les autres.)`)
+console.log(`  Équipe simulée (${TEAM}) : ${save.characters.map((x) => `${x.name} niv${x.level} ${x.primaryBias} (EHP ${fmt(charEhp(x))})`).join(' · ')}`)
+console.log('  → Donjons/Raids = COMBAT D\'ÉQUIPE réel (heal inclus) ; Sorts/Talents = perso actif.')
 
 /* ====================================================================== */
 /* 1) DONJONS                                                            */
 /* ====================================================================== */
-console.log('\n── 1) DONJONS — niveau max franchissable (survivre ET tuer le boss < 180s) ──')
+console.log('\n── 1) DONJONS — niveau max franchissable par l\'ÉQUIPE (vrai combat, heal inclus) ──')
 for (const [dId, def] of Object.entries(DUNGEONS)) {
-  let last = 0, limit = ''
-  for (let D = 1; D <= 60; D++) {
+  let last = 0
+  for (let D = 1; D <= 25; D++) {
     const fights = dungeonFights(D) // dungeonFights prend le NIVEAU du donjon, pas le def
-    const boss = makeDungeonEnemy(def, D, fights - 1, fights, [], c.level)
-    const tk = boss.hp / effectiveDps(c, boss)
-    const survive = ttd(c, boss) >= tk
-    if (survive && tk < 180) { last = D; continue }
-    limit = !survive ? 'survie' : 'vitesse (>180s)'
-    break
+    if (beats(() => makeDungeonEnemy(def, D, fights - 1, fights, [], save.bestStage ?? 1), 180)) last = D
+    else break
   }
-  const verdict = last === 0 ? '⛔ infranchissable' : last >= 55 ? '😴 trop facile' : `🧱 mur ~niv ${last + 1} (${limit})`
+  const verdict = last === 0 ? '⛔ infranchissable' : last >= 25 ? '😴 trop facile (≥25)' : `🧱 mur ~niv ${last + 1}`
   console.log(`  ${def.icon} ${def.name.padEnd(22)} max niv ${String(last).padStart(2)}   ${verdict}`)
 }
 
 /* ====================================================================== */
 /* 2) RAIDS                                                              */
 /* ====================================================================== */
-console.log('\n── 2) RAIDS — tier max battable (TTK boss < enrage ET survie ; mécaniques de raid non modélisées) ──')
-const RAID_CAP = 30 // les raids normaux plafonnent en ilvl bien avant — au-delà, aucun mur ne reste
+console.log('\n── 2) RAIDS — tier max battable par l\'ÉQUIPE (vrai boss + mécaniques télégraphiées, heal inclus) ──')
 for (const def of RAID_LIST) {
-  let last = 0, limit = ''
-  for (let t = 1; t <= RAID_CAP; t++) {
-    const il = raidIlvl(def, t, 200)
-    const tk = enemyHp(il, 'raidboss') / totalDps(c)
-    const surviveS = charEhp(c) / enemyDmg(il, 'raidboss')
-    const enrage = raidBerserkTime(def, t)
-    if (tk < enrage && surviveS >= tk) { last = t; continue }
-    limit = tk >= enrage ? `enrage (TTK ${tk.toFixed(0)}s > ${enrage.toFixed(0)}s)` : 'survie'
-    break
+  const el = def.element === 'rotating' ? 'arcane' : def.element // type de dégâts infligé par le boss
+  let last = 0
+  for (let t = 1; t <= 15; t++) {
+    if (beats((n) => makeRaidBoss(def, t, el, save.bestStage ?? 1, n), raidBerserkTime(def, t))) last = t
+    else break
   }
-  const verdict = last === 0 ? '⛔ T1 hors de portée' : last >= RAID_CAP ? '😴 tous tiers (raid plafonné en difficulté)' : `🧱 mur T${last + 1} (${limit})`
-  console.log(`  ${def.icon} ${def.name.padEnd(22)} max T${String(last).padStart(2)}   ${verdict}`)
+  const verdict = last === 0 ? '⛔ T1 hors de portée' : last >= 15 ? '😴 tous tiers (≥15)' : `🧱 mur T${last + 1}`
+  const note = def.icon === '🕳️' ? '  (Abîme = DUO en réalité → un peu plus dur que cette sim mono-boss)' : ''
+  console.log(`  ${def.icon} ${def.name.padEnd(22)} max T${String(last).padStart(2)}   ${verdict}${note}`)
 }
 
 /* ====================================================================== */
@@ -203,8 +208,9 @@ if (inert.length) {
 } else console.log('  ✓ tous tes nœuds alloués pèsent sur le DPS ou l\'EHP.')
 
 console.log(`\n${'═'.repeat(70)}`)
-console.log('Modèle : DPS soutenu (auto+sorts+DoT) vs PV/enrage, survie = EHP burst. Estimation — il')
-console.log('ignore rotation fine, cooldowns et mécaniques signature de raid. Mur = 1er niveau/tier échoué.')
+console.log('Donjons/Raids = VRAI moteur de combat d\'équipe (heal, cooldowns, mécaniques de boss inclus),')
+console.log('SANS buffs gemmes/runes/consommables (plancher) mais en supposant un jeu parfait (léger plafond) ;')
+console.log('3 essais/combat, majorité. Sorts/Talents = contribution DPS mono-cible du perso actif.')
 console.log(demo
   ? 'Démo terminée. Lance sur TA save : node scripts/save-audit.mjs chemin/vers/ta-save.json'
   : 'Audit terminé.')
