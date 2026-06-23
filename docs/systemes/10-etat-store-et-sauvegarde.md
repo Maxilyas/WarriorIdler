@@ -1,6 +1,8 @@
 # 10 — État, store & sauvegarde
 
-> Source : [`store.ts`](../../src/game/store.ts) (~3.4k lignes : état + actions + orchestration),
+> Source : [`store.ts`](../../src/game/store.ts) (~500 lignes : assembleur — types, état initial,
+> spread des 10 slices), [`*Slice.ts`](../../src/game/) (les ~120 actions par domaine : tick, monde,
+> stuff, gems, officine, atelier, expéditions, héros, live-ops, market),
 > [`save.ts`](../../src/game/save.ts) (sauvegarde & migration), [`combatEngine.ts`](../../src/game/combatEngine.ts)
 > (moteur de combat), [`storeHelpers.ts`](../../src/game/storeHelpers.ts) (helpers purs + consts partagés) —
 > tous extraits de `store.ts`,
@@ -49,7 +51,10 @@ Store Zustand unique (`useGame`), 4 grands rôles :
    sous-systèmes (métiers, alchimie, donjon/raid en cours, maîtrises, hauts faits, daily, event, inbox).
 2. **Actions** : tout ce qui mute l'état (équiper, crafter, lancer un donjon/raid, acheter, prestige…).
    Chaque action calcule le prochain état via des fonctions **pures** de `game/`, `set(next)` puis
-   `persist(next)`.
+   `persist(next)`. Les ~120 actions sont **découpées en 10 slices par domaine** (`*Slice.ts` :
+   tick, monde, stuff, gems, officine, atelier, expéditions, héros, live-ops, market) — chacune
+   `createXSlice(set, get) → Pick<GameState, …>` que `create()` spread dans son `return` ; les slices
+   n'importent du store que des **types** (`import type` → pas de cycle runtime).
 3. **Boucle de combat** : `tick(dt)` à 5 Hz (`TICK_MS = 200` dans App.tsx) — voir [01 Combat](01-combat-et-degats.md).
    Sous-fonctions : `tickHeroStatuses`, `tickEnemyAbilities`, gestion menace/mort/repli/butin.
 4. **Sauvegarde** (voir ci-dessous).
@@ -57,7 +62,7 @@ Store Zustand unique (`useGame`), 4 grands rôles :
 ## Sauvegarde & migration
 
 - **Clé** : `SAVE_KEY = 'warrior-idler-save-v030c'` ; sérialisation JSON dans `localStorage`.
-- **`persist(s)`** (~ligne 2126) : projette le `GameState` sur une forme `SaveData` (liste **explicite**
+- **`persist(s)`** (dans [`save.ts`](../../src/game/save.ts)) : projette le `GameState` sur une forme `SaveData` (liste **explicite**
   des champs persistés — les champs transitoires en sont **exclus**), horodate `lastSeen`.
 - **`load()`** : lit la clé, `JSON.parse`, puis `migrateOldSave(p)`.
 - **Migrations** : une série de fonctions rattrapent les vieilles saves —
@@ -83,9 +88,10 @@ Store Zustand unique (`useGame`), 4 grands rôles :
 
 ## Dette / provisoire
 
-- `store.ts` reste **volumineux** (~3.4k lignes) malgré le découpage (save/combatEngine/storeHelpers
-  extraits depuis un god-file de 7.5k lignes) : les ~120 actions Zustand y cohabitent encore. Toute
-  extraction doit préserver l'invariant « logique pure dans `game/`, orchestration dans le store ».
-  Suite possible : slicing des actions en slices Zustand par domaine (plus risqué — closures `set`/`get`).
+- Le découpage du god-file (7.5k lignes) est **terminé** : `store.ts` ≈ 500 lignes (assembleur), le
+  reste réparti en `save.ts` / `combatEngine.ts` / `storeHelpers.ts` / 10 `*Slice.ts`. Toute extraction
+  future doit préserver l'invariant « logique pure dans `game/`, orchestration dans les slices ».
+- Le **socle de tests** [`test/`](../../test/) (Vitest) couvre save (round-trip/migration), helpers purs
+  et invariants moteur ; à étoffer au fil des évolutions (`npm test`).
 - La clé de save porte encore `v030c` : la **version de schéma** (clé) et la **version de jeu**
   (commits) sont découplées — voir la proposition d'`APP_VERSION` dans le [README](../../README.md).

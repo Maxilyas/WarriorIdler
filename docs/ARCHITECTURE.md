@@ -79,10 +79,11 @@ auto-lancées, altérations (DoT/HoT, voir `tickHeroStatuses`), capacités ennem
 | Module | Rôle | Doc système |
 |---|---|---|
 | `types.ts` | Vocabulaire de domaine : `Item`, `Affix`, `Character`, `DamageType`, `EquipSlotId`, `PowerDef`… | [10](systemes/10-etat-store-et-sauvegarde.md) |
-| `store.ts` | **Store Zustand** : état + actions + orchestration (tick/donjon/raid) (~3,4k lignes) | [10](systemes/10-etat-store-et-sauvegarde.md) |
+| `store.ts` | **Assembleur du store Zustand** (~500 lignes) : types, état initial (`create()` : loadSave + hors-ligne + cold-start) et **spread des 10 slices d'actions**. Plus de logique de jeu inline. | [10](systemes/10-etat-store-et-sauvegarde.md) |
+| `*Slice.ts` (×10) | **Slices d'actions par domaine** : `tickSlice` (boucle de combat), `worldSlice`, `stuffSlice`, `gemsSlice`, `officineSlice`, `atelierSlice`, `expeditionsSlice`, `herosSlice`, `liveopsSlice`, `marketSlice`. Chacun : `createXSlice(set, get)` → `Pick<GameState, …>`. `sliceTypes.ts` = `GameSet`/`GameGet`. | [10](systemes/10-etat-store-et-sauvegarde.md) |
 | `save.ts` | **Sauvegarde & migration** : `SaveData`, `freshSave`, `sanitize`, `loadSave`, `persist` (extrait de `store.ts`) | [10](systemes/10-etat-store-et-sauvegarde.md) |
 | `combatEngine.ts` | **Moteur de combat** : état transitoire + `partyCombatStep`/`partyCombatStepMulti` (extrait de `store.ts`) | [01](systemes/01-combat-et-degats.md) |
-| `storeHelpers.ts` | **Helpers du store** : fonctions pures d'orchestration + consts partagés (journal, XP métiers/Conseil, coffres, prix échoppe, `tickDungeon`/`tickRaid`/`applyChestRewards`) — extrait de `store.ts` | [10](systemes/10-etat-store-et-sauvegarde.md) |
+| `storeHelpers.ts` | **Helpers du store** : fonctions pures d'orchestration + consts partagés (journal, XP métiers/Conseil, coffres, prix échoppe, `tickDungeon`/`tickRaid`/`applyChestRewards`, `awaySince`) — extrait de `store.ts` | [10](systemes/10-etat-store-et-sauvegarde.md) |
 | `stats.ts` | Méta des stats, totaux, dérivées, soft-caps, stats rares | [02](systemes/02-stats-et-maitrises.md) |
 | `maitrise.ts` | Conseil des Maîtrises : progression de compte time-gatée (contrats hebdo) | [02](systemes/02-stats-et-maitrises.md) |
 | `combat.ts` | Coups, mitigation (armure), DPS théorique, dégâts subis, résist sur sorts | [01](systemes/01-combat-et-degats.md) |
