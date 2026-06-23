@@ -12,7 +12,8 @@ function gearedHero(level = 50) {
   return c
 }
 
-/** Héros sur-équipé : tue vite à un palier élevé (≈ 60) où le farm lâche de l'Épique/Légendaire. */
+/** Héros endgame réaliste (stuff Abyssal ilvl 240 = borne raid Abîme) : tue au Chapitre 4 où le farm
+ *  lâche de l'Épique/Légendaire (donc des uniques). */
 const FULL_SLOTS: { slot: EquipSlotId; type: ItemType }[] = [
   { slot: 'tete', type: 'tete' }, { slot: 'cou', type: 'cou' }, { slot: 'epaules', type: 'epaules' },
   { slot: 'cape', type: 'cape' }, { slot: 'torse', type: 'torse' }, { slot: 'poignets', type: 'poignets' },
@@ -23,7 +24,7 @@ const FULL_SLOTS: { slot: EquipSlotId; type: ItemType }[] = [
 ]
 function strongHero() {
   const c = makeCharacter('H', 400, 'force')
-  for (const { slot, type } of FULL_SLOTS) c.equipment[slot] = mkItem({ type, ilvl: 800, rarity: 'legendaire' })
+  for (const { slot, type } of FULL_SLOTS) c.equipment[slot] = mkItem({ type, ilvl: 240, rarity: 'abyssal' })
   c.hp = charMaxHp(c)
   return c
 }
@@ -55,7 +56,7 @@ describe('tickSlice', () => {
 
   // Régression — bug du seuil de rareté au drop : l'auto-recyclage protégeait TOUS les uniques
   // (`!it.unique`), contrairement au recyclage de masse (`bulkProtected` : verrou + uniques Cosmique+).
-  // À haut palier ~1/4 des Légendaires farmés sont des uniques → avec un seuil élevé, le joueur voyait
+  // À Chapitre élevé ~1/4 des Légendaires farmés sont des uniques → avec un seuil élevé, le joueur voyait
   // de l'Épique/Légendaire (unique) « tomber » malgré le seuil. L'auto doit recycler les uniques sous
   // le seuil, comme la masse.
   describe('auto-recyclage par seuil de rareté', () => {
