@@ -161,6 +161,8 @@ export function precisionRatingToCancel(dodge: number): number {
 }
 /** Part de la 2e stat offensive reversée dans la puissance (knob d'équilibrage). */
 export const SECOND_STAT_SHARE = 0.2
+/** PV gagnés par point d'Endurance (knob d'équilibrage, partagé formule ↔ affichage). */
+export const HP_PER_ENDURANCE = 12
 
 /** Puissance issue d'une stat primaire offensive. */
 function statPower(value: number): number {
@@ -252,7 +254,7 @@ export function computeDerived(total: StatBlock): DerivedStats {
     agiPower,
     intPower,
     endurancePower: statPower(endurance),
-    hp: (100 + endurance * 12) * (1 + shieldPct), // PV/Endurance relevés (survie suit mieux la montée)
+    hp: (100 + endurance * HP_PER_ENDURANCE) * (1 + shieldPct), // PV/Endurance relevés (survie suit mieux la montée)
     critChance,
     critMult,
     // Hâte : 1% par 50 rating (rating/5000), soft cap +90% → +140% (aps max ~2,4).
@@ -300,7 +302,7 @@ export function describeStats(total: StatBlock): { primary: StatEffect[]; second
     const rating = total[k] ?? 0
     if (k === 'endurance') {
       return { key: k, name: m.name, short: m.short, color: m.color, rating, active: true,
-        effect: `+${rating * 10} points de vie`, desc: m.desc }
+        effect: `+${rating * HP_PER_ENDURANCE} points de vie`, desc: m.desc }
     }
     const isMain = k === d.mainStat
     return {
