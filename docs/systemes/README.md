@@ -20,4 +20,6 @@ modèle de données, mécanique (formules réelles), **knobs** d'équilibrage, i
 | [10](10-etat-store-et-sauvegarde.md) | État, store & sauvegarde | `store.ts`, `types.ts`, `character.ts` |
 
 Voir aussi : [`../ARCHITECTURE.md`](../ARCHITECTURE.md) (vue d'ensemble), [`../GLOSSAIRE.md`](../GLOSSAIRE.md)
-(lexique), [`../DESIGN.md`](../DESIGN.md) (vision/pilier).
+(lexique), [`../DESIGN.md`](../DESIGN.md) (vision/pilier),
+[`../etude-persistance-sauvegardes.md`](../etude-persistance-sauvegardes.md) (étude — persistance des
+sauvegardes sur GitHub Pages : client, multi-slot, cloud-save ; **prospective, non implémentée**).
