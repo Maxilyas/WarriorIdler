@@ -17,7 +17,9 @@
     "mur": "node scripts/sim-mur.mjs",
     "eco": "node scripts/eco-sim.mjs",
     "weights": "node scripts/stat-weights.mjs",
-    "forge-hex": "node scripts/verif-forge-hex.mjs"
+    "forge-hex": "node scripts/verif-forge-hex.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "react": "^18.3.1",
@@ -33,6 +35,7 @@
     "tailwindcss": "^4.0.0",
     "typescript": "^5.6.3",
     "vite": "^6.0.3",
-    "vite-plugin-pwa": "^0.21.1"
+    "vite-plugin-pwa": "^0.21.1",
+    "vitest": "^4.1.9"
   }
 }
