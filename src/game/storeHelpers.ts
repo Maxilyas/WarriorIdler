@@ -56,13 +56,13 @@ import {
 import { SETS } from './sets'
 import type { GameState, ChestReward, ForgeContractDef, BrewBuffs, MysteryBox, LogEntry, LogKind } from './store'
 
-// v0.30 — WIPE ASSUMÉ : la refonte de progression (budget d'objet exponentiel, échelle d'ilvl
-// unifiée) rend les anciens objets/paliers incohérents sur la nouvelle courbe. On bumpe la clé →
-// les saves v1 ne sont plus chargées (reset propre, comme un gros prestige). Cf. DESIGN_v0.30.md.
+// WIPE ASSUMÉ : la refonte de progression (budget d'objet exponentiel, échelle d'ilvl unifiée) rend
+// les anciens objets/vagues incohérents sur la nouvelle courbe. On bumpe la clé → les saves v1 ne
+// sont plus chargées (reset propre, comme un gros prestige).
 export const MAX_LOG = 40
-// v0.25 (DESIGN §2) : pas de Sacoches — le tri se fait par l'auto-recyclage (seuil de rareté) et les
+// pas de Sacoches — le tri se fait par l'auto-recyclage (seuil de rareté) et les
 // outils de masse. CAP technique : borne de SÉCURITÉ (perf : limite le re-render/scan d'inventaire).
-// v0.42 (Palier 2) : la save durable vit désormais dans IndexedDB (filet localStorage best-effort, voir
+// la save durable vit dans IndexedDB (filet localStorage best-effort, voir
 // save.ts) → la contrainte de quota localStorage est levée. On relève donc le cap 5000 → 20000, en le
 // gardant BORNÉ (perf) plutôt qu'infini. Sims inchangées (aucune n'accumule un inventaire à ce volume).
 export const INV_BASE = 20000
@@ -77,7 +77,7 @@ export let invMax = INV_BASE
 export function capPrepend<T>(inv: T[], it: T, cap: number): T[] {
   return inv.length >= cap ? [it, ...inv.slice(0, cap - 1)] : [it, ...inv]
 }
-/* v0.27 (Lot 3) — socle ANTI-IMMORTALITÉ en RAID (knobs à éprouver). */
+/* socle ANTI-IMMORTALITÉ en RAID (knobs à éprouver). */
 export const RAID_REGEN_MULT = 0.5   // « Mal de l'abîme » : régén de base bridée de moitié en raid
 export const ESTOC_INTERVAL = 9      // s entre deux « Estocs primordiaux »
 export const ESTOC_PCT = 0.04        // % des PV MAX par estoc, IMPARABLE (ignore armure/résist/mitigation)
@@ -85,15 +85,15 @@ export const HEALCUT_DUR = 4         // « Blessures mortelles » : durée (s) d
 export const FRAPPE_INTERVAL = 12    // « Frappe partagée » : intervalle (s)
 export const FRAPPE_MULT = 3.2       // dégâts TOTAUX (÷ héros vivants) → soloer la frappe = la prendre PLEINE
 export const ESTOCADE_INTERVAL = 8   // « Estocade » : intervalle (s) — frappe le plus BAS en PV
-/** v0.25.x — RELÈVE en farm : un héros tombé se relève après ce délai (s), à 35% de ses PV. */
+/** RELÈVE en farm : un héros tombé se relève après ce délai (s), à 35% de ses PV. */
 export const RETREAT_STAGES = 2
 /** Intervalle (s) entre deux étourdissements d'un boss (après le 1er, cadencé par ccCd). */
-// v0.35.1 — Personnages 2 & 3 = la « dynamique reine » REQUISE pour les RAIDS (contenu de groupe :
+// Personnages 2 & 3 = la « dynamique reine » REQUISE pour les RAIDS (contenu de groupe :
 // heal/bouclier/synergie). Recrutable au Marché à un coût MODESTE et abordable dès que les raids
-// comptent (palier 50) ; déblocage gratuit très tardif conservé comme filet de sécurité.
+// comptent (vague 50) ; déblocage gratuit très tardif conservé comme filet de sécurité.
 export const CHAR2_STAGE = 350
 export const CHAR3_STAGE = 800
-export const RECRUIT_COST = [1_000_000, 8_000_000] // or — 2ᵉ abordable dès le palier 50, 3ᵉ = vrai objectif
+export const RECRUIT_COST = [1_000_000, 8_000_000] // or — 2ᵉ abordable dès la vague 50, 3ᵉ = vrai objectif
 export const RECRUIT_POUSSIERE = [0, 30] // 2ᵉ : que de l'or (la poussière sert au craft) ; 3ᵉ : un peu
 export const RECRUE_NAMES = ['Lyra', 'Kael', 'Sora', 'Dorn', 'Mira']
 
@@ -153,13 +153,13 @@ export function quintLogSuffix(refund: Partial<Record<DamageType, number>>): str
   return parts.length ? ` + ${parts.join(' ')}` : ''
 }
 
-/** Chances de drop d'une Quintessence du biome actif selon le rang d'ennemi (au palier 1). */
+/** Chances de drop d'une Quintessence du biome actif selon le rang d'ennemi (à la vague 1). */
 export const QUINT_DROP = { normal: 0.01, elite: 0.05, boss: 0.1 }
-/** Bonus de drop de Quintessence par palier (multiplicatif, plafonné) → farmer son palier actuel
- *  rapporte plus que farmer 50 paliers en dessous. */
+/** Bonus de drop de Quintessence par vague (multiplicatif, plafonné) → farmer sa vague actuelle
+ *  rapporte plus que farmer 50 vagues en dessous. */
 export const QUINT_TIER_BONUS = 0.012
 export const QUINT_TIER_MULT_CAP = 4
-/** Multiplicateur de drop de Quintessence au palier `stage`. */
+/** Multiplicateur de drop de Quintessence à la vague `stage`. */
 export function quintTierMult(stage: number): number {
   return Math.min(QUINT_TIER_MULT_CAP, 1 + Math.max(0, stage - 1) * QUINT_TIER_BONUS)
 }
@@ -169,14 +169,14 @@ export function quintTierMult(stage: number): number {
  * gagne de l'XP (créditée tout de suite, gardée même si le run échoue) et de l'or (versé au coffre).
  * Multiplicateurs volontairement GÉNÉREUX (le levelling est lent par design) — à affiner.
  */
-// ×XP de l'équipe par combat dans le Sanctuaire du Savoir. Relevé 7 → 24 (v0.21) : les donjons
-// sont passés de 4+N combats à 2-4 → on préserve l'XP totale d'un run.
+// ×XP de l'équipe par combat de donjon. Calé à 24 : les donjons font 2-4 combats (au lieu de 4+N) →
+// on préserve l'XP totale d'un run.
 export const DUNGEON_FIGHT_XP_MULT = 24
 /** Boost de l'XP du combat CLASSIQUE : recale le ratio donjon/classique (~×80 → ~×10). */
 export const CLASSIC_XP_MULT = 8
-/** Or par kill en combat CLASSIQUE (fraction de l'XP du mob). v0.36 : 0.8 → 5.0 — le farm devient la
+/** Or par kill en combat CLASSIQUE (fraction de l'XP du mob). Calé à 5.0 — le farm est la
  *  SEULE source d'or (donjons retirés de l'or) ; il doit couler franchement pour dépenser souvent au
- *  Marché (coffres + améliorations). KNOB à affiner après une grosse session de tests (cf. DESIGN_v0.36 §2.2). */
+ *  Marché (coffres + améliorations). KNOB à affiner après une grosse session de tests. */
 export const CLASSIC_GOLD_MULT = 5.0
 let logId = 1
 export function pushLog(log: LogEntry[], text: string, kind: LogKind): LogEntry[] {
@@ -189,7 +189,7 @@ export function gainMetierXp(
   metier: MetierId,
   amount: number,
 ): { metiers: MetiersState; log: LogEntry[] } {
-  // 🗃️ Rune de l'Archiviste (v0.26) : +15% d'XP pour les quatre métiers (amplifiée Législateur).
+  // 🗃️ Rune de l'Archiviste : +15% d'XP pour les quatre métiers (amplifiée Législateur).
   if (s.characters && equippedRules(s.characters).has('archiviste')) {
     amount = Math.round(amount * (1 + 0.15 * ruleAmp(craftMods(s.metiers).ruleAmpTier)))
   }
@@ -207,7 +207,7 @@ export function gainMetierXp(
 }
 
 /**
- * v0.25 — XP IMPLICITE des métiers (fin de donjon/raid) : porter ses gemmes fait travailler le
+ * XP IMPLICITE des métiers (fin de donjon/raid) : porter ses gemmes fait travailler le
  * Joaillier, porter ses runes le Runiste — « les mécaniques s'amènent toutes seules ». Minuscule
  * (1 XP/gemme sertie portée, cap 5 · 1 XP/rune gravée portée, cap 4) : réel sur la durée, invisible
  * au quotidien. (L'Alchimiste a déjà ses sources implicites : quintessences + recyclage.)
@@ -229,7 +229,7 @@ export function passiveMetierXp(s: Pick<GameState, 'metiers' | 'characters'>, lo
 }
 
 /**
- * 🏛️ Conseil des Maîtrises (v0.25, DESIGN §3) : avance un contrat hebdo. Gère le ROULEMENT de
+ * 🏛️ Conseil des Maîtrises : avance un contrat hebdo. Gère le ROULEMENT de
  * semaine (contrats remis à zéro, les Points acquis restent) et crédite AUTOMATIQUEMENT le Point
  * de Maîtrise au seuil — la progression se fait en jouant, sans clic.
  */
@@ -284,7 +284,7 @@ export function activeBrewBuffs(s: Pick<GameState, 'elixirActive' | 'oilActive' 
   return out
 }
 
-/** v0.26 : calcule les mods de PACTE de l'équipe et synchronise les dérivées globales
+/** calcule les mods de PACTE de l'équipe et synchronise les dérivées globales
  *  (PV, vitesse, vol de vie, esquive — character.ts), élixirs d'Officine compris. */
 export function teamPactMods(
   s: Pick<GameState, 'characters' | 'metiers'>,
@@ -306,7 +306,7 @@ export function teamPactMods(
 }
 
 
-/** v0.31 — AUTO-ÉQUIP des slots VIDES (onboarding) : remplit chaque emplacement vide du perso avec le
+/** AUTO-ÉQUIP des slots VIDES (onboarding) : remplit chaque emplacement vide du perso avec le
  *  meilleur objet compatible de l'inventaire. NON destructif — les slots déjà remplis ne bougent pas
  *  (les UPGRADES restent un choix manuel). Un perso nu se gear ainsi tout seul depuis ses drops. */
 export function autoEquipEmpties(char: Character, inventory: Item[]): { char: Character; inventory: Item[]; equipped: number } {
@@ -340,7 +340,7 @@ export function autoEquipEmpties(char: Character, inventory: Item[]): { char: Ch
  * (Épique…) restent recyclables en masse : c'est le moteur d'essences du jeu.
  */
 export function bulkProtected(item: Item): boolean {
-  // 🔒 (v0.28) le verrou joueur protège de TOUTE suppression de masse/auto.
+  // 🔒 le verrou joueur protège de TOUTE suppression de masse/auto.
   return !!item.locked || (!!item.unique && RARITIES[item.rarity].tier >= 13)
 }
 
@@ -423,15 +423,15 @@ export function highestLevel(chars: Character[]): number {
 
 /** Soin complet + purge des statuts de combat transitoires (mort, repli, fin de donjon/raid). */
 export function fullHeal(c: Character): Character {
-  // v0.36 — la remise à neuf (mort / checkpoint de Chapitre) RAZ aussi le bouclier d'absorption :
+  // la remise à neuf (mort / checkpoint de Chapitre) RAZ aussi le bouclier d'absorption :
   // pas de report d'un combat à l'autre (« reset dur hors combat »).
   return { ...c, hp: charMaxHp(c), absorb: undefined, rez: undefined, stun: 0, dots: undefined, weaken: undefined }
 }
 
-/** Met à jour les multiplicateurs globaux (combat, régén) — améliorations + 🏛️ Maîtrise (v0.25). */
+/** Met à jour les multiplicateurs globaux (combat, régén) — améliorations + 🏛️ Maîtrise. */
 export function refreshGlobals(upgrades: Record<string, number>, maitrise: Record<string, number> = {}, constellation: Record<string, number> = {}, achievements: Record<string, true> = {}) {
   const m = computeGlobalMods(upgrades, maitrise, achievementBonuses(achievements))
-  // ✨ Constellation de prestige (v0.27, Lot 5) : multiplie les globaux de combat + résist plate.
+  // ✨ Constellation de prestige : multiplie les globaux de combat + résist plate.
   const pm = constellationMods(constellation)
   setGlobalCombatMods({ power: m.power * pm.damageMult, attackSpeed: m.attackSpeed * pm.speedMult, vitality: m.vitality * pm.vitalityMult })
   setGlobalPrestigeResist(pm.resistFlat)
@@ -458,17 +458,17 @@ export const BOX_ARMOR: ItemType[] = ['tete', 'epaules', 'cape', 'torse', 'poign
 export const BOX_ACCESSORIES: ItemType[] = ['anneau', 'bijou', 'cou']
 
 /**
- * Coffres CIBLÉS et ATTRACTIFS (refonte v0.19). Au lieu de coffres « génériques » sans intérêt,
+ * Coffres CIBLÉS et ATTRACTIFS. Au lieu de coffres « génériques » sans intérêt,
  * chaque coffre a une PROMESSE claire : un build (Guerrier/Rôdeur/Mage), un slot (armes/armures/
  * bijoux), un affixe fort (Critique), de la défense, ou des matériaux. Les petits coffres GARANTISSENT
  * un objet utile (ta stat) + des éclats → ils ne sont plus jamais « gâchés ».
  * id = index dans le tableau (utilisé par l'action mysteryBox).
  */
-// v0.40.4 — la RARETÉ des coffres s'ancre sur la rareté DÉBLOQUÉE du compte (unlockedRarityTier, fenêtre
-// [top−4 → top], pic au plancher = dump d'or). v0.43 : elle est MODULÉE par coffre (boxRarityWindow) —
+// la RARETÉ des coffres s'ancre sur la rareté DÉBLOQUÉE du compte (unlockedRarityTier, fenêtre
+// [top−4 → top], pic au plancher = dump d'or). Elle est MODULÉE par coffre (boxRarityWindow) —
 // `shape` (POOR/DUMP/RICH), `capDelta` (départ −1 = budget ; positif = capBonus), `peakShift` (premium +1).
 // Les coffres diffèrent aussi par leur EFFET, leur count (2-4) et leur `priceTier` (poids de prix).
-// v0.40.4/v0.43 — formes de tirage de rareté des coffres (rollWindowRarity, pic au PLANCHER → dump d'or).
+// formes de tirage de rareté des coffres (rollWindowRarity, pic au PLANCHER → dump d'or).
 export const BOX_DUMP_SHAPE = { shoulder: 0.45, tail: 0.40 } // standard : rareté débloquée (sommet) ~1,7%
 export const BOX_RICH_SHAPE = { shoulder: 0.70, tail: 0.60 } // premium (richTail / jackpot) : sommet ~6%
 // forme « budget » des coffres de DÉPART (Guerrier/Rôdeur/Mage) : haut de fenêtre effondré (~0,07% au
@@ -490,12 +490,12 @@ export const MYSTERY_BOXES: MysteryBox[] = [
   // --- Matériaux & haut de gamme ---
   { id: 8, name: 'Coffre du forgeron', icon: '🔨', gold: 400000, count: 2, priceTier: 7, jackpot: 0.05, eclats: 3000, noyau: 12, poussiere: 8, desc: 'Matériaux de craft en MASSE (atelier/forge) + objets.' },
   { id: 9, name: 'Coffre légendaire', icon: '🟠', gold: 800000, count: 4, priceTier: 8, jackpot: 0.07, eclats: 1500, noyau: 5, poussiere: 3, desc: 'Gros lot d\'objets (or seul).' },
-  // v0.43 — gamme PRESTIGE : dégatée du raid (OR seul, plus de costFragments/costCosmic). En échange,
+  // gamme PRESTIGE : dégatée du raid (OR seul, plus de costFragments/costCosmic). En échange,
   // pic monté (peakShift) ET plafond +1 (capDelta : chance de rareté AU-DESSUS de l'unlock) → le vrai
   // chase + le grand puits d'or. priceTier calé pour un gros achat atteignable (~500M au Néant à Ch.8).
   { id: 10, name: 'Coffre cosmique', icon: '🌟', gold: 2500000, count: 4, priceTier: 7.5, jackpot: 0.09, richTail: true, peakShift: 1, capDelta: 1, guaranteeUnique: true, eclats: 4000, noyau: 10, poussiere: 12, desc: 'Premium (or seul) : pic de rareté MONTÉ + plafond +1 (chance de rareté AU-DESSUS de ton unlock) + 1 unique garanti.' },
   { id: 11, name: 'Coffre du Néant', icon: '🕳️', gold: 10000000, count: 4, priceTier: 8.5, jackpot: 0.13, richTail: true, peakShift: 1, capDelta: 1, guaranteeUnique: true, eclats: 10000, noyau: 25, poussiere: 35, desc: 'Le pari ultime (or seul) : pic MONTÉ + plafond +1 (rareté au-dessus de ton unlock) + unique garanti. Le grand puits d\'or.' },
-  // --- Nouveautés v0.23 (les ids sont des INDEX : on n'insère jamais, on AJOUTE) ---
+  // --- (les ids sont des INDEX : on n'insère jamais, on AJOUTE) ---
   { id: 12, name: 'Coffre du Jour', icon: '🗓️', gold: 0, free: true, count: 2, priceTier: 4, jackpot: 0.06, eclats: 150, desc: 'GRATUIT toutes les 22 h. Des objets + des éclats. Reviens demain !' },
   { id: 13, name: 'Coffre Maudit', icon: '🎲', gold: 60000, count: 2, priceTier: 6, jackpot: 0.08, cursed: true, desc: '75% : contenu DOUBLÉ. 25% : la malédiction ne laisse qu\'un objet Commun.' },
   { id: 14, name: 'Coffre élémentaire', icon: '🔥', gold: 35000, count: 2, priceTier: 5, jackpot: 0.05, elementPick: true, desc: 'Choisis un ÉLÉMENT : ligne « +% dégâts du type » garantie (armes typées).' },
@@ -504,12 +504,12 @@ export const MYSTERY_BOXES: MysteryBox[] = [
   { id: 17, name: 'Coffre du Destin', icon: '🎭', gold: 120000, count: 3, priceTier: 6, jackpot: 0.07, choice: true, desc: 'Révèle 3 objets : tu n\'en GARDES qu\'UN, les deux autres sont recyclés en éclats.' },
   { id: 18, name: 'Coffre du Maillon Faible', icon: '🧩', gold: 150000, count: 2, priceTier: 7, jackpot: 0.06, weakest: true, desc: 'Analyse ton équipement et cible ton EMPLACEMENT le plus faible (vide ou en retard).' },
   { id: 19, name: 'Coffre du Collectionneur', icon: '📖', gold: 300000, count: 2, priceTier: 8, jackpot: 0.06, collector: true, costFragments: 3, desc: 'Des objets dont un porte un effet unique JAMAIS DÉCOUVERT — complète le Grimoire.' },
-  // v0.40.4 — le DUMP D'OR générique : pas d'effet, juste des objets à la rareté DÉBLOQUÉE de ton chapitre.
+  // le DUMP D'OR générique : pas d'effet, juste des objets à la rareté DÉBLOQUÉE de ton chapitre.
   { id: 20, name: 'Coffre du Chapitre', icon: '📦', gold: 50000, count: 3, priceTier: 6, jackpot: 0.05, desc: 'Objets à la rareté débloquée de ton chapitre (donjons/raids compris). Le dump d\'or polyvalent.' },
 ]
 
 /**
- * v0.43 — FENÊTRE DE RARETÉ EFFECTIVE d'un coffre, à partir de la rareté débloquée du compte (`rTop`).
+ * FENÊTRE DE RARETÉ EFFECTIVE d'un coffre, à partir de la rareté débloquée du compte (`rTop`).
  * Base : [rTop−4 → rTop], pic au plancher (dump d'or). Modulée par coffre :
  *  - `capDelta` décale le PLAFOND (le plancher suit, largeur fixe 4) — départ : −1 (jamais le dernier
  *    cran débloqué) ; positif = capBonus (au-dessus de l'unlock) ;
@@ -528,21 +528,21 @@ export function boxRarityWindow(box: MysteryBox, rTop: number): {
 }
 
 /**
- * v0.25 — PRIX EN OR d'un coffre de stuff. Suit (a) la rareté ET (b) ton revenu d'or (record) :
+ * PRIX EN OR d'un coffre de stuff. Suit (a) la rareté ET (b) ton revenu d'or (record) :
  * un prix FIXE devenait vite trivial face au revenu exponentiel (« on a tout ce qu'on veut »).
- * Calé SOUS la croissance du Donjon d'Or (≈1,069^palier) → acheter coûte ~un nombre constant de
+ * Calé SOUS la croissance du Donjon d'Or (≈1,069^vague) → acheter coûte ~un nombre constant de
  * runs, qui décroît LENTEMENT (rentable sur le temps, jamais instantané). Lots de ressources
  * (count 0) & coffres gratuits : prix fixe (l'équation, indexée rareté, ne les concerne pas).
  */
-// v0.43 — relevé 400 → 2000 (×5) : se stuffer aux coffres était trop facile (un coffre de départ
-// coûtait ~0,15% d'une réserve de mid-game). Le prix indexé palier (BOX_PRICE_STAGE) reste au-dessus
+// calé à 2000 : se stuffer aux coffres était trop facile à 400 (un coffre de départ coûtait ~0,15%
+// d'une réserve de mid-game). Le prix indexé sur la vague (BOX_PRICE_STAGE) reste au-dessus
 // de la croissance du revenu/sec → les coffres ne redeviennent jamais triviaux.
-export const BOX_PRICE_K = 2000      // base (×5 vs v0.42)
+export const BOX_PRICE_K = 2000      // base
 export const BOX_PRICE_RARITY = 2.5  // ×prix par cran de rareté moyenne (raide : « gonfle énormément » en haut)
-export const BOX_PRICE_STAGE = 1.06  // ×prix par palier de record (< revenu d'or → rentable sur le temps)
+export const BOX_PRICE_STAGE = 1.06  // ×prix par vague de record (< revenu d'or → rentable sur le temps)
 export function boxGoldPrice(box: MysteryBox, bestStage: number): number {
   if (box.free || box.count <= 0) return box.gold
-  // v0.40.4 — `priceTier` = poids de prix par coffre (ex-minTier) ; le palier indexe via BOX_PRICE_STAGE.
+  // `priceTier` = poids de prix par coffre (ex-minTier) ; la vague indexe via BOX_PRICE_STAGE.
   const tMoy = box.priceTier + 1.5
   return Math.round(BOX_PRICE_K * box.count * Math.pow(BOX_PRICE_RARITY, tMoy - 3) * Math.pow(BOX_PRICE_STAGE, Math.max(1, bestStage)))
 }
@@ -556,11 +556,11 @@ export function bestRaidTier(raidProgress: Record<string, number>): number {
 
 /**
  * iLvl MAX « de contenu » : le meilleur iLvl lootable dans les contenus DÉBLOQUÉS —
- * donjons (plafonnés à 125% du record de palier, voir dungeonIlvl) et raids VAINCUS
- * (iLvl du meilleur tier clear, par raid). Sert de plafond RELATIF au surillvl (v0.25.x) :
- * l'atelier suit la progression du joueur, il ne la double pas.
+ * donjons (ilvl FIXE par niveau, voir dungeonIlvl) et raids VAINCUS (iLvl du meilleur tier clear,
+ * par raid). Sert de plafond RELATIF au surillvl : l'atelier suit la progression du joueur, il ne
+ * la double pas.
  */
-/** v0.31 — contexte de complétion des quêtes du tutoriel, dérivé de l'état (pas de tracking lourd). */
+/** contexte de complétion des quêtes du tutoriel, dérivé de l'état (pas de tracking lourd). */
 export function tutContext(s: {
   characters: Character[]; activeChar: number; bestStage: number
   inventory: Item[]; dungeonProgress: Record<string, number>; tut: { bought: boolean }
@@ -579,7 +579,7 @@ export function tutContext(s: {
 }
 
 export function maxContentIlvl(bestStage: number, raidProgress: Record<string, number>): number {
-  // v0.36 — FIX : plus de ×1.25 (relique v0.25, quand les donjons donnaient 125% du record). Comme
+  // FIX : plus de ×1.25 (relique d'une époque où les donjons donnaient 125% du record). Comme
   // `stageIlvl` est désormais CAPÉ à 200, le ×1.25 gonflait le plafond à 250 → on pouvait surilvl un
   // objet 200 jusqu'à ~256 SANS l'Abîme. Le plafond = le MEILLEUR ilvl réellement atteignable (farm
   // capé 200 + raids vaincus, dont l'Abîme à 220/240) ; le surilvl ne perce que d'une MARGE fixe
@@ -593,8 +593,8 @@ export function maxContentIlvl(bestStage: number, raidProgress: Record<string, n
 }
 
 /**
- * RÉFÉRENCE D'ILVL DU COMPTE (v0.28, B1) — le plus haut iLvl RÉELLEMENT obtenable selon le contenu
- * débloqué : farm (palier), DONJONS et RAIDS. C'est l'échelle UNIFIÉE : la forge, le marché et les
+ * RÉFÉRENCE D'ILVL DU COMPTE — le plus haut iLvl RÉELLEMENT obtenable selon le contenu débloqué :
+ * farm (vague), DONJONS et RAIDS. C'est l'échelle UNIFIÉE : la forge, le marché et les
  * coffres produisent à ce niveau (ils suivent tes meilleurs drops au lieu de stagner au farm), et
  * l'inventaire colore le « retard » par rapport à elle. ≠ `maxContentIlvl` (qui garde le ×1.25 +
  * marge UNIQUEMENT comme plafond de surillvl, pour qu'on puisse pousser un poil au-dessus en craft).
@@ -629,7 +629,7 @@ export function shopRefreshCost(bestStage: number): number {
 export function generateShop(bestStage: number, raidProgress: Record<string, number>, dungeonProgress: Record<string, number>, luckBonus: number): Item[] {
   // B1 — le marché suit la référence du compte (raids/donjons compris), plus seulement le farm.
   const ilvl = Math.max(1, referenceIlvl(bestStage, raidProgress, dungeonProgress))
-  // v0.35 — le marché est un DUMP D'OR à BASSE rareté : objets à TON ilvl (slot-filling) mais rareté
+  // le marché est un DUMP D'OR à BASSE rareté : objets à TON ilvl (slot-filling) mais rareté
   // FAIBLE (plus de montée auto par stageLuckTier) → jamais la source principale de stuff. La rareté
   // se chasse au drop / donjon poussé / raid. Seul l'investissement marchand (luckBonus) nudge un peu.
   const luck = Math.min(2, luckBonus)
@@ -659,7 +659,7 @@ export function pickBias(chars: Character[]): OffensiveStat {
 
 /** Donne de l'XP à un perso, gère les montées de niveau (gains de base + points de talent). */
 /**
- * v0.36 — XP de COMPTE : level/xp sont PARTAGÉS par toute l'équipe (un seul niveau de compte). On avance
+ * XP de COMPTE : level/xp sont PARTAGÉS par toute l'équipe (un seul niveau de compte). On avance
  * le compte UNE fois (depuis le niveau le plus haut) et on synchronise TOUS les héros — chacun rattrape
  * sa base (bias + endurance) jusqu'au niveau de compte. Un 2e/3e perso n'ajoute donc PAS de niveau, et
  * le pool de talents (teamTalentPool, dérivé) n'enfle pas. Remplace l'ancien grantXp par-perso.
@@ -677,7 +677,7 @@ export function grantTeamXp(chars: Character[], xp: number): { chars: Character[
     if (inc > 0) {
       base[c.primaryBias] = (base[c.primaryBias] ?? 0) + inc
       base.endurance = (base.endurance ?? 0) + inc
-      // v0.39 : un palier de niveau peut débloquer un passif-conversion du SOCLE → recalcul.
+      // un niveau gagné peut débloquer un passif-conversion du SOCLE → recalcul.
       const unlockedPowers = computeUnlockedPowers({ ...c.talents, ...(c.pantheon ?? {}) }, level)
       return { ...c, level, xp: curXp, base, unlockedPowers }
     }
@@ -687,7 +687,7 @@ export function grantTeamXp(chars: Character[], xp: number): { chars: Character[
 }
 
 
-/** v0.26 : options d'agrégation des gemmes issues de l'arbre du Joaillier — 🔗 Serti conducteur
+/** options d'agrégation des gemmes issues de l'arbre du Joaillier — 🔗 Serti conducteur
  *  (2+ gemmes d'une famille sur un héros), 🪩 Mosaïque (3+ familles portées), 📖 Catalogue
  *  (collection complète), 👑 Châsse royale, 🎭 Double allégeance. */
 export function teamGemOpts(s: Pick<GameState, 'characters' | 'gemsSeen'>, cm: ReturnType<typeof craftMods>): GemModOpts {
@@ -729,10 +729,10 @@ export function tickDungeon(s: GameState, dt: number, set: (s: GameState) => voi
   let regen = dungeonRegen(d.trait, d.level) // identité 'regen' : rampe avec le niveau (nulle au niv 1)
   for (const m of d.modifiers) {
     if (m.enrageRampPerSec) enrage += m.enrageRampPerSec
-    if (m.reflectPct) reflect += m.reflectPct // vestige « Réfléchissant » (runs antérieurs à v0.25.x)
+    if (m.reflectPct) reflect += m.reflectPct // vestige « Réfléchissant » (runs hérités)
     if (m.regenPct) regen += m.regenPct
   }
-  // v0.25.x (A) : les affixes de difficulté PAIENT — multiplicateur de récompenses du run.
+  // les affixes de difficulté PAIENT — multiplicateur de récompenses du run.
   const rwMult = d.modifiers.reduce((a, m) => a * (m.rewardMult ?? 1), 1)
   const explodePct = d.modifiers.reduce((a, m) => a + (m.explodePct ?? 0), 0)
 
@@ -741,7 +741,7 @@ export function tickDungeon(s: GameState, dt: number, set: (s: GameState) => voi
   const dRunes = timeRuneMods(equippedTimeRunes(s.characters), dCraft.runisteTempo)
   const dBuffs = activeBrewBuffs(s)
   const dPact = teamPactMods(s, dCraft, dBuffs)
-  // 🗝️ Pierre de sceau (v0.26) : +X% de dégâts par modificateur actif · ⚗️ élixir/🛢️ huile d'Officine.
+  // 🗝️ Pierre de sceau : +X% de dégâts par modificateur actif · ⚗️ élixir/🛢️ huile d'Officine.
   const dHeroMult = (1 + maitriseBonus(s.bestStage)) * (1 + crescendoBonus(dCond.crescendoCap))
     * (dCond.sceauPct ? 1 + dCond.sceauPct * d.modifiers.length : 1)
     * dBuffs.dmgMult
@@ -800,7 +800,7 @@ export function tickDungeon(s: GameState, dt: number, set: (s: GameState) => voi
     let logBit = ''
     let leveled = false
     // Rendement par combat = part PERFIGHT du rendement total mappé sur les coûts (voir dungeons.ts),
-    // × rwMult (v0.25.x : les affixes paient).
+    // × rwMult (les affixes paient).
     const perFight = (r: 'gold' | 'eclats' | 'noyau' | 'poussiere') => dungeonRunYield(r, lv, d.bestStage ?? s.bestStage) * DUNGEON_YIELD_PERFIGHT_FRAC * rwMult / Math.max(1, d.totalFights)
     switch (def.reward) {
       case 'gold': { if (!noGold) { const g = Math.round(perFight('gold') * eco.goldGain); gold += g; logBit = `+${g.toLocaleString('fr-FR')} or` } break }
@@ -818,7 +818,7 @@ export function tickDungeon(s: GameState, dt: number, set: (s: GameState) => voi
         logBit = `+${xp.toLocaleString('fr-FR')} XP`
         break
       }
-      // Cache du Pilleur (v0.36) : tout le butin tombe au COFFRE (count 1 → 5, +1 tous les 3 niveaux), à TA
+      // Cache du Pilleur : tout le butin tombe au COFFRE (count 1 → 5, +1 tous les 3 niveaux), à TA
       // tranche d'ilvl. Plus de drop par-combat → le nombre d'objets/run est piloté proprement par le niveau.
       case 'stuff': break
       // La Géode : la poussière 🔹 coule à chaque combat (la gemme, elle, attend le coffre).
@@ -854,7 +854,7 @@ export function tickDungeon(s: GameState, dt: number, set: (s: GameState) => voi
           : pushLog(log, `⏱️ Pressé manqué (${Math.round(runTime)}s/${presse.timerSec}s) — coffre normal.`, 'info')
       }
       // Multiplicateur de COFFRE : affixes payants (rwMult) × défi Pressé réussi
-      // × 🗺️ Cartographe + ◈ Environnement III × 💰 Potion du pillard (v0.26).
+      // × 🗺️ Cartographe + ◈ Environnement III × 💰 Potion du pillard.
       const chestMult = rwMult * (presseOk ? 1 + (presse?.timerBonus ?? 0) : 1)
         * (1 + (dCond.cartographePct ?? 0) + (dCond.envChestPct ?? 0))
         * (1 + (d.chestPotion ?? 0))
@@ -875,12 +875,12 @@ export function tickDungeon(s: GameState, dt: number, set: (s: GameState) => voi
         // (🔑 Clés en double appliquée après le switch — voir plus bas.)
         case 'xp': { const bonus = Math.round(1200 * lv * Math.pow(1.12, lv) * chestMult * (1 + (d.xpPotion ?? 0))); chars = grantTeamXp(chars, bonus).chars; cXp += bonus; break }
         case 'stuff': {
-          // v0.36 — ilvl du butin = TA tranche (record de palier), IDENTIQUE à tous les niveaux. Ce qui
+          // ilvl du butin = TA tranche (record de vague), IDENTIQUE à tous les niveaux. Ce qui
           // change avec le niveau : le NOMBRE d'objets (1 → 5, droite +1 tous les 3 niveaux) et la rareté (cf. cw).
           const ilvl = lootFarmIlvl(s.bestStage)
-          // v0.39.1 — droite linéaire 1 → 5 (plafond), +1 tous les 3 niveaux (paliers aux niv 4/7/10/13).
+          // droite linéaire 1 → 5 (plafond), +1 tous les 3 niveaux (seuils aux niv 4/7/10/13).
           const count = Math.max(1, Math.round(Math.min(5, 1 + Math.floor((lv - 1) / 3)) * chestMult))
-          // v0.24 : FENÊTRE de la Cache (pic ≤ Légendaire, plafond pratique Artefact — même
+          // FENÊTRE de la Cache (pic ≤ Légendaire, plafond pratique Artefact — même
           // « Avare » ne le perce pas). Au-dessus, seul le « voile » (infime, → Éternel max).
           const cw = cacheRarityWindow(lv)
           for (let i = 0; i < count; i++) {
@@ -907,7 +907,7 @@ export function tickDungeon(s: GameState, dt: number, set: (s: GameState) => voi
           break
         }
       }
-      // 🔑 Clés en double (rune v0.26) : les clés du coffre peuvent être doublées.
+      // 🔑 Clés en double (rune) : les clés du coffre peuvent être doublées.
       const dRules = equippedRules(s.characters)
       if ((cSceaux > 0 || cOrbes > 0) && dRules.has('clesDouble') && Math.random() < 0.15 * ruleAmp(dCraft.ruleAmpTier)) {
         cSceaux *= 2
@@ -916,7 +916,7 @@ export function tickDungeon(s: GameState, dt: number, set: (s: GameState) => voi
       }
       const chest: ChestReward = { dungeonName: d.name, level: lv, items, eclats: cEclats, noyau: cNoyau, gold: cGold, sceaux: cSceaux, orbes: cOrbes, poussiere: cPous, xp: cXp, gemDust: cDust, gem: cGem }
 
-      // 🪄 Rune (v0.25) : drop TRÈS rare en fin de run — la vraie source est le raid (🖋️ Greffier aide).
+      // 🪄 Rune : drop TRÈS rare en fin de run — la vraie source est le raid (🖋️ Greffier aide).
       let runesOwned = s.runesOwned
       if (Math.random() < dungeonRuneChance(lv, dCraft.greffierMult)) {
         const rd = rollRuneDrop()
@@ -980,7 +980,7 @@ export function tickDungeon(s: GameState, dt: number, set: (s: GameState) => voi
 }
 
 /** Dégâts de zone (Nova/adds) sur l'équipe, typés : multiplicateur d'exigence par perso.
- *  `onlyIdx` (v0.27) : limite le coup à un seul héros (Estocade — frappe le plus bas en PV). */
+ *  `onlyIdx` : limite le coup à un seul héros (Estocade — frappe le plus bas en PV). */
 export function applyAoe(chars: Character[], baseDmg: number, type: DamageType, req = 0, onlyIdx?: number): Character[] {
   return chars.map((c, i) => {
     if (c.hp <= 0 || (onlyIdx != null && i !== onlyIdx)) return c
@@ -1014,7 +1014,7 @@ export function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) 
   // Acharnement : le boss frappe plus fort à mesure qu'il agonise (premier boss VIVANT — duo de l'Abîme).
   const bossIn = r.enemies.find((e) => e.boss && e.hp > 0) ?? r.enemies[0]
   if (mech.includes('execute')) dmgMult *= 1 + (1 - bossIn.hp / Math.max(1, bossIn.maxHp)) * 0.7
-  // v0.27 (Lot 3) Forge « Surchauffe » : la forge chauffe à mesure qu'on la martèle → plus tu l'as
+  // Forge « Surchauffe » : la forge chauffe à mesure qu'on la martèle → plus tu l'as
   // entamée, plus elle frappe fort (tension DPS↔survie, anti-glass-cannon).
   if (def.id === 'forge') dmgMult *= 1 + Math.min(0.8, (1 - bossIn.hp / Math.max(1, bossIn.maxHp)) * 0.8)
 
@@ -1028,8 +1028,8 @@ export function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) 
     * (rBuffs.oil && rBuffs.oil.type === r.element ? 1 + rBuffs.oil.pct : 1)
   const res = partyCombatStepMulti(s.characters, r.enemies, dt, {
     enrage, regen: drain, fightTime, dmgMult, heroMult: rHeroMult, cond: rCond, runes: rRunes, pact: rPact,
-    // 🏅 Trophée de guerre (v0.26) : la gemme offre ses points de résist à l'équipe EN RAID.
-    // v0.27 (Lot 3) « Mal de l'abîme » : régén bridée en raid (la vie redevient une ressource).
+    // 🏅 Trophée de guerre : la gemme offre ses points de résist à l'équipe EN RAID.
+    // « Mal de l'abîme » : régén bridée en raid (la vie redevient une ressource).
     content: { resistBonus: rCond.tropheeRes, regenMult: RAID_REGEN_MULT, antidote: rBuffs.antidote ?? undefined },
   })
   let chars = res.chars
@@ -1039,7 +1039,7 @@ export function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) 
   let log = s.log
   for (const n of res.revived ?? []) log = pushLog(log, `🕊️ Sursis : ${n} survit in extremis !`, 'info')
 
-  // v0.27 (Lot 3) Reliquaire « Avarice » : chaque renfort qui tombe REND 3% des PV au boss (l'avare
+  // Reliquaire « Avarice » : chaque renfort qui tombe REND 3% des PV au boss (l'avare
   // récupère son dû) → tuer les adds dans le mauvais ordre te punit, l'ordre de kill compte.
   if (def.id === 'reliquaire') {
     const killed = Math.max(0, r.enemies.filter((e) => e.add && e.hp > 0).length - enemies.filter((e) => e.add && e.hp > 0).length)
@@ -1079,7 +1079,7 @@ export function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) 
     chars = chars.map((c) => (c.hp > 0 ? { ...c, healCut: HEALCUT_DUR } : c))
     log = pushLog(log, `☄️ ${boss.name} déchaîne une Nova ${DAMAGE_TYPES[element].name} (soins réduits !) !`, 'death')
   }
-  // v0.27 (Lot 3) « Estoc primordial » : coup périodique en % des PV MAX qui IGNORE armure/résist/
+  // « Estoc primordial » : coup périodique en % des PV MAX qui IGNORE armure/résist/
   // mitigation → punit l'empilement d'EHP & de réduction (le tank « increvable »). Ne mord que sur
   // les combats QUI DURENT (1er estoc à ESTOC_INTERVAL s) — un kill rapide n'est pas concerné.
   if (Math.floor(fightTime / ESTOC_INTERVAL) > Math.floor((fightTime - dt) / ESTOC_INTERVAL)) {
@@ -1105,7 +1105,7 @@ export function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) 
     }
   }
   // Déferlante : fait SURGIR des renforts réels (combat à plusieurs adversaires).
-  // v0.25.x : les rejetons PERSISTENT jusqu'à leur mort (plus d'expiration) — le plafond
+  // les rejetons PERSISTENT jusqu'à leur mort (plus d'expiration) — le plafond
   // simultané monte avec le tier (raidMaxAdds) : les ignorer laisse la pression s'empiler.
   if (mech.includes('swarm') && swarmCd <= 0) {
     swarmCd = 5
@@ -1125,7 +1125,7 @@ export function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) 
   }
 
   // Renforts : nettoyage des morts (le boss en [0] est toujours conservé). Le décompte de
-  // `lifetime` ne s'applique plus qu'aux rejetons d'anciennes sauvegardes (pré-v0.25.x).
+  // `lifetime` ne s'applique plus qu'aux rejetons d'anciennes sauvegardes (héritées).
   enemies = enemies.filter((e, idx) => {
     if (idx === 0) return true
     if (e.hp <= 0) return false
@@ -1153,17 +1153,17 @@ export function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) 
     crescendoAdd(1)
     tresorerieShield(chars, rCond.tresorerieCap)
     gemKillEvents(chars, rCond, 1, 1, rRunes, rPact) // 🔔 Glas · 🦷 Fièvre · 🎺 Marche · 🪽 · 🍽️
-    // v0.23 : un raid = UN affrontement → le boss (ou duo) vaincu, le trésor tombe directement.
+    // un raid = UN affrontement → le boss (ou duo) vaincu, le trésor tombe directement.
     {
       const tier = r.tier
       const ilvl = raidIlvl(def, tier, r.bestStage ?? s.bestStage)
-      // v0.24 : fenêtre à pic par tier (DESIGN §4.3) — pic « banal », traîne très rare vers le haut.
+      // fenêtre à pic par tier — pic « banal », traîne très rare vers le haut.
       const w = raidRarityWindow(def, tier)
       const count = rollRaidLootCount(def, tier)
       const bias = pickBias(s.characters)
       const items: Item[] = []
       for (let i = 0; i < count; i++) {
-        // v0.40.2 — Abîme : forme custom (down 0.78 / shoulder 0.20 / tail 0.10) → Cosmique/Abyssal/Primo/
+        // Abîme : forme custom (down 0.78 / shoulder 0.20 / tail 0.10) → Cosmique/Abyssal/Primo/
         // Trans = 39/50/10/1 EXACTEMENT. Raids de base : même côté gauche (down 0.30) mais traîne haute
         // RESSERRÉE (shoulder 0.15 / tail 0.12) → le sommet (Primo/Trans) reste sous l'Abîme.
         const rarity = def.id === 'abysse'
@@ -1186,7 +1186,7 @@ export function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) 
           ...(def.id === 'nexus' ? { biasResist: DAMAGE_TYPE_LIST[Math.floor(Math.random() * DAMAGE_TYPE_LIST.length)] } : {}),
         }))
       }
-      const cosmic = raidCosmicQty(def, tier) // v0.36 — déterministe (courbe partagée, 0 sous Cosmique/Ch.12)
+      const cosmic = raidCosmicQty(def, tier) // déterministe (courbe partagée, 0 sous Cosmique/Ch.12)
       const chest: ChestReward = {
         dungeonName: `${def.icon} ${def.name} · Tier ${tier}`,
         level: tier,
@@ -1194,7 +1194,7 @@ export function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) 
         eclats: Math.round(200 * tier * def.baseDifficulty),
         noyau: 3 + tier,
         gold: Math.round(400 * tier * def.baseDifficulty),
-        sceaux: 0, // v0.25 : les Sceaux viennent de l'Antre des Failles, pas des raids
+        sceaux: 0, // les Sceaux viennent de l'Antre des Failles, pas des raids
 
         fragments: raidFragments(def, tier),
         poussiere: Math.floor(tier / 2),
@@ -1203,7 +1203,7 @@ export function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) 
       const healed = chars.map(fullHeal)
       const raidProgress = { ...s.raidProgress, [r.raidId]: Math.max(s.raidProgress[r.raidId] ?? 0, tier) }
       // 🏆 Trophées du raid : la monnaie de passage de tier (≈ 5 clears du tier courant).
-      // 🏆 Rune du Trophéiste (v0.26) : chance de doubler la moisson.
+      // 🏆 Rune du Trophéiste : chance de doubler la moisson.
       const rRules = equippedRules(s.characters)
       let trophies = raidTrophyGain(def, tier)
       if (rRules.has('tropheiste') && Math.random() < 0.15 * ruleAmp(rCraft.ruleAmpTier)) {
@@ -1224,7 +1224,7 @@ export function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) 
         log = pushLog(log, `${cg.icon} GEMME DE CONDITION : ${cg.name} !`, 'loot')
       }
 
-      // 🪄 Rune (v0.25) : LE raid est la source des runes — chance qui monte avec le tier (🖋️ Greffier aide).
+      // 🪄 Rune : LE raid est la source des runes — chance qui monte avec le tier (🖋️ Greffier aide).
       let runesOwned = s.runesOwned
       if (Math.random() < raidRuneChance(tier, rCraft.greffierMult)) {
         const rd = rollRuneDrop()
@@ -1295,7 +1295,7 @@ export function applyChestRewards(s: GameState, c: ChestReward): Pick<GameState,
 /** Compteur d'id de log, partagé (était module-privé du store ; `logId` reste interne ici). */
 export function nextLogId(): number { return logId++ }
 
-/** v0.27 (F3) — horodatage de la mise en arrière-plan (0 = au premier plan). État TRANSITOIRE
+/** horodatage de la mise en arrière-plan (0 = au premier plan). État TRANSITOIRE
  *  partagé store ↔ slices d'actions (markAway/resumeAway) via accesseurs — non persisté. */
 let awaySince = 0
 export function getAwaySince(): number { return awaySince }
