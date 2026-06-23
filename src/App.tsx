@@ -8,6 +8,7 @@ import { TALENT_START_LEVEL, teamTalentPool } from './game/character'
 import { METIER_LIST, pointsAvailable } from './game/metiers'
 import { CombatPanel } from './components/CombatPanel'
 import { ResetButton } from './components/CharacterPanel'
+import { SaveTransfer } from './components/SaveTransfer'
 import { Sheet } from './components/ui'
 import { ChestModal } from './components/ChestModal'
 import { ChoiceModal } from './components/ChoiceModal'
@@ -386,6 +387,7 @@ export default function App() {
               <span>📱 Garder l'écran allumé</span>
               <input type="checkbox" checked={keepAwake} onChange={(e) => setKeepAwake(e.target.checked)} className="h-4 w-4 accent-orange-500" />
             </label>
+            <SaveTransfer />
             <ResetButton />
           </div>
         </Sheet>

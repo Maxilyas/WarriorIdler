@@ -34,6 +34,11 @@ import type { ChestReward, ChoiceReward, DungeonProgress, RaidProgress, GameStat
 
 export const SAVE_KEY = 'warrior-idler-save-v030c'
 
+/** Clé de RELAIS d'import (Palier 1). Un payload déposé ici par `applyImport` a priorité au prochain
+ *  cold-start et SURVIT au flush de `pagehide`/`visibilitychange` (qui n'écrit que `SAVE_KEY`) déclenché
+ *  par le `reload()` post-import — sans quoi l'état pré-import écraserait la save importée. */
+export const IMPORT_KEY = SAVE_KEY + '.import'
+
 export interface SaveData {
   characters: Character[]
   activeChar: number
@@ -921,6 +926,24 @@ function migrateOldSave(p: any): SaveData {
 
 export function loadSave(): SaveData {
   try {
+    // Reprise d'import (Palier 1) : un payload sous `IMPORT_KEY` a PRIORITÉ et survit au flush de
+    // `pagehide` (qui n'écrit que `SAVE_KEY`) déclenché par le reload post-import. On le promeut via la
+    // même chaîne `sanitize`, on le PERSISTE dans `SAVE_KEY` (adoption définitive), puis on le CONSOMME
+    // (removeItem) pour qu'un reload ultérieur reparte de la save normale.
+    const pendingImport = localStorage.getItem(IMPORT_KEY)
+    if (pendingImport !== null) {
+      localStorage.removeItem(IMPORT_KEY)
+      try {
+        const pi = JSON.parse(pendingImport)
+        if (Array.isArray(pi.characters)) {
+          const adopted = sanitize({ ...freshSave(), ...pi, onboarded: pi.onboarded ?? true })
+          writeSave(adopted)
+          return adopted
+        }
+      } catch {
+        /* payload d'import illisible : on l'ignore et on charge la save normale */
+      }
+    }
     const raw = localStorage.getItem(SAVE_KEY)
     if (raw) {
       const p = JSON.parse(raw)
@@ -1080,5 +1103,113 @@ export function persistThrottled(s: GameState) {
 export function flushSave() {
   if (saveTimer !== null) { clearTimeout(saveTimer); saveTimer = null }
   if (pendingSnapshot) { writeSave(pendingSnapshot); pendingSnapshot = null }
+}
+
+// --- Export / Import par fichier (Palier 1) ----------------------------------------------------
+// L'export ENVELOPPE le `SaveData` dans un petit en-tête (tag d'app + version de schéma + horodatage +
+// checksum léger) pour reconnaître un fichier étranger, repérer une save d'une version plus récente, ou
+// détecter une troncature. L'import re-passe par la chaîne `sanitize` ÉPROUVÉE : on écrit le payload
+// dans `localStorage` puis l'appelant recharge la page — le cold-start du store (loadSave → sanitize,
+// refreshGlobals, crédit hors-ligne, automates) fait foi, plutôt que de dupliquer le mapping
+// SaveData→GameState.
+
+/** Tag d'application : distingue une save Warrior Idler d'un JSON quelconque. */
+export const APP_TAG = 'warrior-idler'
+
+/** Version de SCHÉMA des saves exportées. À INCRÉMENTER à chaque changement de forme incompatible :
+ *  un import de schéma SUPÉRIEUR à cette valeur = save d'une version plus récente → downgrade risqué. */
+export const SAVE_SCHEMA = 1
+
+export interface SaveEnvelope {
+  /** Doit valoir `APP_TAG` pour un fichier reconnu. */
+  app: string
+  /** Version de schéma au moment de l'export. */
+  schema: number
+  /** Horodatage (ms) de l'export. */
+  exportedAt: number
+  /** Checksum léger (FNV-1a 32 bits) du JSON COMPACT de `data` — détecte troncature/altération. */
+  checksum: number
+  /** La sauvegarde proprement dite. */
+  data: SaveData
+}
+
+/** Checksum léger FNV-1a 32 bits (NON cryptographique) — simple garde-fou d'intégrité. */
+export function lightChecksum(str: string): number {
+  let h = 0x811c9dc5
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i)
+    h = Math.imul(h, 0x01000193)
+  }
+  return h >>> 0
+}
+
+/** Construit l'enveloppe d'export depuis l'état runtime (réutilise `buildSaveData`). */
+export function buildExport(s: GameState): SaveEnvelope {
+  const data = buildSaveData(s)
+  const checksum = lightChecksum(JSON.stringify(data))
+  return { app: APP_TAG, schema: SAVE_SCHEMA, exportedAt: Date.now(), checksum, data }
+}
+
+/** Sérialise l'état courant en texte JSON (indenté, lisible) prêt à télécharger / copier. */
+export function exportSaveText(s: GameState): string {
+  return JSON.stringify(buildExport(s), null, 2)
+}
+
+/** Nom de fichier suggéré pour le téléchargement : `warrior-idler-AAAA-MM-JJ-HHMM.json`. */
+export function exportFilename(now = new Date()): string {
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `warrior-idler-${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}-${p(now.getHours())}${p(now.getMinutes())}.json`
+}
+
+export type ImportResult =
+  | { ok: true; data: SaveData; warning?: string }
+  | { ok: false; error: string }
+
+/** Analyse DÉFENSIVE d'un texte importé (fichier ou collage) — NE touche PAS à la save courante.
+ *  Accepte l'enveloppe `{ app, schema, data }` OU un `SaveData` brut (ex : copie directe du
+ *  localStorage). Ne valide que le minimum vital (présence de l'équipe) ; la migration complète reste
+ *  déléguée à `sanitize` au rechargement. Renvoie un `warning` non bloquant pour un schéma plus récent
+ *  (downgrade) ou un checksum incohérent — à l'appelant de l'afficher avant d'écraser. */
+export function parseImport(text: string): ImportResult {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    return { ok: false, error: "Fichier illisible : ce n'est pas du JSON valide." }
+  }
+  if (!parsed || typeof parsed !== 'object') {
+    return { ok: false, error: 'Sauvegarde invalide : contenu vide ou inattendu.' }
+  }
+  const warnings: string[] = []
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const obj = parsed as any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let data: any
+  const isEnvelope = obj.data && typeof obj.data === 'object' && (obj.app === APP_TAG || typeof obj.schema === 'number')
+  if (isEnvelope) {
+    data = obj.data
+    if (typeof obj.schema === 'number' && obj.schema > SAVE_SCHEMA) {
+      warnings.push(`Cette sauvegarde vient d'une version PLUS RÉCENTE du jeu (schéma ${obj.schema} > ${SAVE_SCHEMA}). L'import peut perdre ou corrompre des données — downgrade non supporté.`)
+    }
+    if (typeof obj.checksum === 'number' && lightChecksum(JSON.stringify(data)) !== obj.checksum) {
+      warnings.push('Le checksum ne correspond pas : le fichier a peut-être été tronqué ou modifié.')
+    }
+  } else {
+    data = obj // `SaveData` brut (pas d'enveloppe) — toléré.
+  }
+  if (!Array.isArray(data.characters) || data.characters.length === 0) {
+    return { ok: false, error: 'Sauvegarde invalide : aucune équipe trouvée dans le fichier.' }
+  }
+  return { ok: true, data: data as SaveData, warning: warnings.length ? warnings.join('\n') : undefined }
+}
+
+/** Applique une save importée : on l'ESTAMPILLE (`lastSeen` = maintenant pour neutraliser un crédit
+ *  hors-ligne fortuit, `onboarded` = true) puis on la dépose sous `IMPORT_KEY` (relais qui survit au
+ *  flush de `pagehide`, voir `loadSave`). L'appelant RECHARGE ensuite la page : le cold-start
+ *  (`loadSave → sanitize`, refreshGlobals, automates) promeut le relais et fait foi. Peut throw (quota /
+ *  mode privé) — à l'appelant de gérer le message d'erreur. */
+export function applyImport(data: SaveData): void {
+  const stamped: SaveData = { ...data, lastSeen: Date.now(), onboarded: true }
+  localStorage.setItem(IMPORT_KEY, JSON.stringify(stamped))
 }
 

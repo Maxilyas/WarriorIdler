@@ -12,7 +12,7 @@ import { constellationMods, echosGain, getConstNode, nodeCost, RELIC_BASE_ILVL }
 import { rollCondGem } from './condGems'
 import { makeEnemy, stageIlvl } from './enemies'
 import { RARITIES } from './rarities'
-import { SAVE_KEY, freshSave, persist, discoverFromItems } from './save'
+import { SAVE_KEY, IMPORT_KEY, freshSave, persist, discoverFromItems } from './save'
 import { clearCooldowns } from './combatEngine'
 import { DAMAGE_TYPE_LIST } from './damage'
 import { randomUniqueInstance, undiscoveredUnique } from './uniques'
@@ -185,6 +185,7 @@ export function createMarketSlice(set: GameSet, get: GameGet): Pick<GameState,
     reset: () => {
       const fresh = freshSave()
       localStorage.removeItem(SAVE_KEY)
+      localStorage.removeItem(IMPORT_KEY) // purge un éventuel relais d'import non encore promu
       clearCooldowns()
       refreshGlobals(fresh.upgrades, fresh.maitrise, fresh.constellation, fresh.achievements)
       set({
