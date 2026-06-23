@@ -50,7 +50,7 @@ const BIOME_ENEMIES: Record<BiomeId, string[]> = {
   ombre: ['Goule putride', 'Spectre hurlant', 'Cultiste masqué', 'Démon mineur', 'Ombre rampante', 'Vampire famélique', 'Cauchemar incarné', 'Faucheur silencieux', 'Liche mineure', 'Dévoreur d\'âmes'],
 }
 
-/** Boss PAR BIOME (un nom thématique tous les 10 paliers). */
+/** Boss PAR BIOME (un nom thématique par Chapitre). */
 const BIOME_BOSSES: Record<BiomeId, string[]> = {
   physique: ['Seigneur Mortepierre', 'Korgath le Briseur', 'Général Fer-Noir', 'Urzog, Fléau des Plaines', 'La Montagne qui Marche'],
   feu: ['Pyrothan l\'Incandescent', 'La Fournaise Vivante', 'Ignis, Cœur de Braise', 'Le Sultan des Cendres', 'Vulkar l\'Éruptif'],
@@ -66,30 +66,30 @@ const EPITHETS = ['vorace', 'sinistre', 'hurlant', 'rampant', 'funeste', 'farouc
 
 /** Titres des CHAMPIONS ✦ : ennemis nommés rares au butin exceptionnel (moment de jackpot). */
 const CHAMPION_TITLES = ['le Terrible', 'l\'Écorcheur', 'la Calamité', 'le Maudit', 'le Colossal', 'l\'Immortel', 'le Hanteur', 'la Fin de Toute Chose']
-/** Chance qu'un ennemi normal (palier > 10) soit un champion. */
+/** Chance qu'un ennemi normal (vague > 10) soit un champion. */
 const CHAMPION_CHANCE = 0.03
 
-// v0.40 — Les TRAITS déterministes (Blindé/Féroce/Massif…) ont été retirés : la difficulté d'une vague
-// est désormais PUREMENT sa position dans l'escalier du Chapitre (cf. waveStaircase). Plus de pics de
-// stats hors-escalier ; les pics de BUTIN restent via élite ◆ / champion ✦.
+// Les TRAITS déterministes (Blindé/Féroce/Massif…) ont été retirés : la difficulté d'une vague est
+// PUREMENT sa position dans l'escalier du Chapitre (cf. waveStat). Plus de pics de stats hors-escalier ;
+// les pics de BUTIN restent via élite ◆ / champion ✦.
 
-/** Palier à partir duquel les ennemis gagnent une résistance globale croissante. */
+/** Vague à partir de laquelle les ennemis gagnent une résistance globale croissante. */
 const RESIST_RAMP_FROM = 25
 const RESIST_RAMP_PER_STAGE = 0.004
 const RESIST_RAMP_CAP = 0.55
-/** Élite tous les N paliers (hors boss) : stats accrues + meilleur butin. */
+/** Élite toutes les N vagues (hors boss) : marqueur de meilleur butin. */
 const ELITE_EVERY = 7
 
-/** Résistance globale (tous types) d'un palier — croît linéairement, contrée par la Pénétration. */
+/** Résistance globale (tous types) d'une vague — croît linéairement, contrée par la Pénétration. */
 export function stageResistRamp(stage: number): number {
   if (stage < RESIST_RAMP_FROM) return 0
   return Math.min(RESIST_RAMP_CAP, (stage - RESIST_RAMP_FROM) * RESIST_RAMP_PER_STAGE)
 }
 
 /**
- * FACTEUR DE DIFFICULTÉ DU FARM (v0.30.1) — deux rôles :
- *  1. RAMPE D'ONBOARDING : les premiers paliers sont très faibles → un perso NU démarre de zéro
- *     (palier 1 ~50 PV, tuable en 2-3 s), loote ses 1ers objets, s'équipe, progresse.
+ * FACTEUR DE DIFFICULTÉ DU FARM — deux rôles :
+ *  1. RAMPE D'ONBOARDING : les premières vagues sont très faibles → un perso NU démarre de zéro
+ *     (vague 1 ~50 PV, tuable en 2-3 s), loote ses 1ers objets, s'équipe, progresse.
  *  2. PLATEAU DE FARM : au-delà de `ONBOARD_STAGES`, le farm plafonne à `FARM_PLATEAU` (~0,55) de la
  *     courbe calibrée — car les sims TTK calibrent sur du LÉGENDAIRE, alors qu'un farmeur a du stuff de
  *     FARM (~épique, ~2× moins de DPS). Sans ça le farm serait ~2× trop lent. Les RAIDS (qui donnent
@@ -100,25 +100,25 @@ export const ONBOARD_STAGES = 22
 export const FARM_PLATEAU = 0.55
 export function onboardingMult(stage: number): number {
   if (stage >= ONBOARD_STAGES) return FARM_PLATEAU
-  // Courbe TRÈS douce sur les premiers paliers (exposant 2,6) : le joueur early n'a ni keystones
+  // Courbe TRÈS douce sur les premières vagues (exposant 2,6) : le joueur early n'a ni keystones
   // (talents au niv 11) ni stuff complet → bien plus faible que les builds optimisés des sims. On lui
-  // laisse de l'air pour gear/level/découvrir, puis on rejoint le plateau de farm au palier 22.
+  // laisse de l'air pour gear/level/découvrir, puis on rejoint le plateau de farm à la vague 22.
   return Math.max(0.004, FARM_PLATEAU * Math.pow(stage / ONBOARD_STAGES, 2.6))
 }
 
-// ---- MURS (v0.35) : boss de fin de Palier (vague 10) — DESIGN_v0.35 §6 ----
-// Le mur est un VRAI boss-classe (~35 s) avec une mécanique DOMINANTE cyclée (l'enrage DPS est
-// l'ossature présente partout ; la dominante ajoute le défi de sa dimension). NB v0.35 (tranche 1) :
-// la dominante est posée en MÉTADONNÉE (fiche + enrage) ; son application en combat (nova/fortress/
-// leech/rotate) arrive avec le câblage du tick (tranche suivante).
+// ---- MURS : boss de fin de Chapitre (vague 10) ----
+// Le mur est un VRAI boss-classe (~35 s) bâti sur l'enrage DPS (ossature présente partout) plus, dès le
+// Chapitre 6, une régén de vie (sustain check). La mécanique DOMINANTE (murMechanic) sert d'étiquette
+// d'archétype sur la fiche (cf. CombatPanel) : ses effets propres (nova/fortress/leech/rotate) ne sont
+// PAS distingués en combat pour les murs — ce sont les RAIDS qui les portent (voir raids.ts).
 const MUR_DOMINANTS = ['berserk', 'nova', 'fortress', 'leech', 'rotate'] as const
 /** Mécanique dominante du mur d'un Palier (cycle de 5 ; Palier 1 = course au DPS pure). */
 export function murMechanic(palier: number): string {
   return MUR_DOMINANTS[(Math.max(1, palier) - 1) % MUR_DOMINANTS.length]
 }
-// v0.36 — INTENSITÉ post-Prologue : les Chapitres 1-5 (tuto) restent CHILL ; à partir du Chapitre 6 (les
-// vrais Chapitres, où les persos se débloquent), les murs montent en PV et gagnent une RÉGÉN de vie →
-// vrai combat DPS / survie / heal (la « dynamique reine » multi-perso). Knobs à éprouver au playtest.
+// INTENSITÉ post-Prologue : les Chapitres 1-5 (tuto) restent CHILL ; à partir du Chapitre 6 (les vrais
+// Chapitres, où les persos se débloquent), les murs montent en PV et gagnent une RÉGÉN de vie → vrai
+// combat DPS / survie / heal (la « dynamique reine » multi-perso).
 /** Multiplicateur de PV d'un mur selon son Chapitre (×1 jusqu'à Ch.5, puis +10 %/Chapitre → ×2 au Ch.15). */
 export function murHpRamp(chapitre: number): number {
   return chapitre <= 5 ? 1 : 1 + 0.10 * (chapitre - 5)
@@ -149,7 +149,7 @@ export function murBossDmg(stage: number): number {
   return enemyDmg(farmDifficultyIlvl(stage), 'trash') * MUR_DMG_MULT * murSoftness(stage)
 }
 
-// ESCALIER DES VAGUES (v0.40.1 — ACCESSIBLE). Chaque Chapitre repart BAS et monte jusqu'à son boss :
+// ESCALIER DES VAGUES (ACCESSIBLE). Chaque Chapitre repart BAS et monte jusqu'à son boss :
 // vague V = V·10 % du boss DU CHAPITRE (vague 1 = 10 %, vague 9 ≈ 90 %, vague 10 = boss) → plus de
 // plateau farmable juste sous le boss. MAIS l'escalier « fond » progressivement pour rester ACCESSIBLE :
 // pendant le PROLOGUE (Ch ≤ STAIRCASE_PROLOGUE) les vagues gardent la courbe d'onboarding (un perso NU
@@ -173,8 +173,8 @@ export function waveStat(stage: number, metricBoss: (s: number) => number, acces
   return accessible + (stair - accessible) * staircaseBlend(c)
 }
 
-/** Crée l'ennemi correspondant à un palier (stage) dans un biome donné. Boss tous les 10 paliers.
- *  `championMult` (v0.26, 🍖 rune d'Appât) : multiplie la chance d'apparition des champions ✦. */
+/** Crée l'ennemi correspondant à une vague (stage) dans un biome donné. Boss toutes les 10 vagues.
+ *  `championMult` (🍖 rune d'Appât) : multiplie la chance d'apparition des champions ✦. */
 export function makeEnemy(stage: number, biome: BiomeId = 'physique', championMult = 1): Enemy {
   const isBoss = stage % 10 === 0
   // Champion ✦ : rencontre rare et ALÉATOIRE — désormais un pic de BUTIN (jackpot), plus un pic de
@@ -182,9 +182,9 @@ export function makeEnemy(stage: number, biome: BiomeId = 'physique', championMu
   const isChampion = !isBoss && stage > 10 && Math.random() < CHAMPION_CHANCE * championMult
   const isElite = !isBoss && !isChampion && stage % ELITE_EVERY === 0 && stage > ELITE_EVERY
 
-  // v0.40.1 — ESCALIER ACCESSIBLE : la difficulté (PV/DPS) d'une vague NORMALE = waveStat (courbe
-  // d'onboarding du prologue → escalier ancré au boss, fondu progressif). Plus de multiplicateurs
-  // élite/champion/trait (« fondus dans l'escalier »). Le boss (vague 10) = murBossHp/murBossDmg.
+  // ESCALIER ACCESSIBLE : la difficulté (PV/DPS) d'une vague NORMALE = waveStat (courbe d'onboarding du
+  // prologue → escalier ancré au boss, fondu progressif). Plus de multiplicateurs élite/champion/trait
+  // (« fondus dans l'escalier »). Le boss (vague 10) = murBossHp/murBossDmg.
   const diffIlvl = farmDifficultyIlvl(stage)
   const trashHp = enemyHp(diffIlvl, 'trash') * onboardingMult(stage)
   const maxHp = Math.round(isBoss ? murBossHp(stage) : waveStat(stage, murBossHp, trashHp))
@@ -201,10 +201,10 @@ export function makeEnemy(stage: number, biome: BiomeId = 'physique', championMu
           ? `${baseName} ${EPITHETS[(stage * 3 + baseName.length) % EPITHETS.length]}`
           : baseName
 
-  // Résistance globale (rampe de palier, contrée par la Pénétration) + AFFINITÉ ÉLÉMENTAIRE (v0.37) :
-  // l'ennemi RÉSISTE l'élément de son biome et est VULNÉRABLE à l'opposé (Physique neutre). Le tuyau
-  // v0.37 (rollHit autos, spellResistMult sorts) applique déjà résist/vuln par type → amener le bon
-  // élément (ou le multi-classe) devient un levier. (Donjons et raids partagent ce modèle.)
+  // Résistance globale (rampe de vague, contrée par la Pénétration) + AFFINITÉ ÉLÉMENTAIRE : l'ennemi
+  // RÉSISTE l'élément de son biome et est VULNÉRABLE à l'opposé (Physique neutre). Le tuyau de dégâts
+  // (rollHit autos, spellResistMult sorts) applique résist/vuln par type → amener le bon élément (ou le
+  // multi-classe) devient un levier. (Donjons et raids partagent ce modèle.)
   const resist = elementAffinityResist(biome, stageResistRamp(stage))
 
   // Auto-attaques TOUJOURS PHYSIQUES (la base). L'élément du biome arrive en plus, via la technique
@@ -225,16 +225,16 @@ export function makeEnemy(stage: number, biome: BiomeId = 'physique', championMu
     resist,
     damageType,
     ...(isElite ? { trait: 'Élite' } : isChampion ? { trait: 'Champion ✦' } : {}),
-    // Exigence de résistance (v0.24) sur l'élément du biome — nulle avant le palier 45, douce après.
+    // Exigence de résistance sur l'élément du biome — nulle avant la vague 45, douce après.
     ...(() => { const rq = farmReq(stage); return rq > 0 ? { reqs: { [biome]: rq } as Partial<Record<DamageType, number>> } : {} })(),
-    // v0.40 — l'élite/champion ne déclenche plus de capacité spéciale (fondu dans l'escalier) : seul
-    // le biome (signature) et le boss portent les techniques.
+    // l'élite/champion ne déclenche pas de capacité spéciale (fondu dans l'escalier) : seul le biome
+    // (signature) et le boss portent les techniques.
     ...(() => { const a = biomeAbilities(biome, isBoss, false); return a.length ? { abilities: a } : {} })(),
     // Élite/champion = marqueurs de BUTIN uniquement (pas de pic de difficulté : ni esquive, ni stats).
     ...(isElite || isChampion ? { elite: true } : {}),
     ...(isChampion ? { champion: true } : {}),
     // Boss : reçoivent les « Dégâts vs Boss », esquivent (→ Précision, hit cap boss 1500) et étourdissent (→ Résilience).
-    // MUR (v0.35) : métadonnée de dominante + enrage (fiche + tick), au Palier = stage / 10.
+    // MUR : métadonnée de dominante + enrage (fiche + tick), au Palier = stage / 10 (= n° de Chapitre).
     ...(isBoss ? {
       boss: true, dodge: ENEMY_DODGE.boss, ccDur: 1.5, ccCd: 7,
       mur: { mechanic: murMechanic(stage / 10), palier: stage / 10, enrageAt: murEnrage(stage / 10), regen: murRegenAt(stage / 10) },
@@ -246,13 +246,13 @@ export function isBossStage(stage: number): boolean {
   return stage % 10 === 0
 }
 
-/** ilvl de loot attendu pour une vague (v0.35 : = ilvlFarm = frontière − LAG, courbe unifiée, plus de
- *  cap — le loot reste en retard permanent sur la difficulté de la vague). */
+/** ilvl de loot attendu pour une vague (= ilvlFarm = frontière − LAG, capé à ILVL_CAP_BASE — le loot
+ *  reste en retard permanent sur la difficulté de la vague). */
 export function stageIlvl(stage: number): number {
   return ilvlFarm(stage)
 }
 
-/** Décalage de chance de rareté selon le palier atteint. */
+/** Décalage de chance de rareté selon la vague atteinte. */
 export function stageLuckTier(stage: number): number {
   return Math.floor(stage / 8)
 }

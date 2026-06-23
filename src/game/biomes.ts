@@ -3,17 +3,17 @@ import { DAMAGE_TYPES } from './damage'
 import { chapitreOf } from './progression'
 
 /**
- * BIOMES (refonte v0.18) — 7 biomes = les 7 types de dégâts.
+ * BIOMES — 7 biomes = les 7 types de dégâts.
  *
- * Chaque biome a SA progression de paliers (indépendante). Le joueur choisit le biome actif.
+ * Chaque biome a SA progression de vagues (indépendante). Le joueur choisit le biome actif.
  * - Physique = biome de DÉPART (apprentissage : dégâts physiques purs).
- * - Feu / Froid / Foudre / Nature = 4 « communs », débloqués ENSEMBLE (jalon neutre = palier 20
+ * - Feu / Froid / Foudre / Nature = 4 « communs », débloqués ENSEMBLE (jalon neutre = vague 20
  *   en Physique) → aucun build n'est avantagé par l'ordre.
- * - Arcane / Ombre = 2 « rares », débloqués ENSEMBLE (meilleur palier tous biomes ≥ 50).
+ * - Arcane / Ombre = 2 « rares », débloqués ENSEMBLE (meilleure vague tous biomes ≥ 50).
  *
  * Identité de loot : le butin d'un biome est orienté vers SON élément (dégâts + résistances de ce
- * type) — voir la génération de butin côté store. Les ennemis frappent dans l'élément du biome
- * (Physique → physique) ; les techniques signature typées arriveront avec les sorts ennemis (Phase 3).
+ * type) — voir la génération de butin côté store. Les auto-attaques restent PHYSIQUES ; chaque biome
+ * ajoute une technique signature typée (Brûlure, Gel, Poison…) — voir enemies.ts.
  */
 
 export type BiomeId = DamageType
@@ -30,12 +30,12 @@ export interface BiomeDef {
   lore: string
 }
 
-/** Palier de Physique requis pour débloquer les 4 biomes communs. */
+/** Vague de Physique requise pour débloquer les 4 biomes communs. */
 export const BIOME_COMMON_UNLOCK = 20
-/** Meilleur palier (tous biomes) requis pour débloquer les 2 biomes rares. */
+/** Meilleure vague (tous biomes) requise pour débloquer les 2 biomes rares. */
 export const BIOME_RARE_UNLOCK = 50
 
-/* ---- v0.28 — ROTATION ALÉATOIRE HORAIRE des biomes + forçage payant (Fragments d'éternité) ----
+/* ---- ROTATION ALÉATOIRE HORAIRE des biomes + forçage payant (Fragments d'éternité) ----
  * Par défaut, la zone de chasse change TOUTE SEULE pour un biome débloqué tiré AU HASARD, une fois
  * par heure (départ = Physique). Pour rester sur un biome précis (farm d'une quintessence/d'un
  * stuff ciblé), on le FORCE contre des Fragments : il reste actif ~1 h, puis la rotation reprend.
