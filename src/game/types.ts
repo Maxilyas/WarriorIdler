@@ -28,8 +28,8 @@ export type SecondaryStat =
   // --- Défensif ---
   | 'reductionDegats' // réduction plate des dégâts subis
   | 'barriere' // bouclier de départ : PV effectifs en plus (anti-burst)
-  | 'resilience' // (v0.38) réduit durée des CC ET durée/intensité des altérations subies (fusion Ténacité+Purge)
-  // --- DÉPRÉCIÉES (v0.38) : conservées pour les vieux objets/talents, repliées dans computeDerived. ---
+  | 'resilience' // réduit durée des CC ET durée/intensité des altérations subies (fusion Ténacité+Purge)
+  // --- DÉPRÉCIÉES : conservées pour les vieux objets/talents, repliées dans computeDerived. ---
   | 'esquive' // (déprécié) repliée dans Réduction
   | 'tenacite' // (déprécié) fusionnée dans Résilience
   | 'purge' // (déprécié) fusionnée dans Résilience
@@ -126,7 +126,7 @@ export interface UniqueEffect {
   mods?: StatBlock
   /** Bonus de résistances de base (rang 1), montés par le rang. */
   resistMods?: Partial<Record<DamageType, number>>
-  /** v0.38 — bonus de TAG : ×dégâts (ou ×soin pour [soin]) des sorts portant ce tag. `mult` = fraction
+  /** Bonus de TAG : ×dégâts (ou ×soin pour [soin]) des sorts portant ce tag. `mult` = fraction
    *  au rang 1 (0.30 = +30%), montée par le rang (comme resistMods). Alimente cm.tagBonus. */
   tagMods?: { tag: string; mult: number }[]
   /** Capacité active (proc/sort) débloquée au rang actif — texte d'accroche. */
@@ -141,7 +141,7 @@ export interface UniqueInstance {
 
 // ---- Gemmes (sertissage) ----
 
-/** Une gemme sertie dans une châsse. v0.22 : TOUTES les gemmes vivantes sont des gemmes de
+/** Une gemme sertie dans une châsse. TOUTES les gemmes vivantes sont des gemmes de
  *  CONDITION (`cond` renseigné, voir condGems.ts) — type/tier sont des vestiges du format
  *  élémentaire (migré en poussière). `rank` = rang de recoupe du Joaillier. */
 export interface GemInstance {
@@ -149,7 +149,7 @@ export interface GemInstance {
   tier: number
   cond?: string
   rank?: number
-  /** Qualité (v0.26) : 0 = Éclatée, 1/absent = Polie, 2 = Parfaite — roulée à la TAILLE. */
+  /** Qualité : 0 = Éclatée, 1/absent = Polie, 2 = Parfaite — roulée à la TAILLE. */
   quality?: number
 }
 
@@ -229,19 +229,19 @@ export interface Item {
   gems?: GemInstance[]
   /** Enchantement runique (id du registre enchants.ts) — une seule rune par pièce. */
   enchant?: string
-  /** Nombre de SURILLVL déjà appliqués (v0.25 : chaque usage renchérit le suivant ×1,18). */
+  /** Nombre de SURILLVL déjà appliqués (chaque usage renchérit le suivant ×1,18). */
   surCount?: number
-  /** Nombre de REFORGES déjà appliquées (v0.25 : même logique anti-spam). */
+  /** Nombre de REFORGES déjà appliquées (même logique anti-spam). */
   reforgeCount?: number
-  /** PERÇAGE du Joaillier (v0.26) : une châsse ajoutée à la main — une seule fois par objet. */
+  /** PERÇAGE du Joaillier : une châsse ajoutée à la main — une seule fois par objet. */
   drilled?: boolean
-  /** ⭐ POLISSAGE du Forgeron (v0.26) : qualité de forge 1–5 (budget déjà appliqué). */
+  /** ⭐ POLISSAGE du Forgeron : qualité de forge 1–5 (budget déjà appliqué). */
   stars?: number
-  /** 🔥 TREMPE LENTE (v0.26) : nombre d'iLvl déjà gagnés au bac de trempe (5 max par objet). */
+  /** 🔥 TREMPE LENTE : nombre d'iLvl déjà gagnés au bac de trempe (5 max par objet). */
   trempeCount?: number
-  /** Pièce de SET (id du registre sets.ts) : bonus à paliers quand plusieurs pièces sont portées. */
+  /** Pièce de SET (id du registre sets.ts) : bonus à seuils quand plusieurs pièces sont portées. */
   setId?: string
-  /** 🔒 VERROU joueur (v0.28) : protège la pièce de TOUTE vente/recyclage (manuel, masse, auto, multi-sélection). */
+  /** 🔒 VERROU joueur : protège la pièce de TOUTE vente/recyclage (manuel, masse, auto, multi-sélection). */
   locked?: boolean
 }
 
@@ -254,7 +254,7 @@ export type PowerKind = 'active' | 'passive'
 /**
  * Effet d'une capacité ACTIVE (auto-lancée sur cooldown en combat idle).
  * Base : heal / nuke / shield / buffParty / cleave / dot / hot.
- * Ultimes (v0.19) : effets forts à long cooldown qui dynamisent le combat.
+ * Ultimes : effets forts à long cooldown qui dynamisent le combat.
  */
 export type PowerEffect =
   | 'heal' | 'nuke' | 'shield' | 'buffParty' | 'cleave' | 'dot' | 'hot'
@@ -268,25 +268,25 @@ export type PowerEffect =
   | 'lifeNuke'     // grosse frappe qui rend une part des dégâts en vie au lanceur
   | 'rupture'      // brise la régénération ennemie + forte plaie (DoT)
   | 'mark'         // marque la cible : elle subit ×magnitude de dégâts pendant `duration`
-  // --- v0.29.1 : socle Voleur (mécaniques réutilisables) ---
+  // --- socle Voleur (mécaniques réutilisables) ---
   | 'poison'       // ASSASSIN : ajoute un STACK de venin (DoT cumulatif, monte avec le combat)
   | 'detonate'     // ASSASSIN : consomme tous les stacks de venin → pic = stacks × magnitude
   | 'builder'      // OMBRELAME : génère un Point de Combo (+ petit coup)
   | 'finisher'     // OMBRELAME : consomme les Points de Combo → dégâts × points
-  // --- v0.34 : socle Prêtre « Crépuscule » (Lumière × Vide) ---
+  // --- socle Prêtre « Crépuscule » (Lumière × Vide) ---
   | 'smiteHeal'    // CRÉPUSCULE : frappe d'ombre QUI SOIGNE l'allié le plus blessé (la dualité en un sort)
   | 'eclipse'      // CRÉPUSCULE : ULTIME — cataclysme d'ombre de zone qui restaure TOUT le groupe
-  // --- v0.34 : socle Guerrier « Juggernaut » ---
+  // --- socle Guerrier « Juggernaut » ---
   | 'avatar'       // AVATAR DE GUERRE : transe de dégâts (frenzy) + énorme bouclier d'absorption
-  // --- v0.34 : socle Druide « Métamorphe » ---
+  // --- socle Druide « Métamorphe » ---
   | 'shift'        // BOND SAUVAGE : métamorphose-éclair (forme suivante + Instinct) puis frappe
   | 'chimera'      // FORME CHIMÈRE : les 3 formes (Fauve+Ours+Hibou) actives à la fois pendant une fenêtre
 
 /**
- * v0.39 — CONVERSION de capacité PASSIVE (toujours active, niveau FICHE).
+ * CONVERSION de capacité PASSIVE (toujours active, niveau FICHE).
  * Niche non couverte par les gemmes (déclencheurs) ni les runes (horloges/pactes) :
  * transforme la feuille de stats. `from` = une stat OU une grandeur dérivée
- * (`healPower` ≈ Intelligence depuis v0.38, puisque le soin scale INT).
+ * (`healPower` ≈ Intelligence, puisque le soin scale INT).
  */
 export type ConvSource = StatKey | 'healPower'
 export interface PassiveConversion {
@@ -319,7 +319,7 @@ export interface PowerDef {
   damageReduction?: number
   /** Bonus de stats permanents. */
   mods?: StatBlock
-  /** v0.39 — Conversions de stat (passifs « moteur de conversions »). Appliquées au calcul de la fiche. */
+  /** Conversions de stat (passifs « moteur de conversions »). Appliquées au calcul de la fiche. */
   convert?: PassiveConversion[]
   // --- Actives (auto-cast) ---
   cooldown?: number // secondes entre deux déclenchements
@@ -339,18 +339,18 @@ export interface PowerDef {
   /** Type de dégât EXPLICITE (sorts élémentaires). À défaut, le sort prend le type de l'arme équipée. */
   damageType?: DamageType
   /**
-   * TAGS de comportement (v0.29.4) : mots-clés qui catégorisent le sort (mono, zone, dot, direct,
+   * TAGS de comportement : mots-clés qui catégorisent le sort (mono, zone, dot, direct,
    * generateur, finisseur, furtif, soin, protection, ultime, invocation, controle). Les nœuds de
    * talent modifient des TAGS (pas un sort nommé) → synergies CROSS-CLASSE sans point gâché.
    */
   tags?: string[]
   /**
-   * Nom de la RESSOURCE build/spend utilisée par ce générateur/finisseur (v0.29.5). Le moteur
+   * Nom de la RESSOURCE build/spend utilisée par ce générateur/finisseur. Le moteur
    * (char.combo) est générique ; ce libellé n'est qu'un affichage. Défaut « Combo ». Les futures
    * classes mettent 'Rage', 'Pouvoir sacré', 'Maelström'… → même mécanique, nom propre.
    */
   resource?: string
-  /** Ressource générée par lancement d'un GÉNÉRATEUR (`builder`), défaut 1 (v0.31). Levier d'identité :
+  /** Ressource générée par lancement d'un GÉNÉRATEUR (`builder`), défaut 1. Levier d'identité :
    *  un générateur INT lent peut donner +2 d'un coup, un AGI rapide +1. */
   gen?: number
 }
@@ -363,7 +363,7 @@ export interface BuildPreset {
   talents: Record<string, number>
   powers: (string | null)[]
   passives?: (string | null)[]
-  /** Sorts de SOUTIEN équipés (builders + boucliers/soins auto-cast) — séparés des actifs (v0.39 ; ex-`generators`). */
+  /** Sorts de SOUTIEN équipés (builders + boucliers/soins auto-cast) — séparés des actifs (ex-`generators`). */
   support?: (string | null)[]
   primaryBias: PrimaryStat
 }
@@ -377,10 +377,10 @@ export interface Character {
   equipment: Equipment
   /** 5 emplacements de capacité ACTIVE NON-générateur (id ou null) — auto/manuel, à timer. */
   powers: (string | null)[]
-  /** 3 emplacements de capacité PASSIVE (id ou null) — séparés des actifs (v0.29.5). */
+  /** 3 emplacements de capacité PASSIVE (id ou null) — séparés des actifs. */
   passives?: (string | null)[]
   /** 3 emplacements de SOUTIEN (id ou null) — auto-cast pur : builders (fabriquent Combo/Rage/…) ET
-   *  sorts de soutien (boucliers/soins/buffs) en fire-and-forget. Hors des 5 actifs (v0.39 ; ex-`generators`). */
+   *  sorts de soutien (boucliers/soins/buffs) en fire-and-forget. Hors des 5 actifs (ex-`generators`). */
   support?: (string | null)[]
   /** Mode de lancement par emplacement actif : true/absent = AUTO, false = MANUEL (bouton). */
   powerAuto?: boolean[]
@@ -390,27 +390,27 @@ export interface Character {
   talentPoints: number
   /** Talents alloués : id de nœud → rang. */
   talents: Record<string, number>
-  /** v0.33 — PANTHÉON (2e arbre) : nœuds alloués des classes débloquées par l'Éveil. Pool de points
+  /** PANTHÉON (2e arbre) : nœuds alloués des classes débloquées par l'Éveil. Pool de points
    *  séparé (budget de Points d'Éveil = prestigeRank × K). Remis à zéro à chaque Éveil comme `talents`,
    *  mais le budget et les déblocages persistent (dérivés de prestigeRank). Racine `pa_start` gratuite. */
   pantheon?: Record<string, number>
   primaryBias: PrimaryStat
-  /** 🏆 Titre affiché (v0.28) : id d'un haut fait débloqué (résolu en libellé via achievements.ts). */
+  /** 🏆 Titre affiché : id d'un haut fait débloqué (résolu en libellé via achievements.ts). */
   title?: string
-  /** 🎨 Portrait procédural (v0.28) : palette + emblème (ids de avatar.ts ; défaut dérivé de la classe).
-   *  v0.32 : bordure + aura (parures de prestige débloquées par hauts faits). */
+  /** 🎨 Portrait procédural : palette + emblème (ids de avatar.ts ; défaut dérivé de la classe).
+   *  Bordure + aura : parures de prestige débloquées par hauts faits. */
   avatar?: { palette?: string; emblem?: string; border?: string; aura?: string }
   /** Présets de build (3 emplacements) — application via respec payant. */
   buildPresets?: (BuildPreset | null)[]
   /** PV courants (les PV max sont dérivés du stuff). */
   hp: number
   /** Compteur de RELÈVE (s) — transitoire : un héros tombé en FARM se relève après un délai
-   *  (v0.25.x — avant, un mort hors wipe d'équipe restait mort indéfiniment). */
+   *  (sans ça, un mort hors wipe d'équipe resterait mort indéfiniment). */
   rez?: number
   /** Étourdissement restant (s) — transitoire, posé par les contrôles ennemis ; n'attaque pas tant que > 0. */
   stun?: number
   /** Altérations subies (DoT ennemis) — transitoire, dps déjà atténué (résist + Purge).
-   *  `dealt` (v0.26) : dégâts déjà infligés par cette altération (🪢 Garrot soigne à l'expiration). */
+   *  `dealt` : dégâts déjà infligés par cette altération (🪢 Garrot soigne à l'expiration). */
   dots?: { dps: number; type: DamageType; remaining: number; dealt?: number }[]
   /** Affaiblissement (malédiction) — transitoire : multiplie les dégâts du héros tant que remaining > 0. */
   weaken?: { mult: number; remaining: number }
@@ -418,21 +418,21 @@ export interface Character {
   absorb?: number
   /** Immunité aux dégâts directs restante (s) — sort « Phase éthérée ». Transitoire. */
   invuln?: number
-  /** v0.27 (Lot 3) « Blessures mortelles » : soins (régén) RÉDUITS tant que > 0 (s). Transitoire. */
+  /** « Blessures mortelles » : soins (régén) RÉDUITS tant que > 0 (s). Transitoire. */
   healCut?: number
   /** « Vengeance différée » : enregistre les dégâts infligés puis frappe ×mult à expiration. Transitoire. */
   charge?: { dealt: number; remaining: number; mult: number }
   /** Frénésie (« Furie sanguinaire ») : multiplicateur de dégâts temporaire. Transitoire. */
   frenzy?: { mult: number; remaining: number }
-  /** OMBRELAME (v0.29.1) : Points de Combo accumulés (builders +1, finishers consomment). Transitoire. */
+  /** OMBRELAME : Points de Combo accumulés (builders +1, finishers consomment). Transitoire. */
   combo?: number
-  /** PYROMANCIEN (v0.31) « Hot Streak » : Chaleur accumulée par tes sorts de feu (montée pondérée par le
+  /** PYROMANCIEN « Hot Streak » : Chaleur accumulée par tes sorts de feu (montée pondérée par le
    *  Critique) ; à plein, ton prochain gros sort de feu est SURPUISSANT puis remet la Chaleur à 0. Transitoire. */
   heat?: number
-  /** ARCANISTE (v0.31) « Surcharge instable » : secondes restantes de la fenêtre de Surcharge (déclenchée
+  /** ARCANISTE « Surcharge instable » : secondes restantes de la fenêtre de Surcharge (déclenchée
    *  quand les Charges atteignent le max) — pendant, dégâts arcanes ↑ et recharges ↑↑. Transitoire. */
   overload?: number
-  /** DRUIDE MÉTAMORPHE (v0.34) « Danse Primordiale » : forme active (0=Fauve, 1=Ours, 2=Hibou). Transitoire. */
+  /** DRUIDE MÉTAMORPHE « Danse Primordiale » : forme active (0=Fauve, 1=Ours, 2=Hibou). Transitoire. */
   form?: number
   /** Métamorphe : secondes avant la prochaine métamorphose (rotation auto des formes). Transitoire. */
   formClock?: number
@@ -487,16 +487,16 @@ export interface Enemy {
   /** Type de dégâts infligés par l'ennemi (les résistances du héros le réduisent). */
   damageType: DamageType
   /**
-   * EXIGENCES de résistance par type (v0.24, points) : si la résist du héros est sous
+   * EXIGENCES de résistance par type (points) : si la résist du héros est sous
    * l'exigence, les attaques de ce type frappent ×M (voir resist.ts). ≈0 en farm,
    * faible en donjon, c'est LE check de stuff des boss de raid.
    */
   reqs?: Partial<Record<DamageType, number>>
   /** DoT actif posé par le héros (saignement/poison), résolu au tick. */
   dot?: { dps: number; remaining: number }
-  /** ASSASSIN (v0.29.1) : nombre de stacks de venin posés (le DoT `dot` monte avec). Transitoire. */
+  /** ASSASSIN : nombre de stacks de venin posés (le DoT `dot` monte avec). Transitoire. */
   venomStacks?: number
-  /** CONTRÔLE (v0.29.6) : durée restante de gel/ralenti (s) — posée par les sorts [controle].
+  /** CONTRÔLE : durée restante de gel/ralenti (s) — posée par les sorts [controle].
    *  Les keystones `shatter` infligent un bonus de dégâts aux ennemis contrôlés. Transitoire. */
   controlled?: number
   /** Trait déterministe (texture du combat classique) : nom court affiché. */
@@ -526,15 +526,15 @@ export interface Enemy {
   noRegen?: number
   /** Vulnérabilité — multiplicateur de dégâts SUBIS, posé par « Sceau de faiblesse ». Transitoire. */
   vuln?: { mult: number; remaining: number }
-  /** Brèche (🥁 Tambour de siège v0.26) : fraction d'armure rongée. Transitoire. */
+  /** Brèche (🥁 Tambour de siège) : fraction d'armure rongée. Transitoire. */
   sunder?: { pct: number; remaining: number }
-  /** ⏳ Grain de sable (rune v0.26) : première incantation déjà interrompue. Transitoire. */
+  /** ⏳ Grain de sable (rune) : première incantation déjà interrompue. Transitoire. */
   interrupted?: boolean
   /** Furie du survivant (duo de boss) : déjà enragé, ne se redéclenche pas. */
   enraged?: boolean
   /** Âge du combat (s) contre cet ennemi — transitoire, pour le Sablier de l'Acharné. */
   age?: number
-  /** MUR (v0.35) : boss de fin de Palier. `mechanic` = dominante (berserk/nova/fortress/leech/rotate),
+  /** MUR : boss de fin de Chapitre. `mechanic` = dominante (berserk/nova/fortress/leech/rotate),
    *  `enrageAt` = délai (s) avant l'enrage dur. Métadonnée pour la fiche + l'enrage (appliqué au tick). */
   mur?: { mechanic: string; palier: number; enrageAt: number; regen?: number }
 }

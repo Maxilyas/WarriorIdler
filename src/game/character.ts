@@ -26,10 +26,10 @@ export const STARTING_BASE: StatBlock = { force: 5, agilite: 5, intelligence: 5,
  */
 export const TALENT_START_LEVEL = 10
 
-/** v0.29.5 : 3 emplacements RÉSERVÉS aux capacités PASSIVES (distincts des 5 slots actifs). */
+/** 3 emplacements RÉSERVÉS aux capacités PASSIVES (distincts des 5 slots actifs). */
 export const PASSIVE_SLOTS = 3
 
-/** v0.39 : 3 emplacements de SOUTIEN (ex-Générateurs), auto-cast pur. Accueillent les builders ET
+/** 3 emplacements de SOUTIEN (ex-Générateurs), auto-cast pur. Accueillent les builders ET
  *  les sorts de soutien (boucliers/soins/buffs) à lancer en fond, sans les timer (fire-and-forget). */
 export const SUPPORT_SLOTS = 3
 
@@ -43,7 +43,7 @@ const SUPPORT_EFFECTS: ReadonlySet<PowerEffect> = new Set<PowerEffect>([
   'shield', 'bigShield', 'invuln', 'avatar', 'heal', 'hot', 'buffParty', 'bigHeal',
 ])
 
-/** Un sort peut-il aller dans la lane SOUTIEN ? builder OU sort de soutien. MULTI-LANE (v0.39) : les
+/** Un sort peut-il aller dans la lane SOUTIEN ? builder OU sort de soutien. MULTI-LANE : les
  *  boucliers/soins restent AUSSI équipables en ACTIF (pour un déclenchement manuel) — l'unicité tranche. */
 export function isSupport(p: PowerDef | undefined): boolean {
   if (!p || p.kind !== 'active') return false
@@ -61,7 +61,7 @@ export function talentsSpent(c: Character): number {
 }
 
 /**
- * v0.36 — POOL DE TALENTS PARTAGÉ (niveau de COMPTE). Points gagnés au niveau de compte (le plus haut
+ * POOL DE TALENTS PARTAGÉ (niveau de COMPTE). Points gagnés au niveau de compte (le plus haut
  * des persos, qui restent synchronisés) + bonus d'amélioration, MOINS le total dépensé sur TOUS les
  * arbres. Une recrue (arbre vide) n'ajoute rien → zéro inflation ; développer 2 arbres SPLITTE le même
  * budget (« budget partagé » = frein au multi-perso, la dynamique reine). Dérivé → aucune désync possible.
@@ -86,17 +86,17 @@ function newCharId(): string {
 export function makeCharacter(name: string, level: number, bias: PrimaryStat): Character {
   const base: StatBlock = { ...STARTING_BASE }
   // Gain par niveau VOLONTAIREMENT faible : la puissance vient du STUFF, pas du niveau seul
-  // (on doit s'équiper soigneusement pour passer les paliers).
+  // (on doit s'équiper soigneusement pour passer les vagues).
   base[bias] = (base[bias] ?? 0) + 1 * (level - 1)
   base.endurance = (base.endurance ?? 0) + 1 * (level - 1)
 
   // Le nœud racine « Éveil » est alloué d'office (débloque Frappe + stats de départ).
   const talents: Record<string, number> = { co_start: 1 }
-  // v0.33 : racine du Panthéon (2e arbre) seedée d'office — ancrage gratuit (0 stat), rend les
+  // racine du Panthéon (2e arbre) seedée d'office — ancrage gratuit (0 stat), rend les
   // classes avancées atteignables une fois débloquées par l'Éveil.
   const pantheon: Record<string, number> = { pa_start: 1 }
   const unlocked = computeUnlockedPowers({ ...talents, ...pantheon }, level)
-  // v0.39 : on répartit les capacités débloquées entre ACTIFS (5), SOUTIEN (3) et PASSIFS (3).
+  // on répartit les capacités débloquées entre ACTIFS (5), SOUTIEN (3) et PASSIFS (3).
   // Seuls les builders sont auto-rangés en SOUTIEN ; les boucliers/soins atterrissent en actif (le
   // joueur les déplace en Soutien s'il veut le fire-and-forget).
   const powers: (string | null)[] = Array(POWER_SLOTS).fill(null)
@@ -134,7 +134,7 @@ export function makeCharacter(name: string, level: number, bias: PrimaryStat): C
 }
 
 /**
- * Capacités débloquées = nœuds `ability` alloués dans l'arbre. v0.42 : plus AUCUN passif débloqué par
+ * Capacités débloquées = nœuds `ability` alloués dans l'arbre. Plus AUCUN passif débloqué par
  * NIVEAU — les passifs utilitaires (slots) comme les capstones d'identité s'obtiennent DANS L'ARBRE.
  * (Le paramètre `level` est conservé pour la compat des appelants ; il n'est plus utilisé ici.)
  */
@@ -142,7 +142,7 @@ export function computeUnlockedPowers(talents: Record<string, number>, _level = 
   return talentUnlockedPowers(talents)
 }
 
-/** v0.33 : allocations TOTALES d'un perso = arbre de base (`talents`) + Panthéon (`pantheon`).
+/** Allocations TOTALES d'un perso = arbre de base (`talents`) + Panthéon (`pantheon`).
  *  Les deux maps n'ont aucune clé en commun (racines/voies distinctes) → simple fusion. Tous les
  *  agrégateurs de talents (stats, résist, keystones, capacités) lisent cette vue unifiée. */
 export function charAllocations(char: Character): Record<string, number> {
@@ -150,7 +150,7 @@ export function charAllocations(char: Character): Record<string, number> {
   return p && Object.keys(p).length > 0 ? { ...char.talents, ...p } : (char.talents ?? {})
 }
 
-/** Agrège les effets des capacités PASSIVES équipées (menace, réduction, mods, conversions v0.39). */
+/** Agrège les effets des capacités PASSIVES équipées (menace, réduction, mods, conversions). */
 export function charPassives(char: Character): { threatMult: number; damageReduction: number; mods: StatBlock; conversions: PassiveConversion[] } {
   const e = cacheFor(char)
   return (e.passivesOut ??= charPassivesUncached(char))
@@ -177,11 +177,11 @@ export function charKeystones(char: Character): KeystoneEffect[] {
   return talentKeystones(charAllocations(char))
 }
 
-/** Applique les conversions de stat : keystones (additif, verrouillés à l'arbre) PUIS passifs v0.39
+/** Applique les conversions de stat : keystones (additif, verrouillés à l'arbre) PUIS passifs
  *  (transfert par défaut = sidegrade). Toutes lisent la valeur d'ORIGINE (`total`) → pas de double-dip. */
 function applyStatConversions(total: StatBlock, keystones: KeystoneEffect[], conversions: PassiveConversion[] = []): StatBlock {
   const out = { ...total }
-  // SÈVE ET ACIER (v0.34) : overcap — le Critique AU-DELÀ de 50 % (rating 2250) déborde en Altération.
+  // SÈVE ET ACIER : overcap — le Critique AU-DELÀ de 50 % (rating 2250) déborde en Altération.
   // Borné par construction : ne convertit QUE le surplus, et l'Altération reste soft-capée en aval.
   let critToAlt = 0
   for (const k of keystones) {
@@ -200,8 +200,8 @@ function applyStatConversions(total: StatBlock, keystones: KeystoneEffect[], con
     const surplus = Math.max(0, (total.critique ?? 0) - CRIT_50_RATING)
     out.alteration = (out.alteration ?? 0) + Math.round(surplus * critToAlt)
   }
-  // v0.39 — CONVERSIONS de passifs. Source lue sur `total` (origine) ; transfert = retire de la source.
-  // `healPower` (puissance de soin) = proxy Intelligence (le soin scale INT depuis v0.38).
+  // CONVERSIONS de passifs. Source lue sur `total` (origine) ; transfert = retire de la source.
+  // `healPower` (puissance de soin) = proxy Intelligence (le soin scale INT).
   for (const cv of conversions) {
     const src = cv.from === 'healPower' ? (total.intelligence ?? 0) : (total[cv.from] ?? 0)
     const moved = Math.round(src * cv.frac)
@@ -276,7 +276,7 @@ export function setGlobalCombatMods(m: { power: number; attackSpeed: number; vit
   GLOBAL = m
 }
 
-// 🩸 PACTES (v0.26, runes keystone) : mods dérivés d'ÉQUIPE, recalculés par le store au tick —
+// 🩸 PACTES (runes keystone) : mods dérivés d'ÉQUIPE, recalculés par le store au tick —
 // même mécanique module-niveau que GLOBAL (les pactes portés changent rarement, latence ≤ 1 tick).
 let PACT = { hpMult: 1, apsMult: 1, apsForce: 0, leechBonus: 0, noRiposte: false }
 export function setPactDerivedMods(m: { hpMult: number; apsMult: number; apsForce: number; leechBonus: number; noRiposte: boolean }) {
@@ -285,7 +285,7 @@ export function setPactDerivedMods(m: { hpMult: number; apsMult: number; apsForc
   PACT = m
 }
 
-// ✨ PRESTIGE (v0.27) : résistance plate offerte par la Constellation (Acclimatation), mise à jour par le store.
+// ✨ PRESTIGE : résistance plate offerte par la Constellation (Acclimatation), mise à jour par le store.
 let PRESTIGE_RESIST = 0
 export function setGlobalPrestigeResist(v: number) {
   const nv = Math.max(0, v)
@@ -348,7 +348,7 @@ function singlePower(d: DerivedStats, s?: OffensiveStat): number {
   return d.power
 }
 export function abilityPower(d: DerivedStats, scale?: OffensiveStat | OffensiveStat[]): number {
-  // v0.27 (C1) — DÉCOUPLAGE : le primaire est le MOTEUR, l'arbre est l'IDENTITÉ. Toute capacité
+  // DÉCOUPLAGE : le primaire est le MOTEUR, l'arbre est l'IDENTITÉ. Toute capacité
   // scale sur ta stat DOMINANTE (`d.power`) ; le `scaleStat` déclaré n'est plus qu'une AFFINITÉ
   // thématique, jamais INFÉRIEURE à la dominante. Fin du mismatch « sort d'arbre Int qui scale
   // For/Agi » : un build For prend un sort « Int » et il scale sur sa Force.
@@ -397,7 +397,7 @@ function abilityDps(p: PowerDef, derived: DerivedStats, profileMult: number, dmg
   if (p.kind !== 'active' || !p.effect) return 0
   let tagMult = 1
   if (p.tags) for (const t of p.tags) tagMult *= (cm.tagBonus[t] ?? 1)
-  // v0.31 : EV des procs signature du Mage (Hot Streak feu, Surcharge arcane).
+  // EV des procs signature du Mage (Hot Streak feu, Surcharge arcane).
   let procMult = 1
   const isNuke = p.effect === 'nuke' || p.effect === 'cleave' || p.effect === 'megaCleave'
   if (cm.hotStreak && isNuke && p.tags?.includes('feu') && p.tags?.includes('direct')) {
@@ -526,7 +526,7 @@ export function dpsBreakdown(char: Character): DpsBreakdown {
   return { total: auto + spells.reduce((a, s) => a + s.dps, 0), auto, spells, factors, hasConversions }
 }
 
-/** Résistances du héros en POINTS (équipement + talents + sets) — non plafonnées (v0.24). */
+/** Résistances du héros en POINTS (équipement + talents + sets) — non plafonnées. */
 export function charResist(char: Character): Partial<Record<DamageType, number>> {
   const e = cacheFor(char)
   return (e.resist ??= charResistUncached(char))
@@ -566,7 +566,7 @@ export interface CombatMods {
   execute?: { threshold: number; mult: number }
   lowHp?: { threshold: number; mult: number }
   highHp?: { threshold: number; mult: number }
-  // --- v0.24 : effets des nouveaux archétypes (voir talents.ts / DESIGN §3.4-3.5) ---
+  // --- effets des archétypes (voir talents.ts) ---
   /** Oracle sanglant : fraction des soins de sorts aussi infligée en dégâts (somme). */
   healToDamage: number
   /** Briseur : éclaboussure des auto-attaques sur le pack (somme, capée 0.8). */
@@ -599,7 +599,7 @@ export interface CombatMods {
   adaptiveResist?: { gain: number; cap: number }
   /** Purgateur : carburant d'affliction (per somme, cap max). */
   afflictionFuel?: { per: number; cap: number }
-  // --- v0.29.2 : socle VOLEUR ---
+  // --- socle VOLEUR ---
   /** ASSASSIN : venin cumulatif (base + bonus des keystones). */
   poison: { perStack: number; maxStacks: number }
   /** OMBRELAME : plafond de Points de Combo au-delà de 5 (somme). */
@@ -608,9 +608,9 @@ export interface CombatMods {
   comboGen: number
   /** OMBRELAME : amplification des finisseurs (somme). */
   finisherMult: number
-  /** v0.29.4 : bonus de dégâts par TAG (produit des keystones du même tag). */
+  /** Bonus de dégâts par TAG (produit des keystones du même tag). */
   tagBonus: Record<string, number>
-  /** v0.38 : multiplicateur de tag appliqué à l'AUTO-ATTAQUE (élément de l'arme × [direct] × [mono]/[zone]). */
+  /** Multiplicateur de tag appliqué à l'AUTO-ATTAQUE (élément de l'arme × [direct] × [mono]/[zone]). */
   autoTagMult: number
   /** ASSASSIN « Catalyse » : la détonation double le venin. */
   detonateDouble: boolean
@@ -630,7 +630,7 @@ export interface CombatMods {
   overload?: { window: number; mult: number }
   /** PALADIN AUBE : fraction de tes dégâts reversée en soin à l'allié le plus blessé (somme). */
   damageToHeal: number
-  // --- v0.34 : VOLEUR « Lame Vénéneuse » ---
+  // --- VOLEUR « Lame Vénéneuse » ---
   finisherToPoison: number
   finisherIsDot: boolean
   finisherRefreshPoison: boolean
@@ -645,7 +645,7 @@ export interface CombatMods {
   critToAlteration: number
   builderPoison: boolean
   venomFinisherGen: boolean
-  // --- v0.34 : PRÊTRE « Crépuscule » ---
+  // --- PRÊTRE « Crépuscule » ---
   healAppliesDot: number
   atonementIsShadow: boolean
   atonementVsDot: number
@@ -655,23 +655,23 @@ export interface CombatMods {
   folieDot: number
   noSelfHeal: boolean
   dotHealsParty: number
-  // --- v0.34 : MAGE « Convergence » ---
+  // --- MAGE « Convergence » ---
   hotStreakCharges: number
   overloadFreezes: boolean
   frozenIgnites: number
   elementalStates: number
   shatterFromAlteration: number
-  // --- v0.34 : GUERRIER « Juggernaut » + « Furie » ---
+  // --- GUERRIER « Juggernaut » + « Furie » ---
   shieldToFinisher: number
   damageToRage: number
   finisherRefreshBleed: boolean
   enrageOnCrit?: { mult: number; duration: number }
-  // --- v0.34 : CHASSEUR « Symbiose » ---
+  // --- CHASSEUR « Symbiose » ---
   petBonus: number
   petFromPrecision: number
   petCombo: number
   petBurstOnFinisher: number
-  // --- v0.34 : DRUIDE « Métamorphe » ---
+  // --- DRUIDE « Métamorphe » ---
   shifter: boolean
   formFauve: number
   formOurs: number
@@ -693,20 +693,20 @@ function charCombatModsUncached(char: Character): CombatMods {
     spellMult: 1, cdrOnCast: 0, reqReduction: 0, surplusToDamage: 0, shareResist: 0, surplusRegen: 0,
     poison: { perStack: 0.08, maxStacks: 4 }, comboCap: 0, comboGen: 0, finisherMult: 0,
     tagBonus: {}, autoTagMult: 1, detonateDouble: false, comboRefund: 0, petDps: 0, shatter: 0, finisherShield: 0, damageToHeal: 0,
-    // v0.34 : Lame Vénéneuse
+    // Lame Vénéneuse
     finisherToPoison: 0, finisherIsDot: false, finisherRefreshPoison: false, finisherVsVenom: 0,
     finisherFromAlteration: 0, finisherVenomBonus: 0, noDotLeech: false, poisonCanCrit: 0, finisherDetonate: 0,
     detonateReapply: 0, critToAlteration: 0, builderPoison: false, venomFinisherGen: false,
-    // v0.34 : Crépuscule
+    // Crépuscule
     healAppliesDot: 0, atonementIsShadow: false, atonementVsDot: 0, atonementFromAlteration: 0, atonementMult: 1,
     folieEmpowersAtonement: 0, folieDot: 0, noSelfHeal: false, dotHealsParty: 0,
-    // v0.34 : Convergence (Mage)
+    // Convergence (Mage)
     hotStreakCharges: 0, overloadFreezes: false, frozenIgnites: 0, elementalStates: 0, shatterFromAlteration: 0,
-    // v0.34 : Guerrier (Juggernaut + Furie)
+    // Guerrier (Juggernaut + Furie)
     shieldToFinisher: 0, damageToRage: 0, finisherRefreshBleed: false,
-    // v0.34 : Chasseur (Symbiose)
+    // Chasseur (Symbiose)
     petBonus: 0, petFromPrecision: 0, petCombo: 0, petBurstOnFinisher: 0,
-    // v0.34 : Druide (Métamorphe)
+    // Druide (Métamorphe)
     shifter: false, formFauve: 0, formOurs: 0, formHibou: 0, instinctPer: 0, instinctMax: 0, shiftHaste: 0, formEcho: 0,
   }
   // Multiplicateur de dégâts des bonus de SET (s'applique aux auto-attaques ET aux sorts,
@@ -723,7 +723,7 @@ function charCombatModsUncached(char: Character): CombatMods {
     if (k.executeBonus) out.execute = k.executeBonus
     if (k.lowHpBonus) out.lowHp = k.lowHpBonus
     if (k.highHpBonus) out.highHp = k.highHpBonus
-    // --- v0.24 ---
+    // --- archétypes ---
     if (k.healToDamage) out.healToDamage += k.healToDamage
     if (k.cleaveAuto) out.cleaveAuto = Math.min(0.8, out.cleaveAuto + k.cleaveAuto)
     if (k.perEnemyBonus) out.perEnemyBonus += k.perEnemyBonus
@@ -758,7 +758,7 @@ function charCombatModsUncached(char: Character): CombatMods {
         ? { per: out.afflictionFuel.per + k.afflictionFuel.per, cap: Math.max(out.afflictionFuel.cap, k.afflictionFuel.cap) }
         : { ...k.afflictionFuel }
     }
-    // --- v0.29.2 : socle VOLEUR ---
+    // --- socle VOLEUR ---
     if (k.poison) { out.poison.perStack += k.poison.perStack; out.poison.maxStacks += k.poison.maxStacks }
     if (k.comboCap) out.comboCap += k.comboCap
     if (k.comboGen) out.comboGen += k.comboGen
@@ -775,7 +775,7 @@ function charCombatModsUncached(char: Character): CombatMods {
     }
     if (k.finisherShield) out.finisherShield += k.finisherShield
     if (k.damageToHeal) out.damageToHeal += k.damageToHeal
-    // --- v0.34 : VOLEUR « Lame Vénéneuse » ---
+    // --- VOLEUR « Lame Vénéneuse » ---
     if (k.finisherToPoison) out.finisherToPoison += k.finisherToPoison
     if (k.finisherIsDot) out.finisherIsDot = true
     if (k.finisherRefreshPoison) out.finisherRefreshPoison = true
@@ -790,7 +790,7 @@ function charCombatModsUncached(char: Character): CombatMods {
     if (k.critToAlteration) out.critToAlteration += k.critToAlteration
     if (k.builderPoison) out.builderPoison = true
     if (k.venomFinisherGen) out.venomFinisherGen = true
-    // --- v0.34 : PRÊTRE « Crépuscule » ---
+    // --- PRÊTRE « Crépuscule » ---
     if (k.healAppliesDot) out.healAppliesDot += k.healAppliesDot
     if (k.atonementIsShadow) out.atonementIsShadow = true
     if (k.atonementVsDot) out.atonementVsDot += k.atonementVsDot
@@ -800,25 +800,25 @@ function charCombatModsUncached(char: Character): CombatMods {
     if (k.folieDot) out.folieDot += k.folieDot
     if (k.noSelfHeal) out.noSelfHeal = true
     if (k.dotHealsParty) out.dotHealsParty += k.dotHealsParty
-    // --- v0.34 : MAGE « Convergence » ---
+    // --- MAGE « Convergence » ---
     if (k.hotStreakCharges) out.hotStreakCharges += k.hotStreakCharges
     if (k.overloadFreezes) out.overloadFreezes = true
     if (k.frozenIgnites) out.frozenIgnites += k.frozenIgnites
     if (k.elementalStates) out.elementalStates += k.elementalStates
     if (k.shatterFromAlteration) out.shatterFromAlteration += k.shatterFromAlteration
-    // --- v0.34 : GUERRIER « Juggernaut » + « Furie » ---
+    // --- GUERRIER « Juggernaut » + « Furie » ---
     if (k.shieldToFinisher) out.shieldToFinisher += k.shieldToFinisher
     if (k.damageToRage) out.damageToRage += k.damageToRage
     if (k.finisherRefreshBleed) out.finisherRefreshBleed = true
     if (k.enrageOnCrit) out.enrageOnCrit = out.enrageOnCrit
       ? { mult: Math.max(out.enrageOnCrit.mult, k.enrageOnCrit.mult), duration: Math.max(out.enrageOnCrit.duration, k.enrageOnCrit.duration) }
       : { ...k.enrageOnCrit }
-    // --- v0.34 : CHASSEUR « Symbiose » ---
+    // --- CHASSEUR « Symbiose » ---
     if (k.petBonus) out.petBonus += k.petBonus
     if (k.petFromPrecision) out.petFromPrecision += k.petFromPrecision
     if (k.petCombo) out.petCombo += k.petCombo
     if (k.petBurstOnFinisher) out.petBurstOnFinisher += k.petBurstOnFinisher
-    // --- v0.34 : DRUIDE « Métamorphe » ---
+    // --- DRUIDE « Métamorphe » ---
     if (k.shifter) out.shifter = true
     if (k.formFauve) out.formFauve += k.formFauve
     if (k.formOurs) out.formOurs += k.formOurs
@@ -835,14 +835,14 @@ function charCombatModsUncached(char: Character): CombatMods {
         : { ...k.multiTypeBonus }
     }
   }
-  // v0.38 — UNIQUES PAR TAG : leur bonus s'ajoute multiplicativement au tagBonus (×dégâts des sorts
+  // UNIQUES PAR TAG : leur bonus s'ajoute multiplicativement au tagBonus (×dégâts des sorts
   // du tag, et ×soin pour [soin] via healTagMult) → un unique peut DÉFINIR un build (feu, dot, soin…).
   for (const it of Object.values(char.equipment)) {
     if (!it?.unique) continue
     const tm = instanceTagMods(it.unique)
     for (const tag in tm) out.tagBonus[tag] = (out.tagBonus[tag] ?? 1) * (1 + tm[tag])
   }
-  // v0.38 — l'AUTO-ATTAQUE profite des bonus de tag : son élément (type de l'arme) × [direct] × [mono]/[zone].
+  // l'AUTO-ATTAQUE profite des bonus de tag : son élément (type de l'arme) × [direct] × [mono]/[zone].
   // (les sorts, eux, prennent leur tagMult propre dans fireActive). → un unique [feu] ou [direct] booste aussi l'auto.
   const autoElem = char.equipment.armePrincipale?.damageType ?? 'physique'
   out.autoTagMult = (out.tagBonus[autoElem] ?? 1) * (out.tagBonus['direct'] ?? 1) * (out.tagBonus[out.cleaveAuto > 0 ? 'zone' : 'mono'] ?? 1)
