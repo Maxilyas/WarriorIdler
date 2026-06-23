@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useGame } from '../game/store'
 import { PRIMARY_META } from '../game/stats'
 import type { PrimaryStat } from '../game/types'
+import { SaveImport } from './SaveImport'
 
 /** Les 3 spés jouables au départ (l'Endurance n'est jamais une stat de combat). */
 type Spec = Exclude<PrimaryStat, 'endurance'>
@@ -37,6 +38,7 @@ const GOALS: { icon: string; title: string; text: string }[] = [
 export function WelcomeScreen() {
   const completeOnboarding = useGame((s) => s.completeOnboarding)
   const [spec, setSpec] = useState<Spec | null>(null)
+  const [importOpen, setImportOpen] = useState(false)
 
   return (
     <div className="fixed inset-0 z-[80] overflow-y-auto bg-[#070a11]">
@@ -113,6 +115,24 @@ export function WelcomeScreen() {
           >
             {spec ? `Commencer l’aventure en ${PRIMARY_META[spec].name}` : 'Choisis une spécialisation pour commencer'}
           </button>
+
+          {/* Reprise d'une sauvegarde existante (autre appareil / fichier) — sans devoir d'abord
+              lancer une partie. L'import réutilise la chaîne éprouvée et aboutit à une partie onboardée. */}
+          <div className="mt-3 text-center">
+            {importOpen ? (
+              <div className="rounded-2xl border border-slate-800 bg-[#0d111a] p-3 text-left">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-[12px] font-semibold text-slate-300">📥 Importer une partie</span>
+                  <button onClick={() => setImportOpen(false)} className="rounded bg-slate-800 px-2 py-0.5 text-[11px] text-slate-400 hover:bg-slate-700">Fermer</button>
+                </div>
+                <SaveImport confirmPrompt="Charger cette sauvegarde et commencer la partie ?" />
+              </div>
+            ) : (
+              <button onClick={() => setImportOpen(true)} className="text-[12px] text-slate-400 underline-offset-2 hover:text-slate-200 hover:underline">
+                Déjà une sauvegarde ? Importer une partie
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>

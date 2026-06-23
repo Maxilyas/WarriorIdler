@@ -98,6 +98,19 @@ describe('bascule de slot (switch)', () => {
     expect(boot.freshSwitch).toBe(true)
     expect(localStorage.getItem('wi-fresh-switch')).toBeNull() // consommé
   })
+
+  it('charge le slot CIBLE même si le filet contient l\'état du slot QUITTÉ (course pagehide)', async () => {
+    await bootStorage()
+    const id2 = await createSlot() // cible NEUVE (gold 0)
+    await switchToSlot(id2, { ...freshSave(), gold: 777 }) // état SOURCE persisté dans slot-0
+    // Simule le `pagehide` du reload : markAway → persist réécrit le FILET avec l'état SOURCE (gold 777,
+    // lastSeen très récent) APRÈS le changement de pointeur. Sans le garde `freshSwitch`, ce filet
+    // gagnerait la réconciliation et chargerait 777 dans le slot cible.
+    localStorage.setItem(SAVE_KEY, JSON.stringify({ ...freshSave(), gold: 777, lastSeen: Date.now() + 1_000_000 }))
+    const boot = await bootStorage()
+    expect(boot.activeId).toBe(id2)
+    expect(boot.save.gold).toBe(0) // le slot CIBLE (neuf), pas le filet du slot quitté
+  })
 })
 
 describe('réconciliation filet localStorage ↔ IndexedDB (durabilité)', () => {

@@ -220,8 +220,11 @@ export async function bootStorage(): Promise<BootResult> {
     try { chosen = sanitizeRaw(JSON.parse(importRaw)) } catch { chosen = null }
     try { localStorage.removeItem(IMPORT_KEY) } catch { /* */ }
   }
-  // 2) Filet localStorage vs IDB : on garde le lastSeen le plus récent.
-  if (!chosen) {
+  // 2) Filet localStorage vs IDB : on garde le lastSeen le plus récent — SAUF sur une bascule délibérée
+  //    (`freshSwitch`), où le filet appartient encore au slot QUITTÉ : le `pagehide` du reload (markAway →
+  //    persist) le réécrit avec l'état SOURCE *après* le changement de pointeur. On charge alors le slot
+  //    CIBLE directement depuis l'IDB (le mirror durable est coupé pendant la bascule, voir switchToSlot).
+  if (!chosen && !freshSwitch) {
     let netData: SaveData | null = null
     try { const r = localStorage.getItem(SAVE_KEY); if (r) netData = sanitizeRaw(JSON.parse(r)) } catch { /* */ }
     if (netData && idbData) chosen = (netData.lastSeen ?? 0) >= (idbData.lastSeen ?? 0) ? netData : idbData
@@ -293,7 +296,11 @@ export async function deleteSlot(id: string): Promise<void> {
 export async function switchToSlot(id: string, current: SaveData): Promise<void> {
   if (mode !== 'idb' || id === getActiveSlotId()) return
   if (!(await getRecord(id))) throw new Error('no-slot')
-  await writeSlotData(getActiveSlotId(), current)
+  // COUPE le mirror durable AVANT toute autre chose : sinon un persist déclenché par le `pagehide` du
+  // reload (App: markAway/flushSave) mirrorerait l'état SOURCE dans le slot CIBLE (course pointeur↔flush).
+  // Le mirror est ré-enregistré par `bootStorage` au rechargement.
+  registerDurableSink(null)
+  await writeSlotData(getActiveSlotId(), current) // persiste durablement le slot courant (awaited)
   setActiveSlotId(id)
   setFreshSwitchFlag()
   try { localStorage.removeItem(SAVE_KEY) } catch { /* */ }

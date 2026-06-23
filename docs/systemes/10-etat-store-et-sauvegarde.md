@@ -89,18 +89,22 @@ Store Zustand unique (`useGame`), 4 grands rôles :
   gains depuis `lastSeen` et les dépose dans l'inbox. **Crédité une seule fois par chargement de slot**,
   dans `hydrate(save)` (`store.ts`) — la fonction partagée appelée par le boot async.
 
-## Export / Import par fichier (Palier 1, [`save.ts`](../../src/game/save.ts) + [`SaveTransfer.tsx`](../../src/components/SaveTransfer.tsx))
+## Export / Import par fichier (Palier 1, [`save.ts`](../../src/game/save.ts) + [`SaveTransfer.tsx`](../../src/components/SaveTransfer.tsx) + [`SaveImport.tsx`](../../src/components/SaveImport.tsx))
 
-Sauvegarde transférable, sans backend, depuis ⚙ Réglages :
+Sauvegarde transférable, sans backend :
 
 - **Export** : `exportSaveText(state)` enveloppe `buildSaveData` dans `{ app, schema, exportedAt,
-  checksum, data }` (`SAVE_SCHEMA`, checksum FNV-1a léger). UI : téléchargement `.json` (Blob +
-  `<a download>`), avec replis **Copier** (presse-papier) / **Partager** (Web Share) pour le mobile.
-  Vise toujours le **slot actif** (`useGame.getState()`).
+  checksum, data }` (`SAVE_SCHEMA`, checksum FNV-1a léger). UI (⚙ Réglages → `SaveTransfer`) :
+  téléchargement `.json` (Blob + `<a download>`), avec replis **Copier** (presse-papier) / **Partager**
+  (Web Share) pour le mobile. Vise toujours le **slot actif** (`useGame.getState()`).
 - **Import** : `parseImport(text)` est **défensif** (`JSON.parse` try/catch ; n'écrase **jamais** avant
   validation ; accepte l'enveloppe OU un `SaveData` brut ; **avertit** sur schéma plus récent =
   downgrade, ou checksum incohérent). `applyImport(data)` estampille `lastSeen = now` (neutralise un
-  crédit hors-ligne fortuit) + `onboarded = true`, puis dépose le payload sous **`IMPORT_KEY`**.
+  crédit hors-ligne fortuit) + `onboarded = true`, puis dépose le payload sous **`IMPORT_KEY`**. La
+  logique d'import vit dans le composant **réutilisable `SaveImport`** (fichier/texte → confirmation →
+  reload), monté à la fois dans **Réglages** (`SaveTransfer`) **et sur l'écran d'accueil**
+  (`WelcomeScreen` → « Importer une partie ») — un nouveau venu peut donc reprendre une save **sans**
+  devoir d'abord lancer une partie ; le parcours aboutit à une partie **onboardée**.
 - **Relais `IMPORT_KEY`** : l'import recharge la page ; or le `pagehide` du reload déclenche un flush qui
   n'écrit que `SAVE_KEY`/le slot actif → un payload sous `IMPORT_KEY` **survit** et est **promu** au boot
   (`loadSave`/`bootStorage`), avec **priorité** sur le filet et l'IDB, puis consommé. C'est la parade à la
@@ -128,10 +132,15 @@ Sauvegarde transférable, sans backend, depuis ⚙ Réglages :
   async est abandonnée. (Même leçon que le relais `IMPORT_KEY`.)
 - **Gestion des slots** (UI Réglages) : lister (aperçu niveau/chapitre/or/prestige), créer, renommer,
   **dupliquer** (= backup local instantané — prend l'état EN COURS pour le slot actif), supprimer (jamais
-  l'actif), **basculer**. La bascule (`switchToSlot`) persiste DURABLEMENT le slot courant (awaited, donc
-  pas de course `pagehide`), arme le **drapeau anti-windfall**, purge le filet, puis **recharge** → le
-  boot recharge le slot cible via le chemin éprouvé. **Anti-windfall** : à une bascule délibérée, le boot
-  remet `lastSeen = now` → **aucun** crédit hors-ligne du temps « dormant » du slot cible.
+  l'actif), **basculer**. La bascule (`switchToSlot`) **coupe d'abord le sink durable**
+  (`registerDurableSink(null)`), persiste DURABLEMENT le slot courant (awaited), arme le **drapeau
+  anti-windfall**, purge le filet, puis **recharge** → le boot recharge le slot cible via le chemin
+  éprouvé. **Course pointeur↔flush (corrigée)** : le `pagehide` du reload déclenche `markAway → persist`
+  qui réécrit le filet (et mirrorerait l'IDB) avec l'état du slot QUITTÉ *après* le changement de
+  pointeur → couper le sink empêche la corruption du slot cible, et le boot **ignore le filet quand
+  `freshSwitch`** (il appartient au slot quitté) en chargeant le slot cible depuis l'IDB. **Anti-windfall** :
+  à une bascule délibérée, le boot remet `lastSeen = now` → **aucun** crédit hors-ligne du temps
+  « dormant » du slot cible.
 - **Acyclique** : `saveSlots.ts → save.ts` (le sink est **injecté**, `save.ts` n'importe jamais
   `saveSlots.ts`). Aucun accès `indexedDB`/`window` au chargement des modules (sims Node saines).
 
