@@ -32,7 +32,7 @@ for (let T = 1; T <= 2; T++) {
 console.log(`\nRappel raids de base T10 : loot ${raidIlvl(forge,10)} · diff ${raidDifficultyIlvl(forge,10)} · ✨ ${raidFragments(forge,10)} · 💫 ${raidCosmicQty(forge,10)}`)
 
 console.log('\n=== Rareté Abîme vs raid T10 de base (chance Primordial t15 / Transcendant t16 par objet) ===')
-// v0.40.2 — formes réelles (cf. store.ts) : Abîme down0.78/shoulder0.20/tail0.10 ; base down0.30/shoulder0.15/tail0.12.
+// formes réelles (cf. store.ts) : Abîme down0.78/shoulder0.20/tail0.10 ; base down0.30/shoulder0.15/tail0.12.
 const wA = raidRarityWindow(ab, 1), dAb = dist(wA.floor, wA.peak, wA.cap, 0.10, 0.78, 0.20)
 const wB = raidRarityWindow(forge, 10), dBase = dist(wB.floor, wB.peak, wB.cap, 0.12, 0.30, 0.15)
 const p = (d, t) => d.find(([x]) => x === t)?.[1] ?? 0

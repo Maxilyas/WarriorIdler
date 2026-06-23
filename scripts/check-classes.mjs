@@ -19,7 +19,7 @@ function build1(name, bias, talents, powers) {
   const c = makeCharacter(name, 80, bias)
   c.talents = { co_start: 1, ...talents }
   c.unlockedPowers = computeUnlockedPowers(c.talents)
-  // v0.30 : les générateurs (builder) vont dans leur section dédiée, hors des 5 actifs.
+  // les générateurs (builder) vont dans leur section dédiée, hors des 5 actifs.
   const act = [], gen = []
   for (const id of powers) (getPower(id)?.effect === 'builder' ? gen : act).push(id)
   c.powers = [...act, null, null, null, null, null].slice(0, 5)
@@ -55,7 +55,7 @@ const cases = [
   ['Vide (DoT ombre)', 'intelligence',
     { cat_tissu: 1, cl_pretre: 1, vi_hub: 1, vi_tenebres: 1, vi_dotamp: 1, vi_ombre: 1, vi_demence: 1, vi_forme: 1, vi_insanite: 1, vi_soif: 1, vi_drain: 1 },
     ['vi_mot_ombre', 'vi_douleur', 'vi_devorer'], null],
-  // ---- v0.32 : 5 dernières classes ----
+  // ---- 5 dernières classes ----
   ['Givre-mort (shatter mêlée)', 'force',
     { cat_plaque: 1, cl_dk: 1, gm_hub: 1, gm_obli: 1, gm_finamp: 1, gm_execute: 1, gm_buf1: 5, gm_fracas: 1, gm_glace: 1, gm_froid: 1 },
     ['gm_givre', 'gm_obliteration', 'gm_pilier'], null],

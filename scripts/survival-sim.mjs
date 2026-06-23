@@ -1,4 +1,4 @@
-// Harnais de survie : compare, par palier, le TEMPS-POUR-MOURIR (EHP / dégâts ennemis) au
+// Harnais de survie : compare, par vague, le TEMPS-POUR-MOURIR (EHP / dégâts ennemis) au
 // TEMPS-POUR-TUER (PV ennemi / DPS joueur). Si mourir << tuer, on se fait fondre avant de gagner.
 import { build } from 'esbuild'
 const load = async (entry) => {
@@ -15,7 +15,7 @@ const M = await load(`
 const { makeCharacter, charDerived, charMaxHp, charResist, charCombatMods, charPassives, charDps, setGlobalCombatMods, incomingDps, enemyHp, enemyDmg, generateItem, EQUIP_SLOTS } = M
 setGlobalCombatMods({ power: 1, attackSpeed: 1, vitality: 1 })
 
-// v0.42 — gear RÉEL via generateItem (budget exponentiel v0.30, comme ttk-sim). Le makeItem hand-rollé
+// gear RÉEL via generateItem (budget exponentiel, comme ttk-sim). Le makeItem hand-rollé
 // d'avant (budget LINÉAIRE) sous-estimait massivement l'EHP au-delà de l'ilvl ~150. Tank = orientation
 // défensive (≈70% Endurance), DPS = offensive.
 function makeChar(level, ilvl, rarityId, mode, b) {
@@ -33,7 +33,7 @@ function makeChar(level, ilvl, rarityId, mode, b) {
 }
 const fmt = (n) => n >= 1e9 ? (n/1e9).toFixed(1)+'Md' : n >= 1e6 ? (n/1e6).toFixed(1)+'M' : n >= 1e3 ? (n/1e3).toFixed(0)+'k' : Math.round(n).toString()
 
-// v0.42 — builds réels (Guerrier). TANK : keystones flatDr (Forteresse .12 + Résilience .10 +
+// builds réels (Guerrier). TANK : keystones flatDr (Forteresse .12 + Résilience .10 +
 // Vengeance .06 + capstone Indomptable .15) + 3 passifs défensifs. DPS : Sentence + capstone + 3
 // passifs offensifs. Générateur en SOUTIEN (sinon finisseurs à combo 1).
 const TANK = {
@@ -54,8 +54,8 @@ function survivalSeconds(c, dmg, dmgType) {
   return { hp: charMaxHp(c), dpsTaken, ttd: charMaxHp(c) / dpsTaken }
 }
 
-// v0.42 — modèle de contenu COURANT (aligné sur ttk-sim) : ilvl de contenu (ci) + gear LÉGENDAIRE calé,
-// PV/dégâts ennemis via progression.ts (fini les paliers + transcendant sur-stuffé d'avant les Chapitres).
+// modèle de contenu COURANT (aligné sur ttk-sim) : ilvl de contenu (ci) + gear LÉGENDAIRE calé,
+// PV/dégâts ennemis via progression.ts (modèle Chapitres).
 const CIS = [50, 150, 300, 400, 500, 700]
 console.log('=== Survie vs offense à stuff calé (légendaire, ilvl = contenu) ===')
 console.log('TTD = temps pour mourir (tank, dégâts boss en auto) · TTK = temps pour tuer (build DPS) · ratio<1 = on meurt avant de tuer\n')

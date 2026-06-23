@@ -62,7 +62,7 @@ function ttd(c, enemy) {
 // Donjon franchissable si le BOSS (dernier combat) est tué avant la mort et en temps raisonnable.
 function clears(c, def, D) {
   const fights = dungeonFights(D)
-  const boss = makeDungeonEnemy(def, D, fights - 1, fights, [], c.level) // v0.35 : difficulté relative au joueur (bestStage ≈ niveau)
+  const boss = makeDungeonEnemy(def, D, fights - 1, fights, [], c.level) // difficulté relative au joueur (bestStage ≈ niveau)
   const tk = boss.hp / effectiveDps(c, boss)
   return ttd(c, boss) >= tk && tk < 180
 }

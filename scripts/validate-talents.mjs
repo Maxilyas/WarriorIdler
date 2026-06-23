@@ -2,7 +2,7 @@ import { fileURLToPath } from 'node:url'
 import { build } from 'esbuild'
 
 // BUNDLE (résout ./classData & efface les import type ./types) puis import dynamique.
-// v0.29.1 : talents.ts & powers.ts importent classData.ts → il faut bundler, pas juste transpiler.
+// talents.ts & powers.ts importent classData.ts → il faut bundler, pas juste transpiler.
 const load = async (rel) => {
   const res = await build({
     entryPoints: [fileURLToPath(new URL(rel, import.meta.url))],
@@ -33,7 +33,7 @@ for (const t of TALENTS) {
 }
 
 // 2) accessibilité depuis les RACINES (mêmes arêtes que le moteur : requires).
-//    v0.33 : deux arbres → deux racines (Cœur = base, Panthéon = classes débloquées par l'Éveil).
+//    deux arbres → deux racines (Cœur = base, Panthéon = classes débloquées par l'Éveil).
 const ROOTS = ['co_start', 'pa_start']
 const seen = new Set(ROOTS)
 let changed = true

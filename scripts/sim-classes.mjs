@@ -1,5 +1,5 @@
 /**
- * sim-classes.mjs — Simulateur d'équilibrage des CLASSES (refonte v0.29).
+ * sim-classes.mjs — Simulateur d'équilibrage des CLASSES.
  *
  * Reproduit FIDÈLEMENT le moteur du jeu (src/game/stats.ts, damage.ts, combat.ts,
  * character.ts, items.ts) pour estimer le DPS RÉEL de chaque classe proposée, avec :
@@ -83,7 +83,7 @@ const SEC = {
 /* ------------------------------------------------------------------ */
 /* 4. DÉRIVÉES (stats.ts computeDerived) à partir d'une allocation.      */
 /* ------------------------------------------------------------------ */
-// 'current' = formules du moteur v0.28 (révèle le déséquilibre) ; 'rebalanced' = proposition refonte.
+// 'current' = formules du moteur actuel (révèle le déséquilibre) ; 'rebalanced' = proposition refonte.
 const MASTERY_MODE = process.env.MODE === 'current' ? 'current' : 'rebalanced'
 function derive(main, mainVal, secondVal, alloc, ks) {
   const effMain = mainVal + SECOND_STAT_SHARE * secondVal
@@ -141,7 +141,7 @@ function abilityDps(sig, d, tMult, dmg) {
 }
 
 /* ------------------------------------------------------------------ */
-/* 5. CATALOGUE DES CLASSES (refonte v0.29 — ≥36 identités).            */
+/* 5. CATALOGUE DES CLASSES (≥36 identités).                            */
 /* main: F/A/I (stat dominante) · hybrid: [main2,frac] · type: focus élément
  * sec: profil d'allocation · ks: keystone d'identité · sig: 1-2 sorts signature
  * tax: part du budget secondaire détournée vers la survie · offFrac: orientation gear
@@ -227,7 +227,7 @@ function simulate(cls, g) {
   let auto = d.power * d.masteryMult * d.overpower * avgCrit * d.aps * tMult * (1 + d.multistrike)
   auto *= condMult(cls.ks, d)
   auto *= dotMult(cls.ks, d)
-  // Dégâts vs boss/élite : ~35% du temps de combat en farm idle (boss de palier, élites, donjons).
+  // Dégâts vs boss/élite : ~35% du temps de combat en farm idle (boss de vague, élites, donjons).
   auto *= 1 + (d.bossMult - 1) * 0.35
 
   // Capacités signature.
@@ -282,7 +282,7 @@ function table(role) {
   console.log(`  → écart END : ×${(hi / lo).toFixed(2)} (top ${fmt(hi)} / bottom ${fmt(lo)})  — idéal < ×1.6`)
 }
 
-console.log('SIMULATION DES CLASSES — refonte v0.29  (DPS moteur-exact, hypothèses en tête de fichier)')
+console.log('SIMULATION DES CLASSES  (DPS moteur-exact, hypothèses en tête de fichier)')
 console.log(`Stuff MID = lvl~50 / iLvl ${GEAR.MID.ilvl} / Épique   |   Stuff END = lvl~150 / iLvl ${GEAR.END.ilvl} / Mythique`)
 table('DPS')
 table('TANK')

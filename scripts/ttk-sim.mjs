@@ -1,9 +1,9 @@
-// Harnais TTK (refonte v0.30) — filet de sécurité chiffré, branché sur le VRAI code du jeu.
+// Harnais TTK — filet de sécurité chiffré, branché sur le VRAI code du jeu.
 // Construit un perso calé sur chaque ilvl de contenu (équipement réel via generateItem) et mesure le
 // TEMPS DE KILL (TTK) vs les courbes d'ennemi de progression.ts. Si DPS ∝ b^ilvl (compression OK),
 // le TTK est PLAT → pas de snowball. Calibre ITEM_BUDGET0 / ENEMY_HP0 / ENEMY_DMG0.
 //
-// Critères (DESIGN_v0.30 §11) : TTK plat 50→700 (trash 3 s / boss 35 s ±15 %), sur-stuff borné,
+// Critères : TTK plat 50→700 (trash 3 s / boss 35 s ±15 %), sur-stuff borné,
 // rareté ≤ ×4, aucun ilvl > 700, survie ~8 s.
 import { build } from 'esbuild'
 
@@ -26,7 +26,7 @@ setGlobalCombatMods({ power: 1, attackSpeed: 1, vitality: 1 })
 const fmt = (n) => n >= 1e12 ? (n / 1e12).toFixed(2) + 'T' : n >= 1e9 ? (n / 1e9).toFixed(2) + 'Md' : n >= 1e6 ? (n / 1e6).toFixed(2) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : Math.round(n).toString()
 const ok = (b) => b ? '✅' : '❌'
 
-// Builds ENDGAME représentatifs (v0.42 : chemin de classe réel + keystones + capstone d'IDENTITÉ ;
+// Builds ENDGAME représentatifs (chemin de classe réel + keystones + capstone d'IDENTITÉ ;
 // le générateur va en SOUTIEN — sinon les finisseurs tombent à combo 1 ; + 3 PASSIFS slottés).
 const DPS_PASSIVES = ['pas_cruaute', 'pas_perforation', 'pas_celerite']
 const BUILDS = {
@@ -77,7 +77,7 @@ function repEhp(ci) {
   return sum / n
 }
 
-console.log('================= HARNAIS TTK v0.30 (code réel) =================')
+console.log('================= HARNAIS TTK (code réel) =================')
 console.log(`b=${POW_BASE}  ×2/${ilvlPerDouble().toFixed(1)} ilvl  ·  cap ${ILVL_MAX}  ·  rareté +${RARITY_ILVL_PER_TIER}/cran  ·  ITEM_BUDGET0=${ITEM_BUDGET0} ENEMY_HP0=${ENEMY_HP0} ENEMY_DMG0=${ENEMY_DMG0}\n`)
 
 // ---- (1) TTK à stuff calé sur toute la plage ----
@@ -93,9 +93,9 @@ for (const ci of [50, 100, 150, 200, 300, 400, 500, 600, 700]) {
 }
 // L'ANTI-SNOWBALL se juge sur la zone ENDGAME (ci ≥ 400, la frontière des raids) : c'est LÀ que le TTK
 // doit être plat. La « dérive » 50→400 est le build qui s'allume (secondaires soft-capés qui se
-// remplissent). v0.32.1 : seuil 300→400 — la courbe plus plate (b=1.018) étale cette rampe d'allumage
-// plus loin (le budget par ilvl est plus petit → les soft-caps se remplissent plus tard) ; le palier
-// stable commence donc vers ci 400, pas 300. (Critère curve-dependent, cf. commentaire d'origine.)
+// remplissent). Seuil à 400 : la courbe plate (b=1.018) étale cette rampe d'allumage plus loin (le
+// budget par ilvl est plus petit → les soft-caps se remplissent plus tard) ; le plateau stable
+// commence donc vers ci 400, pas 300. (Critère curve-dependent.)
 const endgame = rows.filter((r) => r.ci >= 400)
 const egTrash = endgame.map((r) => r.tTrash), egBoss = endgame.map((r) => r.tBoss)
 const egDpsFlat = Math.max(...endgame.map((r) => r.hp0impl)) / Math.min(...endgame.map((r) => r.hp0impl))
@@ -152,7 +152,7 @@ console.log(`  ${ok(survFlat < 1.25)} survie ENDGAME plate (ci≥400, ratio ${su
 // ---- (6) RAIDS : bande d'ilvl linéaire + TTK boss à stuff calé (le contenu ex-snowball) ----
 console.log('\n=== (6) Raids : ilvl par tier + TTK boss à stuff calé ===')
 console.log('  raid          T1   T5   T10  | TTK boss T1/T5/T10 (cible ~40s) | enrage T1/T10')
-const RB = 200 // (v0.35.1 : raidIlvl est FIXE par tier mondial — RB n'est plus lu, gardé pour la signature)
+const RB = 200 // (raidIlvl est FIXE par tier mondial — RB n'est pas lu, gardé pour la signature)
 let raidOk = true
 for (const def of M.RAID_LIST) {
   const il = (t) => M.raidIlvl(def, t, RB)
@@ -162,8 +162,8 @@ for (const def of M.RAID_LIST) {
   if (Math.max(il(1), il(5), il(10)) > ILVL_MAX) raidOk = false
   console.log(`  ${def.id.padEnd(12)} ${String(il(1)).padStart(3)}  ${String(il(5)).padStart(3)}  ${String(il(10)).padStart(3)}  | ${t1.toFixed(0).padStart(3)}s ${t5.toFixed(0).padStart(3)}s ${t10.toFixed(0).padStart(3)}s            | ${enr1.toFixed(0)}s ${enr10.toFixed(0)}s`)
 }
-// v0.35.1 — difficulté FIXE par tier (ancrée palier 50→400) : le step vaut ~+35 ilvl/tier (≈ ×1,9 de
-// puissance, la pente raid d'origine), plus +5. On vérifie le RATIO de puissance/tier, pas l'ilvl brut.
+// difficulté FIXE par tier (ancrée sur la vague du Chapitre gardé : T1 ≈ vague 50 → T10 ≈ vague 140,
+// loot capé à 200). On vérifie le RATIO de puissance/tier (cible ~×1,9, seuil ×2,3), pas l'ilvl brut.
 const stepPow = Math.max(...M.RAID_LIST.map((def) => P.powerAt(M.raidIlvl(def, 2, RB)) / P.powerAt(M.raidIlvl(def, 1, RB))))
 const stepIlvl = Math.max(...M.RAID_LIST.map((def) => M.raidIlvl(def, 2, RB) - M.raidIlvl(def, 1, RB)))
 console.log(`  ${ok(stepPow <= 2.3)} puissance/tier = ×${stepPow.toFixed(2)} (+${stepIlvl} ilvl · cible ~×1,9, seuil ×2,3)`)
@@ -173,7 +173,7 @@ console.log(`  ${ok(raidBossTtkOk)} TTK boss de raid dans une bande saine (~30-5
 const enrageOk = M.RAID_LIST.every((def) => [1, 5, 10].every((t) => M.raidBerserkTime(def, t) > P.enemyHp(M.raidIlvl(def, t, RB), 'raidboss') / repDps(M.raidIlvl(def, t, RB), 'legendaire')))
 console.log(`  ${ok(enrageOk)} enrage > TTK boss à stuff calé (marge de clear)`)
 
-// ---- (7) PROPORTION des stats sur un objet (le bug v0.30.1 : primaire 2 vs secondaire 66) ----
+// ---- (7) PROPORTION des stats sur un objet (l'ancien bug : primaire 2 vs secondaire 66) ----
 console.log('\n=== (7) Proportion primaire vs secondaire sur un objet (légendaire) ===')
 console.log('  ilvl | primaire | endurance | max secondaire | ratio sec/prim')
 let propOk = true

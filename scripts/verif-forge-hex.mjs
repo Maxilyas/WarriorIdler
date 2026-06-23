@@ -1,4 +1,4 @@
-// Vérif de la Forge hexagonale (DESIGN v0.41, Lot 0) — branchée sur le VRAI code de metiers.ts.
+// Vérif de la Forge hexagonale — branchée sur le VRAI code de metiers.ts.
 // Prouve : voisinage axial, Chaînes (run connecté de même famille), Creuset (entrées possédées),
 // et la règle de FORGEABILITÉ par adjacence (voisin d'une tuile possédée ou du Creuset (0,0)).
 import { build } from 'esbuild'
@@ -55,7 +55,7 @@ check('juste hors zone parfaite = BIEN', judgeFrappe(0.62) === 'good', judgeFrap
 check('loin du centre = RATÉ', judgeFrappe(0.78) === 'miss', judgeFrappe(0.78))
 check('extrémité = RATÉ', judgeFrappe(0) === 'miss', judgeFrappe(0))
 
-// 8) Keystone Haut fourneau + jonctions (polish v0.41) — câblage dans craftMods / foyerRate.
+// 8) Keystone Haut fourneau + jonctions — câblage dans craftMods / foyerRate.
 const cmBase = craftMods(emptyMetiers())
 check('par défaut : signatureCostMult = 1', cmBase.signatureCostMult === 1, cmBase.signatureCostMult)
 check('par défaut : hautFourneau = false', cmBase.hautFourneau === false, cmBase.hautFourneau)

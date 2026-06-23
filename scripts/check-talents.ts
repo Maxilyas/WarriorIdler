@@ -2,7 +2,7 @@
  * Harnais d'intégrité de l'arbre de talents (npx tsx scripts/check-talents.ts) :
  *  - ids uniques, prérequis existants, capacités débloquées existantes ;
  *  - tout nœud atteignable depuis la racine `co_start` ;
- *  - verrous de palier finissables (gate ≤ points disponibles dans la constellation) ;
+ *  - verrous de seuil finissables (gate ≤ points disponibles dans la constellation) ;
  *  - complétabilité PAR BUILD : chaque nœud est allouable dans au moins un build valide
  *    (les choix `exclusive` ne se prennent pas en même temps — on teste la faisabilité, pas
  *    une allocation simultanée totale).

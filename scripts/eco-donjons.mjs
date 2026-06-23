@@ -1,4 +1,4 @@
-// Analyse éco des DONJONS (v0.36) : difficulté vs murs + drop par niveau vs coût de craft accessible.
+// Analyse éco des DONJONS : difficulté vs murs + drop par niveau vs coût de craft accessible.
 // Utilise le VRAI code (esbuild). Lancer : node scripts/eco-donjons.mjs
 import { build } from 'esbuild'
 const load = async (entry) => {

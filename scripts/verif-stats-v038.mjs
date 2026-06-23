@@ -1,4 +1,4 @@
-// Vérif refonte stats v0.38 sur la fiche du joueur (avant/après). node scripts/verif-stats-v038.mjs
+// Vérif de la refonte des stats sur la fiche du joueur (avant/après). node scripts/verif-stats-v038.mjs
 import { build } from 'esbuild'
 const load = async (entry) => {
   const res = await build({ stdin: { contents: entry, resolveDir: process.cwd(), loader: 'ts' }, bundle: true, format: 'esm', write: false, logLevel: 'silent' })

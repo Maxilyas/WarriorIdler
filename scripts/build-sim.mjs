@@ -18,7 +18,7 @@ const M = await load(`
 const { makeCharacter, charDerived, charDamageProfile, charDps, charMaxHp, charCombatMods, charResist, setGlobalCombatMods, RARITIES, ITEM_TYPES, EQUIP_SLOTS, itemBudget, effItemIlvl } = M
 setGlobalCombatMods({ power: 1, attackSpeed: 1, vitality: 1 }) // pas d'upgrades marchand (comparaison pure)
 
-// Affixe stat à la valeur MAX (gear optimisé) : v0.30.1 — secondaire PROPORTIONNEL au budget
+// Affixe stat à la valeur MAX (gear optimisé) : secondaire PROPORTIONNEL au budget
 // (poids SECONDARY_FRAC), même formule que rollLineValue (max roll 1.3).
 const statAffix = (stat, ilvl, tier, rare = false) => ({ kind: 'stat', stat, value: Math.max(1, Math.round(M.softCap(itemBudget(ilvl, tier, M.SECONDARY_FRAC, 1), M.SECONDARY_SOFT, M.SECONDARY_HARD) * (rare ? 0.5 : 1) * 1.3)) })
 // Ligne de type au roll max — mêmes constantes que rollLineValue (plus de copie qui dérive).
@@ -35,7 +35,7 @@ function affixesFor(elem, ilvl, tier, count) {
   return out
 }
 
-// Construit une pièce optimisée (offensif partout pour le DPS max). v0.30 : budget EXPONENTIEL.
+// Construit une pièce optimisée (offensif partout pour le DPS max). Budget EXPONENTIEL.
 function makeItem(type, primary, elem, ilvl, rarityId) {
   const r = RARITIES[rarityId]
   const w = ITEM_TYPES[type].weight

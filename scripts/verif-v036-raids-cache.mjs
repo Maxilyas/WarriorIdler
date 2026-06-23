@@ -1,4 +1,4 @@
-// Vérif v0.36 : (A) PV des boss de raid montent à CHAQUE tier (plus de plateau) · (B) table de loot
+// Vérif : (A) PV des boss de raid montent à CHAQUE tier (plus de plateau) · (B) table de loot
 // de la Cache du Pilleur (count + ilvl=bestStage + distribution de rareté). Lancer : node scripts/verif-v036-raids-cache.mjs
 import { build } from 'esbuild'
 const load = async (entry) => {

@@ -1,5 +1,5 @@
-// Harnais ÉCONOMIQUE (refonte v0.35) — mappe le RENDEMENT des donjons (par devise) contre le COÛT de
-// TOUS les puits d'optimisation, sur la courbe v0.35. Règle : un run au niveau de farm ≈ quelques
+// Harnais ÉCONOMIQUE — mappe le RENDEMENT des donjons (par devise) contre le COÛT de
+// TOUS les puits d'optimisation. Règle : un run au niveau de farm ≈ quelques
 // actions d'optimisation (jamais des milliers). Vrai code via esbuild ; seuls le marché (2 formules
 // triviales) et xpForLevel sont reflétés inline (dans store.ts, lourd à importer — zustand).
 import { build } from 'esbuild'
@@ -23,14 +23,14 @@ const shopRefreshCost = (bestStage) => Math.round(500 + bestStage * 60)
 const xpForLevel = (level) => { const x = level - 1; return Math.round(560 * Math.exp(0.105 * x + 0.00055 * x * x)) }
 
 const fmt = (n) => n >= 1e9 ? (n / 1e9).toFixed(1) + 'Md' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : Math.round(n).toString()
-const REF_LEVEL = 3 // niveau de donjon « de farm » représentatif (v0.35.1 : aligné sur DUNGEON_RUN_REF_LEVEL=3).
+const REF_LEVEL = 3 // niveau de donjon « de farm » représentatif (aligné sur DUNGEON_RUN_REF_LEVEL=3).
 const TIME_RUNE = M.ENCHANTS.find((e) => e.time) // rune la moins chère à graver/forger
 // « actions par run » : combien d'optimisations un run finance. Bande saine ≈ 0,3 à 8.
 const ratio = (yield_, cost) => cost > 0 ? yield_ / cost : Infinity
 const band = (r) => r >= 0.3 && r <= 8 ? '✅' : (r < 0.3 ? '❌ trop peu' : '❌ trop')
 const line = (label, y, cost, unit) => console.log(`    ${label.padEnd(26)} coût ${fmt(cost).padStart(8)} ${unit} → ${ratio(y, cost).toFixed(2).padStart(6)} /run ${band(ratio(y, cost))}`)
 
-console.log('================= HARNAIS ÉCO v0.35 — rendement donjon vs TOUS les puits =================')
+console.log('================= HARNAIS ÉCO — rendement donjon vs TOUS les puits =================')
 console.log(`Run de référence : donjon niveau ${REF_LEVEL}. « /run » = nb d'actions qu'un run finance (bande saine 0,3–8).\n`)
 
 for (const best of [10, 30, 60, 100, 200]) {

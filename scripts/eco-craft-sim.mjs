@@ -32,7 +32,7 @@ const pct = (n) => (n >= 0 ? '+' : '') + (n * 100).toFixed(1) + '%'
 /* 1) AMÉLIORATIONS — puits d'or : courbe de coût + effet à un niveau cible */
 /* ====================================================================== */
 console.log('=== 1) Améliorations du Marché (puits d\'or) ===')
-// Niveau cible d'évaluation : maxLevel si plafonné, sinon un palier d'illustration (10).
+// Niveau cible d'évaluation : maxLevel si plafonné, sinon un niveau d'illustration (10).
 const SAMPLE_LV = 10
 // Champ de GlobalMods touché par chaque amélioration (pour mesurer l'effet vivant).
 const FIELD = { goldGain: 'goldGain', xpGain: 'xpGain', eclatGain: 'eclatGain', lootQty: 'lootChance', rarityLuck: 'rarityLuck', talentBonus: 'talentBonus', forgeStellaire: 'power' }

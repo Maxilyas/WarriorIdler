@@ -1,10 +1,10 @@
-// Harnais MURS (refonte v0.35 — DESIGN_v0.35 §5-6) — l'outil qui pilote le calibrage.
+// Harnais MURS — l'outil qui pilote le calibrage.
 //
 // Pour chaque Palier, compare DEUX builds contre le boss-MUR (vague 10) :
 //   • Build NU     = loot ilvl + stat primaire SEULE (zéro secondaire/talent/gemme/rune/pacte/alch).
 //   • Build CIBLE  = loot ilvl + secondaires + talents (SIMULÉS FIDÈLEMENT via le vrai code)
 //                    × l'enveloppe des systèmes situationnels (gemmes/runes/pacte/alch), PARAMÉTRÉE
-//                    et scalée par le taux d'optimisation attendu τ(palier) (cf. §5.1-5.2).
+//                    et scalée par le taux d'optimisation attendu τ(palier).
 //
 // Règle de calibrage (§5.3) : à chaque Palier, le Build NU doit ÉCHOUER et le Build CIBLE doit
 // PASSER, sur les checks ACTIFS de la tranche (DPS tôt → DPS+survie → +sustain tard). La marge de
@@ -31,14 +31,14 @@ setGlobalCombatMods({ power: 1, attackSpeed: 1, vitality: 1 })
 // ---- KNOBS ----
 // Les knobs de MUR (TTK cible, margeMur, nova) viennent de progression.ts (source de vérité — le
 // harnais teste le VRAI code, pas une copie). Restent locaux ici : τ et le nb de dimensions testées.
-// v0.36 — on teste le CONTENU DE BASE (Chapitres 1-15, gear-scaling jusqu'au cap ilvl 200). Au-delà,
+// on teste le CONTENU DE BASE (Chapitres 1-15, gear-scaling jusqu'au cap ilvl 200). Au-delà,
 // le Chapitre++ a un gear CAPÉ 200 mais une difficulté qui monte encore → soft-wall d'optimisation
 // (« jusqu'où peux-tu pousser »), HORS du modèle discriminant « le build CIBLE clear chaque mur ».
 const PALIERS = [1, 3, 5, 8, 10, 12, 14, 15]
 const TARGET_BOSS_TTK = P.MUR_TARGET_TTK      // ~35 s : clear visé du Build CIBLE
 const SURVIVE = P.SURVIVE_SECONDS             // ~8 s : secondes de boss encaissables minimum
 
-/** Taux d'optimisation ATTENDU au Palier (§5.2) — par paliers (pas une rampe). */
+/** Taux d'optimisation ATTENDU au Palier — par paliers (pas une rampe). */
 function tau(p) { return p <= 10 ? 0.40 : p <= 25 ? 0.65 : 0.90 }
 /** Nombre de checks ACTIFS (§5.2) : DPS tôt → +survie → +sustain. */
 function nbChecks(p) { return p <= 10 ? 1 : p <= 25 ? 2 : 3 }
@@ -124,7 +124,7 @@ const pad = (s, n) => String(s).padStart(n)
 const NOVA_FULL = P.NOVA_FULL // pic de nova PLEIN (endgame). La sévérité RAMPE avec le Palier
 const novaReq = (p) => P.novaReqAt(p) // nulle avant P20 → pleine à P40 (source : progression.ts)
 
-console.log('================= HARNAIS MURS v0.35 (code réel + enveloppe τ) =================')
+console.log('================= HARNAIS MURS (code réel + enveloppe τ) =================')
 console.log(`LAG0=${P.LAG0} K_LAG=${P.K_LAG} · pente ${P.PENTE_VAGUE} ilvl/vague · TTK cible boss ${TARGET_BOSS_TTK}s · survie ${SURVIVE}s + nova rampe→×${NOVA_FULL}`)
 console.log(`stack dmg×${STACK_DMG_FULL} surv×${STACK_SURV_FULL} (plein) · τ 40/65/90 % · checks 1→3`)
 console.log(`Test discriminant : SOUS (sous-optimisé) doit ÉCHOUER, CIBLE doit PASSER. NU = plancher de sanité.\n`)
