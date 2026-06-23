@@ -64,15 +64,15 @@ export interface CreateOptions {
   rarity: RarityId
   orientation?: import('./types').ItemOrientation
   element?: DamageType
-  /** v0.26 — Signature (Compagnonnage III) : affixe garanti au choix (coûte des Lingots 🧱). */
+  /** Signature (Compagnonnage III) : affixe garanti au choix (coûte des Lingots 🧱). */
   signature?: SecondaryStat
-  /** v0.26 — Chef-d'œuvre hebdomadaire (Compagnonnage V) : +1 cran garanti + châsse garantie. */
+  /** Chef-d'œuvre hebdomadaire (Compagnonnage V) : +1 cran garanti + châsse garantie. */
   masterwork?: boolean
-  /** v0.41 — Surchauffe : dépense de la Chaleur (mini-jeu de Frappe) pour +1 ⭐ garanti. */
+  /** Surchauffe : dépense de la Chaleur (mini-jeu de Frappe) pour +1 ⭐ garanti. */
   surchauffe?: boolean
 }
 
-/** v0.26 — Contrat de forge quotidien : « forge-moi CETTE pièce ». */
+/** Contrat de forge quotidien : « forge-moi CETTE pièce ». */
 export interface ForgeContractDef {
   type: ItemType
   primary: OffensiveStat
@@ -135,9 +135,9 @@ export interface GameState extends SaveData {
   tick: (dt: number) => void
   setStage: (n: number) => void
   setBiome: (biome: BiomeId) => void
-  /** v0.28 — force un biome contre des Fragments d'éternité (reste dessus ~1 h, puis rotation). */
+  /** force un biome contre des Fragments d'éternité (reste dessus ~1 h, puis rotation). */
   lockBiome: (biome: BiomeId) => void
-  /** v0.28 — fait tourner la zone vers un biome ALÉATOIRE si l'échéance horaire est atteinte (timer). */
+  /** fait tourner la zone vers un biome ALÉATOIRE si l'échéance horaire est atteinte (timer). */
   rotateBiomeIfDue: () => void
   toggleFarmLock: () => void
   setRecycleThreshold: (tier: number) => void
@@ -145,7 +145,7 @@ export interface GameState extends SaveData {
   toggleAutoRecycleUseless: () => void
   insertEffect: (itemId: string, effectId: string) => void
   claimOffline: () => void
-  /** v0.31 — réclame la récompense d'une quête du tutoriel « Premiers Pas » (si terminée et non réclamée). */
+  /** réclame la récompense d'une quête du tutoriel « Premiers Pas » (si terminée et non réclamée). */
   claimTutorialReward: (id: string) => void
   /** ✉ Réclame la récompense d'un message d'inbox (crédite puis marque réclamé). */
   claimInbox: (id: string) => void
@@ -163,11 +163,11 @@ export interface GameState extends SaveData {
   claimLogin: () => void
   /** 🎉 Fait tourner l'event Invasion si la semaine a changé (nouvel élément + reset). */
   rollEventIfNeeded: () => void
-  /** 🎉 Réclame un palier de l'event (le capstone débloque l'aura élémentaire). */
+  /** 🎉 Réclame un seuil de l'event (le capstone débloque l'aura élémentaire). */
   claimEventMilestone: (index: number) => void
-  /** v0.27 (F3) — cycle de vie mobile : l'appli passe en arrière-plan (horodate la mise en veille). */
+  /** cycle de vie mobile : l'appli passe en arrière-plan (horodate la mise en veille). */
   markAway: () => void
-  /** v0.27 (F3) — retour au premier plan : crédite les gains hors-ligne accumulés en arrière-plan. */
+  /** retour au premier plan : crédite les gains hors-ligne accumulés en arrière-plan. */
   resumeAway: () => void
   equip: (itemId: string, targetSlot?: EquipSlotId) => void
   unequip: (slot: EquipSlotId) => void
@@ -175,11 +175,11 @@ export interface GameState extends SaveData {
   recycle: (itemId: string) => void
   sellAllBelow: (tier: number, uselessOnly?: boolean) => void
   recycleAllBelow: (tier: number, uselessOnly?: boolean) => void
-  /** 🔒 (v0.28) Bascule le verrou anti-suppression d'un objet. */
+  /** 🔒 Bascule le verrou anti-suppression d'un objet. */
   toggleLock: (itemId: string) => void
-  /** (v0.28) Vend en lot une sélection d'objets (ignore les verrouillés). */
+  /** Vend en lot une sélection d'objets (ignore les verrouillés). */
   sellMany: (itemIds: string[]) => void
-  /** (v0.28) Recycle en lot une sélection d'objets (ignore les verrouillés). */
+  /** Recycle en lot une sélection d'objets (ignore les verrouillés). */
   recycleMany: (itemIds: string[]) => void
   reforge: (itemId: string, locked: number[]) => void
   surillvl: (itemId: string) => void
@@ -196,29 +196,29 @@ export interface GameState extends SaveData {
   grindGem: (key: string) => void
   /** TAILLE (Joaillier) : façonne la gemme de son CHOIX (rang 1) contre de la poussière 🔹. */
   cutGem: (condId: CondGemId) => void
-  /** 🛒 (v0.28 B2) Échoppe de gemmes : achète une gemme de condition (rang 1) contre Poussière de gemme 🔹, sans Joaillier. */
+  /** 🛒 Échoppe de gemmes : achète une gemme de condition (rang 1) contre Poussière de gemme 🔹, sans Joaillier. */
   buyGem: (condId: CondGemId) => void
   /** RECOUPE (Joaillier) : monte d'un rang le paramètre d'une gemme SERTIE (poussière 🔹). */
   recutGem: (itemId: string, index: number) => void
-  /** FUSION (v0.26) : 3 gemmes identiques du stock → 1 gemme au rang supérieur. */
+  /** FUSION : 3 gemmes identiques du stock → 1 gemme au rang supérieur. */
   fuseGems: (key: string) => void
-  /** 🔥 (v0.28) Fusionne d'un coup TOUS les lots de gemmes éligibles (cascade incluse). */
+  /** 🔥 Fusionne d'un coup TOUS les lots de gemmes éligibles (cascade incluse). */
   fuseAllGems: () => void
-  /** CORRUPTION (v0.26) : retaille risquée d'une gemme du stock (rang +1 / rien / broyée). */
+  /** CORRUPTION : retaille risquée d'une gemme du stock (rang +1 / rien / broyée). */
   corruptGem: (key: string) => void
-  /** PERÇAGE (v0.26) : ajoute UNE châsse à un objet (très cher, une fois par objet). */
+  /** PERÇAGE : ajoute UNE châsse à un objet (très cher, une fois par objet). */
   drillSocket: (itemId: string) => void
-  /** ⚖️ Marché aux pierres (v0.26) : 1/jour, 3 gemmes du stock → 1 gemme au CHOIX (rang = min). */
+  /** ⚖️ Marché aux pierres : 1/jour, 3 gemmes du stock → 1 gemme au CHOIX (rang = min). */
   tradeGems: (keys: string[], targetId: CondGemId) => void
   /** Grave (ou remplace) la rune d'enchantement d'un objet (coût : Savoir-faire + éclats). */
   enchantItem: (itemId: string, enchantId: string) => void
-  /** 🧽 EFFACEMENT (v0.26) : sacrifie une rune possédée → Fragments runiques 🜁. */
+  /** 🧽 EFFACEMENT : sacrifie une rune possédée → Fragments runiques 🜁. */
   eraseRune: (enchantId: string) => void
-  /** 🔨 FORGE RUNIQUE (v0.26) : forge la rune de ton CHOIX (fragments + 🌌 + or, ×1,5/exemplaire). */
+  /** 🔨 FORGE RUNIQUE : forge la rune de ton CHOIX (fragments + 🌌 + or, ×1,5/exemplaire). */
   forgeRune: (enchantId: string) => void
-  /** 🎲 SURCHARGE RUNIQUE (v0.26) : 3 fragments → une rune aléatoire (jamais un pacte). */
+  /** 🎲 SURCHARGE RUNIQUE : 3 fragments → une rune aléatoire (jamais un pacte). */
   gambleRune: () => void
-  /* — ⚗️ Officine (v0.26) — */
+  /* — ⚗️ Officine — */
   /** 🧪 EXPÉRIMENTATION : combine 2 réactifs (3 de chaque) — découvre une recette… ou pas. */
   experiment: (a: DamageType, b: DamageType) => void
   /** 🫙 Lance un brassin dans une cuve libre (recette DÉCOUVERTE uniquement). */
@@ -240,11 +240,11 @@ export interface GameState extends SaveData {
   /** 🜍 Forge la Pierre philosophale (capstone : réactifs des 7 biomes + un Millésime + 🌌). */
   craftPhilosophale: () => void
   createItem: (opts: CreateOptions) => void
-  /** 🔨 FRAPPE (v0.41) : une frappe du mini-jeu (parfait/bien/raté) → Chaleur + série + XP. */
+  /** 🔨 FRAPPE : une frappe du mini-jeu (parfait/bien/raté) → Chaleur + série + XP. */
   strikeForge: (result: 'perfect' | 'good' | 'miss') => void
-  /** 🫕 FONDERIE (v0.26) : fond un objet du SAC (Rare+) en Lingots 🧱. */
+  /** 🫕 FONDERIE : fond un objet du SAC (Rare+) en Lingots 🧱. */
   smeltItem: (itemId: string) => void
-  /** 🔥 TREMPE LENTE (v0.26) : dépose un objet du sac au bac (+1 iLvl/24 h réelles, 5 max). */
+  /** 🔥 TREMPE LENTE : dépose un objet du sac au bac (+1 iLvl/24 h réelles, 5 max). */
   startTempering: (itemId: string) => void
   /** 🔥 Récupère l'objet du bac de trempe (crédite les jours écoulés). */
   collectTempering: () => void
@@ -252,7 +252,7 @@ export interface GameState extends SaveData {
   learnMetierNode: (metier: MetierId, nodeId: string) => void
   /** Réinitialise l'arbre d'un métier contre de l'or (XP et niveau conservés). */
   respecMetier: (metier: MetierId) => void
-  /** v0.26 : réinitialise UNE branche de l'arbre (40% du coût complet) — changer de voie sans tout raser. */
+  /** réinitialise UNE branche de l'arbre (40% du coût complet) — changer de voie sans tout raser. */
   respecMetierBranch: (metier: MetierId, branchId: string) => void
   /** Construit le prochain automate de forge (3 max, coût croissant brutal). */
   buildAutomate: () => void
@@ -284,13 +284,13 @@ export interface GameState extends SaveData {
   /** Bascule un emplacement de capacité entre AUTO et MANUEL (perso actif). */
   togglePowerAuto: (slot: number, charIndex?: number) => void
   /** Lance MANUELLEMENT la capacité d'un emplacement — strict : ne part qu'au prochain tick si prête.
-   *  `charIndex` (v0.36) : cible N'IMPORTE QUEL héros, pas seulement l'actif (UI combat multi-perso). */
+   *  `charIndex` : cible N'IMPORTE QUEL héros, pas seulement l'actif (UI combat multi-perso). */
   castPower: (slot: number, charIndex?: number) => void
   allocateTalent: (nodeId: string) => void
   respecTalents: () => void
-  /** v0.33 — alloue un nœud du PANTHÉON (2e arbre) avec le budget de Points d'Éveil (perso actif). */
+  /** alloue un nœud du PANTHÉON (2e arbre) avec le budget de Points d'Éveil (perso actif). */
   allocatePantheon: (nodeId: string) => void
-  /** v0.33 — réinitialise le Panthéon du perso actif (gratuit : rebuild libre à chaque run). */
+  /** réinitialise le Panthéon du perso actif (gratuit : rebuild libre à chaque run). */
   respecPantheon: () => void
   /** Sauvegarde le build courant (talents + capacités + spé) dans un emplacement (0-2). */
   saveBuildPreset: (slot: number, name?: string) => void
@@ -304,23 +304,23 @@ export interface GameState extends SaveData {
   mysteryBox: (id: number, opts?: { qty?: number; element?: DamageType }) => void
   /** 🏛️ Dépense un Point de Maîtrise dans un nœud de l'arbre du Conseil. */
   learnMaitrise: (nodeId: string) => void
-  /** 🏆 (v0.28) Évalue et débloque les hauts faits désormais atteints (appelé périodiquement). */
+  /** 🏆 Évalue et débloque les hauts faits désormais atteints (appelé périodiquement). */
   checkAchievements: () => void
-  /** 🏆 (v0.28) Choisit le TITRE affiché d'un héros (id de haut fait débloqué, ou null). */
+  /** 🏆 Choisit le TITRE affiché d'un héros (id de haut fait débloqué, ou null). */
   selectTitle: (charId: string, achId: string | null) => void
-  /** 🎨 (v0.28) Personnalise le portrait d'un héros (palette / emblème). */
-  /** v0.36 (lot 8) — l'apparence est désormais au niveau du COMPTE (un seul badge). On l'édite via le
-   *  perso-ancre characters[0] ; plus de charId. */
+  /** 🎨 Personnalise le portrait d'un héros (palette / emblème). */
+  /** L'apparence est au niveau du COMPTE (un seul badge). On l'édite via le perso-ancre
+   *  characters[0] ; plus de charId. */
   setAvatar: (sel: { palette?: string; emblem?: string; border?: string; aura?: string }) => void
-  /** 🎨 (v0.28 B2) Débloque un cosmétique premium contre de la Poussière d'étoile 🌌. */
+  /** 🎨 Débloque un cosmétique premium contre de la Poussière d'étoile 🌌. */
   unlockCosmetic: (id: string) => void
   /** Coffre du Destin : garde l'objet à cet index, recycle les autres. */
   chooseFromChoice: (index: number) => void
   recruitCharacter: () => void
   reset: () => void
-  /** v0.27 (Lot 5) — ÉVEIL PRIMORDIAL : reset DUR contre des Échos ; garde 1 Relique (slot choisi). */
+  /** ÉVEIL PRIMORDIAL : reset DUR contre des Échos ; garde 1 Relique (slot choisi). */
   awaken: (relicSlot: EquipSlotId | null) => void
-  /** v0.27 (Lot 5) — investit des Échos dans un nœud de Constellation. */
+  /** investit des Échos dans un nœud de Constellation. */
   allocateConstellation: (nodeId: string) => void
 }
 
@@ -343,7 +343,7 @@ export interface MysteryBox {
   icon: string
   gold: number
   count: number
-  // v0.40.4 — la rareté n'est PLUS figée par coffre : elle suit la rareté DÉBLOQUÉE du compte
+  // la rareté n'est PAS figée par coffre : elle suit la rareté DÉBLOQUÉE du compte
   // (unlockedRarityTier → fenêtre [top−4 → top]). `priceTier` ne sert qu'au POIDS DE PRIX (boxGoldPrice).
   priceTier: number
   /** Forme « premium » (Cosmique/Néant) : traîne haute moins raide → ~6% de rareté débloquée (vs ~1.7%). */
@@ -414,9 +414,9 @@ export interface CombatMods {
   cond?: CondMods
   /** Runes de TEMPS actives (manipulation des horloges — voir enchants.ts). */
   runes?: TimeRuneMods
-  /** 🩸 Pacte(s) actif(s) (v0.26) — bonus/malus permanents d'équipe (voir enchants.ts). */
+  /** 🩸 Pacte(s) actif(s) — bonus/malus permanents d'équipe (voir enchants.ts). */
   pact?: PactMods
-  /** v0.26 : CONTEXTE de contenu pour les gemmes d'Environnement (où se passe le combat). */
+  /** CONTEXTE de contenu pour les gemmes d'Environnement (où se passe le combat). */
   content?: {
     /** Biome actif (farm) — Prisme d'accord. */
     biomeType?: DamageType
@@ -426,9 +426,9 @@ export interface CombatMods {
     affixCount?: number
     /** Raid : points de résistance offerts à l'équipe — Trophée de guerre. */
     resistBonus?: number
-    /** v0.27 (Lot 3) — « Mal de l'abîme » : multiplicateur de régén des héros en RAID (< 1 = bridée). */
+    /** « Mal de l'abîme » : multiplicateur de régén des héros en RAID (< 1 = bridée). */
     regenMult?: number
-    /** Farm : à ≤ 2 paliers du record — Pied du mur (appliqué via heroMult au tick). */
+    /** Farm : à ≤ 2 vagues du record — Pied du mur (appliqué via heroMult au tick). */
     nearRecord?: boolean
     /** 🧴 Antidote ciblé (Officine) : −pct des dégâts SUBIS de ce type. */
     antidote?: { type: DamageType; pct: number }
@@ -442,14 +442,14 @@ type RuntimeData = SaveData & { enemy: Enemy; log: LogEntry[]; killCount: number
  * Calcule l'ÉTAT RUNTIME depuis une `SaveData` chargée : refresh des globaux, CRÉDIT HORS-LIGNE,
  * rattrapage des automates, roulement quotidien/event, ennemi & journal d'accueil. PARTAGÉ — appelé
  * EXACTEMENT une fois par chargement de slot (sinon double-crédit hors-ligne). Mute `save` (gains
- * crédités) puis le renvoie enrichi des champs transitoires. v0.42 (Palier 2) : extrait de l'init
- * synchrone du store, désormais appelé APRÈS le boot async (lecture du stockage durable).
+ * crédités) puis le renvoie enrichi des champs transitoires. Extrait de l'init synchrone du store,
+ * appelé APRÈS le boot async (lecture du stockage durable).
  */
 export function hydrate(save: SaveData): RuntimeData {
   refreshGlobals(save.upgrades, save.maitrise, save.constellation, save.achievements)
 
-  // Progression hors-ligne : applique les gains accumulés depuis la dernière sauvegarde. v0.31.3 — le
-  // récap part dans la ✉ boîte de réception (message « non lu ») au lieu d'un modal plein écran intrusif.
+  // Progression hors-ligne : applique les gains accumulés depuis la dernière sauvegarde. Le récap
+  // part dans la ✉ boîte de réception (message « non lu ») au lieu d'un modal plein écran intrusif.
   const elapsed = Date.now() - (save.lastSeen ?? Date.now())
   if (elapsed > 0) {
     const report = simulateOffline(save.characters, save.stage, save.upgrades, elapsed, save.activeBiome, save.maitrise, achievementBonuses(save.achievements))
@@ -504,7 +504,7 @@ export function hydrate(save: SaveData): RuntimeData {
       { id: nextLogId(), text: 'Bienvenue, guerrier. Le combat commence.', kind: 'info' as LogKind },
     ],
     killCount: 0,
-    // v0.31.3 — `pendingOffline` n'est plus alimenté (le modal de retour est remplacé par la ✉ inbox) ;
+    // `pendingOffline` n'est pas alimenté (le modal de retour est remplacé par la ✉ inbox) ;
     // le champ et `claimOffline` restent dormants pour ne pas toucher au plan de sauvegarde.
     pendingOffline: null,
   }
