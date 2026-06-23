@@ -924,6 +924,17 @@ function migrateOldSave(p: any): SaveData {
   })
 }
 
+/** Normalise un objet brut (déjà parsé) en `SaveData` complet via la chaîne `sanitize` (merge defaults +
+ *  migration + `onboarded`), ou `null` si invalide (pas d'équipe). Centralise l'adoption d'une save
+ *  d'origine quelconque (relais d'import, slot IndexedDB, filet localStorage). */
+export function sanitizeRaw(raw: unknown): SaveData | null {
+  if (!raw || typeof raw !== 'object') return null
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const p = raw as any
+  if (!Array.isArray(p.characters) || p.characters.length === 0) return null
+  return sanitize({ ...freshSave(), ...p, onboarded: p.onboarded ?? true })
+}
+
 export function loadSave(): SaveData {
   try {
     // Reprise d'import (Palier 1) : un payload sous `IMPORT_KEY` a PRIORITÉ et survit au flush de
@@ -934,9 +945,8 @@ export function loadSave(): SaveData {
     if (pendingImport !== null) {
       localStorage.removeItem(IMPORT_KEY)
       try {
-        const pi = JSON.parse(pendingImport)
-        if (Array.isArray(pi.characters)) {
-          const adopted = sanitize({ ...freshSave(), ...pi, onboarded: pi.onboarded ?? true })
+        const adopted = sanitizeRaw(JSON.parse(pendingImport))
+        if (adopted) {
           writeSave(adopted)
           return adopted
         }
@@ -960,7 +970,7 @@ export function loadSave(): SaveData {
 
 /** Construit le payload `SaveData` à partir de l'état runtime (sans les champs transitoires). Pur :
  *  appelé au moment du `persist`/`persistThrottled` — `lastSeen` reflète donc l'instant de l'appel. */
-function buildSaveData(s: GameState): SaveData {
+export function buildSaveData(s: GameState): SaveData {
   const data: SaveData = {
     characters: s.characters,
     activeChar: s.activeChar,
@@ -1062,6 +1072,16 @@ function writeSave(data: SaveData) {
   }
 }
 
+// --- Sink durable (Palier 2) -------------------------------------------------------------------
+// `save.ts` ne connaît PAS IndexedDB (aucun import de `saveSlots.ts` → pas de cycle) : `saveSlots.ts`
+// INJECTE un sink ici. À chaque persist, en plus du FILET synchrone localStorage (`writeSave`), on
+// notifie le sink qui mirrore le slot ACTIF dans IndexedDB (debounce). Le filet survit à un kill brutal ;
+// le boot réconcilie filet vs IDB par `lastSeen`. Sans sink (sims Node, repli local) : no-op.
+type DurableSink = (data: SaveData, immediate: boolean) => void
+let durableSink: DurableSink | null = null
+let lastBuilt: SaveData | null = null
+export function registerDurableSink(fn: DurableSink | null) { durableSink = fn }
+
 // --- Sauvegarde throttlée (perf) ---------------------------------------------------------------
 // Le chemin chaud (boucle de combat 5 Hz : `tick`/`tickDungeon`/`tickRaid`) peut persister à chaque
 // kill — soit jusqu'à 5 `JSON.stringify` de TOUT le save par seconde, bloquant sur le thread UI.
@@ -1081,7 +1101,10 @@ function clearPending() {
  *  write throttlé en attente (l'état passé est le plus récent → le pending serait périmé). */
 export function persist(s: GameState) {
   clearPending()
-  writeSave(buildSaveData(s))
+  const data = buildSaveData(s)
+  lastBuilt = data
+  writeSave(data)
+  durableSink?.(data, false)
 }
 
 /** Sauvegarde THROTTLÉE — réservée au chemin chaud (boucle de combat). Mémorise l'instantané le plus
@@ -1089,7 +1112,10 @@ export function persist(s: GameState) {
  *  `flushSave` (mise en veille/fermeture) et `persist` (action joueur) écrivent le pending immédiatement,
  *  et le cold-start recrédite tout écart via `lastSeen` (simulation hors-ligne). */
 export function persistThrottled(s: GameState) {
-  pendingSnapshot = buildSaveData(s) // immuabilité du store ⇒ l'instantané reste valide jusqu'au flush
+  const data = buildSaveData(s) // immuabilité du store ⇒ l'instantané reste valide jusqu'au flush
+  pendingSnapshot = data
+  lastBuilt = data
+  durableSink?.(data, false) // le sink debounce de son côté (mirror IDB)
   if (saveTimer === null) {
     saveTimer = setTimeout(() => {
       saveTimer = null
@@ -1103,6 +1129,7 @@ export function persistThrottled(s: GameState) {
 export function flushSave() {
   if (saveTimer !== null) { clearTimeout(saveTimer); saveTimer = null }
   if (pendingSnapshot) { writeSave(pendingSnapshot); pendingSnapshot = null }
+  if (lastBuilt) durableSink?.(lastBuilt, true) // force un mirror IDB best-effort (peut ne pas finir sur unload)
 }
 
 // --- Export / Import par fichier (Palier 1) ----------------------------------------------------

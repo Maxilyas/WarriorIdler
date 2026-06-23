@@ -1,3 +1,6 @@
+// Polyfill IndexedDB (Palier 2) pour l'environnement Node : `saveSlots.ts` lit/écrit les slots.
+import 'fake-indexeddb/auto'
+
 // Polyfill minimal de `localStorage` pour l'environnement Node (save.ts lit/écrit la save).
 // In-memory, réinitialisable par les tests via `localStorage.clear()`.
 class MemoryStorage {

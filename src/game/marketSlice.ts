@@ -12,7 +12,7 @@ import { constellationMods, echosGain, getConstNode, nodeCost, RELIC_BASE_ILVL }
 import { rollCondGem } from './condGems'
 import { makeEnemy, stageIlvl } from './enemies'
 import { RARITIES } from './rarities'
-import { SAVE_KEY, IMPORT_KEY, freshSave, persist, discoverFromItems } from './save'
+import { IMPORT_KEY, freshSave, persist, discoverFromItems } from './save'
 import { clearCooldowns } from './combatEngine'
 import { DAMAGE_TYPE_LIST } from './damage'
 import { randomUniqueInstance, undiscoveredUnique } from './uniques'
@@ -184,17 +184,20 @@ export function createMarketSlice(set: GameSet, get: GameGet): Pick<GameState,
 
     reset: () => {
       const fresh = freshSave()
-      localStorage.removeItem(SAVE_KEY)
       localStorage.removeItem(IMPORT_KEY) // purge un éventuel relais d'import non encore promu
       clearCooldowns()
       refreshGlobals(fresh.upgrades, fresh.maitrise, fresh.constellation, fresh.achievements)
-      set({
+      const next = {
         ...fresh,
         enemy: makeEnemy(fresh.stage, fresh.activeBiome),
         log: [{ id: nextLogId(), text: 'Nouvelle partie commencée.', kind: 'info' }],
         killCount: 0,
         pendingOffline: null,
-      } as GameState)
+      } as GameState
+      // Palier 2 — écrit la partie NEUVE dans le filet (et planifie le mirror IDB du slot actif) : sans
+      // ça, le slot IndexedDB garderait l'ancienne partie et un reload la restaurerait (réconciliation).
+      persist(next)
+      set(next)
     },
 
     // v0.27 (Lot 5) — ÉVEIL PRIMORDIAL : reset DUR contre des Échos. Conserve Échos + Constellation +

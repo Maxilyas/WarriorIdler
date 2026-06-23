@@ -9,6 +9,7 @@ import { METIER_LIST, pointsAvailable } from './game/metiers'
 import { CombatPanel } from './components/CombatPanel'
 import { ResetButton } from './components/CharacterPanel'
 import { SaveTransfer } from './components/SaveTransfer'
+import { SlotManager } from './components/SlotManager'
 import { Sheet } from './components/ui'
 import { ChestModal } from './components/ChestModal'
 import { ChoiceModal } from './components/ChoiceModal'
@@ -65,7 +66,29 @@ function fmtShort(n: number): string {
   return n.toLocaleString('fr-FR')
 }
 
+/** Écran de chargement (Palier 2) : affiché le temps que le boot async lise le stockage durable. */
+function BootScreen() {
+  return (
+    <div className="flex h-[100dvh] flex-col items-center justify-center gap-3 bg-[#0b0e14] text-slate-400">
+      <div className="text-3xl">⚔</div>
+      <div className="h-1 w-32 overflow-hidden rounded-full bg-slate-800">
+        <div className="h-full w-1/2 animate-pulse rounded-full bg-orange-500" />
+      </div>
+      <div className="text-xs">Chargement de la partie…</div>
+    </div>
+  )
+}
+
+/** Racine : tant que le store n'est pas hydraté (boot async, Palier 2), on montre l'écran de chargement.
+ *  Le vrai jeu (`GameApp`) n'est monté qu'APRÈS — ses effets (tick, cycle de vie) ne tournent donc
+ *  jamais sur l'état placeholder. */
 export default function App() {
+  const booted = useGame((s) => s.booted)
+  if (!booted) return <BootScreen />
+  return <GameApp />
+}
+
+function GameApp() {
   const tick = useGame((s) => s.tick)
   const markAway = useGame((s) => s.markAway)
   const resumeAway = useGame((s) => s.resumeAway)
@@ -387,6 +410,7 @@ export default function App() {
               <span>📱 Garder l'écran allumé</span>
               <input type="checkbox" checked={keepAwake} onChange={(e) => setKeepAwake(e.target.checked)} className="h-4 w-4 accent-orange-500" />
             </label>
+            <SlotManager />
             <SaveTransfer />
             <ResetButton />
           </div>

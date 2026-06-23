@@ -61,9 +61,11 @@ import type { GameState, ChestReward, ForgeContractDef, BrewBuffs, MysteryBox, L
 // les saves v1 ne sont plus chargées (reset propre, comme un gros prestige). Cf. DESIGN_v0.30.md.
 export const MAX_LOG = 40
 // v0.25 (DESIGN §2) : pas de Sacoches — le tri se fait par l'auto-recyclage (seuil de rareté) et les
-// outils de masse. CAP technique = 5000 (perf : borne le re-render/scan d'inventaire et corrige un bug
-// latent de quota localStorage — la save mono-`setItem` throwait silencieusement vers ~15-18k objets).
-export const INV_BASE = 5000
+// outils de masse. CAP technique : borne de SÉCURITÉ (perf : limite le re-render/scan d'inventaire).
+// v0.42 (Palier 2) : la save durable vit désormais dans IndexedDB (filet localStorage best-effort, voir
+// save.ts) → la contrainte de quota localStorage est levée. On relève donc le cap 5000 → 20000, en le
+// gardant BORNÉ (perf) plutôt qu'infini. Sims inchangées (aucune n'accumule un inventaire à ce volume).
+export const INV_BASE = 20000
 export let invMax = INV_BASE
 /**
  * Insertion en tête bornée au `cap`, byte-identique à `[it, ...inv].slice(0, cap)` mais SANS la 2ᵉ

@@ -20,7 +20,8 @@ import { type CondGemId, type CondMods, type GemFamily, type GemQuality } from '
 import { tickAutomates, type AutomateMission } from './automates'
 import { makeEnemy } from './enemies'
 import { type BiomeId } from './biomes'
-import { type SaveData, loadSave } from './save'
+import { type SaveData, loadSave, freshSave, persist } from './save'
+import { bootStorage, SLOT0, type StorageMode } from './saveSlots'
 export { powerCooldowns } from './combatEngine'
 import { offlineMessage, INBOX_CAP, type InboxMessage } from './inbox'
 import { dailyMetrics, rollDaily, todayStr } from './daily'
@@ -124,6 +125,13 @@ export interface GameState extends SaveData {
   killCount: number
   /** Récap de progression hors-ligne à présenter au retour (modal). */
   pendingOffline: OfflineReport | null
+  /** Palier 2 — false tant que le boot async (lecture du stockage durable) n'a pas hydraté le store.
+   *  Transitoire (jamais persisté) : tant que !booted, l'UI montre l'écran de chargement (aucun tick). */
+  booted: boolean
+  /** Palier 2 — mode de stockage effectif : `idb` (multi-slots) ou `local` (repli mono-slot). */
+  storageMode: 'idb' | 'local'
+  /** Palier 2 — id du slot actuellement chargé. */
+  activeSlotId: string
   tick: (dt: number) => void
   setStage: (n: number) => void
   setBiome: (biome: BiomeId) => void
@@ -418,8 +426,17 @@ export interface CombatMods {
   }
 }
 
-export const useGame = create<GameState>((set, get) => {
-  const save = loadSave()
+/** Données runtime (hors actions) que `hydrate` produit et que `bootGame` injecte via setState. */
+type RuntimeData = SaveData & { enemy: Enemy; log: LogEntry[]; killCount: number; pendingOffline: OfflineReport | null }
+
+/**
+ * Calcule l'ÉTAT RUNTIME depuis une `SaveData` chargée : refresh des globaux, CRÉDIT HORS-LIGNE,
+ * rattrapage des automates, roulement quotidien/event, ennemi & journal d'accueil. PARTAGÉ — appelé
+ * EXACTEMENT une fois par chargement de slot (sinon double-crédit hors-ligne). Mute `save` (gains
+ * crédités) puis le renvoie enrichi des champs transitoires. v0.42 (Palier 2) : extrait de l'init
+ * synchrone du store, désormais appelé APRÈS le boot async (lecture du stockage durable).
+ */
+export function hydrate(save: SaveData): RuntimeData {
   refreshGlobals(save.upgrades, save.maitrise, save.constellation, save.achievements)
 
   // Progression hors-ligne : applique les gains accumulés depuis la dernière sauvegarde. v0.31.3 — le
@@ -481,6 +498,25 @@ export const useGame = create<GameState>((set, get) => {
     // v0.31.3 — `pendingOffline` n'est plus alimenté (le modal de retour est remplacé par la ✉ inbox) ;
     // le champ et `claimOffline` restent dormants pour ne pas toucher au plan de sauvegarde.
     pendingOffline: null,
+  }
+}
+
+export const useGame = create<GameState>((set, get) => {
+  // BOOT ASYNCHRONE (Palier 2) : le store démarre en état PLACEHOLDER (booted:false) — AUCUN accès au
+  // stockage durable ici (synchrone). `bootGame()` (appelé par main.tsx) lit IndexedDB / le repli
+  // localStorage PUIS hydrate via setState. Tant que !booted, App affiche l'écran de chargement (le tick
+  // est gardé sur `onboarded`, false dans la freshSave placeholder → aucune persist, aucun combat).
+  const placeholder = freshSave()
+  refreshGlobals(placeholder.upgrades, placeholder.maitrise, placeholder.constellation, placeholder.achievements)
+  return {
+    ...placeholder,
+    enemy: makeEnemy(placeholder.stage, placeholder.activeBiome),
+    log: [],
+    killCount: 0,
+    pendingOffline: null,
+    booted: false,
+    storageMode: 'idb' as StorageMode,
+    activeSlotId: SLOT0,
 
     ...createTickSlice(set, get),
 
@@ -496,4 +532,29 @@ export const useGame = create<GameState>((set, get) => {
     ...createMarketSlice(set, get),
   }
 })
+
+let booting = false
+/**
+ * Démarre le BOOT ASYNCHRONE (Palier 2) : lit le stockage durable (IndexedDB ou repli localStorage),
+ * applique l'anti-windfall d'une bascule délibérée, HYDRATE le store, marque `booted`, puis persiste
+ * l'état hydraté (filet + slot IDB). Idempotent (ignore les appels redondants — ex. StrictMode).
+ */
+export async function bootGame(): Promise<void> {
+  if (booting || useGame.getState().booted) return
+  booting = true
+  let boot: { save: SaveData; activeId: string; mode: StorageMode; freshSwitch: boolean }
+  try {
+    boot = await bootStorage()
+  } catch {
+    boot = { save: loadSave(), activeId: SLOT0, mode: 'local', freshSwitch: false }
+  }
+  const save = boot.save
+  // Anti-windfall : une bascule de slot DÉLIBÉRÉE ne crédite pas le temps « dormant » du slot cible.
+  if (boot.freshSwitch) save.lastSeen = Date.now()
+  const data = hydrate(save)
+  useGame.setState({ ...data, booted: true, storageMode: boot.mode, activeSlotId: boot.activeId } as Partial<GameState>)
+  // Écrit l'état hydraté (crédit hors-ligne appliqué, lastSeen=now) dans le filet + le slot IDB actif.
+  persist(useGame.getState())
+  booting = false
+}
 
