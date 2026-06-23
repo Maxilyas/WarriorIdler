@@ -51,6 +51,8 @@ if (path) {
   let raw
   try { raw = JSON.parse(readFileSync(path, 'utf8')) }
   catch (e) { console.error(`✗ Lecture/JSON impossible : ${path}\n  ${e.message}`); process.exit(1) }
+  // Export du jeu enveloppé : { app, schema, exportedAt, checksum, data } → le SaveData est dans `data`.
+  if (raw && !Array.isArray(raw.characters) && raw.data && Array.isArray(raw.data.characters)) raw = raw.data
   save = sanitizeRaw(raw)
   if (!save) { console.error('✗ Fichier non reconnu comme une sauvegarde Warrior Idler (champ "characters" manquant ?).'); process.exit(1) }
 } else {
@@ -164,9 +166,14 @@ else {
     const contrib = base - totalDps(without)
     return { id, contrib, pctOfTotal: (contrib / base) * 100 }
   }).sort((a, b) => b.contrib - a.contrib)
+  // Effets dont la valeur N'EST PAS du DPS direct (soutien/debuff) → 0% est NORMAL, pas un poids mort.
+  const SUPPORT_FX = new Set(['mark', 'builder', 'shield', 'bigShield', 'heal', 'bigHeal', 'hot', 'buffParty', 'invuln', 'frenzy'])
   for (const r of rows) {
-    const flag = r.pctOfTotal < 1 ? '  ⚠ poids mort' : ''
-    console.log(`  ${(getPower(r.id)?.name ?? r.id).padEnd(24)} +${fmt(r.contrib).padStart(8)} DPS (${r.pctOfTotal.toFixed(1)}% du total)${flag}`)
+    const eff = getPower(r.id)?.effect
+    const note = r.pctOfTotal >= 1 ? ''
+      : SUPPORT_FX.has(eff) ? `  (soutien « ${eff} » — valeur indirecte, hors DPS direct)`
+      : '  ⚠ poids mort (sort de dégât sans contribution — élément/stat inadaptés ?)'
+    console.log(`  ${(getPower(r.id)?.name ?? r.id).padEnd(24)} +${fmt(r.contrib).padStart(8)} DPS (${r.pctOfTotal.toFixed(1)}% du total)${note}`)
   }
 }
 
@@ -181,16 +188,18 @@ const dpsFull = totalDps(c)
 const uplift = ((dpsFull - dpsBare) / Math.max(1, dpsBare)) * 100
 console.log(`  ${spent} points dépensés dans l'arbre · ${pool} restant(s) dans le pool d'équipe · ton arbre = ${uplift >= 0 ? '+' : ''}${uplift.toFixed(0)}% de DPS`)
 const ehpBare = charEhp(clone(c, { talents: { co_start: 1 } }))
-const dead = []
+const inert = []
 for (const id of Object.keys(c.talents)) {
   if (id === 'co_start' || (c.talents[id] ?? 0) <= 0) continue
+  if (getTalent(id)?.unlockPower) continue // un nœud qui DÉBLOQUE un sort équipé n'est jamais « mort »
   const without = clone(c, { talents: { ...c.talents, [id]: 0 } })
   const dDps = Math.abs(dpsFull - totalDps(without)), dEhp = Math.abs(charEhp(c) - charEhp(without))
-  if (dDps < dpsFull * 0.0005 && dEhp < ehpBare * 0.0005) dead.push(id)
+  if (dDps < dpsFull * 0.0005 && dEhp < ehpBare * 0.0005) inert.push(id)
 }
-if (dead.length) {
-  console.log(`  ⚠ ${dead.length} nœud(s) alloué(s) sans effet DPS/EHP mesurable (utilité/sustain, ou point gâché) :`)
-  console.log('    ' + dead.map((id) => getTalent(id)?.name ?? id).join(', '))
+if (inert.length) {
+  console.log(`  ${inert.length} nœud(s) sans impact DPS/EHP burst mesuré (hors sorts débloqués) — utilité,`)
+  console.log('  survie conditionnelle (bouclier/riposte, non captée par l\'EHP burst) ou pathing — pas forcément gâchés :')
+  console.log('    ' + inert.map((id) => getTalent(id)?.name ?? id).join(', '))
 } else console.log('  ✓ tous tes nœuds alloués pèsent sur le DPS ou l\'EHP.')
 
 console.log(`\n${'═'.repeat(70)}`)
