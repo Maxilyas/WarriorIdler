@@ -91,9 +91,18 @@ appliqué ? Quantifie l'effet total (tout maxé ≈ +12% de combat agrégé) et 
 3. **Sorts équipés** : contribution DPS de chacun par retrait marginal (repère le poids mort).
 4. **Talents** : points dépensés/dispo, gain de DPS de l'arbre, nœuds alloués sans effet.
 
-Sans argument → **mode démo** (perso stuffé généré) qui prouve le pipeline. Modèle simplifié (DPS
-soutenu vs PV/enrage, survie = EHP burst) : une **estimation**, pas le combat tick-à-tick (ignore
-rotation fine et mécaniques signature de raid).
+Sans argument → **mode démo** (perso stuffé généré) qui prouve le pipeline. Le combat (donjons/raids)
+tourne le **VRAI `partyCombatStep`** sur toute l'équipe (heal, cooldowns, mécaniques de boss inclus),
+sans buffs gemmes/runes/conso (plancher) et en supposant un jeu parfait (léger plafond) ; il affiche le
+**diagnostic du mur** (qui tombe en premier, quand, PV restant du boss → mur de survie vs de DPS).
+
+### `build-explorer.mjs` — `npm run explorer`
+**Matrice d'équilibrage des builds** via le vrai moteur. Croise des ARCHÉTYPES (chemins de classe réels)
+× une ORIENTATION de stuff (offensif/équilibré/défensif), fabrique le perso réel (`generateItem`) et
+simule (`partyCombatStep`, solo) le tier de raid / niveau de donjon MAX battable + DPS/EHP. Sort deux
+lectures : **écart de DPS entre classes** (déséquilibre) et **offensif vs défensif** (les monstres
+forcent-ils la défense ?). Extensible (ajouter des entrées à `ARCHETYPES`/`ORIENTATIONS`). Couche
+suivante : gemmes/runes par build.
 
 ## Économie
 
