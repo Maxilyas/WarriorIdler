@@ -44,19 +44,19 @@ export interface SaveData {
   activeChar: number
   /** Palier courant DU BIOME ACTIF. */
   stage: number
-  /** Meilleur palier tous biomes confondus (= max sur biomeBest). */
+  /** Meilleure vague tous biomes confondus (= max sur biomeBest). */
   bestStage: number
   /** Biome actif (combat classique). */
   activeBiome: BiomeId
-  /** v0.28 — horodatage de la prochaine rotation ALÉATOIRE de la zone de chasse (~1 h). */
+  /** horodatage de la prochaine rotation ALÉATOIRE de la zone de chasse (~1 h). */
   nextRotateAt: number
-  /** v0.28 — biome FORCÉ (payé en Fragments) jusqu'à cet horodatage (0 = rotation libre). */
+  /** biome FORCÉ (payé en Fragments) jusqu'à cet horodatage (0 = rotation libre). */
   biomeLockUntil: number
   /** Palier courant mémorisé par biome (le biome actif reflète `stage`). */
   biomeStages: Record<BiomeId, number>
-  /** Meilleur palier atteint par biome. */
+  /** Meilleure vague atteinte par biome. */
   biomeBest: Record<BiomeId, number>
-  /** Verrou de farm : fige la progression au palier courant. */
+  /** Verrou de farm : fige la progression à la vague courante. */
   farmLock: boolean
   gold: number
   essence: number
@@ -69,23 +69,23 @@ export interface SaveData {
   gems: Record<string, number>
   /** Poussière de gemme 🔹 : broyage → taille (gemme au choix) & recoupe (rangs). Joaillier. */
   gemDust: number
-  /** v0.26 : gemmes possédées au moins une fois (📖 Catalogue du Joaillier). */
+  /** gemmes possédées au moins une fois (📖 Catalogue du Joaillier). */
   gemsSeen: string[]
-  /** v0.26 : jour epoch du dernier échange au ⚖️ Marché aux pierres (1/jour). */
+  /** jour epoch du dernier échange au ⚖️ Marché aux pierres (1/jour). */
   lastStoneTrade: number
-  /** v0.26 : Lingots 🧱 (Fonderie du Forgeron) — la matière des Signatures et Chefs-d'œuvre. */
+  /** Lingots 🧱 (Fonderie du Forgeron) — la matière des Signatures et Chefs-d'œuvre. */
   lingots: number
-  /** v0.26 : objet au BAC DE TREMPE (🔥 Trempe lente) — +1 iLvl/24 h réelles, 5 max par objet. */
+  /** objet au BAC DE TREMPE (🔥 Trempe lente) — +1 iLvl/24 h réelles, 5 max par objet. */
   trempe: { itemId: string; startedAt: number } | null
-  /** v0.26 : 📋 Contrats de forge du jour (jour epoch + état des 3 commandes). */
+  /** 📋 Contrats de forge du jour (jour epoch + état des 3 commandes). */
   forgeContracts: { day: number; done: boolean[] } | null
-  /** v0.26 : semaine epoch du dernier CHEF-D'ŒUVRE (Compagnonnage V, 1/semaine). */
+  /** semaine epoch du dernier CHEF-D'ŒUVRE (Compagnonnage V, 1/semaine). */
   lastMasterwork: number
-  /** v0.26 : Fragments runiques 🜁 (Effacement → Forge runique / Surcharge). */
+  /** Fragments runiques 🜁 (Effacement → Forge runique / Surcharge). */
   runeFragments: number
-  /** v0.26 : exemplaires déjà FORGÉS par rune (le coût croît ×1,5 à chaque exemplaire). */
+  /** exemplaires déjà FORGÉS par rune (le coût croît ×1,5 à chaque exemplaire). */
   runeCrafted: Record<string, number>
-  /* — ⚗️ Officine de l'Alchimiste (v0.26) — */
+  /* — ⚗️ Officine de l'Alchimiste — */
   /** Réactifs de biome (1 herbe par type de dégâts). */
   reagents: Partial<Record<DamageType, number>>
   /** Brassins en stock (clé `id:qualité` — voir alchimie.ts). */
@@ -110,7 +110,7 @@ export interface SaveData {
   lastTransmute: number
   /** 🜍 Pierre philosophale forgée (relique de compte : +2% drops de ressources). */
   philosophale: boolean
-  /** v0.26 : version de migration des arbres de métiers (Prodige, etc.). */
+  /** version de migration des arbres de métiers (Prodige, etc.). */
   metiersV?: number
   essences: Record<string, number>
   sceaux: number
@@ -127,7 +127,7 @@ export interface SaveData {
   fragments: number
   /** Éclat cosmique 💫 — ressource ultra-rare des raids. */
   cosmic: number
-  /** ✨ Échos primordiaux 💠 (v0.27, Lot 5) — monnaie de PRESTIGE (Éveil), investie en Constellation. */
+  /** ✨ Échos primordiaux 💠 — monnaie de PRESTIGE (Éveil), investie en Constellation. */
   echos: number
   /** Nombre d'Éveils accomplis. */
   prestigeRank: number
@@ -138,33 +138,33 @@ export interface SaveData {
   /** Relique conservée au dernier Éveil (1 pièce, iLvl plancher) — versée dans le sac au reset. */
   relic: Item | null
   raidProgress: RaidProgress
-  /** 🏆 Trophées par raid (v0.24) : la monnaie de PASSAGE DE TIER (gagnés par clear). */
+  /** 🏆 Trophées par raid : la monnaie de PASSAGE DE TIER (gagnés par clear). */
   raidTrophies: Partial<Record<RaidId, number>>
-  /** Tier maximal TENTABLE par raid (v0.24) : monte via unlockRaidTier (clear + Trophées). */
+  /** Tier maximal TENTABLE par raid : monte via unlockRaidTier (clear + Trophées). */
   raidTierUnlocked: Partial<Record<RaidId, number>>
   raid: ActiveRaid | null
-  /** 🪄 Runes POSSÉDÉES (v0.25, option A) : id de rune → quantité. Drop rare (raids surtout) ;
+  /** 🪄 Runes POSSÉDÉES : id de rune → quantité. Drop rare (raids surtout) ;
    *  la gravure CONSOMME un exemplaire — retirer/écraser ne rembourse pas. */
   runesOwned: Record<string, number>
   /** Grimoire : ids des effets uniques déjà découverts. */
   codex: string[]
   /** Améliorations permanentes : id → niveau. */
   upgrades: Record<string, number>
-  /** 🏛️ Conseil des Maîtrises (v0.25) : contrats de la semaine courante. */
+  /** 🏛️ Conseil des Maîtrises : contrats de la semaine courante. */
   conseil: ConseilState
   /** Points de Maîtrise non dépensés (1 par contrat hebdo rempli). */
   maitrisePoints: number
   /** Arbre de Maîtrise : id de nœud → rang (bonus minimes via computeGlobalMods). */
   maitrise: Record<string, number>
-  /** 🏆 Hauts faits débloqués (v0.28) : id → true. Bonus permanents façon Maîtrise + titres. */
+  /** 🏆 Hauts faits débloqués : id → true. Bonus permanents façon Maîtrise + titres. */
   achievements: Record<string, true>
-  /** 🎨 Cosmétiques premium débloqués (v0.28 B2) : id de palette/emblème → true (sink Poussière d'étoile). */
+  /** 🎨 Cosmétiques premium débloqués : id de palette/emblème → true (sink Poussière d'étoile). */
   cosmetics: Record<string, true>
-  /** Métiers de l'Atelier (v0.22) : XP cumulée + nœuds d'arbre appris, par métier. */
+  /** Métiers de l'Atelier : XP cumulée + nœuds d'arbre appris, par métier. */
   metiers: MetiersState
-  /** 🔥 Le Foyer (v0.41) : production idle d'XP de Forgeron + Lingots, indexée sur les Chefs-d'œuvre. */
+  /** 🔥 Le Foyer : production idle d'XP de Forgeron + Lingots, indexée sur les Chefs-d'œuvre. */
   foyer: ForgeronFoyer
-  /** 🔥 Chaleur (v0.41) : ressource du mini-jeu de Frappe (0..CHALEUR_MAX), dépensée à la forge. */
+  /** 🔥 Chaleur : ressource du mini-jeu de Frappe (0..CHALEUR_MAX), dépensée à la forge. */
   chaleur: number
   /** Série de frappes PARFAITES en cours (5 → +1 cran de rareté garanti à la prochaine forge). */
   chaleurStreak: number
@@ -180,17 +180,17 @@ export interface SaveData {
   /** Recyclage auto « inutile » : recycle au drop tout butin qui n'améliore NI le DPS NI la survie
    *  d'aucun héros recruté (cumulable avec le seuil de rareté). Persisté. */
   autoRecycleUseless: boolean
-  /** v0.31 — tutoriel « Premiers Pas » : quêtes dont la récompense a été réclamée + flag d'achat marché. */
+  /** tutoriel « Premiers Pas » : quêtes dont la récompense a été réclamée + flag d'achat marché. */
   tut: { claimed: string[]; bought: boolean }
-  /** ✉ Boîte de réception (v0.31.2) : gains à collecter (cadeaux, hors-ligne, events) — sortis du combat. */
+  /** ✉ Boîte de réception : gains à collecter (cadeaux, hors-ligne, events) — sortis du combat. */
   inbox: InboxMessage[]
-  /** 📅 Quotidien (v0.31.4) : contrats du jour + connexion. */
+  /** 📅 Quotidien : contrats du jour + connexion. */
   daily: DailyState
   /** Compteur de kills à vie (combat classique) — métrique des contrats du jour (delta depuis baseline). */
   totalKills: number
   /** Compteur de donjons terminés à vie — métrique des contrats du jour. */
   totalDungeons: number
-  /** 🎉 Event Invasion élémentaire (v0.31.5) : élément de la semaine + paliers réclamés. */
+  /** 🎉 Event Invasion élémentaire : élément de la semaine + seuils réclamés. */
   event: EventState
   /** 🎉 Auras d'invasion débloquées (ids AVATAR_AURAS) — cosmétiques d'event, collectionnés au fil des semaines. */
   eventCosmetics: string[]
@@ -223,7 +223,7 @@ function emptyBiomeRecord(physiqueValue: number, otherValue: number): Record<Bio
   return out
 }
 
-/** Meilleur palier tous biomes confondus (gate des donjons/raids/persos). */
+/** Meilleure vague tous biomes confondus (gate des donjons/raids/persos). */
 function globalBest(biomeBest: Record<BiomeId, number>): number {
   let best = 1
   for (const id of BIOME_IDS) best = Math.max(best, biomeBest[id] ?? 0)
@@ -246,7 +246,7 @@ export function discoverFromItems(codex: string[], items: (Item | undefined)[]):
 }
 
 export function freshSave(): SaveData {
-  // v0.30.1 — on part NU (zéro stuff) : la rampe d'onboarding (enemies.ts) rend les premiers paliers
+  // on part NU (zéro stuff) : la rampe d'onboarding (enemies.ts) rend les premières vagues
   // faibles pour qu'on loote et s'équipe de zéro, en découvrant les concepts/donjons/métiers.
   return {
     characters: [makeCharacter('Héros', 1, 'force')],
@@ -361,7 +361,7 @@ function migrateItem(item: any) {
   if (typeof item.endurance !== 'number') item.endurance = 0
   if (!item.orientation) item.orientation = 'offensif'
   // Migration des affixes vers le format unifié (stat / dmgType / resist).
-  // Renommage v0.17 : Bouclier→Barrière, Polyvalence supprimée→Maîtrise (préserve la valeur du stuff).
+  // Renommage : Bouclier→Barrière, Polyvalence supprimée→Maîtrise (préserve la valeur du stuff).
   const renameStat = (s: string): import('./types').SecondaryStat => (s === 'bouclier' ? 'barriere' : s === 'polyvalence' ? 'maitrise' : s) as import('./types').SecondaryStat
   const validStats = new Set<string>(SECONDARY_STATS)
   const affixes: Affix[] = []
@@ -391,7 +391,7 @@ function sanitize(save: SaveData): SaveData {
   // Ressources / champs ajoutés.
   if (typeof save.poussiere !== 'number') save.poussiere = 0
   if (typeof save.cosmic !== 'number') save.cosmic = 0
-  // v0.31 — tutoriel (vieilles saves : si déjà avancé, on considère le tuto déjà fait pour ne pas
+  // tutoriel (vieilles saves : si déjà avancé, on considère le tuto déjà fait pour ne pas
   // re-proposer les quêtes de base à un joueur établi).
   if (!save.tut || !Array.isArray(save.tut.claimed)) {
     save.tut = { claimed: (save.bestStage ?? 1) >= 15 ? [...TUT_QUEST_IDS] : [], bought: (save.bestStage ?? 1) >= 15 }
@@ -421,7 +421,7 @@ function sanitize(save: SaveData): SaveData {
   if (typeof save.lastMasterwork !== 'number') save.lastMasterwork = 0
   if (typeof save.runeFragments !== 'number') save.runeFragments = 0
   if (!save.runeCrafted || typeof save.runeCrafted !== 'object') save.runeCrafted = {}
-  // ⚗️ Officine (v0.26) — défauts des saves antérieures.
+  // ⚗️ Officine — défauts des saves antérieures.
   if (!save.reagents || typeof save.reagents !== 'object') save.reagents = {}
   if (!save.brews || typeof save.brews !== 'object') save.brews = {}
   if (!Array.isArray(save.alchemyRecipes)) save.alchemyRecipes = []
@@ -435,7 +435,7 @@ function sanitize(save: SaveData): SaveData {
   if (save.armedXpBonus === undefined) save.armedXpBonus = null
   if (typeof save.lastTransmute !== 'number') save.lastTransmute = 0
   if (typeof save.philosophale !== 'boolean') save.philosophale = false
-  // v0.26 — MIGRATION des arbres (metiersV 2) : « Œil du maître » (+4%/rang ×5) devient
+  // MIGRATION des arbres (metiersV 2) : « Œil du maître » (+4%/rang ×5) devient
   // « Prodige » (+2%/rang ×15) → rangs ×2 (même valeur) ; ◈ Visionnaire (+12% + surillvl +1)
   // devient 6 rangs de Prodige + « Affûtage supérieur ». Personne ne perd un pourcent.
   if ((save.metiersV ?? 1) < 2 && save.metiers?.forgeron) {
@@ -449,7 +449,7 @@ function sanitize(save: SaveData): SaveData {
     save.metiers = { ...save.metiers, forgeron: { ...save.metiers.forgeron, nodes } }
     save.metiersV = 2
   }
-  // v0.26 — MIGRATION metiersV 3 : les specs plates (rang 1) deviennent des lignes étagées I→V.
+  // MIGRATION metiersV 3 : les specs plates (rang 1) deviennent des lignes étagées I→V.
   // L'ancien rang 1 valait l'étage III (mêmes chiffres : Chronomancien ×1,5, Législateur amplifié…)
   // → converti en rang 3 pour ne RIEN nerfer (les points en plus sont offerts par la migration).
   // (Joaillier : l'ancien rang 1 = « +1 rang de famille » = exactement le nouvel étage I → rien à migrer.)
@@ -465,7 +465,7 @@ function sanitize(save: SaveData): SaveData {
     }
     save.metiersV = 3
   }
-  // v0.28 E2 — MIGRATION metiersV 4 : arbre Forgeron RÉDUIT (Atelier + Manufacture). On fusionne les
+  // MIGRATION metiersV 4 : arbre Forgeron RÉDUIT (Atelier + Manufacture). On fusionne les
   // anciens nœuds (surillvl+affutage, polissage+polissageFin, econome+specEconome, chance plafonné à 5)
   // et on RETIRE les disparus (Compagnonnage/Moules/Pédagogie/Sérendipité/Verrous/Contrats/Négociant/
   // Lingotier/Inspiration) → leurs points sont AUTOMATIQUEMENT rendus (pointsSpent recalculé). Idempotente.
@@ -488,7 +488,7 @@ function sanitize(save: SaveData): SaveData {
     save.metiers = { ...save.metiers, forgeron: { ...save.metiers.forgeron, nodes } }
     save.metiersV = 4
   }
-  // v0.28 E2 — MIGRATION metiersV 5 : arbre Joaillier RÉDUIT (Taillerie + Maîtrise & Sources).
+  // MIGRATION metiersV 5 : arbre Joaillier RÉDUIT (Taillerie + Maîtrise & Sources).
   // Fusionne les verbes-clés (taille = broyage+taille+qualité), garde specs/recoupe/fusion/corruption/
   // perçage/troc, RETIRE le filler → points rendus. Idempotente (clé : Math.max sur les rangs migrés).
   if ((save.metiersV ?? 1) < 5 && save.metiers?.joaillier) {
@@ -510,7 +510,7 @@ function sanitize(save: SaveData): SaveData {
     save.metiers = { ...save.metiers, joaillier: { ...save.metiers.joaillier, nodes } }
     save.metiersV = 5
   }
-  // v0.28 E2 — MIGRATION metiersV 6 : arbre Runiste RÉDUIT (Atelier runique + Voies). Garde les
+  // MIGRATION metiersV 6 : arbre Runiste RÉDUIT (Atelier runique + Voies). Garde les
   // verbes + les 3 spés ; RETIRE le filler (palimpseste/calligraphie/greffier/horloger) → points rendus.
   if ((save.metiersV ?? 1) < 6 && save.metiers?.runiste) {
     const old: Record<string, number> = save.metiers.runiste.nodes ?? {}
@@ -523,7 +523,7 @@ function sanitize(save: SaveData): SaveData {
     save.metiers = { ...save.metiers, runiste: { ...save.metiers.runiste, nodes } }
     save.metiersV = 6
   }
-  // v0.28 E2 — MIGRATION metiersV 7 : arbre Alchimiste RÉDUIT (Officine + Grand Œuvre). Fusionne les
+  // MIGRATION metiersV 7 : arbre Alchimiste RÉDUIT (Officine + Grand Œuvre). Fusionne les
   // cuves dans officine (R1-3), garde quint/synthèses/spés ; RETIRE le filler (paillasse/brassages/
   // grandsCrus/rendementQ/distillation/condensation/herboriste/doubleDistillation) → points rendus.
   if ((save.metiersV ?? 1) < 7 && save.metiers?.alchimiste) {
@@ -539,7 +539,7 @@ function sanitize(save: SaveData): SaveData {
     save.metiers = { ...save.metiers, alchimiste: { ...save.metiers.alchimiste, nodes } }
     save.metiersV = 7
   }
-  // v0.41 — MIGRATION metiersV 8 : Forge hexagonale. Les ids de tuiles sont INCHANGÉS (compat directe :
+  // MIGRATION metiersV 8 : Forge hexagonale. Les ids de tuiles sont INCHANGÉS (compat directe :
   // une tuile déjà possédée le reste, l'adjacence ne gate que les NOUVEAUX forgeages). Seule nouveauté
   // structurelle : le `foyer` est une tuile NEUVE servant de PORTE d'entrée de la Voie Industriel — les
   // anciennes saves possèdent automates/trempe/montage SANS foyer. On l'OFFRE (gratuit, si un point est
@@ -556,7 +556,7 @@ function sanitize(save: SaveData): SaveData {
     save.metiers = { ...save.metiers, forgeron: { ...f, nodes } }
     save.metiersV = 8
   }
-  // v0.26 : 📖 Catalogue — les saves d'avant sont créditées de leurs gemmes déjà possédées
+  // 📖 Catalogue — les anciennes saves sont créditées de leurs gemmes déjà possédées
   // (stock + serties), pour ne pas repartir de zéro.
   if (!Array.isArray(save.gemsSeen)) save.gemsSeen = []
   {
@@ -573,7 +573,7 @@ function sanitize(save: SaveData): SaveData {
     }
     save.gemsSeen = [...seen]
   }
-  // Migration gemmes (v0.22) : les ÉLÉMENTAIRES sont broyées en poussière 🔹, les gemmes de
+  // Migration gemmes : les ÉLÉMENTAIRES sont broyées en poussière 🔹, les gemmes de
   // condition gagnent un rang (clé `cond:id[:rang]`). S'applique au stock ET aux gemmes serties.
   {
     for (const k of Object.keys(save.gems)) {
@@ -594,7 +594,7 @@ function sanitize(save: SaveData): SaveData {
       }
       it.gems = keep.length ? keep : undefined
     }
-    // Runes de STAT supprimées (v0.22) : effacées et remboursées en 🌌 poussière d'étoile.
+    // Runes de STAT supprimées : effacées et remboursées en 🌌 poussière d'étoile.
     const migrateItemRune = (it: Item) => {
       if (it.enchant && !getEnchant(it.enchant)) {
         delete it.enchant
@@ -620,7 +620,7 @@ function sanitize(save: SaveData): SaveData {
       yieldLvl: Math.max(0, Math.min(AUTOMATE_UPG_MAX, a.yieldLvl ?? 0)),
       bank: a.bank && typeof a.bank === 'object' ? a.bank : {},
     }))
-  // Métiers (v0.22) : migration de l'ancien duo Savoir-faire 🔧 / forgeUpgrades, sinon validation.
+  // Métiers : migration de l'ancien duo Savoir-faire 🔧 / forgeUpgrades, sinon validation.
   // ATTENTION : loadSave spreade freshSave() AVANT la vieille sauvegarde — `save.metiers` existe
   // donc toujours (vide). La présence des champs LEGACY fait foi, pas l'absence de `metiers`.
   {
@@ -665,7 +665,7 @@ function sanitize(save: SaveData): SaveData {
   if (save.pendingChoice && !Array.isArray(save.pendingChoice.items)) save.pendingChoice = null
   if (typeof save.killsSinceEpic !== 'number') save.killsSinceEpic = 0
   if (typeof save.lastSeen !== 'number') save.lastSeen = Date.now()
-  // v0.41 — Le Foyer (défauts robustes pour les anciennes saves).
+  // Le Foyer (défauts robustes pour les anciennes saves).
   if (!save.foyer || typeof save.foyer !== 'object') save.foyer = emptyFoyer()
   if (!Array.isArray(save.foyer.masterworkKeys)) save.foyer.masterworkKeys = []
   if (typeof save.foyer.lastTick !== 'number') save.foyer.lastTick = Date.now()
@@ -678,15 +678,15 @@ function sanitize(save: SaveData): SaveData {
   // d'accueil). Seul `freshSave()` pose explicitement `false` (et false reste false : c'est un booléen).
   if (typeof save.onboarded !== 'boolean') save.onboarded = true
 
-  // v0.27 (F2) — rotation/lock des biomes (défauts pour les anciennes saves).
+  // rotation/lock des biomes (défauts pour les anciennes saves).
   if (typeof save.nextRotateAt !== 'number') save.nextRotateAt = Date.now() + BIOME_ROTATE_MS
   if (typeof save.biomeLockUntil !== 'number') save.biomeLockUntil = 0
-  // v0.27 (Lot 5) — prestige (défauts pour les anciennes saves).
+  // prestige (défauts pour les anciennes saves).
   if (typeof save.echos !== 'number') save.echos = 0
   if (typeof save.prestigeRank !== 'number') save.prestigeRank = 0
   if (!save.constellation || typeof save.constellation !== 'object') save.constellation = {}
   if (typeof save.relic === 'undefined') save.relic = null
-  // Biomes (v0.18) : une ancienne save mono-zone devient le biome Physique.
+  // Biomes : une ancienne save mono-zone devient le biome Physique.
   if (!save.activeBiome || !BIOME_IDS.includes(save.activeBiome)) save.activeBiome = 'physique'
   {
     const stages = emptyBiomeRecord(Math.max(1, save.stage ?? 1), 1)
@@ -699,7 +699,7 @@ function sanitize(save: SaveData): SaveData {
     }
     save.biomeStages = stages
     save.biomeBest = best
-    // `stage` = palier courant du biome actif ; `bestStage` = max global.
+    // `stage` = vague courante du biome actif ; `bestStage` = max global.
     save.stage = Math.max(1, stages[save.activeBiome] ?? 1)
     save.bestStage = globalBest(best)
   }
@@ -713,18 +713,18 @@ function sanitize(save: SaveData): SaveData {
     for (const id of Object.keys(RAIDS) as RaidId[]) rec[id] = (rp as RaidProgress)[id] ?? 0
     save.raidProgress = rec
   }
-  // 🏆 Trophées & tiers débloqués (v0.24) : migration — l'accès existant est conservé
+  // 🏆 Trophées & tiers débloqués : migration — l'accès existant est conservé
   // (tier débloqué = meilleur tier vaincu + 1), les Trophées partent de zéro.
   if (!save.raidTrophies || typeof save.raidTrophies !== 'object') save.raidTrophies = {}
-  // 🪄 Runes possédées (v0.25) : stash vide au départ — les runes déjà GRAVÉES sont conservées.
+  // 🪄 Runes possédées : stash vide au départ — les runes déjà GRAVÉES sont conservées.
   if (!save.runesOwned || typeof save.runesOwned !== 'object') save.runesOwned = {}
-  // 🏛️ Conseil des Maîtrises (v0.25) : contrats hebdo + arbre minime.
+  // 🏛️ Conseil des Maîtrises : contrats hebdo + arbre minime.
   if (!save.conseil || typeof save.conseil !== 'object') save.conseil = emptyConseil()
   if (typeof save.maitrisePoints !== 'number') save.maitrisePoints = 0
   if (!save.maitrise || typeof save.maitrise !== 'object') save.maitrise = {}
   if (!save.achievements || typeof save.achievements !== 'object') save.achievements = {}
   if (!save.cosmetics || typeof save.cosmetics !== 'object') save.cosmetics = {}
-  // 🏪 v0.25 (DESIGN §1) : améliorations de combat + Sacoches SUPPRIMÉES — remboursement 100%
+  // 🏪 améliorations de combat + Sacoches SUPPRIMÉES — remboursement 100%
   // (or + éclats, recalculé depuis les formules de coût d'origine). Durcissement assumé.
   {
     const up = (save.upgrades ?? {}) as Record<string, number>
@@ -748,7 +748,7 @@ function sanitize(save: SaveData): SaveData {
     }
   }
   {
-    // SEED UNIQUE (v0.24 fix) : si la save n'a pas encore de tiers débloqués (pré-v0.24), on dérive
+    // SEED UNIQUE : si la save n'a pas encore de tiers débloqués (ancienne save), on dérive
     // l'accès du meilleur tier vaincu +1. SINON on conserve l'acquis SANS re-bump — avant, ce bloc
     // tournait à CHAQUE chargement et faisait `max(progress+1, …)` → clear le tier N rouvrait le N+1
     // GRATUITEMENT au reload (le gate Trophées court-circuité). Désormais seul `unlockRaidTier` ouvre.
@@ -766,10 +766,10 @@ function sanitize(save: SaveData): SaveData {
 
   // Raid en cours au format obsolète (pas de `raidId`) → abandonné par la migration.
   if (save.raid && !(save.raid as { raidId?: string }).raidId) save.raid = null
-  // v0.23 : un raid = UN affrontement. Un raid multi-boss en cours (ancienne save) est abandonné.
+  // un raid = UN affrontement. Un raid multi-boss en cours (ancienne save) est abandonné.
   if (save.raid && (save.raid as ActiveRaid).totalBosses !== 1) save.raid = null
 
-  // dungeonProgress : REFONTE v0.17 (clé = id de donjon-ressource, plus le type de dégâts) → reset propre,
+  // dungeonProgress : REFONTE (clé = id de donjon-ressource, plus le type de dégâts) → reset propre,
   // en conservant uniquement les clés déjà au nouveau format si présentes.
   const dp = save.dungeonProgress as unknown
   const dprec = emptyDungeonProgress()
@@ -781,7 +781,7 @@ function sanitize(save: SaveData): SaveData {
   }
   save.dungeonProgress = dprec
 
-  // Donjon actif : structure refondue (v0.17). Sans `dungeonId` (ancien format), on l'abandonne proprement.
+  // Donjon actif : structure refondue. Sans `dungeonId` (ancien format), on l'abandonne proprement.
   if (save.dungeon && !(save.dungeon as { dungeonId?: string }).dungeonId) save.dungeon = null
   if (save.raid) {
     const r = save.raid as ActiveRaid & { enemy?: Enemy }
@@ -797,8 +797,8 @@ function sanitize(save: SaveData): SaveData {
       if (it) sanitizeItem(it)
     }
     // Talents : on CONSERVE l'allocation du joueur. On purge les nœuds inconnus (vieilles saves),
-    // on garantit les racines, et on recalcule les dérivés. v0.33 : on ROUTE chaque nœud vers son
-    // arbre (base / Panthéon) d'après sa constellation — migre les saves v0.32 où les 4 classes
+    // on garantit les racines, et on recalcule les dérivés. On ROUTE chaque nœud vers son
+    // arbre (base / Panthéon) d'après sa constellation — migre les anciennes saves où les 4 classes
     // avancées vivaient dans l'arbre unique (elles atterrissent dans `pantheon`, build préservé).
     const rawTalents = c.talents && typeof c.talents === 'object' ? c.talents : {}
     const rawPantheon = c.pantheon && typeof c.pantheon === 'object' ? c.pantheon : {}
@@ -825,7 +825,7 @@ function sanitize(save: SaveData): SaveData {
     // Points restants = gagnés (au-delà du niveau de départ des talents) − dépensés (hors racine gratuite).
     c.talentPoints = Math.max(0, talentPointsForLevel(c.level) - spent)
     c.unlockedPowers = computeUnlockedPowers({ ...talents, ...pantheon }, c.level)
-    // v0.39 : RÉPARTITION actifs (5) / SOUTIEN (3) / passifs (3). Migration : on relit les anciens
+    // RÉPARTITION actifs (5) / SOUTIEN (3) / passifs (3). Migration : on relit les anciens
     // `powers` + `support` (ex-`generators`, back-compat) + `passives`, on valide, on range par genre —
     // seuls les builders quittent la barre des actifs ; les boucliers/soins restent où ils étaient.
     const legacyGen = (c as { generators?: (string | null)[] }).generators // ex-`generators` → `support`
@@ -837,7 +837,7 @@ function sanitize(save: SaveData): SaveData {
     const pas: string[] = []
     const seen = new Set<string>()
     const valid = (pid: string | null) => (pid && !seen.has(pid) && c.unlockedPowers.includes(pid) ? getPower(pid) : undefined)
-    // v0.39 BUGFIX : on RESPECTE la lane où le joueur a rangé chaque sort. Les boucliers/soins sont
+    // BUGFIX : on RESPECTE la lane où le joueur a rangé chaque sort. Les boucliers/soins sont
     // MULTI-LANE (équipables en Actif OU en Soutien) ; sans ce premier passage par lane, la
     // réconciliation les renvoyait toujours en Actif (`else`) → ils disparaissaient des slots Soutien
     // à chaque chargement de la save (« bouclier runique / second souffle s'enlève »).
@@ -855,7 +855,7 @@ function sanitize(save: SaveData): SaveData {
     }
     c.powers = [0, 1, 2, 3, 4].map((i) => act[i] ?? null)
     c.support = [0, 1, 2].map((i) => sup[i] ?? null)
-    delete (c as { generators?: unknown }).generators // v0.39 : champ renommé en `support`
+    delete (c as { generators?: unknown }).generators // champ renommé en `support`
     c.passives = [0, 1, 2].map((i) => pas[i] ?? null)
     // Mode auto/manuel par emplacement ACTIF (défaut AUTO).
     c.powerAuto = [0, 1, 2, 3, 4].map((i) => (Array.isArray(c.powerAuto) ? c.powerAuto[i] !== false : true))
