@@ -77,7 +77,7 @@ M = 1 + RESIST_KMAX · min(1, déficit / RESIST_DSCALE)^RESIST_P     déficit = 
 | `RESIST_P` | **1.35** | Forme de courbe ; <1.6 = les déficits moyens piquent tôt. |
 | `RESIST_DSCALE` | **250** | Déficit (points) déclenchant la punition max. |
 
-Gradation des exigences par contenu : **farm** `farmReq(stage)` (0 avant palier 45, cap 60 → ×1.7),
+Gradation des exigences par contenu : **farm** `farmReq(stage)` (0 avant la vague 45, cap 60 → ×1.7),
 **donjon** `dungeonReq(level)` (cap 120 → ×2.9), **raid** (req 100-430+ → ×2.5…×6, **obligatoire**).
 `resistSurplus` (points au-delà des exigences) alimente l'archétype Égide.
 

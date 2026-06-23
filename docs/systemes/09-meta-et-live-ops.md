@@ -19,7 +19,7 @@ Objectifs débloqués **en jouant**. Récompense : un **titre** (par héros) + u
 permanent** dans les mêmes catégories que le Conseil des Maîtrises (frappe/vigueur/celerite/fortune/
 savoir/flair) — **1 rang de haut fait = 1 rang de Maîtrise**, réutilise les coefficients de
 `computeGlobalMods` (pas de monnaie, pas de stats brutes). Catégories `AchvCategory` : progression,
-stuff, collection, metiers, combat, **legende** (étage endgame v0.32 : palier 800, Abîme t14,
+stuff, collection, metiers, combat, **legende** (étage endgame v0.32 : vague 800, Abîme t14,
 prestige ×10… → titres + parures **zéro puissance**). Évalué périodiquement (`checkAchievements`,
 toutes les 4 s) sur un instantané léger `AchvCtx` (aucun import du store).
 

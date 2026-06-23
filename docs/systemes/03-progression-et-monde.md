@@ -54,9 +54,10 @@ bloc de `CHAPITRE_SIZE = 10` vagues, fermé par un **boss-MUR** (vague 10).
 
 ### Gate de raid (v0.36)
 
-Prologue **Chapitres 1-5 libre**, puis 10 vrais Chapitres (6-15) dont le **mur** est gaté par un
-tier de raid : `raidGateForStage(stage)` → battre le Raid T(k) ouvre le mur du Chapitre 4+k.
-Au-delà du Chapitre 15 : libre.
+Prologue **Chapitres 1-5 libre** (sans raid), puis 10 vrais Chapitres **(6-15)** dont l'entrée est
+gatée par un **tier de raid** (`raidGateForStage`) : battre le Raid **T1 → Chapitre 6**, T2 → 7, …,
+**T10 → Chapitre 15** (formellement : franchir le **mur** du Chapitre `c`, avec 5 ≤ c ≤ 14, exige le
+Raid T(c−4)). Au-delà du Chapitre 15 : libre, mais l'ilvl du loot **plafonne** (`ILVL_CAP_BASE = 200`).
 
 ### Escalier des vagues (v0.40.1, accessible)
 
@@ -86,14 +87,14 @@ l'**épique**). Les **raids n'y passent pas** (pleine échelle).
 Faune & boss **par biome** (zéro redondance inter-biomes), épithètes déterministes, **élite ◆**
 (`ELITE_EVERY = 7`) et **champion ✦** (`CHAMPION_CHANCE = 0.03`) = **marqueurs de butin** (plus de
 pic de difficulté depuis v0.40, les traits ont été retirés). Résistance globale `stageResistRamp`
-(dès palier 25, cap 55 %) + **affinité élémentaire** (voir [01](01-combat-et-degats.md)). Auto-attaques
+(dès la vague 25, cap 55 %) + **affinité élémentaire** (voir [01](01-combat-et-degats.md)). Auto-attaques
 **toujours physiques** + technique **signature** du biome (DoT/burst/CC typé). Exigence de résist
-`farmReq` (dès palier 45).
+`farmReq` (dès la vague 45).
 
 ## Biomes
 
 7 biomes = les 7 types de dégâts ([`biomes.ts`](../../src/game/biomes.ts)), **Physique = zone de
-départ**. Chaque biome a **sa** progression de paliers (`biomeStages`/`biomeBest`) ; la zone tourne
+départ**. Chaque biome a **sa** progression de vagues (`biomeStages`/`biomeBest`) ; la zone tourne
 au hasard toutes les ~1 h (`BIOME_ROTATE_MS`).
 
 **Bonus de biome** ([`biomeBonus.ts`](../../src/game/biomeBonus.ts)) :
@@ -104,8 +105,8 @@ au hasard toutes les ~1 h (`BIOME_ROTATE_MS`).
 
 ## Hors-ligne ([`offline.ts`](../../src/game/offline.ts))
 
-`simulateOffline` estime le rythme de kills (DPS équipe vs PV de l'ennemi du palier courant) à
-taux réduit. Le **palier ne progresse pas** hors-ligne (farm sûr).
+`simulateOffline` estime le rythme de kills (DPS équipe vs PV de l'ennemi de la vague courante) à
+taux réduit. La **vague ne progresse pas** hors-ligne (farm sûr).
 
 | Knob | Valeur |
 |---|---|
@@ -119,7 +120,7 @@ or = **farm only**.
 
 ## Prestige « Éveil Primordial » ([`prestige.ts`](../../src/game/prestige.ts))
 
-Reset **dur** (rend paliers, niveau, stuff sauf **1 Relique**, tiers de raid) contre des **Échos
+Reset **dur** (rend vagues, niveau, stuff sauf **1 Relique**, tiers de raid) contre des **Échos
 primordiaux**. Conservés à travers l'Éveil : Échos + **Constellation** (méta-arbre, 8 nœuds),
 Relique, record de progression (gating), XP des métiers.
 

@@ -8,13 +8,14 @@ champ/constante correspondant dans la source.
 
 | Terme | Définition |
 |---|---|
-| **Palier** (`stage`) | L'**axe de progression unique** (refonte v0.35). Tu farmes un palier ; le battre débloque le suivant. `bestStage` = record. |
-| **Chapitre** | Groupe de paliers (`CHAPITRE_SIZE`). Le monde est découpé en chapitres ; l'économie or/XP est calée sur le **farm** du chapitre courant. |
-| **Mur / Gardien** | Boss-verrou tous les 10 paliers. Le franchir ouvre la suite. Les raids sont calés **au-dessus** du mur gardé. |
-| **Escalier des vagues** | Dans un chapitre, la difficulté repart bas et **monte** vague après vague jusqu'au boss du chapitre (`enemies.ts`). |
-| **ilvl** (item level) | Niveau d'objet : pilote le **budget de stats**. Calé sur le palier de farm (loot), borné par un **cap** (`ILVL_CAP_BASE` / `ILVL_CAP_ENDGAME`). |
+| **Vague** (`stage`) | L'unité de progression = **un combat contre un ennemi**. La battre débloque la suivante ; `bestStage` = record. Affichée « Chapitre C · Vague V/10 » (`chapitreLabel`). *(Ex-« Palier » : nom encore présent dans certaines variables/docs archivées.)* |
+| **Chapitre** | Bloc de **10 vagues** (`CHAPITRE_SIZE = 10`), fermé par un **Mur** (vague 10). Le jeu est câblé pour **15 Chapitres** : au-delà, l'ilvl du loot **plafonne** (`ILVL_CAP_BASE`), seule la difficulté continue de monter. L'économie or/XP est calée sur le **farm** du Chapitre courant. |
+| **Prologue & gate de raid** | **Chapitres 1-5** = Prologue **libre** (sans raid). **Chapitres 6-15** se débloquent par **tier de raid** : Raid **T1 → Chapitre 6**, T2 → 7, …, **T10 → Chapitre 15** (`raidGateForStage`). |
+| **Mur / Gardien** | Boss-verrou en **fin de Chapitre** (toutes les 10 vagues). Le franchir ouvre la suite ; les murs des Chapitres **5-14** exigent le **tier de raid** correspondant (T(c−4)). |
+| **Escalier des vagues** | Dans un Chapitre, la difficulté **repart bas** et **monte** vague après vague jusqu'au Mur (`enemies.ts` / `staircaseBlend`). |
+| **ilvl** (item level) | Niveau d'objet : pilote le **budget de stats**. Calé sur la vague de farm (loot), borné par un **cap** (`ILVL_CAP_BASE` / `ILVL_CAP_ENDGAME`). |
 | **Retard de gear** (`lag`) | Décalage volontaire entre ton ilvl et le contenu : garde le TTK tendu (`lagAt`, `frontierIlvl`). |
-| **Biome** | L'une des 7 zones = les 7 types de dégâts. Chaque biome a **sa** progression de paliers ; la zone active tourne ~toutes les heures. |
+| **Biome** | L'une des 7 zones = les 7 types de dégâts. Chaque biome a **sa** progression de vagues ; la zone active tourne ~toutes les heures. |
 | **Cache** | Coffre/butin dont la **courbe de rareté** suit la rareté débloquée du compte (rampe puis plateau). |
 | **Abîme Primordial** | Le raid capstone d'endgame (drop le premier set, défi ultime). |
 | **TTK** (time-to-kill) | Temps pour tuer un ennemi calé. Le design vise un TTK **constant** à stuff calé (invariance v0.30). |

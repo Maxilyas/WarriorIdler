@@ -120,7 +120,7 @@ patterns gardent le coût borné (tous **sans changer aucune formule** — véri
 | `damage.ts` | 7 types de dégâts, profil de dégâts, triangle d'élément, soft cap de type | [01](systemes/01-combat-et-degats.md) |
 | `resist.ts` | Résistances relatives (en points, non plafonnées) — annulent la punition typée | [01](systemes/01-combat-et-degats.md) |
 | `enemies.ts` | Génération d'ennemis, escalier des vagues, techniques signature de biome | [01](systemes/01-combat-et-degats.md) / [03](systemes/03-progression-et-monde.md) |
-| `progression.ts` | **Source de vérité chiffrée** : loi de puissance, ilvl, Paliers, Chapitres, budget objet | [03](systemes/03-progression-et-monde.md) |
+| `progression.ts` | **Source de vérité chiffrée** : loi de puissance, ilvl, Vagues, Chapitres, budget objet | [03](systemes/03-progression-et-monde.md) |
 | `biomes.ts` | 7 biomes (= 7 types de dégâts), progression par biome, rotation | [03](systemes/03-progression-et-monde.md) |
 | `biomeBonus.ts` | 4 mécaniques anti-mono-biome | [03](systemes/03-progression-et-monde.md) |
 | `offline.ts` | Gains hors-ligne (cap 12 h, taux 0,5) | [03](systemes/03-progression-et-monde.md) |

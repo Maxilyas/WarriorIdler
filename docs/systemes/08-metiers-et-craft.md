@@ -13,17 +13,17 @@ La logique de **coûts** d'objets (reforge/surilvl/ascension/création) vit dans
 
 ## Les 4 métiers ([`metiers.ts`](../../src/game/metiers.ts))
 
-Quatre verbes (`METIERS`), chacun avec son **palier de déblocage** (`unlockStage`) :
+Quatre verbes (`METIERS`), chacun avec sa **vague de déblocage** (`unlockStage`) :
 
 | Métier | Verbe | Rôle | Unlock |
 |---|---|---|---|
-| 🔨 **Forgeron** | Façonner la matière | création/reforge/surilvl/transmutation/ascension + automates | palier 6 |
-| 💎 **Joaillier** | Programmer le combat | gemmes de condition (sertir/broyer/tailler/recouper/fusionner) | palier 25 |
-| 🪄 **Runiste** | Tordre temps & règles | runes (Temps/Règles/Pactes), le métier le plus cher | palier 35 |
+| 🔨 **Forgeron** | Façonner la matière | création/reforge/surilvl/transmutation/ascension + automates | vague 6 |
+| 💎 **Joaillier** | Programmer le combat | gemmes de condition (sertir/broyer/tailler/recouper/fusionner) | vague 25 |
+| 🪄 **Runiste** | Tordre temps & règles | runes (Temps/Règles/Pactes), le métier le plus cher | vague 35 |
 | ⚗️ **Alchimiste** | Distiller l'essence | quintessences + consommables | (officine) |
 
 **Progression** : le **niveau** (1→25) monte par la **pratique** (chaque action donne de l'XP).
-1 niveau = 1 point d'arbre (`METIER_NODES`). **Double verrou** : le palier (`bestStage`) ouvre le
+1 niveau = 1 point d'arbre (`METIER_NODES`). **Double verrou** : la vague (`bestStage`) ouvre le
 métier/les nœuds de contenu, l'arbre ouvre les **fonctions**. Arbres groupés en **branches**
 (`METIER_BRANCHES`), respec **par branche** (`respecBranchCost` = 40 % du respec complet).
 

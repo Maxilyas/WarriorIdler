@@ -63,7 +63,7 @@ règles) : `npm run ttk` / `sim` / `survival` / `dungeon` / `mur` / `eco` / `wei
 
 ## Décisions verrouillées (rappels)
 
-- 3 personnages max, débloqués aux paliers ; inventaire/ressources communs, équipement/talents propres.
+- 3 personnages max, débloqués aux vagues ; inventaire/ressources communs, équipement/talents propres.
 - Les capacités se débloquent **uniquement** via l'arbre de talents (plus par niveau).
 - Aggro = **menace légère** : l'ennemi frappe la plus haute menace cumulée → un vrai rôle de tank émerge.
 - Registres **data-driven** partout (uniques, powers, talents, sets, gemmes, runes, donjons, raids) :
