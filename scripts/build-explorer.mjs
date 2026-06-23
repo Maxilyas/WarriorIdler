@@ -72,6 +72,12 @@ function dotDps(c) {
   return perHit * cm.dot.frac * d.alterationMult
 }
 const totalDps = (c) => charDps(c) + dotDps(c)
+// generateItem tire des affixes ALÉATOIRES → on moyenne DPS/EHP sur plusieurs sets pour des chiffres stables.
+function avgStats(arch, orient, n = 8) {
+  let dps = 0, ehp = 0
+  for (let i = 0; i < n; i++) { const c = gearedChar(arch, orient); dps += totalDps(c); ehp += charEhp(c) }
+  return { dps: dps / n, ehp: ehp / n }
+}
 
 // Combat SOLO via le vrai moteur jusqu'au kill (gagné) ou wipe/temps (perdu).
 function simWin(arch, orientation, makeEnemy, timeLimit) {
@@ -110,8 +116,7 @@ console.log('Archétype          Orient.    DPS       EHP      RaidTmax  DonjonM
 const rows = []
 for (const arch of ARCHETYPES) {
   for (const orient of ORIENTATIONS) {
-    const c = gearedChar(arch, orient)
-    const dps = totalDps(c), ehp = charEhp(c)
+    const { dps, ehp } = avgStats(arch, orient)
     const rt = maxRaidTier(arch, orient), dl = maxDunLevel(arch, orient)
     rows.push({ arch: arch.name, orient, dps, ehp, rt, dl })
     console.log(`${arch.name.padEnd(18)} ${orient.padEnd(10)} ${fmt(dps).padStart(7)}  ${fmt(ehp).padStart(8)}   ${String(rt).padStart(5)}    ${String(dl).padStart(6)}`)
