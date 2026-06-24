@@ -7,6 +7,10 @@ poussées bien au-delà (16 paliers de rareté, 7 types de dégâts, arbres de t
 > 📚 **Documentation complète** : [`docs/`](docs/) — [architecture](docs/ARCHITECTURE.md),
 > [systèmes](docs/systemes/), [glossaire](docs/GLOSSAIRE.md), [vision](docs/DESIGN.md).
 
+> 🏆 **Leaderboard des builds** : [classement & stats de la communauté](https://maxilyas.github.io/WarriorIdler/leaderboard.html)
+> (tier max, DPS, survie, talents/sorts/gemmes populaires). Soumets le tien depuis le **Simulateur** en jeu →
+> 🔗 Partager → 🚀 Soumettre — une [GitHub Action](.github/workflows/ingest-builds.yml) l'ajoute au catalogue.
+
 ## Lancer le projet
 
 ```bash

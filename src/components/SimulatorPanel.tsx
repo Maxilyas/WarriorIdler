@@ -111,6 +111,8 @@ function GemInfoButton() {
 
 /** Dépôt GitHub où sont centralisés les builds (soumission via issue → Action d'ingestion → catalogue). */
 const GITHUB_REPO = 'Maxilyas/WarriorIdler'
+/** Dashboard public (GitHub Pages) : classement + stats des builds soumis. */
+const LEADERBOARD_URL = 'https://maxilyas.github.io/WarriorIdler/leaderboard.html'
 
 /** Export / import / SOUMISSION d'un build sous forme de CODE autonome. Fondation de la centralisation :
  *  un code contient toute la compo + loadouts (reproductible partout) ; « Soumettre » ouvre une issue
@@ -248,6 +250,12 @@ export function SimulatorPanel() {
             {running ? '⏳ Simulation…' : '▶ Lancer'}
           </button>
         </div>
+        <a
+          href={LEADERBOARD_URL} target="_blank" rel="noopener noreferrer"
+          className="mt-2 flex items-center justify-center gap-1.5 rounded-lg border border-fuchsia-500/40 bg-fuchsia-500/10 py-1.5 text-[11px] font-semibold text-fuchsia-200 hover:bg-fuchsia-500/20"
+        >
+          🏆 Voir le classement des builds (dashboard) ↗
+        </a>
       </div>
 
       {/* RÉSULTAT (en tête une fois calculé) */}
