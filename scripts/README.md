@@ -116,6 +116,14 @@ COMPLET. Sortie : profil de l'équipe + « ce contenu passe-t-il ? » + diagnost
 PV boss). `content` accepte `{raid|dungeon, tier|level}` ou `{…, scan:true}` (tier/niveau max). Sans
 argument → config d'exemple. Modèle : [`sandbox.example.json`](sandbox.example.json).
 
+### `builds-bench.mjs` — `npm run bench`
+**Banc d'essai des builds** via le MÊME moteur que l'écran Simulateur (`runSim`). Teste le **catalogue de
+référence** (`src/game/referenceBuilds.ts`) ET le **catalogue communautaire** (`src/game/communityBuilds.json`,
+codes `WIB1:` décodés via `buildCode.ts`) dans les mêmes conditions : tier/niveau max, DPS équipe, EHP min,
+mur. Sort aussi des **tendances** d'usage des capacités actives (top utilisées + sorts « jamais choisis »
+= sous-utilisés). Le catalogue communautaire est alimenté par les **soumissions GitHub** des joueurs
+(Simulateur → 🔗 Partager → 🚀 Soumettre → issue → Action `ingest-builds.yml` → `ingest-build.mjs`).
+
 ## Économie
 
 ### `eco-sim.mjs` — `npm run eco`
