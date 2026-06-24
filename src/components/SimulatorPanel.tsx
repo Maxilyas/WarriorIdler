@@ -21,7 +21,7 @@ const LIB_KEY = 'wi-sim-builds'
 type SavedBuild = { name: string; cfg: SimConfig }
 /** Pool de talents PARTAGÉ par l'équipe (niveau de compte). `remaining` = ce qu'il reste à allouer,
  *  COMMUN à tous les membres : ce que les autres dépensent réduit le tien. */
-type TalentBudget = { level: number; pool: number; teamSpent: number; remaining: number }
+type TalentBudget = { level: number; bonus: number; pool: number; teamSpent: number; remaining: number }
 function loadLib(): SavedBuild[] {
   try { const v = JSON.parse(localStorage.getItem(LIB_KEY) || '[]'); return Array.isArray(v) ? v : [] } catch { return [] }
 }
@@ -175,6 +175,9 @@ export function SimulatorPanel() {
   const bestStage = useGame((s) => s.bestStage)
   const characters = useGame((s) => s.characters)
   const activeChar = useGame((s) => s.activeChar)
+  // Bonus de points de talents acheté au marchand (« Sagesse innée » = upgrades.talentBonus) : il
+  // s'ajoute au pool, exactement comme dans le vrai jeu (teamTalentPool(chars, talentBonus)).
+  const talentBonus = useGame((s) => s.upgrades.talentBonus ?? 0)
   const [cfg, setCfg] = useState<SimConfig>(() => defaultConfig(bestStage || 300))
   const [result, setResult] = useState<SimResult | null>(null)
   const [running, setRunning] = useState(false)
@@ -230,10 +233,10 @@ export function SimulatorPanel() {
     const effTalents = (m: SimMemberCfg) => m.talents ?? (m.imported ? m.imported.talents : initTalents(m.cls))
     const spentOf = (t: Record<string, number>) => Object.values(t).reduce((a, b) => a + b, 0) - (t.co_start ?? 0)
     const level = Math.max(1, ...cfg.team.map(memberLevel))
-    const pool = talentPointsForLevel(level)
+    const pool = talentPointsForLevel(level) + talentBonus // + « Sagesse innée » (marchand)
     const teamSpent = cfg.team.reduce((a, m) => a + spentOf(effTalents(m)), 0)
-    return { level, pool, teamSpent, remaining: Math.max(0, pool - teamSpent) }
-  }, [cfg.team])
+    return { level, bonus: talentBonus, pool, teamSpent, remaining: Math.max(0, pool - teamSpent) }
+  }, [cfg.team, talentBonus])
 
   return (
     <div className="flex h-full flex-col gap-3 overflow-y-auto pr-1">
@@ -265,17 +268,19 @@ export function SimulatorPanel() {
       {/* BIBLIOTHÈQUE : catalogue versionné (dev) + mes builds (localStorage) */}
       <section className="rounded-xl border border-slate-800 bg-[#11151f] p-3">
         <Label>Bibliothèque</Label>
-        <div className="mb-2">
-          <div className="mb-1 text-[10px] text-slate-500">📚 Catalogue de référence</div>
-          <div className="flex flex-wrap gap-1.5">
-            {REFERENCE_BUILDS.map((b) => (
-              <button key={b.name} onClick={() => loadCfg(b.config)} title={b.desc}
-                className="rounded-full border border-slate-700 bg-slate-800/40 px-2.5 py-1 text-[11px] text-slate-300 hover:border-fuchsia-400/60 hover:text-fuchsia-200">
-                {b.name}
-              </button>
-            ))}
+        {REFERENCE_BUILDS.length > 0 && (
+          <div className="mb-2">
+            <div className="mb-1 text-[10px] text-slate-500">📚 Catalogue de référence</div>
+            <div className="flex flex-wrap gap-1.5">
+              {REFERENCE_BUILDS.map((b) => (
+                <button key={b.name} onClick={() => loadCfg(b.config)} title={b.desc}
+                  className="rounded-full border border-slate-700 bg-slate-800/40 px-2.5 py-1 text-[11px] text-slate-300 hover:border-fuchsia-400/60 hover:text-fuchsia-200">
+                  {b.name}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
         {(communityBuilds as CommunityBuild[]).length > 0 && (
           <div className="mb-2">
             <div className="mb-1 text-[10px] text-slate-500">🌍 Catalogue communautaire ({(communityBuilds as CommunityBuild[]).length}) — builds soumis par les joueurs</div>
@@ -765,8 +770,8 @@ function TalentTreeSandbox({ clsId, level, talents, onChange, weapon, resetTo, b
   return (
     <div className="space-y-1.5">
       <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
-        <span className="text-slate-400" title="Pool de talents PARTAGÉ par l'équipe, fixé par le niveau de compte (= niveau le plus haut de l'équipe). Pour plus de points : monte le niveau — pas de budget libre.">
-          🤝 Pool d'équipe · niv {budget.level} : <b className="text-slate-200">{budget.pool}</b> pts
+        <span className="text-slate-400" title="Pool de talents PARTAGÉ par l'équipe = points du niveau de compte + « Sagesse innée » (marchand). Pour plus de points : monte le niveau ou achète Sagesse innée.">
+          🤝 Pool d'équipe · niv {budget.level} : <b className="text-slate-200">{budget.pool}</b> pts{budget.bonus > 0 ? <span className="text-amber-300/90"> (+{budget.bonus} 🌟)</span> : null}
         </span>
         <span className="text-slate-500">équipe <b className="text-emerald-300">{budget.teamSpent}</b> · reste <b className={points <= 0 ? 'text-rose-400' : 'text-amber-300'}>{points}</b></span>
       </div>

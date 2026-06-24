@@ -149,6 +149,9 @@ for (const e of entries) {
 }
 DATA.sort((a, b) => b.tmax - a.tmax || b.dpsTotal - a.dpsTotal)
 DATA.forEach((d, i) => { d.rank = i + 1 })
+// Couleur de classe dominante (1er membre) pour le graphe d'archétypes.
+const CLASS_COLORS = { guerrier: '#ff6b6b', voleur: '#51cf66', mage: '#4dabf7', chasseur: '#fbbf24' }
+DATA.forEach((d) => { const c = d.members[0]?.cls; d.color = CLASS_COLORS[c] ?? '#a78bfa'; d.clsLabel = d.members[0]?.clsLabel ?? c })
 
 // 2) KPI résolus (top listes + talents par classe).
 const topList = (map, n = 6) => [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, n).map(([name, count]) => ({ name, count }))
@@ -161,87 +164,102 @@ const ilvls = DATA.map((d) => d.ilvl)
 const ILVL_MIN = Math.min(0, ...ilvls), ILVL_MAX = Math.max(10, ...ilvls)
 const today = new Date().toISOString().slice(0, 10)
 
-// 3) Rendu HTML : KPI + filtres + liste, le tout piloté par un petit front JS à partir d'un blob JSON.
+// 3) Rendu HTML : dashboard épuré — graphe d'archétypes (toggle Niveau), sous-classements, filtres,
+// détail au clic, et statistiques de communauté en bas. Front embarqué (DATA/KPI JSON + vanilla JS).
 const html = `<!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>⚔ Warrior Idler — Dashboard des builds</title>
-<meta name="description" content="Classement et statistiques des builds Warrior Idler : tier max, DPS, survie, talents, sorts, gemmes. Soumets le tien !">
+<title>⚔ Warrior Idler — Classement des builds</title>
+<meta name="description" content="Classement de la communauté Warrior Idler : tier max, DPS, survie, archétypes, talents et sorts populaires. Soumets ton build !">
 <style>
-  :root{--bg:#0b1120;--panel:#11161f;--card:#131a26;--line:#1e293b;--txt:#e2e8f0;--mut:#64748b;
-    --orange:#f97316;--fuchsia:#d946ef;--dps:#34d399;--ehp:#38bdf8;--hp:#f472b6;--gold:#fbbf24;}
+  :root{--bg:#0a0f1a;--panel:#111726;--card:#141b2b;--line:#222c3f;--txt:#e6ebf3;--mut:#7886a0;--mut2:#586277;
+    --orange:#fb923c;--fuchsia:#e879f9;--dps:#34d399;--ehp:#38bdf8;--hp:#fb7185;--gold:#fbbf24;}
   *{box-sizing:border-box} html{scroll-behavior:smooth}
   body{margin:0;font-family:ui-sans-serif,system-ui,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:var(--txt);
-    background:radial-gradient(1200px 600px at 50% -10%,#1b2540 0%,var(--bg) 55%) fixed;min-height:100vh}
-  .wrap{max-width:980px;margin:0 auto;padding:24px 16px 64px}
-  .hero{text-align:center;padding:36px 16px 6px}
-  .hero h1{margin:0;font-size:clamp(26px,5.5vw,44px);font-weight:900;letter-spacing:-.02em;
+    background:radial-gradient(900px 500px at 50% -8%,#19223b 0%,var(--bg) 60%) fixed;min-height:100vh;font-size:14px}
+  .wrap{max-width:940px;margin:0 auto;padding:22px 16px 72px}
+  a{color:inherit}
+  .hero{text-align:center;padding:30px 12px 4px}
+  .hero h1{margin:0;font-size:clamp(25px,5vw,40px);font-weight:900;letter-spacing:-.02em;
     background:linear-gradient(90deg,var(--orange),var(--fuchsia));-webkit-background-clip:text;background-clip:text;color:transparent}
-  .hero .sub{color:var(--mut);margin:8px 0 18px;font-size:14px}
-  .cta{display:inline-block;text-decoration:none;font-weight:800;color:#fff;border-radius:14px;padding:13px 26px;font-size:16px;
-    background:linear-gradient(180deg,#fb923c,#ea580c);box-shadow:0 10px 30px -8px #ea580c99;animation:pulse 2.4s ease-in-out infinite}
-  @keyframes pulse{0%,100%{box-shadow:0 10px 30px -8px #ea580c99}50%{box-shadow:0 14px 44px -6px #ea580cdd}}
+  .hero .sub{color:var(--mut);margin:8px auto 16px;font-size:13.5px;max-width:560px;line-height:1.5}
+  .cta{display:inline-block;text-decoration:none;font-weight:800;color:#1a1206;border-radius:13px;padding:12px 24px;font-size:15px;
+    background:linear-gradient(180deg,#fdba74,#f97316)}
+  .cta:hover{filter:brightness(1.06)}
   .count{margin-left:10px;color:var(--mut);font-size:13px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:18px}
+  h2.sec{font-size:12px;text-transform:uppercase;letter-spacing:.12em;color:var(--mut);margin:26px 4px 10px;font-weight:700}
 
-  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:26px 0 8px}
-  .kpi{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 16px}
-  .kpi h3{margin:0 0 10px;font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--mut)}
-  .trow{display:flex;align-items:center;gap:8px;margin:6px 0;font-size:13px}
-  .trow .ic{width:20px;text-align:center} .trow .nm{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .trow .ct{color:var(--mut);font-variant-numeric:tabular-nums;font-size:12px}
-  .clsbar{height:8px;border-radius:999px;background:#0e1626;overflow:hidden;flex:1}
-  .clsbar > i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,#7c3aed,var(--fuchsia))}
+  /* graphe */
+  .chart{padding:14px 14px 8px;margin-top:18px}
+  .chart .top{display:flex;flex-wrap:wrap;align-items:center;gap:10px;justify-content:space-between;margin-bottom:6px}
+  .seg{display:inline-flex;background:#0d1422;border:1px solid var(--line);border-radius:10px;padding:2px}
+  .seg button{border:0;background:none;color:var(--mut);font:inherit;font-size:12px;font-weight:700;padding:6px 12px;border-radius:8px;cursor:pointer}
+  .seg button.on{background:linear-gradient(90deg,var(--orange),var(--fuchsia));color:#1a1206}
+  .legend{display:flex;flex-wrap:wrap;gap:10px;font-size:11.5px;color:var(--mut)}
+  .legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px;vertical-align:middle}
+  svg.scatter{width:100%;height:300px;display:block}
+  .scatter .grid{stroke:#1b2334}
+  .ax{fill:var(--mut2);font-size:11px} .axt{fill:var(--mut);font-size:11px;font-weight:600}
+  .dot{cursor:pointer;transition:opacity .15s} .dot:hover{opacity:.75}
 
-  .filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:10px 12px;margin:8px 0 14px;font-size:13px}
-  .filters .grp{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-  .chip{cursor:pointer;border:1px solid var(--line);background:#0e1626;color:var(--mut);border-radius:999px;padding:5px 11px;font-size:12px;font-weight:600;user-select:none}
-  .chip.on{color:#0b1120;background:linear-gradient(90deg,var(--orange),var(--fuchsia));border-color:transparent}
-  .filters label{color:var(--mut)} .filters input[type=range]{vertical-align:middle}
-  .filters select{background:#0e1626;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:5px 8px}
-  .sep{width:1px;height:20px;background:var(--line);margin:0 4px}
+  /* contrôles */
+  .controls{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;padding:11px 14px;margin-top:12px;font-size:13px}
+  .controls .grp{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .controls label{color:var(--mut);font-size:12px}
+  .chip{cursor:pointer;border:1px solid var(--line);background:#0d1422;color:var(--mut);border-radius:999px;padding:5px 11px;font-size:12px;font-weight:600;user-select:none}
+  .chip.on{color:#1a1206;background:linear-gradient(90deg,var(--orange),var(--fuchsia));border-color:transparent}
+  .controls input[type=range]{vertical-align:middle;accent-color:var(--orange)}
+  .sep{width:1px;height:18px;background:var(--line)}
 
-  .row{background:var(--panel);border:1px solid var(--line);border-radius:14px;margin-bottom:9px;overflow:hidden}
-  .row.ref{background:#fef3c708}
-  .rhead{display:grid;grid-template-columns:42px 1fr repeat(3,minmax(64px,82px)) 64px 22px;gap:10px;align-items:center;padding:11px 14px;cursor:pointer}
-  .rhead:hover{background:#ffffff06}
-  .rk{text-align:center;font-weight:800;color:var(--mut);font-size:15px}
-  .who .nt{font-weight:700} .who .meta{display:block;font-size:11px;color:var(--mut);margin-top:1px}
-  .who .ic{margin-right:6px}
-  .stat{text-align:right;font-variant-numeric:tabular-nums} .stat b{font-size:14px} .stat label{display:block;font-size:9.5px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
-  .tbadge{justify-self:center;display:inline-block;font-weight:800;color:#0b1120;background:linear-gradient(90deg,var(--orange),var(--fuchsia));padding:3px 9px;border-radius:999px;font-size:12px}
-  .chev{color:var(--mut);transition:transform .2s} .row.open .chev{transform:rotate(90deg)}
-  .detail{display:none;border-top:1px solid var(--line);padding:6px 14px 14px;background:#0d1320}
-  .row.open .detail{display:block}
-  .mb{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-top:10px;background:var(--card)}
-  .mb .mh{display:flex;flex-wrap:wrap;gap:10px;align-items:baseline} .mb .mn{font-weight:700} .mb .mtag{font-size:11px;color:var(--mut)}
-  .mb .ms{margin-left:auto;display:flex;gap:14px;font-variant-numeric:tabular-nums;font-size:12px}
-  .mb .ms .v{font-weight:700}
-  .seg{margin-top:9px} .seg .lab{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);margin-bottom:4px}
-  .pills{display:flex;flex-wrap:wrap;gap:5px} .pill{background:#0e1626;border:1px solid var(--line);border-radius:8px;padding:3px 8px;font-size:12px}
-  .pill.tal{border-color:transparent}
-  .empty{color:var(--mut);text-align:center;padding:24px}
-
-  .colhead{display:grid;grid-template-columns:42px 1fr repeat(3,minmax(64px,82px)) 64px 22px;gap:10px;padding:0 14px 6px;font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut)}
+  /* liste */
+  .colhead{display:grid;grid-template-columns:40px 1fr 92px 78px 78px 56px 20px;gap:10px;padding:2px 14px 6px;font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut2)}
   .colhead span{text-align:right} .colhead span:nth-child(2){text-align:left} .colhead span:nth-child(6){text-align:center}
-  footer{text-align:center;color:var(--mut);font-size:12px;margin-top:26px;line-height:1.7} footer a{color:var(--orange);text-decoration:none}
-  @media(max-width:680px){.rhead,.colhead{grid-template-columns:34px 1fr 70px 64px 20px}.hidesm{display:none}}
+  .row{border:1px solid var(--line);border-radius:14px;margin-bottom:8px;overflow:hidden;background:var(--panel)}
+  .rhead{display:grid;grid-template-columns:40px 1fr 92px 78px 78px 56px 20px;gap:10px;align-items:center;padding:11px 14px;cursor:pointer}
+  .rhead:hover{background:#ffffff05}
+  .rk{text-align:center;font-weight:800;color:var(--mut);font-size:15px}
+  .who{display:flex;align-items:center;gap:9px;min-width:0}
+  .who .av{width:30px;height:30px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:15px;flex:0 0 auto;border:1px solid var(--line)}
+  .who .nt{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .who .meta{display:block;font-size:11px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .stat{text-align:right;font-variant-numeric:tabular-nums} .stat b{font-size:13.5px} .stat.dim b{color:var(--txt);opacity:.7}
+  .stat label{display:block;font-size:9px;color:var(--mut2);text-transform:uppercase;letter-spacing:.05em}
+  .tbadge{justify-self:center;font-weight:800;color:#1a1206;background:linear-gradient(90deg,var(--orange),var(--fuchsia));padding:3px 9px;border-radius:999px;font-size:12px}
+  .chev{color:var(--mut2);transition:transform .2s} .row.open .chev{transform:rotate(90deg)}
+  .detail{display:none;border-top:1px solid var(--line);padding:4px 14px 12px;background:#0d1322} .row.open .detail{display:block}
+  .mb{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-top:10px;background:var(--card)}
+  .mb .mh{display:flex;flex-wrap:wrap;gap:8px;align-items:baseline} .mb .mn{font-weight:700} .mb .mtag{font-size:11px;color:var(--mut)}
+  .mb .ms{margin-left:auto;display:flex;gap:13px;font-variant-numeric:tabular-nums;font-size:12px} .mb .ms .v{font-weight:700}
+  .seg2{margin-top:9px} .seg2 .lab{font-size:9.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--mut2);margin-bottom:4px}
+  .pills{display:flex;flex-wrap:wrap;gap:5px} .pill{background:#0d1422;border:1px solid var(--line);border-radius:8px;padding:3px 8px;font-size:12px}
+  .empty{color:var(--mut);text-align:center;padding:18px}
+
+  /* stats communauté */
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}
+  .kpi{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:13px 15px}
+  .kpi h3{margin:0 0 9px;font-size:10.5px;text-transform:uppercase;letter-spacing:.1em;color:var(--mut)}
+  .trow{display:flex;align-items:center;gap:8px;margin:5px 0;font-size:13px}
+  .trow .ic{width:18px;text-align:center} .trow .nm{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .trow .ct{color:var(--mut);font-variant-numeric:tabular-nums;font-size:12px}
+  .clsbar{height:7px;border-radius:999px;background:#0d1422;overflow:hidden;flex:1} .clsbar>i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,#a855f7,var(--fuchsia))}
+
+  .bigempty{text-align:center;padding:46px 16px;margin-top:18px}
+  .bigempty .e{font-size:54px} .bigempty h2{margin:8px 0 4px;font-size:20px} .bigempty p{color:var(--mut);max-width:420px;margin:0 auto 18px}
+  footer{text-align:center;color:var(--mut2);font-size:12px;margin-top:30px;line-height:1.7} footer a{color:var(--orange);text-decoration:none}
+  @media(max-width:680px){.colhead,.rhead{grid-template-columns:32px 1fr 80px 56px 20px}.hidesm{display:none}}
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="hero">
-    <h1>⚔ Dashboard des builds</h1>
-    <div class="sub">Chaque build rejoué sur le <b>même benchmark</b> (${esc(SIM_RAIDS[0].name)}, scan du tier max) via le vrai moteur. Classé par tier max, puis DPS.</div>
+    <h1>⚔ Classement des builds</h1>
+    <div class="sub">Les builds soumis par la communauté, rejoués sur le <b>même benchmark</b> (${esc(SIM_RAIDS[0].name)}, scan du tier max) via le vrai moteur. Moyenne de 3 simulations.</div>
     <a class="cta" href="${SUBMIT_URL}">🚀 Soumettre mon build</a><span class="count">· <span id="bcount">${DATA.length}</span> build${DATA.length > 1 ? 's' : ''}</span>
   </div>
-
-  <div class="kpis" id="kpis"></div>
-  <div class="filters" id="filters"></div>
-  <div class="colhead"><span>#</span><span>Build</span><span>DPS</span><span class="hidesm">Survie</span><span class="hidesm">HP</span><span>Tier</span><span></span></div>
-  <div id="list"></div>
-
+  <div id="content"></div>
   <footer>
     Généré le ${today} · moteur identique au jeu (<code>runSim</code>).<br>
     Compose ton build dans le <a href="./">simulateur</a>, puis <a href="${SUBMIT_URL}">soumets-le</a> — il apparaîtra ici.
@@ -255,41 +273,9 @@ const ILVL_MIN = ${ILVL_MIN}, ILVL_MAX = ${ILVL_MAX};
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt = n => n>=1e9?(n/1e9).toFixed(2)+'Md':n>=1e6?(n/1e6).toFixed(2)+'M':n>=1e3?(n/1e3).toFixed(1)+'k':Math.round(n).toString();
 const MEDAL = {1:'🥇',2:'🥈',3:'🥉'};
-const state = { cls:null, content:'all', team:'all', ilvl:ILVL_MIN };
-
-// KPI cards
-function renderKpis(){
-  const maxTal = Math.max(1,...KPI.talentsByClass.map(t=>t.points));
-  const tlist = (arr) => arr.length ? arr.map(x=>\`<div class="trow"><span class="ic">\${esc(x.icon||'•')}</span><span class="nm">\${esc(x.name)}</span><span class="ct">×\${x.count}</span></div>\`).join('') : '<div class="ct" style="color:var(--mut)">—</div>';
-  document.getElementById('kpis').innerHTML = \`
-    <div class="kpi"><h3>Talents par classe</h3>\${KPI.talentsByClass.length?KPI.talentsByClass.map(t=>\`<div class="trow"><span class="ic">\${esc(t.icon)}</span><span class="nm">\${esc(t.name)}</span><span class="clsbar"><i style="width:\${(t.points/maxTal*100).toFixed(0)}%"></i></span><span class="ct">\${t.points}</span></div>\`).join(''):'<div class="ct">—</div>'}</div>
-    <div class="kpi"><h3>Sorts populaires</h3>\${tlist(KPI.spells)}</div>
-    <div class="kpi"><h3>Gemmes populaires</h3>\${tlist(KPI.gems)}</div>
-    <div class="kpi"><h3>Runes populaires</h3>\${tlist(KPI.runes)}</div>
-    <div class="kpi"><h3>Uniques populaires</h3>\${tlist(KPI.uniques.map(u=>({...u,icon:'✦'})))}</div>\`;
-}
-
-// Filters
-const CLS_ICON = {}; DATA.forEach(d=>d.members.forEach(m=>CLS_ICON[m.cls]=m.clsIcon));
-function renderFilters(){
-  const classes = KPI.classes;
-  const chip = (on,label,on2) => \`<span class="chip\${on?' on':''}" data-act="\${on2}">\${label}</span>\`;
-  document.getElementById('filters').innerHTML = \`
-    <div class="grp"><label>Classe</label>\${chip(state.cls===null,'Toutes','cls:')}\${classes.map(c=>chip(state.cls===c,(CLS_ICON[c]||'')+' '+c,'cls:'+c)).join('')}</div>
-    <span class="sep"></span>
-    <div class="grp"><label>Contenu</label>\${chip(state.content==='all','Tous','content:all')}\${chip(state.content==='raid','☠️ Raid','content:raid')}\${chip(state.content==='dungeon','🏰 Donjon','content:dungeon')}</div>
-    <span class="sep"></span>
-    <div class="grp"><label>Compo</label>\${chip(state.team==='all','Toutes','team:all')}\${chip(state.team==='solo','Solo','team:solo')}\${chip(state.team==='team','Équipe','team:team')}</div>
-    <span class="sep"></span>
-    <div class="grp"><label>ilvl ≥ <b id="ilo">\${state.ilvl}</b></label><input type="range" min="\${ILVL_MIN}" max="\${ILVL_MAX}" value="\${state.ilvl}" id="ilvlr"></div>\`;
-  document.querySelectorAll('#filters .chip').forEach(el=>el.onclick=()=>{
-    const [k,v]=el.dataset.act.split(':');
-    if(k==='cls') state.cls = v===''?null:v;
-    else state[k]=v;
-    renderFilters(); renderList();
-  });
-  const r=document.getElementById('ilvlr'); if(r) r.oninput=()=>{state.ilvl=+r.value;document.getElementById('ilo').textContent=r.value;renderList();};
-}
+const state = { sort:'tmax', cls:null, content:'all', team:'all', ilvl:ILVL_MIN, chart:'arch' };
+const SORTS = { tmax:{lab:'🏆 Tier',key:d=>[d.tmax,d.dpsTotal]}, dps:{lab:'⚔ DPS',key:d=>[d.dpsTotal]}, ehp:{lab:'🛡 Survie',key:d=>[d.ehpMin]} };
+const cmp = (a,b)=>{const ka=SORTS[state.sort].key(a),kb=SORTS[state.sort].key(b);for(let i=0;i<ka.length;i++){if(kb[i]!==ka[i])return kb[i]-ka[i];}return 0;};
 
 function pass(d){
   if(state.cls && !d.classes.includes(state.cls)) return false;
@@ -300,46 +286,121 @@ function pass(d){
   return true;
 }
 
+if(!DATA.length){
+  document.getElementById('content').innerHTML = \`<div class="bigempty"><div class="e">🏆</div><h2>Le classement attend son premier build.</h2><p>Compose le tien dans le simulateur en jeu, puis soumets-le — il s'affichera ici avec ses stats et son rang.</p><a class="cta" href="${SUBMIT_URL}">🚀 Soumettre mon build</a></div>\`;
+} else {
+  document.getElementById('content').innerHTML = \`
+    <div class="card chart">
+      <div class="top">
+        <div class="seg" id="cmode"><button data-m="arch" class="on">Archétypes · DPS ↔ survie</button><button data-m="level">Par niveau · niveau ↔ tier</button></div>
+        <div class="legend" id="legend"></div>
+      </div>
+      <svg class="scatter" id="svg" viewBox="0 0 700 300" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Nuage de points des builds"></svg>
+    </div>
+
+    <h2 class="sec">Classement</h2>
+    <div class="card controls">
+      <div class="grp"><label>Trier</label><span class="seg" id="sortseg"></span></div>
+      <span class="sep"></span>
+      <div class="grp" id="fcls"></div>
+      <span class="sep"></span>
+      <div class="grp" id="fcontent"></div>
+      <span class="sep"></span>
+      <div class="grp" id="fteam"></div>
+      <span class="sep"></span>
+      <div class="grp"><label>ilvl ≥ <b id="ilo">\${state.ilvl}</b></label><input type="range" min="\${ILVL_MIN}" max="\${ILVL_MAX}" value="\${state.ilvl}" id="ilvlr"></div>
+    </div>
+    <div class="colhead"><span>#</span><span>Build</span><span>\${SORTS[state.sort].lab.replace(/^.. /,'')}</span><span class="hidesm">DPS</span><span class="hidesm">Survie</span><span>Tier</span><span></span></div>
+    <div id="list"></div>
+
+    <h2 class="sec">📊 Statistiques de la communauté</h2>
+    <div class="kpis" id="kpis"></div>\`;
+  renderChart(); renderControls(); renderList(); renderKpis();
+}
+
+function logScale(v,min,max,a,b){const lv=Math.log10(Math.max(1,v)),lo=Math.log10(Math.max(1,min)),hi=Math.log10(Math.max(10,max));return a+(b-a)*(hi>lo?(lv-lo)/(hi-lo):0.5);}
+function linScale(v,min,max,a,b){return a+(b-a)*(max>min?(v-min)/(max-min):0.5);}
+
+function renderChart(){
+  const svg=document.getElementById('svg'); if(!svg) return;
+  const W=700,H=300,pl=46,pr=18,pt=14,pb=34;
+  const mode=state.chart;
+  const xv=d=>mode==='arch'?d.dpsTotal:d.level, yv=d=>mode==='arch'?d.ehpMin:d.tmax;
+  const xs=DATA.map(xv),ys=DATA.map(yv);
+  const xmin=Math.min(...xs),xmax=Math.max(...xs),ymin=Math.min(...ys),ymax=Math.max(...ys);
+  const X=v=>mode==='arch'?logScale(v,xmin,xmax,pl,W-pr):linScale(v,Math.min(xmin,1),xmax,pl,W-pr);
+  const Y=v=>mode==='arch'?logScale(v,ymin,ymax,H-pb,pt):linScale(v,0,Math.max(ymax,1),H-pb,pt);
+  const xlab=mode==='arch'?'DPS d\\'équipe →':'Niveau de compte →', ylab=mode==='arch'?'↑ Survie (EHP)':'↑ Tier max';
+  let g='';
+  for(let i=0;i<=4;i++){const y=pt+(H-pb-pt)*i/4;g+=\`<line class="grid" x1="\${pl}" y1="\${y}" x2="\${W-pr}" y2="\${y}" stroke="#1b2334"/>\`;}
+  g+=\`<text class="axt" x="\${pl}" y="\${H-8}">\${xlab}</text>\`;
+  g+=\`<text class="axt" x="6" y="\${pt+8}" transform="rotate(0)">\${ylab}</text>\`;
+  const tier=t=>5+Math.min(7,Math.max(0,t))*0.7;
+  const dots=DATA.map(d=>\`<circle class="dot" cx="\${X(xv(d)).toFixed(1)}" cy="\${Y(yv(d)).toFixed(1)}" r="\${tier(d.tmax).toFixed(1)}" fill="\${d.color}" fill-opacity="0.82" stroke="#0a0f1a" stroke-width="1.5"><title>\${esc(d.name)} — \${esc(d.clsLabel)} · T\${d.tmax} · \${fmt(d.dpsTotal)} dps · \${fmt(d.ehpMin)} survie · niv \${d.level}</title></circle>\`).join('');
+  svg.innerHTML=g+dots;
+  // legend = classes présentes
+  const seen={}; DATA.forEach(d=>seen[d.clsLabel]=d.color);
+  document.getElementById('legend').innerHTML=Object.entries(seen).map(([n,c])=>\`<span><i style="background:\${c}"></i>\${esc(n)}</span>\`).join('')+'<span style="color:var(--mut2)">· taille = tier</span>';
+}
+
+function renderControls(){
+  const chip=(on,label,act)=>\`<span class="chip\${on?' on':''}" data-act="\${act}">\${label}</span>\`;
+  document.getElementById('sortseg').innerHTML=Object.entries(SORTS).map(([k,v])=>\`<button data-s="\${k}" class="\${state.sort===k?'on':''}" style="border:0;background:\${state.sort===k?'linear-gradient(90deg,var(--orange),var(--fuchsia))':'none'};color:\${state.sort===k?'#1a1206':'var(--mut)'};font:inherit;font-size:12px;font-weight:700;padding:6px 11px;border-radius:8px;cursor:pointer">\${v.lab}</button>\`).join('');
+  const CLS_ICON={}; DATA.forEach(d=>d.members.forEach(m=>CLS_ICON[m.cls]=m.clsIcon));
+  document.getElementById('fcls').innerHTML='<label>Classe</label>'+chip(state.cls===null,'Toutes','cls:')+KPI.classes.map(c=>chip(state.cls===c,(CLS_ICON[c]||'')+' '+c,'cls:'+c)).join('');
+  document.getElementById('fcontent').innerHTML='<label>Contenu</label>'+chip(state.content==='all','Tous','content:all')+chip(state.content==='raid','☠️ Raid','content:raid')+chip(state.content==='dungeon','🏰 Donjon','content:dungeon');
+  document.getElementById('fteam').innerHTML='<label>Compo</label>'+chip(state.team==='all','Toutes','team:all')+chip(state.team==='solo','Solo','team:solo')+chip(state.team==='team','Équipe','team:team');
+  document.querySelectorAll('#cmode button').forEach(b=>b.onclick=()=>{state.chart=b.dataset.m;document.querySelectorAll('#cmode button').forEach(x=>x.classList.toggle('on',x===b));renderChart();});
+  document.querySelectorAll('#sortseg button').forEach(b=>b.onclick=()=>{state.sort=b.dataset.s;renderControls();renderList();});
+  document.querySelectorAll('.controls .chip').forEach(el=>el.onclick=()=>{const [k,v]=el.dataset.act.split(':');if(k==='cls')state.cls=v===''?null:v;else state[k]=v;renderControls();renderList();});
+  const r=document.getElementById('ilvlr'); if(r) r.oninput=()=>{state.ilvl=+r.value;document.getElementById('ilo').textContent=r.value;renderList();};
+}
+
 function memberCard(m){
-  const seg=(lab,items)=>items&&items.length?\`<div class="seg"><div class="lab">\${lab}</div><div class="pills">\${items}</div></div>\`:'';
-  const tal=m.talents.map(t=>\`<span class="pill tal" style="background:\${esc(t.color)}22;color:\${esc(t.color)}">\${esc(t.icon)} \${esc(t.name)} ·\${t.points}</span>\`).join('');
-  const sp=m.spells.map(s=>\`<span class="pill">\${esc(s.icon)} \${esc(s.name)}</span>\`).join('');
-  const gm=m.gems.map(g=>\`<span class="pill">\${esc(g.icon)} \${esc(g.name)}</span>\`).join('');
-  const rn=m.runes.map(r=>\`<span class="pill">\${esc(r.icon)} \${esc(r.name)}</span>\`).join('');
-  const un=m.uniques.map(u=>\`<span class="pill">✦ \${esc(u.name)}</span>\`).join('');
-  return \`<div class="mb">
-    <div class="mh"><span class="mn">\${esc(m.clsIcon)} \${esc(m.name)}</span><span class="mtag">\${esc(m.clsLabel)} · N\${m.level} · ilvl \${m.ilvl} · \${m.totalTalents} talents</span>
-      <span class="ms"><span><span class="v" style="color:var(--dps)">\${fmt(m.dps)}</span> dps</span><span><span class="v" style="color:var(--ehp)">\${fmt(m.ehp)}</span> survie</span><span><span class="v" style="color:var(--hp)">\${fmt(m.hp)}</span> pv</span></span></div>
-    \${seg('Talents',tal)}\${seg('Capacités',sp)}\${seg('Gemmes',gm)}\${seg('Runes',rn)}\${seg('Uniques',un)}
-  </div>\`;
+  const seg=(lab,items)=>items&&items.length?\`<div class="seg2"><div class="lab">\${lab}</div><div class="pills">\${items}</div></div>\`:'';
+  const tal=m.talents.map(t=>\`<span class="pill" style="background:\${esc(t.color)}1f;color:\${esc(t.color)};border-color:transparent">\${esc(t.icon)} \${esc(t.name)} ·\${t.points}</span>\`).join('');
+  const P=arr=>arr.map(x=>\`<span class="pill">\${esc(x.icon||'✦')} \${esc(x.name)}</span>\`).join('');
+  return \`<div class="mb"><div class="mh"><span class="mn">\${esc(m.clsIcon)} \${esc(m.name)}</span><span class="mtag">\${esc(m.clsLabel)} · N\${m.level} · ilvl \${m.ilvl} · \${m.totalTalents} talents</span>
+    <span class="ms"><span><span class="v" style="color:var(--dps)">\${fmt(m.dps)}</span> dps</span><span><span class="v" style="color:var(--ehp)">\${fmt(m.ehp)}</span> survie</span><span><span class="v" style="color:var(--hp)">\${fmt(m.hp)}</span> pv</span></span></div>
+    \${seg('Talents',tal)}\${seg('Capacités',P(m.spells))}\${seg('Gemmes',P(m.gems))}\${seg('Runes',P(m.runes))}\${seg('Uniques',P(m.uniques))}</div>\`;
 }
 
 function renderList(){
-  const rows = DATA.filter(pass);
-  document.getElementById('bcount').textContent = rows.length;
-  const el = document.getElementById('list');
-  if(!rows.length){ el.innerHTML='<div class="empty">Aucun build ne correspond à ces filtres.</div>'; return; }
-  el.innerHTML = rows.map(d=>\`
-    <div class="row \${d.ref?'ref':''}" data-r="\${d.rank}">
+  const rows=DATA.filter(pass).sort(cmp); rows.forEach((d,i)=>d._r=i+1);
+  document.getElementById('bcount').textContent=rows.length;
+  const el=document.getElementById('list');
+  if(!rows.length){el.innerHTML='<div class="empty">Aucun build ne correspond à ces filtres.</div>';return;}
+  const primary=d=>state.sort==='dps'?{v:fmt(d.dpsTotal),l:'dps'}:state.sort==='ehp'?{v:fmt(d.ehpMin),l:'survie'}:{v:'T'+d.tmax,l:'tier'};
+  el.innerHTML=rows.map(d=>{const p=primary(d);return \`
+    <div class="row" data-r="\${d.rank}">
       <div class="rhead">
-        <span class="rk">\${MEDAL[d.rank]||d.rank}</span>
-        <span class="who"><span class="ic">\${esc(d.members.map(m=>m.clsIcon).join(''))}</span><span class="nt">\${esc(d.name)}</span><span class="meta">\${d.ref?'★ référence':esc(d.by)} · \${d.chars} perso\${d.chars>1?'s':''} · niv \${d.level} · ilvl \${d.ilvl} · \${esc(d.contentLabel)}</span></span>
-        <span class="stat"><b style="color:var(--dps)">\${fmt(d.dpsTotal)}</b><label>dps</label></span>
-        <span class="stat hidesm"><b style="color:var(--ehp)">\${fmt(d.ehpMin)}</b><label>survie</label></span>
-        <span class="stat hidesm"><b style="color:var(--hp)">\${fmt(d.members.reduce((a,m)=>a+m.hp,0))}</b><label>hp</label></span>
+        <span class="rk">\${MEDAL[d._r]||d._r}</span>
+        <span class="who"><span class="av" style="background:\${d.color}1f;color:\${d.color}">\${esc(d.members[0]?.clsIcon||'⚔️')}</span><span style="min-width:0"><span class="nt">\${esc(d.name)}</span><span class="meta">\${d.ref?'★ réf':esc(d.by)} · \${d.chars} perso\${d.chars>1?'s':''} · niv \${d.level} · ilvl \${d.ilvl} · \${esc(d.contentLabel)}</span></span></span>
+        <span class="stat"><b style="color:var(--orange)">\${p.v}</b><label>\${p.l}</label></span>
+        <span class="stat dim hidesm"><b style="color:var(--dps)">\${fmt(d.dpsTotal)}</b><label>dps</label></span>
+        <span class="stat dim hidesm"><b style="color:var(--ehp)">\${fmt(d.ehpMin)}</b><label>survie</label></span>
         <span class="tbadge">T\${d.tmax}</span>
         <span class="chev">▸</span>
       </div>
       <div class="detail">\${d.members.map(memberCard).join('')}</div>
-    </div>\`).join('');
+    </div>\`;}).join('');
   el.querySelectorAll('.rhead').forEach(h=>h.onclick=()=>h.parentElement.classList.toggle('open'));
 }
 
-renderKpis(); renderFilters(); renderList();
+function renderKpis(){
+  const maxTal=Math.max(1,...KPI.talentsByClass.map(t=>t.points));
+  const tl=arr=>arr.length?arr.map(x=>\`<div class="trow"><span class="ic">\${esc(x.icon||'•')}</span><span class="nm">\${esc(x.name)}</span><span class="ct">×\${x.count}</span></div>\`).join(''):'<div class="ct">—</div>';
+  document.getElementById('kpis').innerHTML=\`
+    <div class="kpi"><h3>Talents par classe</h3>\${KPI.talentsByClass.length?KPI.talentsByClass.map(t=>\`<div class="trow"><span class="ic">\${esc(t.icon)}</span><span class="nm">\${esc(t.name)}</span><span class="clsbar"><i style="width:\${(t.points/maxTal*100).toFixed(0)}%"></i></span><span class="ct">\${t.points}</span></div>\`).join(''):'<div class="ct">—</div>'}</div>
+    <div class="kpi"><h3>Sorts populaires</h3>\${tl(KPI.spells)}</div>
+    <div class="kpi"><h3>Gemmes populaires</h3>\${tl(KPI.gems)}</div>
+    <div class="kpi"><h3>Runes populaires</h3>\${tl(KPI.runes)}</div>
+    <div class="kpi"><h3>Uniques populaires</h3>\${tl(KPI.uniques.map(u=>({...u,icon:'✦'})))}</div>\`;
+}
 </script>
 </body>
 </html>`
 
 fs.mkdirSync('dist', { recursive: true })
 fs.writeFileSync('dist/leaderboard.html', html)
-console.log(`Leaderboard généré : dist/leaderboard.html · ${DATA.length} build(s) · KPI (talents/sorts/gemmes/runes/uniques) · filtres + détail.`)
+console.log(`Leaderboard généré : dist/leaderboard.html · ${DATA.length} build(s) · graphe archétypes + sous-classements + filtres + stats.`)
