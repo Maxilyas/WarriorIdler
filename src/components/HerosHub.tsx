@@ -7,6 +7,7 @@ import { Sheet, SubTab } from './ui'
 import { LevelBadge } from './LevelBadge'
 import { PrestigePanel } from './PrestigePanel'
 import { AchievementsPanel } from './AchievementsPanel'
+import { SimulatorPanel } from './SimulatorPanel'
 import { getAchievement } from '../game/achievements'
 import { charDps, charMaxHp, charResist, teamTalentPool } from '../game/character'
 import { getRaidDef, raidReqs, raidUnlocked } from '../game/raids'
@@ -15,7 +16,7 @@ import { DAMAGE_TYPE_LIST } from '../game/damage'
 import { PRIMARY_META } from '../game/stats'
 import type { DamageType } from '../game/types'
 
-type HerosView = CharacterView | 'talents' | 'prestige' | 'hautsFaits'
+type HerosView = CharacterView | 'talents' | 'prestige' | 'hautsFaits' | 'simulateur'
 
 function fmt(n: number): string {
   if (n >= 1e9) return (n / 1e9).toFixed(1) + 'Md'
@@ -88,6 +89,7 @@ export function HerosHub({ talentsUnlocked }: { talentsUnlocked: boolean }) {
             </SubTab>
           )}
           <SubTab on={active === 'hautsFaits'} onClick={() => setSub('hautsFaits')}>🏆 Hauts faits</SubTab>
+          <SubTab on={active === 'simulateur'} onClick={() => setSub('simulateur')}>🧪 Simulateur</SubTab>
         </div>
         <div className="min-h-0 flex-1">
           {active === 'talents' ? (
@@ -96,6 +98,8 @@ export function HerosHub({ talentsUnlocked }: { talentsUnlocked: boolean }) {
             <PrestigePanel />
           ) : active === 'hautsFaits' ? (
             <AchievementsPanel />
+          ) : active === 'simulateur' ? (
+            <SimulatorPanel />
           ) : (
             <div className="h-full overflow-y-auto pr-1">
               <CharacterPanel view={active} />
@@ -136,6 +140,7 @@ export function HerosHub({ talentsUnlocked }: { talentsUnlocked: boolean }) {
         }]
       : []),
     { id: 'hautsFaits' as HerosView, icon: '🏆', label: 'Hauts faits', hint: 'Titres · bonus permanents' },
+    { id: 'simulateur' as HerosView, icon: '🧪', label: 'Simulateur', hint: 'Teste une compo en raid' },
   ]
 
   return (
@@ -202,9 +207,16 @@ export function HerosHub({ talentsUnlocked }: { talentsUnlocked: boolean }) {
       )}
 
       {/* Plein écran (Sheet) */}
-      {card && card !== 'talents' && card !== 'prestige' && card !== 'hautsFaits' && (
+      {card && card !== 'talents' && card !== 'prestige' && card !== 'hautsFaits' && card !== 'simulateur' && (
         <Sheet title={`${cards.find((c) => c.id === card)?.icon} ${cards.find((c) => c.id === card)?.label} — ${char.name}`} onClose={() => setCard(null)}>
           <CharacterPanel view={card} />
+        </Sheet>
+      )}
+      {card === 'simulateur' && (
+        <Sheet title="🧪 Simulateur de raid" onClose={() => setCard(null)}>
+          <div className="h-[74vh]">
+            <SimulatorPanel />
+          </div>
         </Sheet>
       )}
       {card === 'hautsFaits' && (
