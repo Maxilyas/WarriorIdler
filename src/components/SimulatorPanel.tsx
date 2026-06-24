@@ -23,6 +23,21 @@ function loadLib(): SavedBuild[] {
 function saveLib(list: SavedBuild[]) { try { localStorage.setItem(LIB_KEY, JSON.stringify(list)) } catch { /* quota */ } }
 const cloneCfg = (c: SimConfig): SimConfig => JSON.parse(JSON.stringify(c))
 
+/* CODE DE BUILD PARTAGEABLE — `SimConfig` complet (compo + tous les loadouts, y compris un éventuel
+ * perso importé entièrement sérialisé) encodé en base64 UTF-8. Autonome → reproductible partout (autre
+ * appareil, soumission, banc d'essai), sans dépendre d'une sauvegarde. Préfixe versionné `WIB1:`. */
+const BUILD_CODE_PREFIX = 'WIB1:'
+function encodeBuild(cfg: SimConfig): string {
+  return BUILD_CODE_PREFIX + btoa(unescape(encodeURIComponent(JSON.stringify(cfg))))
+}
+function decodeBuild(code: string): SimConfig | null {
+  try {
+    const raw = code.trim().replace(/^WIB1:/, '')
+    const cfg = JSON.parse(decodeURIComponent(escape(atob(raw))))
+    return cfg && Array.isArray(cfg.team) && cfg.content ? (cfg as SimConfig) : null
+  } catch { return null }
+}
+
 const RARITIES_OPT = ['epique', 'legendaire', 'mythique', 'ascendant', 'celeste', 'transcendant'] as const
 
 function fmt(n: number): string {
@@ -97,6 +112,50 @@ function GemInfoButton() {
                 <div className="text-[11px] leading-snug text-slate-400">{g.desc}</div>
               </div>
             ))}
+          </div>
+        </Sheet>
+      )}
+    </>
+  )
+}
+
+/** Export / import d'un build sous forme de CODE autonome (copier-coller). Fondation du partage et de
+ *  la centralisation : un code contient toute la compo + loadouts, reproductible partout. */
+function BuildShareButtons({ cfg, onImport }: { cfg: SimConfig; onImport: (c: SimConfig) => void }) {
+  const [mode, setMode] = useState<null | 'export' | 'import'>(null)
+  const [code, setCode] = useState('')
+  const [msg, setMsg] = useState('')
+  const openExport = () => { setCode(encodeBuild(cfg)); setMsg(''); setMode('export') }
+  const openImport = () => { setCode(''); setMsg(''); setMode('import') }
+  const copy = () => { navigator.clipboard?.writeText(code).then(() => setMsg('✓ Copié dans le presse-papier'), () => setMsg('Copie impossible — sélectionne et copie à la main')) }
+  const doImport = () => {
+    const c = decodeBuild(code)
+    if (!c) { setMsg('❌ Code invalide.'); return }
+    onImport(c); setMode(null)
+  }
+  return (
+    <>
+      <button onClick={openExport} className="rounded-lg border border-slate-700 px-2 py-0.5 text-[10px] text-slate-300 hover:border-fuchsia-400/60 hover:text-fuchsia-200" title="Copier un code partageable de ce build">📤 Exporter</button>
+      <button onClick={openImport} className="rounded-lg border border-slate-700 px-2 py-0.5 text-[10px] text-slate-300 hover:border-fuchsia-400/60 hover:text-fuchsia-200" title="Charger un build depuis un code">📥 Importer</button>
+      {mode === 'export' && (
+        <Sheet title="📤 Exporter le build" onClose={() => setMode(null)}>
+          <p className="mb-2 text-[11px] leading-snug text-slate-500">Copie ce code et partage-le (autre appareil, ou soumission). Il contient la compo + tous les loadouts, et reste reproductible sans sauvegarde.</p>
+          <textarea readOnly value={code} rows={5} onFocus={(e) => e.currentTarget.select()}
+            className="w-full resize-none rounded-lg border border-slate-700 bg-slate-900/60 p-2 text-[10px] font-mono text-slate-300 outline-none" />
+          <div className="mt-2 flex items-center gap-2">
+            <button onClick={copy} className="rounded-lg bg-orange-500/90 px-3 py-1.5 text-[11px] font-medium text-white hover:bg-orange-500">Copier</button>
+            {msg && <span className="text-[10px] text-emerald-300">{msg}</span>}
+          </div>
+        </Sheet>
+      )}
+      {mode === 'import' && (
+        <Sheet title="📥 Importer un build" onClose={() => setMode(null)}>
+          <p className="mb-2 text-[11px] leading-snug text-slate-500">Colle un code de build (commence par <code className="text-slate-400">WIB1:</code>) puis charge-le dans le simulateur.</p>
+          <textarea value={code} onChange={(e) => { setCode(e.target.value); setMsg('') }} rows={5} placeholder="WIB1:…"
+            className="w-full resize-none rounded-lg border border-slate-700 bg-slate-900/60 p-2 text-[10px] font-mono text-slate-300 outline-none focus:border-orange-400/60" />
+          <div className="mt-2 flex items-center gap-2">
+            <button onClick={doImport} className="rounded-lg bg-orange-500/90 px-3 py-1.5 text-[11px] font-medium text-white hover:bg-orange-500">Charger</button>
+            {msg && <span className="text-[10px] text-rose-400">{msg}</span>}
           </div>
         </Sheet>
       )}
@@ -213,6 +272,12 @@ export function SimulatorPanel() {
                   </span>
                 ))}
               </div>}
+          {/* Partage : code de build autonome (copier-coller) — portable, partageable, soumettable */}
+          <div className="mt-2 flex items-center gap-2 border-t border-slate-800 pt-2">
+            <span className="shrink-0 text-[10px] text-slate-500">🔗 Partager</span>
+            <BuildShareButtons cfg={cfg} onImport={loadCfg} />
+            <span className="text-[9.5px] text-slate-600">code autonome — d'un appareil à l'autre, ou à soumettre</span>
+          </div>
         </div>
       </section>
 
