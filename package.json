@@ -24,6 +24,7 @@
     "explorer": "node scripts/build-explorer.mjs",
     "sandbox": "node scripts/sandbox-sim.mjs",
     "bench": "node scripts/builds-bench.mjs",
+    "leaderboard": "node scripts/build-leaderboard.mjs",
     "forge-hex": "node scripts/verif-forge-hex.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
