@@ -209,19 +209,43 @@ const MAX_SCALE = 2.6
 /** Allocation vide stable (réf constante) — évite une nouvelle réf à chaque rendu dans les sélecteurs. */
 const EMPTY_ALLOC: Record<string, number> = {}
 
-export function TalentTree() {
+/**
+ * MODE CONTRÔLÉ (bac-à-sable du Simulateur) : quand `ctrl` est fourni, l'arbre lit/écrit cette COPIE
+ * dédiée au lieu du perso du store — ta vraie partie n'est jamais touchée. Le Panthéon et la barre de
+ * roster sont masqués, le prestige est à 0, et le footer propose un Reset. L'allocation passe par
+ * `onAllocate`/`onRemove` (+1 / −1) au lieu des actions du store.
+ */
+export interface TalentTreeCtrl {
+  talents: Record<string, number>
+  points: number                       // points RESTANTS (budget − dépensés) — pilote canAllocate
+  level: number
+  weapon: DamageType
+  onAllocate: (id: string) => void     // +1 sur un nœud allouable
+  onRemove: (id: string) => void       // −1 sur un nœud déjà pris
+  onReset: () => void
+}
+
+export function TalentTree({ ctrl }: { ctrl?: TalentTreeCtrl }) {
+  const sandbox = !!ctrl
   // abonnements CIBLÉS & STABLES : ne plus re-render l'arbre à 5 Hz pendant le
   // combat. `s.characters` change de réf à chaque tick (PV), mais l'arbre ne dépend que de réfs STABLES
   // (talents/pantheon/équipement — préservées par le spread `{...c, hp}` du tick) + de primitives/nombres.
-  const prestigeRank = useGame((s) => s.prestigeRank)
-  // Pool de talents PARTAGÉ (compte) — sélecteur renvoyant un NOMBRE → stable hors allocation.
-  const basePoints = useGame((s) => teamTalentPool(s.characters, s.upgrades.talentBonus ?? 0))
-  // Champs du perso actif : réfs/valeurs stables hors allocation (les PV ne les touchent pas).
-  const talents = useGame((s) => (s.characters[s.activeChar] ?? s.characters[0])?.talents) ?? EMPTY_ALLOC
-  const pantheonAlloc = useGame((s) => (s.characters[s.activeChar] ?? s.characters[0])?.pantheon)
-  const charLevel = useGame((s) => (s.characters[s.activeChar] ?? s.characters[0])?.level ?? 1)
-  const weaponType = useGame((s) => { const c = s.characters[s.activeChar] ?? s.characters[0]; return c ? charDamageProfile(c).mainType : ('physique' as DamageType) })
-  const hasChar = useGame((s) => (s.characters[s.activeChar] ?? s.characters[0]) != null)
+  // En mode contrôlé, ces hooks restent appelés (règles des hooks) mais leur résultat est ignoré.
+  const storePrestige = useGame((s) => s.prestigeRank)
+  const storeBasePoints = useGame((s) => teamTalentPool(s.characters, s.upgrades.talentBonus ?? 0))
+  const storeTalents = useGame((s) => (s.characters[s.activeChar] ?? s.characters[0])?.talents) ?? EMPTY_ALLOC
+  const storePantheon = useGame((s) => (s.characters[s.activeChar] ?? s.characters[0])?.pantheon)
+  const storeLevel = useGame((s) => (s.characters[s.activeChar] ?? s.characters[0])?.level ?? 1)
+  const storeWeapon = useGame((s) => { const c = s.characters[s.activeChar] ?? s.characters[0]; return c ? charDamageProfile(c).mainType : ('physique' as DamageType) })
+  const storeHasChar = useGame((s) => (s.characters[s.activeChar] ?? s.characters[0]) != null)
+  // En sandbox : copie dédiée + prestige 0 (Panthéon masqué). Sinon : perso actif du store.
+  const prestigeRank = sandbox ? 0 : storePrestige
+  const basePoints = sandbox ? ctrl!.points : storeBasePoints
+  const talents = sandbox ? ctrl!.talents : storeTalents
+  const pantheonAlloc = sandbox ? EMPTY_ALLOC : storePantheon
+  const charLevel = sandbox ? ctrl!.level : storeLevel
+  const weaponType = sandbox ? ctrl!.weapon : storeWeapon
+  const hasChar = sandbox ? true : storeHasChar
   const [tree, setTree] = useState<TalentTreeId>('base')
   const [selected, setSelected] = useState<string | null>(null)
   const [focus, setFocus] = useState<ConstellationId | null>(null)
@@ -339,7 +363,7 @@ export function TalentTree() {
   if (!hasChar) return null
   // arbre actif. Base → points de niveau / `talents`. Panthéon → budget de Points
   // d'Éveil (= prestigeRank × K, identique par perso) / `pantheonAlloc`.
-  const isPantheon = tree === 'pantheon'
+  const isPantheon = !sandbox && tree === 'pantheon'
   const alloc = isPantheon ? (pantheonAlloc ?? { pa_start: 1 }) : talents
   const budget = eveilBudget(prestigeRank)
   // arbre de DÉPART : pool de talents PARTAGÉ (compte), dérivé. Le Panthéon garde son budget propre.
@@ -391,12 +415,28 @@ export function TalentTree() {
   }, [tree, alloc, prestigeRank])
   // Callback de sélection STABLE (référence constante) → permet à React.memo(CanvasNode) d'éviter de
   // re-render les nœuds dont les props n'ont pas changé (ex. sélection d'un seul nœud, vue inchangée).
-  const onSelectNode = useCallback((id: string) => { if (!drag.current?.moved) setSelected(id) }, [])
+  // En sandbox, un clic alloue (+1) un nœud allouable ou retire (−1) un nœud déjà pris — tout en
+  // sélectionnant le nœud pour afficher son détail (réglage fin via les boutons du panneau).
+  const onSelectNode = useCallback((id: string) => {
+    if (drag.current?.moved) return
+    if (ctrl) {
+      const n = getTalent(id)
+      if (n) {
+        if (canAllocate(n, ctrl.talents, ctrl.points)) ctrl.onAllocate(id)
+        else if ((ctrl.talents[id] ?? 0) > 0) ctrl.onRemove(id)
+      }
+    }
+    setSelected(id)
+  }, [ctrl])
 
   return (
     <div className="flex h-full flex-col">
-      {/* En-tête : sélecteur d'arbre (Départ / Panthéon) + points de l'arbre actif */}
+      {/* En-tête : sélecteur d'arbre (Départ / Panthéon) + points de l'arbre actif.
+          En sandbox, pas de Panthéon : un simple libellé. */}
       <div className="mb-2 flex items-center justify-between gap-2">
+        {sandbox ? (
+          <span className="rounded-md bg-fuchsia-500/15 px-2.5 py-1 text-[11px] font-semibold text-fuchsia-200">🌌 Arbre — bac-à-sable</span>
+        ) : (
         <div className="flex items-center gap-1 rounded-lg bg-slate-800/80 p-0.5">
           <button
             onClick={() => switchTree('base')}
@@ -416,6 +456,7 @@ export function TalentTree() {
             )}
           </button>
         </div>
+        )}
         {isPantheon ? (
           <span
             className={'rounded-full px-2 py-0.5 text-xs font-semibold ' +
@@ -437,7 +478,7 @@ export function TalentTree() {
       {/* la rangée de sélection s'abonne SEULE à `s.characters` (réf changée chaque
           tick) → son re-render par tick reste ISOLÉ à ces quelques boutons ; le corps lourd de l'arbre
           (liens + nœuds) ne s'abonne qu'à du slow-state et ne re-render plus en combat. */}
-      <HeroSelectorRow onPicked={() => setSelected(null)} />
+      {!sandbox && <HeroSelectorRow onPicked={() => setSelected(null)} />}
 
       {/* Voies & archétypes : bouton → feuille (remplace la longue rangée scrollable) */}
       <div className="mb-2 flex items-center gap-1.5">
@@ -551,6 +592,7 @@ export function TalentTree() {
         <NodeDetail
           node={selectedNode} weaponType={weaponType}
           tree={tree} alloc={alloc} points={points} prestigeRank={prestigeRank}
+          ctrl={ctrl}
           onClose={() => setSelected(null)}
         />
       )}
@@ -560,7 +602,8 @@ export function TalentTree() {
         <CtrlBtn onClick={() => zoomBy(1.25)} label="+" title="Zoomer" />
         <CtrlBtn onClick={() => zoomBy(0.8)} label="−" title="Dézoomer" />
         <CtrlBtn onClick={center} label="⌖" title="Recentrer" />
-        {isPantheon ? <PantheonRespecBar char={{ pantheon: pantheonAlloc }} /> : (<><PresetsButton /><RespecBar char={{ level: charLevel, talents }} /></>)}
+        {sandbox ? <SandboxResetBar talents={talents} onReset={ctrl!.onReset} />
+          : isPantheon ? <PantheonRespecBar char={{ pantheon: pantheonAlloc }} /> : (<><PresetsButton /><RespecBar char={{ level: charLevel, talents }} /></>)}
       </div>
     </div>
   )
@@ -755,7 +798,7 @@ function SpellCard({ power, weaponType }: { power: PowerDef; weaponType: DamageT
 }
 
 function NodeDetail({
-  node, weaponType, tree, alloc, points, prestigeRank, onClose,
+  node, weaponType, tree, alloc, points, prestigeRank, ctrl, onClose,
 }: {
   node: TalentNode
   weaponType: DamageType
@@ -764,11 +807,13 @@ function NodeDetail({
   /** Points restants du pool de l'arbre actif (points de niveau OU Points d'Éveil). */
   points: number
   prestigeRank: number
+  /** Mode contrôlé (sandbox) : alloue/retire sur la copie dédiée au lieu des actions du store. */
+  ctrl?: TalentTreeCtrl
   onClose: () => void
 }) {
   const allocateTalent = useGame((s) => s.allocateTalent)
   const allocatePantheon = useGame((s) => s.allocatePantheon)
-  const isPantheon = tree === 'pantheon'
+  const isPantheon = !ctrl && tree === 'pantheon'
   const rank = alloc[node.id] ?? 0
   const maxed = rank >= node.maxRank
   const meta = CONSTELLATIONS[node.constellation]
@@ -883,14 +928,35 @@ function NodeDetail({
         </p>
       )}
 
-      <button
-        onClick={() => (isPantheon ? allocatePantheon : allocateTalent)(node.id)}
-        disabled={!can}
-        className="mt-1 w-full rounded-lg py-2 text-xs font-bold transition-colors disabled:bg-slate-800 disabled:text-slate-500"
-        style={can ? { background: meta.color, color: '#0b1120' } : undefined}
-      >
-        {btnLabel}
-      </button>
+      {ctrl ? (
+        // SANDBOX : −1 (retrait direct) à gauche + bouton d'allocation (+1) qui garde les libellés de gating.
+        <div className="mt-1 flex gap-1.5">
+          <button
+            onClick={() => ctrl.onRemove(node.id)}
+            disabled={rank <= 0}
+            className="shrink-0 rounded-lg bg-slate-800 px-3 py-2 text-xs font-bold text-slate-300 transition-colors hover:bg-slate-700 disabled:opacity-30"
+          >
+            −1{node.maxRank > 1 && rank > 0 ? ` (${rank}→${rank - 1})` : ''}
+          </button>
+          <button
+            onClick={() => ctrl.onAllocate(node.id)}
+            disabled={!can}
+            className="flex-1 rounded-lg py-2 text-xs font-bold transition-colors disabled:bg-slate-800 disabled:text-slate-500"
+            style={can ? { background: meta.color, color: '#0b1120' } : undefined}
+          >
+            {btnLabel}
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={() => (isPantheon ? allocatePantheon : allocateTalent)(node.id)}
+          disabled={!can}
+          className="mt-1 w-full rounded-lg py-2 text-xs font-bold transition-colors disabled:bg-slate-800 disabled:text-slate-500"
+          style={can ? { background: meta.color, color: '#0b1120' } : undefined}
+        >
+          {btnLabel}
+        </button>
+      )}
     </div>
   )
 }
@@ -910,6 +976,21 @@ function RespecBar({ char }: { char: { level: number; talents: Record<string, nu
       className="flex-1 rounded-lg bg-slate-800 py-1.5 text-[11px] text-slate-300 hover:bg-slate-700 disabled:opacity-40"
     >
       Réinitialiser · 💰 {respecCost.toLocaleString('fr-FR')}
+    </ConfirmButton>
+  )
+}
+
+/** SANDBOX : réinitialise la copie dédiée (sans toucher la vraie partie). Double-tap anti-erreur. */
+function SandboxResetBar({ talents, onReset }: { talents: Record<string, number>; onReset: () => void }) {
+  const refundable = Object.values(talents).reduce((a, b) => a + b, 0) - (talents.co_start ?? 0)
+  return (
+    <ConfirmButton
+      onConfirm={onReset}
+      disabled={refundable <= 0}
+      confirmLabel="⚠ Réinitialiser l'arbre ?"
+      className="flex-1 rounded-lg bg-slate-800 py-1.5 text-[11px] text-slate-300 hover:bg-slate-700 disabled:opacity-40"
+    >
+      ↺ Réinitialiser (chemin de classe)
     </ConfirmButton>
   )
 }
