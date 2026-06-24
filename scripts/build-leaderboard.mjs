@@ -11,18 +11,20 @@ const load = async (entry) => {
   return import('data:text/javascript;base64,' + Buffer.from(res.outputFiles[0].text).toString('base64'))
 }
 const M = await load(`
-  export { runSim, getClassPreset, initTalents, SIM_CLASSES, SIM_RAIDS, SIM_GEMS, SIM_RUNES, SIM_UNIQUES } from './src/game/simulator.ts'
+  export { runSim, getClassPreset, initTalents, SIM_CLASSES, SIM_RAIDS, SIM_GEMS, SIM_RUNES, SIM_UNIQUES, SIM_SLOTS } from './src/game/simulator.ts'
   export { REFERENCE_BUILDS } from './src/game/referenceBuilds.ts'
   export { decodeBuild } from './src/game/buildCode.ts'
   export { setGlobalCombatMods } from './src/game/character.ts'
   export { getPower, powerSummary } from './src/game/powers.ts'
   export { DAMAGE_TYPES } from './src/game/damage.ts'
   export { TIME_RUNES } from './src/game/enchants.ts'
+  export { RARITIES } from './src/game/rarities.ts'
+  export { ALL_STAT_META } from './src/game/stats.ts'
   export { getTalent, CONSTELLATIONS, talentsByConstellation } from './src/game/talents.ts'
 `)
 const {
-  runSim, getClassPreset, initTalents, SIM_CLASSES, SIM_RAIDS, SIM_GEMS, SIM_RUNES, SIM_UNIQUES,
-  REFERENCE_BUILDS, decodeBuild, setGlobalCombatMods, getPower, powerSummary, DAMAGE_TYPES, TIME_RUNES,
+  runSim, getClassPreset, initTalents, SIM_CLASSES, SIM_RAIDS, SIM_GEMS, SIM_RUNES, SIM_UNIQUES, SIM_SLOTS,
+  REFERENCE_BUILDS, decodeBuild, setGlobalCombatMods, getPower, powerSummary, DAMAGE_TYPES, TIME_RUNES, RARITIES, ALL_STAT_META,
   getTalent, CONSTELLATIONS, talentsByConstellation,
 } = M
 setGlobalCombatMods({ power: 1, attackSpeed: 1, vitality: 1 })
@@ -76,6 +78,43 @@ const constToClass = new Map()
 for (const c of BASE_CLASSES) for (const con of c.cons) constToClass.set(con, c.id)
 const classMeta = (clsId) => { const m = CONSTELLATIONS[clsId]; return m ? { icon: m.icon, label: m.name, color: m.color } : (clsMap.get(clsId) ?? { icon: '🛡️', label: clsId, color: '#a78bfa' }) }
 
+// CARTE D'ÉQUIPEMENT (imports : vrais items) — par emplacement : item + stat primaire + lignes + gemmes + unique.
+function memberEquip(imp) {
+  if (!imp?.equipment) return []
+  const out = []
+  for (const s of SIM_SLOTS) {
+    const it = imp.equipment[s.id]; if (!it) continue
+    const rar = RARITIES[it.rarity] || { name: it.rarity, color: '#cbd5e1' }
+    const lines = (it.affixes || []).map((a) => {
+      if (a.kind === 'stat') { const sm = ALL_STAT_META[a.stat]; return { label: '+' + a.value + ' ' + (sm?.short ?? a.stat), color: sm?.color ?? '#cbd5e1' } }
+      const dt = DAMAGE_TYPES[a.type]
+      return { label: (a.kind === 'resist' ? 'Rés ' : '+') + a.value + '% ' + (dt?.icon ?? a.type), color: dt?.color ?? '#cbd5e1' }
+    })
+    const pm = ALL_STAT_META[it.primary]
+    out.push({
+      slot: s.name, slotIcon: s.icon, name: it.name, rarity: rar.name, color: rar.color, ilvl: it.ilvl, stars: it.stars ?? 0,
+      primary: pm ? { label: '+' + it.primaryValue + ' ' + (pm.short ?? it.primary), color: pm.color } : null, end: it.endurance ?? 0,
+      element: it.damageType ? { icon: DAMAGE_TYPES[it.damageType].icon, name: DAMAGE_TYPES[it.damageType].name, color: DAMAGE_TYPES[it.damageType].color } : null,
+      lines, gems: (it.gems || []).map((g) => g.cond).filter(Boolean).map(gem).filter(Boolean), unique: it.unique ? unique(it.unique.id) : null,
+    })
+  }
+  return out
+}
+
+// Nœuds de talents ALLOUÉS (arbre de base) + leurs parents alloués → vue radiale du build.
+function memberTalentNodes(talents) {
+  const out = []
+  for (const [id, rank] of Object.entries(talents)) {
+    if (!rank || id === 'pa_start') continue
+    const node = getTalent(id); if (!node) continue
+    const meta = CONSTELLATIONS[node.constellation]
+    if (meta?.tree === 'pantheon') continue
+    const parents = id === 'co_start' ? [] : [...(node.requires || []), ...(node.requiresAll || [])].filter((r) => (talents[r] ?? 0) > 0)
+    out.push({ id, rank, c: node.constellation, tier: node.tier, name: node.name, kind: node.kind, color: meta?.color ?? '#94a3b8', power: node.unlockPower ? (getPower(node.unlockPower)?.name ?? null) : null, parents })
+  }
+  return out
+}
+
 // Compo d'UN membre depuis la config (gère membre importé = vrai Character).
 function memberComposition(m, cfg) {
   const imp = m.imported
@@ -116,7 +155,8 @@ function memberComposition(m, cfg) {
   const totalTalents = [...byConst.values()].reduce((a, b) => a + b, 0)
   return { talents, primary, ilvl, totalTalents, talentsGrouped,
     spells: spellIds.map(spell).filter(Boolean), gems: [...gems].map(gem).filter(Boolean),
-    runes: [...runes].map(rune).filter(Boolean), uniques: [...uniques].map(unique).filter(Boolean) }
+    runes: [...runes].map(rune).filter(Boolean), uniques: [...uniques].map(unique).filter(Boolean),
+    equip: memberEquip(imp), talentNodes: memberTalentNodes(talents) }
 }
 
 // 1) Rassembler + rejouer + extraire.
@@ -157,6 +197,7 @@ for (const e of entries) {
       level: m.imported?.level ?? m.level, ilvl: c.ilvl,
       dps: Math.round(rm.dps ?? 0), ehp: Math.round(rm.ehp ?? 0), hp: Math.round(rm.maxHp ?? 0),
       talents: c.talentsGrouped, totalTalents: c.totalTalents, spells: c.spells, gems: c.gems, runes: c.runes, uniques: c.uniques,
+      equip: c.equip, talentNodes: c.talentNodes,
     }
   })
   // Agrégats KPI.
@@ -265,6 +306,13 @@ const html = `<!DOCTYPE html>
   .mb .ms{margin-left:auto;display:flex;gap:13px;font-variant-numeric:tabular-nums;font-size:12px} .mb .ms .v{font-weight:700}
   .seg2{margin-top:9px} .seg2 .lab{font-size:9.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--mut2);margin-bottom:4px}
   .pills{display:flex;flex-wrap:wrap;gap:5px} .pill{background:#0d1422;border:1px solid var(--line);border-radius:8px;padding:3px 8px;font-size:12px}
+  .egrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:7px}
+  .ecard{background:#0d1422;border:1px solid var(--line);border-radius:10px;padding:7px 9px;font-size:11.5px;border-left-width:3px}
+  .ecard .etop{display:flex;gap:6px;align-items:baseline} .ecard .eslot{font-size:13px;flex:0 0 auto} .ecard .ename{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ecard .emeta{color:var(--mut2);font-size:10px;margin:1px 0 4px} .ecard .eprim{font-weight:700;font-size:12px}
+  .ecard .elines{display:flex;flex-wrap:wrap;gap:3px 7px;margin-top:3px} .ecard .eline{font-size:10.5px;font-variant-numeric:tabular-nums}
+  .ecard .egems{margin-top:4px;display:flex;gap:3px} .ecard .egem{cursor:help} .ecard .euniq{margin-top:4px;color:var(--gold);font-weight:600;font-size:11px;cursor:help}
+  svg.tree{width:100%;max-width:320px;height:auto;display:block;margin:2px auto} svg.tree .tnode{cursor:help} svg.tree .tnode:hover{stroke:#fff;stroke-width:1.5}
   .empty{color:var(--mut);text-align:center;padding:18px}
 
   /* stats communauté */
@@ -391,13 +439,51 @@ function renderControls(){
   const r=document.getElementById('ilvlr'); if(r) r.oninput=()=>{state.ilvl=+r.value;document.getElementById('ilo').textContent=r.value;renderList();};
 }
 
+// Grille d'ÉQUIPEMENT stylisée (par emplacement) : item coloré par rareté + stat primaire + lignes +
+// gemmes (survolables) + unique (survolable) + élément d'arme.
+function equipGrid(equip){
+  if(!equip||!equip.length) return '';
+  const cards=equip.map(it=>{
+    const lines=it.lines.map(l=>\`<span class="eline" style="color:\${esc(l.color)}">\${esc(l.label)}</span>\`).join('');
+    const gems=it.gems.map(g=>\`<span class="egem info" data-cat="gem" data-name="\${esc(g.name)}">\${esc(g.icon)}</span>\`).join('');
+    const uniq=it.unique?\`<div class="euniq info" data-cat="unique" data-name="\${esc(it.unique.name)}">✦ \${esc(it.unique.name)}</div>\`:'';
+    const elem=it.element?\` · <span style="color:\${esc(it.element.color)}">\${esc(it.element.icon)} \${esc(it.element.name)}</span>\`:'';
+    return \`<div class="ecard" style="border-color:\${esc(it.color)}55">
+      <div class="etop"><span class="eslot">\${esc(it.slotIcon)}</span><span class="ename" style="color:\${esc(it.color)}">\${esc(it.name)}</span></div>
+      <div class="emeta">iL\${it.ilvl} · \${esc(it.rarity)}\${it.stars?' · ⭐'+it.stars:''}\${elem}</div>
+      \${it.primary?\`<div class="eprim" style="color:\${esc(it.primary.color)}">\${esc(it.primary.label)}</div>\`:''}
+      <div class="elines">\${lines}\${it.end?\`<span class="eline" style="color:#8b97ad">+\${it.end} END</span>\`:''}</div>
+      \${gems?\`<div class="egems">\${gems}</div>\`:''}\${uniq}
+    </div>\`;
+  }).join('');
+  return \`<div class="seg2"><div class="lab">Équipement (\${equip.length})</div><div class="egrid">\${cards}</div></div>\`;
+}
+
+// Vue RADIALE de l'arbre : nœuds alloués positionnés par constellation (angle) × tier (rayon), reliés à
+// leurs parents alloués. Survol d'un nœud = nom + rang + sort débloqué. Cœur au centre.
+function treeSvg(nodes){
+  if(!nodes||nodes.length<=1) return '';
+  const W=300,H=300,cx=W/2,cy=H/2,R=27;
+  const cons=[...new Set(nodes.filter(n=>n.id!=='co_start').map(n=>n.c))];
+  const ang={}; cons.forEach((c,i)=>ang[c]=(i/Math.max(1,cons.length))*2*Math.PI - Math.PI/2);
+  const pos={co_start:{x:cx,y:cy}};
+  const byC={}; nodes.forEach(n=>{ if(n.id==='co_start')return; (byC[n.c]=byC[n.c]||[]).push(n); });
+  for(const c in byC){ const byT={}; byC[c].forEach(n=>{(byT[n.tier]=byT[n.tier]||[]).push(n);});
+    for(const t in byT){ const arr=byT[t], r=Math.max(1,+t)*R; arr.forEach((n,i)=>{ const sp=(i-(arr.length-1)/2)*0.22; const a=ang[c]+sp; pos[n.id]={x:cx+Math.cos(a)*r,y:cy+Math.sin(a)*r}; }); } }
+  let lines=''; nodes.forEach(n=>{ (n.parents||[]).forEach(p=>{ if(pos[p]&&pos[n.id]) lines+=\`<line x1="\${pos[p].x.toFixed(1)}" y1="\${pos[p].y.toFixed(1)}" x2="\${pos[n.id].x.toFixed(1)}" y2="\${pos[n.id].y.toFixed(1)}" stroke="#2b3954" stroke-width="1.3"/>\`; }); });
+  let dots=\`<circle cx="\${cx}" cy="\${cy}" r="5" fill="#e2e8f0"><title>Cœur</title></circle>\`;
+  nodes.forEach(n=>{ if(n.id==='co_start')return; const p=pos[n.id]; if(!p)return; const rr=(n.kind==='keystone'||n.kind==='ability')?5.5:(n.kind==='notable'||n.kind==='gateway')?4:3; const lbl=esc(n.name)+(n.rank>1?' ·'+n.rank:'')+(n.power?' — '+esc(n.power):''); dots+=\`<circle class="tnode" cx="\${p.x.toFixed(1)}" cy="\${p.y.toFixed(1)}" r="\${rr}" fill="\${n.color}" stroke="#0a0f1a" stroke-width="1"><title>\${lbl}</title></circle>\`; });
+  return \`<div class="seg2"><div class="lab">Arbre de talents (\${nodes.length-1} nœuds — survole un point)</div><svg viewBox="0 0 \${W} \${H}" class="tree">\${lines}\${dots}</svg></div>\`;
+}
+
 function memberCard(m){
   const seg=(lab,items)=>items&&items.length?\`<div class="seg2"><div class="lab">\${lab}</div><div class="pills">\${items}</div></div>\`:'';
-  const tal=m.talents.map(t=>\`<span class="pill" style="background:\${esc(t.color)}1f;color:\${esc(t.color)};border-color:transparent">\${esc(t.icon)} \${esc(t.name)} ·\${t.points}</span>\`).join('');
   const P=(arr,cat)=>arr.map(x=>\`<span class="pill info" data-cat="\${cat}" data-name="\${esc(x.name)}">\${esc(x.icon||'✦')} \${esc(x.name)}</span>\`).join('');
+  const hasEquip=m.equip&&m.equip.length;
   return \`<div class="mb"><div class="mh"><span class="mn">\${esc(m.clsIcon)} \${esc(m.name)}</span><span class="mtag">\${esc(m.clsLabel)} · N\${m.level} · ilvl \${m.ilvl} · \${m.totalTalents} talents</span>
     <span class="ms"><span><span class="v" style="color:var(--dps)">\${fmt(m.dps)}</span> dps</span><span><span class="v" style="color:var(--ehp)">\${fmt(m.ehp)}</span> survie</span><span><span class="v" style="color:var(--hp)">\${fmt(m.hp)}</span> pv</span></span></div>
-    \${seg('Talents',tal)}\${seg('Capacités',P(m.spells,'spell'))}\${seg('Gemmes',P(m.gems,'gem'))}\${seg('Runes',P(m.runes,'rune'))}\${seg('Uniques',P(m.uniques,'unique'))}</div>\`;
+    \${equipGrid(m.equip)}\${treeSvg(m.talentNodes)}
+    \${seg('Capacités',P(m.spells,'spell'))}\${seg('Runes',P(m.runes,'rune'))}\${hasEquip?'':seg('Gemmes',P(m.gems,'gem'))+seg('Uniques',P(m.uniques,'unique'))}</div>\`;
 }
 
 function renderList(){
