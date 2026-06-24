@@ -20,12 +20,12 @@ const M = await load(`
   export { TIME_RUNES } from './src/game/enchants.ts'
   export { RARITIES } from './src/game/rarities.ts'
   export { ALL_STAT_META } from './src/game/stats.ts'
-  export { getTalent, CONSTELLATIONS, talentsByConstellation } from './src/game/talents.ts'
+  export { getTalent, CONSTELLATIONS, talentsByConstellation, TALENTS, CONSTELLATION_LIST, nodeTree } from './src/game/talents.ts'
 `)
 const {
   runSim, getClassPreset, initTalents, SIM_CLASSES, SIM_RAIDS, SIM_GEMS, SIM_RUNES, SIM_UNIQUES, SIM_SLOTS,
   REFERENCE_BUILDS, decodeBuild, setGlobalCombatMods, getPower, powerSummary, DAMAGE_TYPES, TIME_RUNES, RARITIES, ALL_STAT_META,
-  getTalent, CONSTELLATIONS, talentsByConstellation,
+  getTalent, CONSTELLATIONS, talentsByConstellation, TALENTS, CONSTELLATION_LIST, nodeTree,
 } = M
 setGlobalCombatMods({ power: 1, attackSpeed: 1, vitality: 1 })
 
@@ -79,6 +79,45 @@ const constToClass = new Map()
 for (const c of BASE_CLASSES) for (const con of c.cons) constToClass.set(con, c.id)
 const classMeta = (clsId) => { const m = CONSTELLATIONS[clsId]; return m ? { icon: m.icon, label: m.name, color: m.color } : (clsMap.get(clsId) ?? { icon: '🛡️', label: clsId, color: '#a78bfa' }) }
 
+// PORT FIDÈLE de computeRadialLayout (TalentTree.tsx) — dendrogramme radial IDENTIQUE au jeu : arbre
+// couvrant par BFS (rayon = profondeur × RING, angle = répartition des feuilles), carrefours au milieu de
+// leurs deux voies. On ne garde que les POSITIONS (nodeId → {x,y}). Le rendu n'affiche que les nœuds
+// alloués, mais à leurs VRAIES coordonnées du jeu.
+const RING = 82
+const CIDX = new Map(CONSTELLATION_LIST.map((c, i) => [c, i]))
+const sortKey = (n) => (CIDX.get(n.constellation) ?? 0) * 1000 + n.tier
+const isCarrefour = (id) => id.startsWith('xr_')
+function radialPositions(tree) {
+  const nodes = TALENTS.filter((t) => nodeTree(t) === tree)
+  const byId = new Map(nodes.map((t) => [t.id, t]))
+  const adj = new Map()
+  const addEdge = (a, b) => { if (!adj.has(a)) adj.set(a, new Set()); if (!adj.has(b)) adj.set(b, new Set()); adj.get(a).add(b); adj.get(b).add(a) }
+  for (const t of nodes) { if (isCarrefour(t.id)) continue; for (const r of [...(t.requires ?? []), ...(t.requiresAll ?? [])]) if (byId.has(r) && !isCarrefour(r)) addEdge(r, t.id) }
+  const ROOT = tree === 'pantheon' ? 'pa_start' : 'co_start'
+  const depth = new Map([[ROOT, 0]]); const children = new Map(); const queue = [ROOT]
+  while (queue.length) {
+    const cur = queue.shift()
+    const neigh = [...(adj.get(cur) ?? [])].sort((a, b) => sortKey(byId.get(a)) - sortKey(byId.get(b)) || (a < b ? -1 : 1))
+    for (const nx of neigh) { if (depth.has(nx)) continue; depth.set(nx, depth.get(cur) + 1); const arr = children.get(cur) ?? []; arr.push(nx); children.set(cur, arr); queue.push(nx) }
+  }
+  for (const t of nodes) { if (depth.has(t.id) || isCarrefour(t.id)) continue; depth.set(t.id, 1); const arr = children.get(ROOT) ?? []; arr.push(t.id); children.set(ROOT, arr) }
+  const totalLeaves = [...depth.keys()].filter((id) => !(children.get(id)?.length)).length || 1
+  let leaf = 0; const angle = new Map()
+  const assign = (id) => { const ch = children.get(id) ?? []; if (!ch.length) { const a = ((leaf + 0.5) / totalLeaves) * Math.PI * 2; leaf++; angle.set(id, a); return a } let s = 0; for (const c of ch) s += assign(c); const a = s / ch.length; angle.set(id, a); return a }
+  assign(ROOT)
+  const pos = new Map()
+  for (const [id, d] of depth) { const r = d * RING, a = angle.get(id) ?? 0; pos.set(id, { x: Math.cos(a) * r, y: Math.sin(a) * r }) }
+  for (const t of nodes) {
+    if (!isCarrefour(t.id)) continue
+    const reqs = (t.requires ?? []).filter((r) => pos.has(r))
+    if (reqs.length >= 2) { const a = pos.get(reqs[0]), b = pos.get(reqs[1]); pos.set(t.id, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }) }
+    else if (reqs.length === 1) { const a = pos.get(reqs[0]); pos.set(t.id, { x: a.x * 1.15, y: a.y * 1.15 }) }
+    else pos.set(t.id, { x: 0, y: 0 })
+  }
+  return pos
+}
+const BASE_POS = radialPositions('base')
+
 // CARTE D'ÉQUIPEMENT (imports : vrais items) — par emplacement : item + stat primaire + lignes + gemmes + unique.
 function memberEquip(imp) {
   if (!imp?.equipment) return []
@@ -112,10 +151,11 @@ function memberTalentNodes(talents) {
     if (meta?.tree === 'pantheon') continue
     const parents = id === 'co_start' ? [] : [...(node.requires || []), ...(node.requiresAll || [])].filter((r) => (talents[r] ?? 0) > 0)
     const power = node.unlockPower ? (getPower(node.unlockPower)?.name ?? null) : null
+    const p = BASE_POS.get(id) ?? { x: 0, y: 0 }
     // clé d'INFO talent UNIQUE (nom + rang) → le clic sur un nœud affiche sa carte.
     const key = node.name + (node.maxRank > 1 ? ' (' + rank + '/' + node.maxRank + ')' : '')
     if (!INFO.talent[key]) INFO.talent[key] = { name: node.name, rank, maxRank: node.maxRank, kind: KIND_LABEL[node.kind] ?? node.kind, constellation: meta?.name, color: meta?.color, desc: node.description, power }
-    out.push({ id, key, rank, c: node.constellation, tier: node.tier, name: node.name, kind: node.kind, color: meta?.color ?? '#94a3b8', power, parents })
+    out.push({ id, key, rank, x: p.x, y: p.y, name: node.name, kind: node.kind, color: meta?.color ?? '#94a3b8', power, parents })
   }
   return out
 }
@@ -224,7 +264,7 @@ for (const e of entries) {
     chars: members.length, solo: members.length === 1, level, ilvl,
     contentKind: cfg.content?.kind ?? 'raid', contentLabel: (cfg.content?.kind === 'dungeon' ? 'Donjon' : 'Raid'),
     classes: [...new Set(members.map((m) => m.cls))],
-    tmax: r.tmax, dpsTotal: members.reduce((a, m) => a + m.dps, 0), ehpMin: Math.min(...members.map((m) => m.ehp)),
+    tmax: r.tmax, dpsTotal: members.reduce((a, m) => a + m.dps, 0), ehpTeam: Math.round(mean(members.map((m) => m.ehp))),
     members,
   })
 }
@@ -374,7 +414,7 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt
 const fmt = n => n>=1e9?(n/1e9).toFixed(2)+'Md':n>=1e6?(n/1e6).toFixed(2)+'M':n>=1e3?(n/1e3).toFixed(1)+'k':Math.round(n).toString();
 const MEDAL = {1:'🥇',2:'🥈',3:'🥉'};
 const state = { sort:'tmax', cls:null, content:'all', team:'all', ilvl:ILVL_MIN, chart:'arch' };
-const SORTS = { tmax:{lab:'🏆 Tier',key:d=>[d.tmax,d.dpsTotal]}, dps:{lab:'⚔ DPS',key:d=>[d.dpsTotal]}, ehp:{lab:'🛡 Survie',key:d=>[d.ehpMin]} };
+const SORTS = { tmax:{lab:'🏆 Tier',key:d=>[d.tmax,d.dpsTotal]}, dps:{lab:'⚔ DPS',key:d=>[d.dpsTotal]}, ehp:{lab:'🛡 Survie',key:d=>[d.ehpTeam]} };
 const cmp = (a,b)=>{const ka=SORTS[state.sort].key(a),kb=SORTS[state.sort].key(b);for(let i=0;i<ka.length;i++){if(kb[i]!==ka[i])return kb[i]-ka[i];}return 0;};
 
 function pass(d){
@@ -425,7 +465,7 @@ function renderChart(){
   const svg=document.getElementById('svg'); if(!svg) return;
   const W=700,H=300,pl=46,pr=18,pt=14,pb=34;
   const mode=state.chart;
-  const xv=d=>mode==='arch'?d.dpsTotal:d.level, yv=d=>mode==='arch'?d.ehpMin:d.tmax;
+  const xv=d=>mode==='arch'?d.dpsTotal:d.level, yv=d=>mode==='arch'?d.ehpTeam:d.tmax;
   const xs=DATA.map(xv),ys=DATA.map(yv);
   const xmin=Math.min(...xs),xmax=Math.max(...xs),ymin=Math.min(...ys),ymax=Math.max(...ys);
   const X=v=>mode==='arch'?logScale(v,xmin,xmax,pl,W-pr):linScale(v,Math.min(xmin,1),xmax,pl,W-pr);
@@ -436,7 +476,7 @@ function renderChart(){
   g+=\`<text class="axt" x="\${pl}" y="\${H-8}">\${xlab}</text>\`;
   g+=\`<text class="axt" x="6" y="\${pt+8}" transform="rotate(0)">\${ylab}</text>\`;
   const tier=t=>5+Math.min(7,Math.max(0,t))*0.7;
-  const dots=DATA.map(d=>\`<circle class="dot" cx="\${X(xv(d)).toFixed(1)}" cy="\${Y(yv(d)).toFixed(1)}" r="\${tier(d.tmax).toFixed(1)}" fill="\${d.color}" fill-opacity="0.82" stroke="#0a0f1a" stroke-width="1.5"><title>\${esc(d.name)} — \${esc(d.clsLabel)} · T\${d.tmax} · \${fmt(d.dpsTotal)} dps · \${fmt(d.ehpMin)} survie · niv \${d.level}</title></circle>\`).join('');
+  const dots=DATA.map(d=>\`<circle class="dot" cx="\${X(xv(d)).toFixed(1)}" cy="\${Y(yv(d)).toFixed(1)}" r="\${tier(d.tmax).toFixed(1)}" fill="\${d.color}" fill-opacity="0.82" stroke="#0a0f1a" stroke-width="1.5"><title>\${esc(d.name)} — \${esc(d.clsLabel)} · T\${d.tmax} · \${fmt(d.dpsTotal)} dps · \${fmt(d.ehpTeam)} survie · niv \${d.level}</title></circle>\`).join('');
   svg.innerHTML=g+dots;
   // legend = classes présentes
   const seen={}; DATA.forEach(d=>seen[d.clsLabel]=d.color);
@@ -475,21 +515,17 @@ function equipGrid(equip){
   return \`<div class="egrid">\${cards}</div>\`;
 }
 
-// Corps de l'arbre RADIAL : nœuds alloués (angle=constellation × rayon=tier) reliés à leurs parents,
-// dans un <g> transformable (pan/zoom) ; chaque nœud est cliquable (data-cat="talent").
+// Corps de l'arbre RADIAL — VRAIE disposition du jeu : chaque nœud à ses coordonnées réelles
+// (BASE_POS), viewBox ajusté à la bbox des nœuds alloués, dans un <g> transformable (pan/zoom).
 function treeBody(nodes){
   if(!nodes||nodes.length<=1) return '';
-  const W=320,H=320,cx=W/2,cy=H/2,R=29;
-  const cons=[...new Set(nodes.filter(n=>n.id!=='co_start').map(n=>n.c))];
-  const ang={}; cons.forEach((c,i)=>ang[c]=(i/Math.max(1,cons.length))*2*Math.PI - Math.PI/2);
-  const pos={co_start:{x:cx,y:cy}};
-  const byC={}; nodes.forEach(n=>{ if(n.id==='co_start')return; (byC[n.c]=byC[n.c]||[]).push(n); });
-  for(const c in byC){ const byT={}; byC[c].forEach(n=>{(byT[n.tier]=byT[n.tier]||[]).push(n);});
-    for(const t in byT){ const arr=byT[t], r=Math.max(1,+t)*R; arr.forEach((n,i)=>{ const sp=(i-(arr.length-1)/2)*0.22; const a=ang[c]+sp; pos[n.id]={x:cx+Math.cos(a)*r,y:cy+Math.sin(a)*r}; }); } }
-  let lines=''; nodes.forEach(n=>{ (n.parents||[]).forEach(p=>{ if(pos[p]&&pos[n.id]) lines+=\`<line x1="\${pos[p].x.toFixed(1)}" y1="\${pos[p].y.toFixed(1)}" x2="\${pos[n.id].x.toFixed(1)}" y2="\${pos[n.id].y.toFixed(1)}" stroke="#2b3954" stroke-width="1.3"/>\`; }); });
-  let dots=\`<circle cx="\${cx}" cy="\${cy}" r="5.5" fill="#e2e8f0"/>\`;
-  nodes.forEach(n=>{ if(n.id==='co_start')return; const p=pos[n.id]; if(!p)return; const rr=(n.kind==='keystone'||n.kind==='ability')?6:(n.kind==='notable'||n.kind==='gateway')?4.5:3.4; dots+=\`<circle class="tnode info" data-cat="talent" data-name="\${esc(n.key)}" cx="\${p.x.toFixed(1)}" cy="\${p.y.toFixed(1)}" r="\${rr}" fill="\${n.color}" stroke="#0a0f1a" stroke-width="1"/>\`; });
-  return \`<div class="treewrap"><svg viewBox="0 0 \${W} \${H}"><g class="tg">\${lines}\${dots}</g></svg>
+  const xs=nodes.map(n=>n.x), ys=nodes.map(n=>n.y), pad=70;
+  const minx=Math.min(...xs)-pad, miny=Math.min(...ys)-pad;
+  const vw=Math.max(160,Math.max(...xs)+pad-minx), vh=Math.max(160,Math.max(...ys)+pad-miny);
+  const byId={}; nodes.forEach(n=>byId[n.id]=n);
+  let lines=''; nodes.forEach(n=>{ (n.parents||[]).forEach(p=>{ const pp=byId[p]; if(pp) lines+=\`<line x1="\${pp.x.toFixed(1)}" y1="\${pp.y.toFixed(1)}" x2="\${n.x.toFixed(1)}" y2="\${n.y.toFixed(1)}" stroke="#2b3954" stroke-width="2.4"/>\`; }); });
+  let dots=''; nodes.forEach(n=>{ if(n.id==='co_start'){ dots+=\`<circle cx="\${n.x.toFixed(1)}" cy="\${n.y.toFixed(1)}" r="11" fill="#e2e8f0"/>\`; return; } const rr=(n.kind==='keystone'||n.kind==='ability')?13:(n.kind==='notable'||n.kind==='gateway')?10:7.5; dots+=\`<circle class="tnode info" data-cat="talent" data-name="\${esc(n.key)}" cx="\${n.x.toFixed(1)}" cy="\${n.y.toFixed(1)}" r="\${rr}" fill="\${n.color}" stroke="#0a0f1a" stroke-width="2"/>\`; });
+  return \`<div class="treewrap"><svg viewBox="\${minx.toFixed(0)} \${miny.toFixed(0)} \${vw.toFixed(0)} \${vh.toFixed(0)}" preserveAspectRatio="xMidYMid meet"><g class="tg">\${lines}\${dots}</g></svg>
     <div class="tzoom"><button data-z="out" aria-label="Dézoomer">−</button><button data-z="in" aria-label="Zoomer">+</button><button data-z="reset" aria-label="Recentrer">⌖</button></div>
     <div class="thint">glisse pour déplacer · molette/boutons pour zoomer · clique un nœud</div></div>\`;
 }
@@ -514,7 +550,7 @@ function renderList(){
   document.getElementById('bcount').textContent=rows.length;
   const el=document.getElementById('list');
   if(!rows.length){el.innerHTML='<div class="empty">Aucun build ne correspond à ces filtres.</div>';return;}
-  const primary=d=>state.sort==='dps'?{v:fmt(d.dpsTotal),l:'dps'}:state.sort==='ehp'?{v:fmt(d.ehpMin),l:'survie'}:{v:'T'+d.tmax,l:'tier'};
+  const primary=d=>state.sort==='dps'?{v:fmt(d.dpsTotal),l:'dps'}:state.sort==='ehp'?{v:fmt(d.ehpTeam),l:'survie'}:{v:'T'+d.tmax,l:'tier'};
   el.innerHTML=rows.map(d=>{const p=primary(d);return \`
     <div class="row" data-r="\${d.rank}">
       <div class="rhead">
@@ -522,7 +558,7 @@ function renderList(){
         <span class="who"><span class="av" style="background:\${d.color}1f;color:\${d.color}">\${esc(d.members[0]?.clsIcon||'⚔️')}</span><span style="min-width:0"><span class="nt">\${esc(d.name)}</span><span class="meta">\${d.ref?'★ réf':esc(d.by)} · \${d.chars} perso\${d.chars>1?'s':''} · niv \${d.level} · ilvl \${d.ilvl} · \${esc(d.contentLabel)}</span></span></span>
         <span class="stat"><b style="color:var(--orange)">\${p.v}</b><label>\${p.l}</label></span>
         <span class="stat dim hidesm"><b style="color:var(--dps)">\${fmt(d.dpsTotal)}</b><label>dps</label></span>
-        <span class="stat dim hidesm"><b style="color:var(--ehp)">\${fmt(d.ehpMin)}</b><label>survie</label></span>
+        <span class="stat dim hidesm"><b style="color:var(--ehp)">\${fmt(d.ehpTeam)}</b><label>survie</label></span>
         <span class="tbadge">T\${d.tmax}</span>
         <span class="chev">▸</span>
       </div>
@@ -580,9 +616,9 @@ document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest
 // ARBRE : pan (glisser) + zoom (molette/boutons) du <g class="tg"> + clic sur un nœud = sa carte.
 const tgGet=g=>({tx:+(g.dataset.tx||0),ty:+(g.dataset.ty||0),s:+(g.dataset.s||1)});
 const tgSet=(g,st)=>{g.dataset.tx=st.tx;g.dataset.ty=st.ty;g.dataset.s=st.s;g.setAttribute('transform','translate('+st.tx.toFixed(1)+' '+st.ty.toFixed(1)+') scale('+st.s.toFixed(3)+')');};
-const tgZoom=(g,f)=>{const st=tgGet(g),ns=Math.max(0.5,Math.min(4,st.s*f)),C=160;st.tx+=(st.s-ns)*C;st.ty+=(st.s-ns)*C;st.s=ns;tgSet(g,st);};
+const tgZoom=(g,f)=>{const vb=g.ownerSVGElement.viewBox.baseVal,st=tgGet(g),ns=Math.max(0.5,Math.min(8,st.s*f));const cx=vb.x+vb.width/2,cy=vb.y+vb.height/2;st.tx+=(st.s-ns)*cx;st.ty+=(st.s-ns)*cy;st.s=ns;tgSet(g,st);};
 let tdrag=null;
-document.addEventListener('pointerdown',e=>{const w=e.target.closest&&e.target.closest('.treewrap');if(!w||(e.target.closest&&e.target.closest('.tzoom')))return;const g=w.querySelector('.tg');if(!g)return;const svg=w.querySelector('svg');const sc=320/((svg&&svg.clientWidth)||320);tdrag={g,x:e.clientX,y:e.clientY,st:tgGet(g),sc,moved:false,node:e.target.closest('.tnode')};try{w.setPointerCapture(e.pointerId)}catch(_){}});
+document.addEventListener('pointerdown',e=>{const w=e.target.closest&&e.target.closest('.treewrap');if(!w||(e.target.closest&&e.target.closest('.tzoom')))return;const g=w.querySelector('.tg');if(!g)return;const svg=w.querySelector('svg');const sc=(svg&&svg.viewBox.baseVal.width||320)/((svg&&svg.clientWidth)||320);tdrag={g,x:e.clientX,y:e.clientY,st:tgGet(g),sc,moved:false,node:e.target.closest('.tnode')};try{w.setPointerCapture(e.pointerId)}catch(_){}});
 document.addEventListener('pointermove',e=>{if(!tdrag)return;const dx=e.clientX-tdrag.x,dy=e.clientY-tdrag.y;if(Math.abs(dx)>3||Math.abs(dy)>3)tdrag.moved=true;tgSet(tdrag.g,{tx:tdrag.st.tx+dx*tdrag.sc,ty:tdrag.st.ty+dy*tdrag.sc,s:tdrag.st.s});});
 document.addEventListener('pointerup',()=>{if(!tdrag)return;if(!tdrag.moved&&tdrag.node){showTip(tdrag.node);pinTip(tdrag.node);}tdrag=null;});
 document.addEventListener('wheel',e=>{const w=e.target.closest&&e.target.closest('.treewrap');if(!w)return;e.preventDefault();const g=w.querySelector('.tg');if(g)tgZoom(g,e.deltaY<0?1.15:0.87);},{passive:false});
