@@ -103,8 +103,10 @@ simule (`partyCombatStep`, solo) le tier de raid / niveau de donjon MAX battable
 lectures : **écart de DPS entre classes** (déséquilibre), **offensif vs défensif** (les monstres
 forcent-ils la défense ?) et **impact des gemmes** (loadout offensif vs défensif via `condGemMods` —
 la défense anti-télégraphe fait-elle gagner du tier ?). Extensible : ajoute des entrées à
-`ARCHETYPES` (4 classes : Guerrier/Voleur/Mage/Chasseur), `ORIENTATIONS`, `GEMS_OFF`/`GEMS_DEF`.
-Couche suivante : runes par build + loadouts de gemmes sur toute la matrice.
+`ARCHETYPES` (4 classes : Guerrier/Voleur/Mage/Chasseur), `ORIENTATIONS`, et les `KIT_*`
+(gemmes + runes). Un **kit standard** (gemmes+runes) est appliqué à toute la matrice ; la section
+impact compare sans-kit / kit offensif / kit défensif. (Constat : avec kit, l'orientation
+**équilibrée** atteint souvent le tier le plus haut — ni full-offense ni full-defense.)
 
 ### `sandbox-sim.mjs` — `npm run sandbox -- ta-config.json`
 **Bac à sable config-driven** (la fondation headless de la future UI) : un JSON décrit une ÉQUIPE

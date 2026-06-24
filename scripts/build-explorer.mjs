@@ -23,11 +23,12 @@ const M = await load(`
   export { makeDungeonEnemy, dungeonFights, DUNGEONS } from './src/game/dungeons.ts'
   export { partyCombatStep, resetAllCooldowns, fuelReset, crescendoReset } from './src/game/combatEngine.ts'
   export { condGemMods } from './src/game/condGems.ts'
+  export { timeRuneMods } from './src/game/enchants.ts'
 `)
 const {
   makeCharacter, charDps, charMaxHp, charEhp, charDerived, charDamageProfile, charCombatMods, setGlobalCombatMods,
   profileDamageMult, generateItem, EQUIP_SLOTS, RAID_LIST, makeRaidBoss, raidBerserkTime,
-  makeDungeonEnemy, dungeonFights, DUNGEONS, partyCombatStep, resetAllCooldowns, fuelReset, crescendoReset, condGemMods,
+  makeDungeonEnemy, dungeonFights, DUNGEONS, partyCombatStep, resetAllCooldowns, fuelReset, crescendoReset, condGemMods, timeRuneMods,
 } = M
 setGlobalCombatMods({ power: 1, attackSpeed: 1, vitality: 1 }) // pas d'upgrades de compte (comparaison pure)
 
@@ -50,9 +51,14 @@ const ARCHETYPES = [
     support: [], powers: ['ch_tir', 'me_cmd', 'me_morsure', 'me_saignee', 'me_curee'], passives: ['pas_cruaute', 'pas_perforation', 'pas_celerite'] },
 ]
 const ORIENTATIONS = ['offensif', 'equilibre', 'defensif']
-// Loadouts de gemmes de condition (id `cond` posé sur le stuff) — pour la section « impact des gemmes ».
+// KITS (gemmes de condition + runes de temps). Un `kit` = { gems:[ids], runes:[ids] }.
 const GEMS_OFF = ['overkill', 'tambour', 'hemorragie']   // rythme : offensif
 const GEMS_DEF = ['sixieme', 'tresorerie', 'souffle']    // anti-télégraphe + bouclier + auto-soin
+const KIT_OFF = { gems: GEMS_OFF, runes: ['premierElan', 'hateFunebre'] }
+const KIT_DEF = { gems: GEMS_DEF, runes: ['sursis', 'boucle'] }
+const NO_KIT = { gems: [], runes: [] }
+// Kit STANDARD appliqué à TOUTE la matrice (mixte pratique) — la compétition « comme on joue vraiment ».
+const KIT_STD = { gems: ['sixieme', 'tresorerie', 'overkill'], runes: ['premierElan', 'sursis'] }
 
 // Bande de progression évaluée (un point fin de jeu, calé sur la table de ttk-sim/dungeon-sim).
 const ILVL = 200, RARITY = 'mythique', LEVEL = 75, BEST_STAGE = 300
@@ -91,10 +97,12 @@ function avgStats(arch, orient, n = 8) {
 }
 
 // Combat SOLO via le vrai moteur jusqu'au kill (gagné) ou wipe/temps (perdu).
-// `gemIds` → gemmes de condition posées + `mods` (condGemMods) passés au moteur, comme tickRaid.
-function simWin(arch, orientation, gemIds, makeEnemy, timeLimit) {
-  let p = [gearedChar(arch, orientation, gemIds)]
-  const mods = gemIds.length ? { heroMult: 1, cond: condGemMods(p) } : undefined
+// `kit` = { gems:[ids], runes:[ids] } → gemmes posées (condGemMods) + runes (timeRuneMods), comme tickRaid.
+function simWin(arch, orientation, kit, makeEnemy, timeLimit) {
+  let p = [gearedChar(arch, orientation, kit.gems)]
+  const mods = (kit.gems.length || kit.runes.length)
+    ? { heroMult: 1, cond: condGemMods(p), runes: timeRuneMods(new Set(kit.runes)) }
+    : undefined
   resetAllCooldowns(p); fuelReset(); crescendoReset()
   let enemy = makeEnemy(1)
   for (let t = 0; t < timeLimit && enemy.hp > 0 && p[0].hp > 0; t += 0.2) {
@@ -103,34 +111,35 @@ function simWin(arch, orientation, gemIds, makeEnemy, timeLimit) {
   }
   return enemy.hp <= 0
 }
-const beats = (arch, orient, gemIds, makeEnemy, timeLimit) => {
-  let w = 0; for (let i = 0; i < 3; i++) if (simWin(arch, orient, gemIds, makeEnemy, timeLimit)) w++; return w >= 2 // majorité (2/3) : battable de façon fiable
+const beats = (arch, orient, kit, makeEnemy, timeLimit) => {
+  let w = 0; for (let i = 0; i < 3; i++) if (simWin(arch, orient, kit, makeEnemy, timeLimit)) w++; return w >= 2 // majorité (2/3) : battable de façon fiable
 }
 
 // Contenu de référence : 1er raid (Forge) pour le tier max, + un donjon « gros PV » pour le niveau max.
 const REF_RAID = RAID_LIST[0]
 const REF_RAID_EL = REF_RAID.element === 'rotating' ? 'arcane' : REF_RAID.element
 const REF_DUN = Object.values(DUNGEONS)[0]
-function maxRaidTier(arch, orient, gemIds = []) {
+function maxRaidTier(arch, orient, kit = NO_KIT) {
   let last = 0
-  for (let t = 1; t <= 15; t++) { if (beats(arch, orient, gemIds, (n) => makeRaidBoss(REF_RAID, t, REF_RAID_EL, BEST_STAGE, n), raidBerserkTime(REF_RAID, t))) last = t; else break }
+  for (let t = 1; t <= 15; t++) { if (beats(arch, orient, kit, (n) => makeRaidBoss(REF_RAID, t, REF_RAID_EL, BEST_STAGE, n), raidBerserkTime(REF_RAID, t))) last = t; else break }
   return last
 }
-function maxDunLevel(arch, orient, gemIds = []) {
+function maxDunLevel(arch, orient, kit = NO_KIT) {
   let last = 0
-  for (let D = 1; D <= 25; D++) { const f = dungeonFights(D); if (beats(arch, orient, gemIds, () => makeDungeonEnemy(REF_DUN, D, f - 1, f, [], BEST_STAGE), 180)) last = D; else break }
+  for (let D = 1; D <= 25; D++) { const f = dungeonFights(D); if (beats(arch, orient, kit, () => makeDungeonEnemy(REF_DUN, D, f - 1, f, [], BEST_STAGE), 180)) last = D; else break }
   return last
 }
 
 /* ---------- run de la matrice ---------- */
 console.log(`=== EXPLORATEUR DE BUILDS — moteur réel, SOLO · iLvl ${ILVL} ${RARITY} · niv ${LEVEL} · record ${BEST_STAGE} ===`)
-console.log(`Contenu de réf : raid ${REF_RAID.icon} ${REF_RAID.name} · donjon ${REF_DUN.icon} ${REF_DUN.name}  (gemmes/runes = couche suivante)\n`)
+console.log(`Contenu de réf : raid ${REF_RAID.icon} ${REF_RAID.name} · donjon ${REF_DUN.icon} ${REF_DUN.name}`)
+console.log(`KIT STANDARD appliqué à tous : gemmes [${KIT_STD.gems.join(', ')}] · runes [${KIT_STD.runes.join(', ')}]\n`)
 console.log('Archétype          Orient.    DPS       EHP      RaidTmax  DonjonMax')
 const rows = []
 for (const arch of ARCHETYPES) {
   for (const orient of ORIENTATIONS) {
     const { dps, ehp } = avgStats(arch, orient)
-    const rt = maxRaidTier(arch, orient), dl = maxDunLevel(arch, orient)
+    const rt = maxRaidTier(arch, orient, KIT_STD), dl = maxDunLevel(arch, orient, KIT_STD)
     rows.push({ arch: arch.name, orient, dps, ehp, rt, dl })
     console.log(`${arch.name.padEnd(18)} ${orient.padEnd(10)} ${fmt(dps).padStart(7)}  ${fmt(ehp).padStart(8)}   ${String(rt).padStart(5)}    ${String(dl).padStart(6)}`)
   }
@@ -160,13 +169,13 @@ for (const arch of ARCHETYPES) {
 console.log(forcedVotes >= 2
   ? '  → ⚠ Le défensif débloque nettement plus de contenu que l\'offensif : les monstres POUSSENT à la défense (« on est forcé »).'
   : '  → ✓ L\'offensif reste compétitif : tu peux jouer la puissance sans être muré par la survie.')
-// 3) Impact des GEMMES de condition (le « tous les composants ») sur un build de réf.
-console.log('\n=== Impact des gemmes de condition (réf : ' + ARCHETYPES[0].name + ' offensif, vs ' + REF_RAID.icon + ' ' + REF_RAID.name + ') ===')
-for (const [label, gems] of [['sans gemmes', []], ['gemmes OFFENSIVES', GEMS_OFF], ['gemmes DÉFENSIVES', GEMS_DEF]]) {
-  const rt = maxRaidTier(ARCHETYPES[0], 'offensif', gems), dl = maxDunLevel(ARCHETYPES[0], 'offensif', gems)
-  console.log(`  ${label.padEnd(18)} RaidTmax T${String(rt).padStart(2)} · DonjonMax ${String(dl).padStart(2)}   [${gems.join(', ') || '—'}]`)
+// 3) Impact du KIT (gemmes + runes) sur un build de réf — le « tous les composants ».
+console.log('\n=== Impact du kit gemmes+runes (réf : ' + ARCHETYPES[0].name + ' offensif, vs ' + REF_RAID.icon + ' ' + REF_RAID.name + ') ===')
+for (const [label, kit] of [['sans kit', NO_KIT], ['kit OFFENSIF', KIT_OFF], ['kit DÉFENSIF', KIT_DEF]]) {
+  const rt = maxRaidTier(ARCHETYPES[0], 'offensif', kit), dl = maxDunLevel(ARCHETYPES[0], 'offensif', kit)
+  console.log(`  ${label.padEnd(13)} RaidTmax T${String(rt).padStart(2)} · DonjonMax ${String(dl).padStart(2)}   gemmes [${kit.gems.join(', ') || '—'}] · runes [${kit.runes.join(', ') || '—'}]`)
 }
-console.log('  (Les gemmes agissent EN COMBAT via condGemMods — pas dans les colonnes DPS/EHP statiques. La défense')
-console.log('   anti-télégraphe « sixieme » + bouclier/auto-soin doit faire gagner du tier de raid si le mur est la survie.)')
+console.log('  (Gemmes+runes agissent EN COMBAT via condGemMods/timeRuneMods — pas dans les colonnes DPS/EHP statiques.')
+console.log('   La défense anti-télégraphe « sixieme » + bouclier/soin/Sursis fait gagner du tier quand le mur est la survie.)')
 
-console.log('\n(Solo, sans heal externe — comparaison RELATIVE. Étends ARCHETYPES/ORIENTATIONS/GEMS pour plus de cas. Runes : couche suivante.)')
+console.log('\n(Solo, sans heal externe — comparaison RELATIVE. Étends ARCHETYPES/ORIENTATIONS et les KIT_* pour plus de cas.)')
