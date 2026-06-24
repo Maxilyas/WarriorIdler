@@ -53,14 +53,16 @@ export const SIM_CLASSES: ClassPreset[] = [
 ]
 export const getClassPreset = (id: string) => SIM_CLASSES.find((c) => c.id === id) ?? SIM_CLASSES[0]
 
-export interface GemOpt { id: string; name: string; icon: string; kind: 'off' | 'def' }
+export interface GemOpt { id: string; name: string; icon: string; color: string; kind: 'off' | 'def'; desc: string }
 const GEM_IDS: { id: string; kind: 'off' | 'def' }[] = [
   { id: 'overkill', kind: 'off' }, { id: 'tambour', kind: 'off' }, { id: 'hemorragie', kind: 'off' }, { id: 'conquete', kind: 'off' }, { id: 'detonation', kind: 'off' },
   { id: 'sixieme', kind: 'def' }, { id: 'tresorerie', kind: 'def' }, { id: 'souffle', kind: 'def' }, { id: 'riposte', kind: 'def' }, { id: 'perfusion', kind: 'def' },
 ]
 export const SIM_GEMS: GemOpt[] = GEM_IDS.map(({ id, kind }) => {
   const def = getCondGem(id as never)
-  return { id, kind, name: def?.name ?? id, icon: def?.icon ?? '◆' }
+  const vals = def?.values ?? []
+  const v = vals[Math.min(4, vals.length - 1)] ?? 0
+  return { id, kind, name: def?.name ?? id, icon: def?.icon ?? '◆', color: def?.color ?? '#cbd5e1', desc: def?.desc?.(v) ?? '' }
 })
 
 export interface RuneOpt { id: string; name: string; icon: string }
@@ -97,7 +99,7 @@ export const SIM_STATS: StatOpt[] = STAT_IDS.map(({ id, kind }) => {
 // Types de dégâts (pour les lignes de RÉSISTANCE et de % DÉGÂTS) + raretés + uniques (pickers UI).
 export const SIM_DMG_TYPES = DAMAGE_TYPE_LIST.map((t) => ({ id: t, name: DAMAGE_TYPES[t].name, icon: DAMAGE_TYPES[t].icon, color: DAMAGE_TYPES[t].color }))
 export const SIM_RARITIES = RARITY_LIST.map((r) => ({ id: r.id, name: r.name, tier: r.tier, affixCount: r.affixCount }))
-export const SIM_UNIQUES = UNIQUE_EFFECTS.map((u) => ({ id: u.id, name: u.name, role: u.role }))
+export const SIM_UNIQUES = UNIQUE_EFFECTS.map((u) => ({ id: u.id, name: u.name, role: u.role, desc: u.description + (u.active ? ' · ⚡ Actif : ' + u.active : '') }))
 
 /** Une LIGNE d'affixe choisie : stat secondaire, résistance à un type, ou % dégâts d'un type. */
 export type LineCfg = { k: 'stat' | 'resist' | 'dmg'; id: string }
@@ -280,16 +282,24 @@ function buildMember(m: SimMemberCfg, cfg: SimConfig, idx: number): Character {
 /** Capacités débloquées par une map de talents, classées par destination de slot (actif/soutien/passif). */
 export interface AbilityOpt { id: string; name: string; icon: string }
 export const SIM_ABILITY_SLOTS = { active: POWER_SLOTS, support: SUPPORT_SLOTS, passive: PASSIVE_SLOTS }
-export function availableAbilities(talents: Record<string, number>): { active: AbilityOpt[]; support: AbilityOpt[]; passive: AbilityOpt[] } {
+export function availableAbilities(
+  talents: Record<string, number>,
+  equipped?: { active?: string[]; support?: string[]; passive?: string[] },
+): { active: AbilityOpt[]; support: AbilityOpt[]; passive: AbilityOpt[] } {
   const out = { active: [] as AbilityOpt[], support: [] as AbilityOpt[], passive: [] as AbilityOpt[] }
-  for (const id of computeUnlockedPowers(talents)) {
-    const def = getPower(id)
-    if (!def) continue
-    const opt: AbilityOpt = { id, name: def.name, icon: def.icon ?? '•' }
-    if (def.kind === 'passive') out.passive.push(opt)
-    else if (isSupport(def)) out.support.push(opt)
-    else out.active.push(opt)
+  const seen = new Set<string>()
+  const push = (g: 'active' | 'support' | 'passive', id: string) => {
+    if (seen.has(id)) return
+    const def = getPower(id); if (!def) return
+    seen.add(id); out[g].push({ id, name: def.name, icon: def.icon ?? '•' })
   }
+  for (const id of computeUnlockedPowers(talents)) {
+    const def = getPower(id); if (!def) continue
+    push(def.kind === 'passive' ? 'passive' : isSupport(def) ? 'support' : 'active', id)
+  }
+  // Inclut les capacités DÉJÀ ÉQUIPÉES (un preset équipe des sorts que son chemin minimal ne débloque
+  // pas formellement) → elles apparaissent et restent surlignées dans leur groupe.
+  if (equipped) (['active', 'support', 'passive'] as const).forEach((g) => (equipped[g] ?? []).forEach((id) => push(g, id)))
   return out
 }
 

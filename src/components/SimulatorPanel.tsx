@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { useGame } from '../game/store'
+import { Sheet } from './ui'
 import {
   runSim, defaultConfig, importedMember, initGear, initTalents, statLines, maxLinesFor, availableAbilities, CLASS_CONSTELLATIONS, DEFAULT_TALENT_BUDGET,
   SIM_CLASSES, SIM_GEMS, SIM_RUNES, SIM_ELIXIRS, SIM_ORIENTATIONS, SIM_RAIDS, SIM_DUNGEONS, SIM_STATS, SIM_SLOTS, SIM_RARITIES, SIM_DMG_TYPES, SIM_UNIQUES,
@@ -74,6 +75,29 @@ function Num({ value, onChange, min = 1, max = 999, w = 'w-16' }: { value: numbe
 }
 
 /* ------------------------------------------------------------------ */
+
+/** Bouton ⓘ → feuille (mobile-friendly) listant les gemmes et leurs effets. */
+function GemInfoButton() {
+  const [open, setOpen] = useState(false)
+  return (
+    <>
+      <button onClick={() => setOpen(true)} className="rounded-full border border-slate-700 px-1.5 text-[10px] text-slate-400 hover:text-slate-200" aria-label="Effets des gemmes">ⓘ</button>
+      {open && (
+        <Sheet title="💎 Gemmes de condition — effets" onClose={() => setOpen(false)}>
+          <div className="space-y-2.5">
+            {SIM_GEMS.map((g) => (
+              <div key={g.id} className="text-[12px]">
+                <span className="font-semibold" style={{ color: g.color }}>{g.icon} {g.name}</span>
+                <span className="ml-1.5 text-[9px] uppercase tracking-wide text-slate-600">{g.kind === 'off' ? 'offensive' : 'défensive'}</span>
+                <div className="text-[11px] leading-snug text-slate-400">{g.desc}</div>
+              </div>
+            ))}
+          </div>
+        </Sheet>
+      )}
+    </>
+  )
+}
 
 export function SimulatorPanel() {
   const bestStage = useGame((s) => s.bestStage)
@@ -356,7 +380,7 @@ function MemberCard({ m, index, canRemove, globalIlvl, globalRarity, onSet, onRe
 
           {/* Gemmes */}
           <div>
-            <Label>Gemmes de condition <span className="text-emerald-500/70">offensives</span> · <span className="text-sky-500/70">défensives</span></Label>
+            <div className="mb-1 flex items-center gap-2"><Label>Gemmes de condition <span className="text-emerald-500/70">off</span> · <span className="text-sky-500/70">déf</span></Label><GemInfoButton /></div>
             <div className="flex flex-wrap gap-1.5">
               {SIM_GEMS.map((g) => (
                 <Chip key={g.id} on={m.gems.includes(g.id)} color={g.kind === 'off' ? 'emerald' : 'sky'} onClick={() => onToggleGem(g.id)} title={g.name}>
@@ -448,6 +472,7 @@ function SlotDetail({ gs, rar, il, lines, isWeapon, setSlot }: { gs: GearSlotCfg
       <div>
         <div className="mb-1 flex items-center gap-2 text-[9.5px] uppercase tracking-wide text-slate-500">
           <span>Gemmes — châsses ({(gs.gems ?? []).length})</span>
+          <GemInfoButton />
           {(gs.gems ?? []).length > 0 && <span className="flex items-center gap-1 normal-case tracking-normal text-slate-400">rang <Num value={gs.gemRank ?? 5} min={1} max={SIM_MAX_GEM_RANK} w="w-11" onChange={(v) => setSlot({ gemRank: v })} /></span>}
         </div>
         <div className="flex flex-wrap gap-1">
@@ -463,6 +488,7 @@ function SlotDetail({ gs, rar, il, lines, isWeapon, setSlot }: { gs: GearSlotCfg
         </select>
         {gs.unique && <span className="flex shrink-0 items-center gap-1">rang <Num value={gs.uniqueRank ?? SIM_MAX_UNIQUE_RANK} min={1} max={SIM_MAX_UNIQUE_RANK} w="w-11" onChange={(v) => setSlot({ uniqueRank: v })} /></span>}
       </div>
+      {gs.unique && <div className="rounded bg-black/20 px-2 py-1 text-[10px] leading-snug text-slate-400">{SIM_UNIQUES.find((u) => u.id === gs.unique)?.desc}</div>}
     </div>
   )
 }
@@ -572,8 +598,8 @@ function TalentSandbox({ clsId, talents, onChange }: { clsId: string; talents: R
  *  bornées au nombre de slots. */
 function AbilitiesEditor({ m, onSet }: { m: SimMemberCfg; onSet: (p: Partial<SimMemberCfg>) => void }) {
   const preset = SIM_CLASSES.find((c) => c.id === m.cls) ?? SIM_CLASSES[0]
-  const avail = availableAbilities(m.talents ?? initTalents(m.cls))
   const cur = { active: m.powers ?? preset.powers, support: m.support ?? preset.support, passive: m.passives ?? preset.passives }
+  const avail = availableAbilities(m.talents ?? initTalents(m.cls), cur) // inclut les capacités déjà équipées
   const FIELD = { active: 'powers', support: 'support', passive: 'passives' } as const
   const groups = [
     { k: 'active' as const, label: 'Actifs', list: avail.active },
