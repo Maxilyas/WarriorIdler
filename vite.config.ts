@@ -25,6 +25,12 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
+      // Le SW est une SPA : sa NavigationRoute sert `index.html` (le jeu) pour TOUTE navigation dans
+      // `/WarriorIdler/`. On EXCLUT la page leaderboard (fichier statique généré au déploiement) du
+      // fallback, sinon elle est « avalée » et renvoie au jeu.
+      workbox: {
+        navigateFallbackDenylist: [/leaderboard\.html$/],
+      },
       manifest: {
         name: 'Warrior Idler',
         short_name: 'WarriorIdler',
