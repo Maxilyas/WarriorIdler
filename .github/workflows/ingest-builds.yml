@@ -1,0 +1,57 @@
+# Ingestion automatique des soumissions de builds : une issue « build-submission » → décodage + validation
+# → ajout au catalogue communautaire (src/game/communityBuilds.json) → commit → issue fermée.
+# Git reste le store : aucun backend. Le banc d'essai (npm run bench) teste ensuite tout le catalogue.
+name: Ingest build submissions
+
+on:
+  issues:
+    types: [opened, edited, labeled]
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  ingest:
+    if: contains(join(github.event.issue.labels.*.name, ','), 'build-submission')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ingestion du build
+        id: ingest
+        env:
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
+        run: node scripts/ingest-build.mjs
+
+      - name: Commit du catalogue
+        if: steps.ingest.outputs.result == 'ok'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/game/communityBuilds.json
+          git commit -m "feat(builds): ajout communautaire « ${{ steps.ingest.outputs.name }} » (#${{ github.event.issue.number }})"
+          git push
+
+      - name: Réponse à l'issue
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const r = '${{ steps.ingest.outputs.result }}';
+            const msg = `${{ steps.ingest.outputs.message }}`;
+            const name = `${{ steps.ingest.outputs.name }}`;
+            if (r === 'ok') {
+              await github.rest.issues.createComment({ ...context.repo, issue_number: context.issue.number,
+                body: `✅ Build « ${name} » ajouté au catalogue communautaire. Merci ! Il est désormais chargeable en jeu et testé par le banc d'essai.` });
+              await github.rest.issues.update({ ...context.repo, issue_number: context.issue.number, state: 'closed' });
+            } else if (r === 'duplicate') {
+              await github.rest.issues.createComment({ ...context.repo, issue_number: context.issue.number, body: 'ℹ️ Ce build est déjà dans le catalogue — rien à faire.' });
+              await github.rest.issues.update({ ...context.repo, issue_number: context.issue.number, state: 'closed' });
+            } else {
+              await github.rest.issues.createComment({ ...context.repo, issue_number: context.issue.number,
+                body: `❌ Soumission non ajoutée : ${msg || 'code invalide'}. Vérifie d'avoir collé le code complet (\`WIB1:…\`) puis ré-édite l'issue.` });
+            }

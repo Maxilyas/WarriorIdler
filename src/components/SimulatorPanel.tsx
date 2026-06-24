@@ -8,8 +8,13 @@ import {
   type SimConfig, type SimMemberCfg, type SimResult, type GearSlotCfg, type LineCfg,
 } from '../game/simulator'
 import { charDamageProfile, talentPointsForLevel } from '../game/character'
+import { encodeBuild, decodeBuild } from '../game/buildCode'
 import { TalentTree } from './TalentTree'
 import { REFERENCE_BUILDS } from '../game/referenceBuilds'
+import communityBuilds from '../game/communityBuilds.json'
+
+/** Une entrée du catalogue communautaire (alimenté par l'ingestion GitHub des soumissions). */
+type CommunityBuild = { name: string; code: string; by?: string; addedAt?: string; issue?: number }
 import type { Character, DamageType, OffensiveStat } from '../game/types'
 
 const LIB_KEY = 'wi-sim-builds'
@@ -22,21 +27,6 @@ function loadLib(): SavedBuild[] {
 }
 function saveLib(list: SavedBuild[]) { try { localStorage.setItem(LIB_KEY, JSON.stringify(list)) } catch { /* quota */ } }
 const cloneCfg = (c: SimConfig): SimConfig => JSON.parse(JSON.stringify(c))
-
-/* CODE DE BUILD PARTAGEABLE — `SimConfig` complet (compo + tous les loadouts, y compris un éventuel
- * perso importé entièrement sérialisé) encodé en base64 UTF-8. Autonome → reproductible partout (autre
- * appareil, soumission, banc d'essai), sans dépendre d'une sauvegarde. Préfixe versionné `WIB1:`. */
-const BUILD_CODE_PREFIX = 'WIB1:'
-function encodeBuild(cfg: SimConfig): string {
-  return BUILD_CODE_PREFIX + btoa(unescape(encodeURIComponent(JSON.stringify(cfg))))
-}
-function decodeBuild(code: string): SimConfig | null {
-  try {
-    const raw = code.trim().replace(/^WIB1:/, '')
-    const cfg = JSON.parse(decodeURIComponent(escape(atob(raw))))
-    return cfg && Array.isArray(cfg.team) && cfg.content ? (cfg as SimConfig) : null
-  } catch { return null }
-}
 
 const RARITIES_OPT = ['epique', 'legendaire', 'mythique', 'ascendant', 'celeste', 'transcendant'] as const
 
@@ -119,15 +109,30 @@ function GemInfoButton() {
   )
 }
 
-/** Export / import d'un build sous forme de CODE autonome (copier-coller). Fondation du partage et de
- *  la centralisation : un code contient toute la compo + loadouts, reproductible partout. */
+/** Dépôt GitHub où sont centralisés les builds (soumission via issue → Action d'ingestion → catalogue). */
+const GITHUB_REPO = 'Maxilyas/WarriorIdler'
+
+/** Export / import / SOUMISSION d'un build sous forme de CODE autonome. Fondation de la centralisation :
+ *  un code contient toute la compo + loadouts (reproductible partout) ; « Soumettre » ouvre une issue
+ *  GitHub pré-remplie → une Action l'ingère dans le catalogue communautaire (git = le store). */
 function BuildShareButtons({ cfg, onImport }: { cfg: SimConfig; onImport: (c: SimConfig) => void }) {
   const [mode, setMode] = useState<null | 'export' | 'import'>(null)
   const [code, setCode] = useState('')
   const [msg, setMsg] = useState('')
   const openExport = () => { setCode(encodeBuild(cfg)); setMsg(''); setMode('export') }
   const openImport = () => { setCode(''); setMsg(''); setMode('import') }
-  const copy = () => { navigator.clipboard?.writeText(code).then(() => setMsg('✓ Copié dans le presse-papier'), () => setMsg('Copie impossible — sélectionne et copie à la main')) }
+  const copy = (c: string) => navigator.clipboard?.writeText(c)
+  const doCopy = () => { copy(code).then(() => setMsg('✓ Copié dans le presse-papier'), () => setMsg('Copie impossible — sélectionne et copie à la main')) }
+  // Soumission : copie le code (trop long pour l'URL) puis ouvre le formulaire d'issue. L'Action GitHub
+  // décode + valide + ajoute au catalogue communautaire, puis ferme l'issue.
+  const submit = () => {
+    const c = code || encodeBuild(cfg)
+    const name = cfg.team.map((m) => m.imported?.name ?? m.name).join(' + ').slice(0, 60)
+    copy(c)
+    const url = `https://github.com/${GITHUB_REPO}/issues/new?labels=build-submission&template=build-submission.yml&title=${encodeURIComponent('Build : ' + name)}`
+    window.open(url, '_blank', 'noopener,noreferrer')
+    setMsg('Code copié — colle-le dans le champ « Code du build » de l\'issue GitHub, puis envoie.')
+  }
   const doImport = () => {
     const c = decodeBuild(code)
     if (!c) { setMsg('❌ Code invalide.'); return }
@@ -142,8 +147,9 @@ function BuildShareButtons({ cfg, onImport }: { cfg: SimConfig; onImport: (c: Si
           <p className="mb-2 text-[11px] leading-snug text-slate-500">Copie ce code et partage-le (autre appareil, ou soumission). Il contient la compo + tous les loadouts, et reste reproductible sans sauvegarde.</p>
           <textarea readOnly value={code} rows={5} onFocus={(e) => e.currentTarget.select()}
             className="w-full resize-none rounded-lg border border-slate-700 bg-slate-900/60 p-2 text-[10px] font-mono text-slate-300 outline-none" />
-          <div className="mt-2 flex items-center gap-2">
-            <button onClick={copy} className="rounded-lg bg-orange-500/90 px-3 py-1.5 text-[11px] font-medium text-white hover:bg-orange-500">Copier</button>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <button onClick={doCopy} className="rounded-lg bg-slate-700 px-3 py-1.5 text-[11px] font-medium text-slate-100 hover:bg-slate-600">Copier</button>
+            <button onClick={submit} className="rounded-lg bg-orange-500/90 px-3 py-1.5 text-[11px] font-medium text-white hover:bg-orange-500" title="Copie le code et ouvre une issue GitHub pour le soumettre au catalogue communautaire">🚀 Soumettre au catalogue</button>
             {msg && <span className="text-[10px] text-emerald-300">{msg}</span>}
           </div>
         </Sheet>
@@ -255,6 +261,19 @@ export function SimulatorPanel() {
             ))}
           </div>
         </div>
+        {(communityBuilds as CommunityBuild[]).length > 0 && (
+          <div className="mb-2">
+            <div className="mb-1 text-[10px] text-slate-500">🌍 Catalogue communautaire ({(communityBuilds as CommunityBuild[]).length}) — builds soumis par les joueurs</div>
+            <div className="flex flex-wrap gap-1.5">
+              {(communityBuilds as CommunityBuild[]).map((b, i) => (
+                <button key={i} onClick={() => { const c = decodeBuild(b.code); if (c) loadCfg(c) }} title={b.by ? `par ${b.by}` : undefined}
+                  className="rounded-full border border-slate-700 bg-slate-800/40 px-2.5 py-1 text-[11px] text-slate-300 hover:border-emerald-400/60 hover:text-emerald-200">
+                  {b.name}{b.by ? <span className="text-slate-500"> · {b.by}</span> : null}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <div>
           <div className="mb-1 flex items-center gap-2">
             <span className="shrink-0 text-[10px] text-slate-500">💾 Mes builds</span>

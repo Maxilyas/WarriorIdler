@@ -1,0 +1,41 @@
+name: 🚀 Soumettre un build
+description: Envoie ton build du simulateur au catalogue communautaire (il sera ajouté automatiquement).
+title: "Build : "
+labels: ["build-submission"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Dans le jeu : **Simulateur → 🔗 Partager → 🚀 Soumettre au catalogue**. Le code de ton build est
+        copié dans ton presse-papier — colle-le ci-dessous, puis envoie. Une automatisation le valide et
+        l'ajoute au catalogue (visible en jeu et testé par le banc d'essai).
+  - type: input
+    id: build-name
+    attributes:
+      label: Nom du build
+      placeholder: "Guerrier saignement, Mage convergence…"
+    validations:
+      required: false
+  - type: input
+    id: author
+    attributes:
+      label: Ton pseudo (optionnel)
+      placeholder: "Affiché à côté du build dans le catalogue"
+    validations:
+      required: false
+  - type: textarea
+    id: build-code
+    attributes:
+      label: Code du build
+      description: "Le code copié par le bouton « Soumettre » (commence par WIB1:)."
+      placeholder: "WIB1:…"
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes (optionnel)
+      placeholder: "Stratégie, contenu visé, niveau conseillé…"
+    validations:
+      required: false
