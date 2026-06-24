@@ -8,7 +8,10 @@
  * de gemmes, états d'archétype) ne sont PAS persistés.
  *   → Doc : docs/systemes/10-etat-store-et-sauvegarde.md + docs/ARCHITECTURE.md
  */
-import { create } from 'zustand'
+// `createWithEqualityFn` (= `create` + support natif d'une fn d'égalité au 2ᵉ arg de `useGame`, SANS
+// le warning de dépréciation zustand v4.5). Importé ici (bundle principal) → pas de double React dans
+// les chunks lazy, contrairement à `useStoreWithEqualityFn` importé directement dans un panneau lazy.
+import { createWithEqualityFn as create } from 'zustand/traditional'
 import type {
   Item, PrimaryStat, OffensiveStat, SecondaryStat, EquipSlotId, ItemType, Enemy, DamageType, RarityId
 } from './types'

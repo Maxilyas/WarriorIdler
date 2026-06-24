@@ -110,7 +110,8 @@ function GameApp() {
   const sceaux = useGame((s) => s.sceaux)
   const bestStage = useGame((s) => s.bestStage)
   // Perf : App ne lit que des champs STABLES du roster (level/talents) → on ignore les champs
-  // transitoires de combat pour ne pas re-rendre la coquille (et tous les panneaux) à chaque tick.
+  // transitoires de combat (égalité 2ᵉ arg, store créé via createWithEqualityFn) pour ne pas
+  // re-rendre la coquille (et donc tous les panneaux) à chaque tick de combat.
   const characters = useGame((s) => s.characters, charsStableEqual)
   const dungeonProgress = useGame((s) => s.dungeonProgress)
   const upgrades = useGame((s) => s.upgrades)

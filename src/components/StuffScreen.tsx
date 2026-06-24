@@ -77,7 +77,8 @@ function targetSlotFor(equipment: Equipment, type: ItemType, selectedSlot: Equip
 
 function StuffScreenBase() {
   const inventory = useGame((s) => s.inventory)
-  // Perf : ignore les champs transitoires de combat → pas de re-render à chaque tick (cf. charsStableEqual).
+  // Perf : égalité qui ignore les champs transitoires de combat → pas de re-render à chaque tick
+  // (store créé via createWithEqualityFn, donc 2ᵉ arg sans warning ; cf. charsStableEqual).
   const characters = useGame((s) => s.characters, charsStableEqual)
   const activeChar = useGame((s) => s.activeChar)
   const setActiveChar = useGame((s) => s.setActiveChar)
