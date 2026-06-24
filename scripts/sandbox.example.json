@@ -1,0 +1,25 @@
+{
+  "ilvl": 200,
+  "rarity": "mythique",
+  "bestStage": 300,
+  "consumables": { "elixir": "elixirPuissance" },
+  "team": [
+    {
+      "name": "Héros",
+      "class": "chasseur",
+      "level": 75,
+      "orientation": "equilibre",
+      "gems": ["sixieme", "tresorerie", "souffle"],
+      "runes": ["premierElan", "sursis"]
+    },
+    {
+      "name": "Lyra",
+      "class": "mage",
+      "level": 75,
+      "orientation": "defensif",
+      "gems": ["riposte"],
+      "runes": ["boucle"]
+    }
+  ],
+  "content": { "raid": "forge", "scan": true }
+}

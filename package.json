@@ -22,6 +22,7 @@
     "maitrise": "node scripts/maitrise-sim.mjs",
     "audit": "node scripts/save-audit.mjs",
     "explorer": "node scripts/build-explorer.mjs",
+    "sandbox": "node scripts/sandbox-sim.mjs",
     "forge-hex": "node scripts/verif-forge-hex.mjs",
     "test": "vitest run",
     "test:watch": "vitest"

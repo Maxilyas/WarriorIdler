@@ -106,6 +106,14 @@ la défense anti-télégraphe fait-elle gagner du tier ?). Extensible : ajoute d
 `ARCHETYPES` (4 classes : Guerrier/Voleur/Mage/Chasseur), `ORIENTATIONS`, `GEMS_OFF`/`GEMS_DEF`.
 Couche suivante : runes par build + loadouts de gemmes sur toute la matrice.
 
+### `sandbox-sim.mjs` — `npm run sandbox -- ta-config.json`
+**Bac à sable config-driven** (la fondation headless de la future UI) : un JSON décrit une ÉQUIPE
+(1-3 persos) avec, pour chacun, classe/talents, stuff (iLvl/rareté/orientation), **gemmes**, **runes**,
+et des **consommables** d'équipe — et on simule un raid/donjon au vrai `partyCombatStep` avec le `mods`
+COMPLET. Sortie : profil de l'équipe + « ce contenu passe-t-il ? » + diagnostic du mur (qui tombe, quand,
+PV boss). `content` accepte `{raid|dungeon, tier|level}` ou `{…, scan:true}` (tier/niveau max). Sans
+argument → config d'exemple. Modèle : [`sandbox.example.json`](sandbox.example.json).
+
 ## Économie
 
 ### `eco-sim.mjs` — `npm run eco`
