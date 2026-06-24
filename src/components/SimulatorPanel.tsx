@@ -1,9 +1,9 @@
 import { useState, type ReactNode } from 'react'
 import { useGame } from '../game/store'
 import {
-  runSim, defaultConfig, importedMember, initGear, initTalents, CLASS_CONSTELLATIONS, DEFAULT_TALENT_BUDGET,
-  SIM_CLASSES, SIM_GEMS, SIM_RUNES, SIM_ELIXIRS, SIM_ORIENTATIONS, SIM_RAIDS, SIM_DUNGEONS, SIM_STATS, SIM_SLOTS,
-  type SimConfig, type SimMemberCfg, type SimResult, type GearSlotCfg,
+  runSim, defaultConfig, importedMember, initGear, initTalents, statLines, maxLinesFor, CLASS_CONSTELLATIONS, DEFAULT_TALENT_BUDGET,
+  SIM_CLASSES, SIM_GEMS, SIM_RUNES, SIM_ELIXIRS, SIM_ORIENTATIONS, SIM_RAIDS, SIM_DUNGEONS, SIM_STATS, SIM_SLOTS, SIM_RARITIES, SIM_DMG_TYPES, SIM_UNIQUES,
+  type SimConfig, type SimMemberCfg, type SimResult, type GearSlotCfg, type LineCfg,
 } from '../game/simulator'
 import { CONSTELLATIONS, talentsByConstellation, canAllocate, gateInfo, type ConstellationId, type TalentNode } from '../game/talents'
 import { REFERENCE_BUILDS } from '../game/referenceBuilds'
@@ -244,7 +244,7 @@ export function SimulatorPanel() {
         </div>
         <div className="space-y-3">
           {cfg.team.map((m, i) => (
-            <MemberCard key={i} m={m} index={i} canRemove={cfg.team.length > 1}
+            <MemberCard key={i} m={m} index={i} canRemove={cfg.team.length > 1} globalIlvl={cfg.ilvl} globalRarity={cfg.rarity}
               onSet={(p) => setMember(i, p)} onRemove={() => removeMember(i)}
               onToggleGem={(g) => setMember(i, { gems: toggleIn(m.gems, g) })}
               onToggleRune={(r) => setMember(i, { runes: toggleIn(m.runes, r) })} />
@@ -261,8 +261,8 @@ export function SimulatorPanel() {
 
 /* ------------------------------------------------------------------ */
 
-function MemberCard({ m, index, canRemove, onSet, onRemove, onToggleGem, onToggleRune }: {
-  m: SimMemberCfg; index: number; canRemove: boolean
+function MemberCard({ m, index, canRemove, globalIlvl, globalRarity, onSet, onRemove, onToggleGem, onToggleRune }: {
+  m: SimMemberCfg; index: number; canRemove: boolean; globalIlvl: number; globalRarity: string
   onSet: (p: Partial<SimMemberCfg>) => void; onRemove: () => void
   onToggleGem: (g: string) => void; onToggleRune: (r: string) => void
 }) {
@@ -327,7 +327,7 @@ function MemberCard({ m, index, canRemove, onSet, onRemove, onToggleGem, onToggl
                 : <button onClick={() => onSet({ gear: initGear(m.orientation) })} className="rounded-lg border border-orange-500/40 bg-orange-500/10 px-2 py-0.5 text-[10px] font-medium text-orange-200 hover:bg-orange-500/20">🔧 Détailler le stuff</button>}
             </div>
             {m.gear
-              ? <GearEditor gear={m.gear} onChange={(g) => onSet({ gear: g })} />
+              ? <GearEditor gear={m.gear} globalIlvl={globalIlvl} globalRarity={globalRarity} onChange={(g) => onSet({ gear: g })} />
               : <Seg value={m.orientation} options={SIM_ORIENTATIONS.map((o) => ({ id: o.id, label: o.label }))} onChange={(v) => onSet({ orientation: v })} />}
           </div>
 
@@ -373,47 +373,106 @@ function MemberCard({ m, index, canRemove, onSet, onRemove, onToggleGem, onToggl
 
 /* ------------------------------------------------------------------ */
 
-/** Éditeur de stuff pièce-par-pièce : par emplacement, orientation off/def + stats qui rollent
- *  (valeurs auto-calculées au max du budget de la pièce). */
-function GearEditor({ gear, onChange }: { gear: Record<string, GearSlotCfg>; onChange: (g: Record<string, GearSlotCfg>) => void }) {
+/** Étiquette lisible d'une ligne d'affixe (stat / résist / % dégâts) + couleur. */
+function lineLabel(l: LineCfg): { text: string; color: string } {
+  if (l.k === 'stat') { const s = SIM_STATS.find((x) => x.id === l.id); return { text: s?.short ?? l.id, color: s?.color ?? '#cbd5e1' } }
+  const d = SIM_DMG_TYPES.find((x) => x.id === l.id)
+  return { text: (l.k === 'resist' ? 'Rés ' : '+% ') + (d?.icon ?? l.id), color: d?.color ?? '#cbd5e1' }
+}
+
+/** Petit select « ajouter » qui se réinitialise après chaque choix. */
+function AddSelect({ label, options, onPick, disabled }: { label: string; options: { id: string; label: string }[]; onPick: (id: string) => void; disabled?: boolean }) {
+  return (
+    <select value="" disabled={disabled} onChange={(e) => { if (e.target.value) onPick(e.target.value) }}
+      className="rounded border border-slate-700 bg-slate-800/60 px-1.5 py-0.5 text-[10px] text-slate-300 outline-none disabled:opacity-40">
+      <option value="">{label}</option>
+      {options.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+    </select>
+  )
+}
+
+/** Éditeur DÉTAILLÉ d'une pièce : ilvl/rareté, lignes (stat/résist/%dmg) au nb de la rareté, gemmes, unique. */
+function SlotDetail({ gs, rar, il, lines, setSlot }: { gs: GearSlotCfg; rar: string; il: number; lines: LineCfg[]; setSlot: (p: Partial<GearSlotCfg>) => void }) {
+  const cap = maxLinesFor(rar)
+  const addLine = (l: LineCfg) => { if (lines.length < cap) setSlot({ lines: [...lines, l] }) }
+  const removeLine = (i: number) => setSlot({ lines: lines.filter((_, j) => j !== i) })
+  const toggleGem = (id: string) => { const g = gs.gems ?? []; setSlot({ gems: g.includes(id) ? g.filter((x) => x !== id) : [...g, id] }) }
+  return (
+    <div className="space-y-2 border-t border-slate-800 p-2">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[10px] text-slate-400">
+        <label className="flex items-center gap-1">iLvl <Num value={il} min={1} max={700} w="w-16" onChange={(v) => setSlot({ ilvl: v })} /></label>
+        <label className="flex items-center gap-1">Rareté
+          <select value={rar} onChange={(e) => setSlot({ rarity: e.target.value })} className="rounded border border-slate-700 bg-slate-900/60 px-1 py-0.5 capitalize text-slate-200 outline-none">
+            {SIM_RARITIES.map((r) => <option key={r.id} value={r.id}>{r.name} ({r.affixCount}L)</option>)}
+          </select>
+        </label>
+        <Seg value={gs.orientation} options={SIM_ORIENTATIONS.map((o) => ({ id: o.id, label: o.label }))} onChange={(v) => setSlot({ orientation: v })} />
+      </div>
+      <div>
+        <div className="mb-1 text-[9.5px] uppercase tracking-wide text-slate-500">Lignes ({lines.length}/{cap})</div>
+        <div className="flex flex-wrap gap-1">
+          {lines.map((l, i) => { const lab = lineLabel(l); return (
+            <span key={i} className="flex items-center rounded border px-1 py-0.5 text-[10px] font-semibold" style={{ color: lab.color, borderColor: lab.color + '80' }}>
+              {lab.text}<button onClick={() => removeLine(i)} className="ml-1 text-rose-400 hover:text-rose-300">✕</button>
+            </span>
+          ) })}
+          {lines.length === 0 && <span className="text-[10px] text-slate-600">aucune ligne</span>}
+        </div>
+        <div className="mt-1 flex flex-wrap gap-1.5">
+          <AddSelect label="+ Stat" disabled={lines.length >= cap} options={SIM_STATS.map((s) => ({ id: s.id, label: s.name }))} onPick={(id) => addLine({ k: 'stat', id })} />
+          <AddSelect label="+ Résist" disabled={lines.length >= cap} options={SIM_DMG_TYPES.map((d) => ({ id: d.id, label: d.name }))} onPick={(id) => addLine({ k: 'resist', id })} />
+          <AddSelect label="+ %Dégâts" disabled={lines.length >= cap} options={SIM_DMG_TYPES.map((d) => ({ id: d.id, label: d.name }))} onPick={(id) => addLine({ k: 'dmg', id })} />
+        </div>
+      </div>
+      <div>
+        <div className="mb-1 text-[9.5px] uppercase tracking-wide text-slate-500">Gemmes — châsses ({(gs.gems ?? []).length})</div>
+        <div className="flex flex-wrap gap-1">
+          {SIM_GEMS.map((g) => (
+            <Chip key={g.id} on={(gs.gems ?? []).includes(g.id)} color={g.kind === 'off' ? 'emerald' : 'sky'} onClick={() => toggleGem(g.id)} title={g.name}>{g.icon}</Chip>
+          ))}
+        </div>
+      </div>
+      <label className="flex items-center gap-2 text-[10px] text-slate-400">✦ Unique
+        <select value={gs.unique ?? ''} onChange={(e) => setSlot({ unique: e.target.value || undefined })} className="min-w-0 flex-1 rounded border border-slate-700 bg-slate-900/60 px-1 py-0.5 text-slate-200 outline-none">
+          <option value="">— aucun —</option>
+          {SIM_UNIQUES.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+        </select>
+      </label>
+    </div>
+  )
+}
+
+/** Éditeur de stuff PIÈCE-PAR-PIÈCE : chaque emplacement s'ouvre en éditeur d'objet complet. */
+function GearEditor({ gear, globalIlvl, globalRarity, onChange }: { gear: Record<string, GearSlotCfg>; globalIlvl: number; globalRarity: string; onChange: (g: Record<string, GearSlotCfg>) => void }) {
+  const [open, setOpen] = useState<string | null>(null)
   const setSlot = (id: string, p: Partial<GearSlotCfg>) => onChange({ ...gear, [id]: { ...gear[id], ...p } })
-  const toggleStat = (id: string, stat: string) => { const cur = gear[id].stats; setSlot(id, { stats: cur.includes(stat) ? cur.filter((s) => s !== stat) : [...cur, stat] }) }
   const applyAllOrientation = (orientation: GearSlotCfg['orientation']) => { const g = { ...gear }; for (const k in g) g[k] = { ...g[k], orientation }; onChange(g) }
   return (
     <div className="space-y-1.5">
-      <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-500">
-        Tout en :
-        {SIM_ORIENTATIONS.map((o) => (
-          <button key={o.id} onClick={() => applyAllOrientation(o.id)} className="rounded border border-slate-700 px-1.5 py-0.5 text-slate-300 hover:bg-slate-800">{o.label}</button>
-        ))}
+      <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-500">Tout en :
+        {SIM_ORIENTATIONS.map((o) => <button key={o.id} onClick={() => applyAllOrientation(o.id)} className="rounded border border-slate-700 px-1.5 py-0.5 text-slate-300 hover:bg-slate-800">{o.label}</button>)}
       </div>
-      <div className="max-h-72 space-y-1 overflow-y-auto pr-1">
+      <div className="max-h-[26rem] space-y-1 overflow-y-auto pr-1">
         {SIM_SLOTS.map((sl) => {
-          const gs = gear[sl.id]
-          if (!gs) return null
+          const gs = gear[sl.id]; if (!gs) return null
+          const lines = gs.lines ?? statLines(gs.stats ?? [])
+          const rar = gs.rarity ?? globalRarity, il = gs.ilvl ?? globalIlvl
+          const isOpen = open === sl.id
           return (
-            <div key={sl.id} className="rounded-lg border border-slate-800 bg-slate-900/40 p-2">
-              <div className="flex items-center justify-between gap-2">
+            <div key={sl.id} className="rounded-lg border border-slate-800 bg-slate-900/40">
+              <button onClick={() => setOpen(isOpen ? null : sl.id)} className="flex w-full items-center justify-between gap-2 px-2 py-1.5 text-left">
                 <span className="text-[11px] font-medium text-slate-300">{sl.icon} {sl.name}</span>
-                <Seg value={gs.orientation} options={SIM_ORIENTATIONS.map((o) => ({ id: o.id, label: o.label }))} onChange={(v) => setSlot(sl.id, { orientation: v })} />
-              </div>
-              <div className="mt-1.5 flex flex-wrap gap-1">
-                {SIM_STATS.map((st) => {
-                  const on = gs.stats.includes(st.id)
-                  return (
-                    <button key={st.id} onClick={() => toggleStat(sl.id, st.id)} title={st.name + (st.kind === 'rare' ? ' (rare)' : '')}
-                      className={'rounded border px-1.5 py-0.5 text-[10px] font-semibold ' + (on ? '' : 'border-slate-700/60 text-slate-500 hover:text-slate-300')}
-                      style={on ? { color: st.color, borderColor: st.color + '99', background: st.color + '1f' } : undefined}>
-                      {st.short}
-                    </button>
-                  )
-                })}
-              </div>
+                <span className="flex items-center gap-1.5 text-[9.5px] text-slate-500">
+                  <span>iL{il} · {rar.slice(0, 5)} · {lines.length}L{gs.gems?.length ? ` · ${gs.gems.length}◆` : ''}{gs.unique ? ' · ✦' : ''}</span>
+                  <span>{isOpen ? '▴' : '▾'}</span>
+                </span>
+              </button>
+              {isOpen && <SlotDetail gs={gs} rar={rar} il={il} lines={lines} setSlot={(p) => setSlot(sl.id, p)} />}
             </div>
           )
         })}
       </div>
-      <div className="text-[10px] text-slate-600">Valeurs auto au max du budget de chaque pièce ; choisis quelles stats rollent + l'équilibre off/def par emplacement.</div>
+      <div className="text-[10px] text-slate-600">Clique une pièce pour l'éditer : ilvl/rareté, lignes (stat/résist/%dmg) au nb de la rareté, gemmes (châsses), unique. Valeurs auto au budget.</div>
     </div>
   )
 }

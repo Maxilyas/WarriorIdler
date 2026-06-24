@@ -53,7 +53,7 @@ function pick<T>(arr: T[]): T {
 
 // ---- Pool d'affixes pondéré (stat / dégâts de type / résistance) ----
 
-type LineSpec =
+export type LineSpec =
   | { kind: 'stat'; stat: SecondaryStat; weight: number }
   | { kind: 'dmgType'; type: DamageType; weight: number }
   | { kind: 'resist'; type: DamageType; weight: number }
@@ -101,7 +101,7 @@ export const DMG_LINE_BASE = 8
 export const DMG_LINE_RANGE = 12
 export const DMG_LINE_TIER_GROWTH = 0.07
 
-function rollLineValue(spec: LineSpec, ilvl: number, qMult: number, tier: number): number {
+export function rollLineValue(spec: LineSpec, ilvl: number, qMult: number, tier: number): number {
   if (spec.kind === 'stat') {
     const soft = RARE_STATS.includes(spec.stat) ? 0.5 : 1 // stats rares modérées (rares mais fortes)
     // PROPORTIONNEL au budget (poids SECONDARY_FRAC) puis SOFT-CAPÉ → à bas ilvl ça suit le
@@ -116,7 +116,7 @@ function rollLineValue(spec: LineSpec, ilvl: number, qMult: number, tier: number
   return Math.round((6 + Math.random() * 10) * (1 + tier * 0.09))
 }
 
-function specToAffix(spec: LineSpec, value: number): Affix {
+export function specToAffix(spec: LineSpec, value: number): Affix {
   if (spec.kind === 'stat') return { kind: 'stat', stat: spec.stat, value }
   return { kind: spec.kind, type: spec.type, value }
 }

@@ -8,20 +8,20 @@
  * Ajouter un build de test = ajouter une entrée ici. Garder des configs PRESET (reproductibles),
  * pas de membres importés (qui dépendent d'une sauvegarde).
  */
-import { defaultConfig, initGear, type SimConfig } from './simulator'
+import { defaultConfig, initGear, statLines, type SimConfig } from './simulator'
 
 const base = (): SimConfig => defaultConfig(300)
 
 /** Stuff complet orienté DoT : Altération + Maîtrise + Critique sur chaque pièce. */
 function dotGear() {
   const g = initGear('equilibre')
-  for (const k in g) g[k] = { ...g[k], stats: ['alteration', 'maitrise', 'critique'] }
+  for (const k in g) g[k] = { ...g[k], lines: statLines(['alteration', 'maitrise', 'critique']) }
   return g
 }
-/** Stuff complet ultra-défensif : Réduction + Barrière + Résilience. */
+/** Stuff complet ultra-défensif : Réduction + Barrière + une ligne de résistance physique. */
 function tankGear() {
   const g = initGear('defensif')
-  for (const k in g) g[k] = { ...g[k], stats: ['reductionDegats', 'barriere', 'resilience'] }
+  for (const k in g) g[k] = { ...g[k], lines: [{ k: 'stat', id: 'reductionDegats' }, { k: 'stat', id: 'barriere' }, { k: 'resist', id: 'physique' }] }
   return g
 }
 

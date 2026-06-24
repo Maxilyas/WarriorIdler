@@ -15,8 +15,10 @@
  */
 import type { Character, DamageType, ItemOrientation, OffensiveStat, RarityId } from './types'
 import { makeCharacter, charDps, charMaxHp, charEhp, charDerived, charDamageProfile, charCombatMods } from './character'
-import { profileDamageMult } from './damage'
-import { generateItem } from './items'
+import { profileDamageMult, DAMAGE_TYPE_LIST, DAMAGE_TYPES } from './damage'
+import { generateItem, rollLineValue, specToAffix, starsMult, qualityBonusAffixes, type LineSpec } from './items'
+import { RARITIES, RARITY_LIST } from './rarities'
+import { UNIQUE_EFFECTS } from './uniques'
 import { EQUIP_SLOTS, ITEM_TYPES } from './slots'
 import { RAID_LIST, makeRaidBoss, raidBerserkTime, type RaidDef } from './raids'
 import { makeDungeonEnemy, dungeonFights, DUNGEONS } from './dungeons'
@@ -91,18 +93,46 @@ export const SIM_STATS: StatOpt[] = STAT_IDS.map(({ id, kind }) => {
   return { id, kind, name: m?.name ?? id, short: m?.short ?? id, color: m?.color ?? '#cbd5e1' }
 })
 
-/** Config de stuff d'UN emplacement (éditeur pièce-par-pièce). */
-export interface GearSlotCfg { orientation: ItemOrientation; stats: string[] }
+// Types de dégâts (pour les lignes de RÉSISTANCE et de % DÉGÂTS) + raretés + uniques (pickers UI).
+export const SIM_DMG_TYPES = DAMAGE_TYPE_LIST.map((t) => ({ id: t, name: DAMAGE_TYPES[t].name, icon: DAMAGE_TYPES[t].icon, color: DAMAGE_TYPES[t].color }))
+export const SIM_RARITIES = RARITY_LIST.map((r) => ({ id: r.id, name: r.name, tier: r.tier, affixCount: r.affixCount }))
+export const SIM_UNIQUES = UNIQUE_EFFECTS.map((u) => ({ id: u.id, name: u.name, role: u.role }))
+
+/** Une LIGNE d'affixe choisie : stat secondaire, résistance à un type, ou % dégâts d'un type. */
+export type LineCfg = { k: 'stat' | 'resist' | 'dmg'; id: string }
+/** Config de stuff d'UN emplacement (éditeur pièce-par-pièce) : ilvl/rareté fins, lignes, gemmes, unique. */
+export interface GearSlotCfg {
+  ilvl?: number          // override d'ilvl de la pièce (défaut = ilvl global)
+  rarity?: string        // override de rareté (défaut = rareté globale) — pilote le NB de lignes
+  orientation: ItemOrientation
+  lines: LineCfg[]       // lignes d'affixes (valeurs auto au budget) ; cap = nb de lignes de la rareté
+  gems: string[]         // gemmes posées sur CETTE pièce (nombre = nb de châsses)
+  unique?: string        // effet unique posé sur cette pièce
+  stats?: string[]       // DÉPRÉCIÉ (v1) — migré en lignes de stat à la construction
+}
 /** Affixes par défaut (priorité offensive) si l'emplacement n'est pas personnalisé. */
 export const DEFAULT_AFFIXES = ['maitrise', 'critique', 'degatsCrit', 'hate', 'penetration']
+/** Raccourci : transforme des ids de stat en lignes. */
+export const statLines = (ids: string[]): LineCfg[] => ids.map((id) => ({ k: 'stat', id }))
+/** Nombre de lignes d'affixes d'une rareté (base + bonus de qualité, qualité 3 par défaut). */
+export function maxLinesFor(rarityId: string): number {
+  const r = RARITIES[rarityId as keyof typeof RARITIES]
+  return Math.min(9, (r?.affixCount ?? 3) + qualityBonusAffixes(3))
+}
 /** Pré-remplit une config de stuff complète (16 emplacements) à partir d'une orientation de base. */
 export function initGear(orientation: ItemOrientation): Record<string, GearSlotCfg> {
   const g: Record<string, GearSlotCfg> = {}
-  for (const s of EQUIP_SLOTS) g[s.id] = { orientation, stats: [...DEFAULT_AFFIXES] }
+  for (const s of EQUIP_SLOTS) g[s.id] = { orientation, lines: statLines(DEFAULT_AFFIXES), gems: [] }
   return g
 }
 /** Emplacements (id + libellé + icône) pour l'UI. */
 export const SIM_SLOTS = EQUIP_SLOTS.map((s) => ({ id: s.id, name: s.name, accepts: s.accepts, icon: ITEM_TYPES[s.accepts].icon }))
+
+function toLineSpec(l: LineCfg): LineSpec {
+  if (l.k === 'stat') return { kind: 'stat', stat: l.id as never, weight: 1 }
+  if (l.k === 'resist') return { kind: 'resist', type: l.id as DamageType, weight: 1 }
+  return { kind: 'dmgType', type: l.id as DamageType, weight: 1 }
+}
 
 /** Constellations pertinentes par classe (cœur + classe + archétypes) — pour l'allocateur bac-à-sable. */
 export const CLASS_CONSTELLATIONS: Record<string, string[]> = {
@@ -196,17 +226,29 @@ function buildMember(m: SimMemberCfg, cfg: SimConfig, idx: number): Character {
   const eq: Record<string, ReturnType<typeof generateItem>> = {}
   for (const s of EQUIP_SLOTS) {
     const gs = m.gear?.[s.id]
+    const ilvl = gs?.ilvl ?? cfg.ilvl
+    const rarity = (gs?.rarity ?? cfg.rarity) as RarityId
     const orient = gs?.orientation ?? m.orientation
-    const stats = gs && gs.stats.length ? gs.stats : DEFAULT_AFFIXES
-    const it = generateItem({ ilvl: cfg.ilvl, rarity: cfg.rarity, type: s.accepts, primary: p.primary, stars: 3, orientation: orient, ...(s.accepts === 'armePrincipale' ? { element: p.elem } : {}) })
-    // Redistribue les lignes de STAT vers les stats CHOISIES (on garde les valeurs = budget rollé).
-    const statAff = it.affixes.filter((a) => a.kind === 'stat')
-    const other = it.affixes.filter((a) => a.kind !== 'stat')
-    it.affixes = [...statAff.map((a, i) => ({ ...a, stat: stats[i % stats.length] as never })), ...other]
+    const it = generateItem({ ilvl, rarity, type: s.accepts, primary: p.primary, stars: 3, orientation: orient, ...(s.accepts === 'armePrincipale' ? { element: p.elem } : {}) })
+    if (gs) {
+      // Lignes EXACTES choisies (stat/résist/%dmg), au nb de lignes de la rareté ; valeurs au vrai budget.
+      const lines: LineCfg[] = gs.lines?.length ? gs.lines : (gs.stats ?? DEFAULT_AFFIXES).map((id) => ({ k: 'stat', id }))
+      const tier = RARITIES[rarity].tier, qMult = starsMult(3), cap = maxLinesFor(rarity)
+      it.affixes = lines.slice(0, cap).map((l) => { const sp = toLineSpec(l); return specToAffix(sp, rollLineValue(sp, ilvl, qMult, tier)) })
+      it.gems = (gs.gems ?? []).map((id) => ({ type: 'physique' as DamageType, tier: 1, cond: id, rank: 5, quality: 2 })) // nb = châsses
+      it.unique = gs.unique ? { id: gs.unique, rank: 10 } : undefined
+    } else {
+      // Mode simple : redistribue les stats par défaut (valeurs rollées conservées).
+      const statAff = it.affixes.filter((a) => a.kind === 'stat'), other = it.affixes.filter((a) => a.kind !== 'stat')
+      it.affixes = [...statAff.map((a, i) => ({ ...a, stat: DEFAULT_AFFIXES[i % DEFAULT_AFFIXES.length] as never })), ...other]
+    }
     eq[s.id] = it
   }
-  const slotIds = EQUIP_SLOTS.map((s) => s.id)
-  m.gems.forEach((id, i) => { const it = eq[slotIds[i % slotIds.length]]; it.gems = [...(it.gems ?? []), { type: 'physique' as DamageType, tier: 1, cond: id, rank: 5, quality: 2 }] })
+  // Gemmes au NIVEAU MEMBRE (mode simple uniquement) — en mode détaillé, elles sont posées par pièce.
+  if (!m.gear) {
+    const slotIds = EQUIP_SLOTS.map((s) => s.id)
+    m.gems.forEach((id, i) => { const it = eq[slotIds[i % slotIds.length]]; it.gems = [...(it.gems ?? []), { type: 'physique' as DamageType, tier: 1, cond: id, rank: 5, quality: 2 }] })
+  }
   c.equipment = eq as Character['equipment']
   if (m.talents) {
     c.talents = { co_start: 1, ...m.talents } // arbre personnalisé (bac-à-sable)
