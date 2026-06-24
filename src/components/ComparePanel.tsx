@@ -303,7 +303,6 @@ function CraftSection({ item }: { item: Item }) {
   const reforge = useGame((s) => s.reforge)
   const surillvl = useGame((s) => s.surillvl)
   const ascend = useGame((s) => s.ascend)
-  const infuseUnique = useGame((s) => s.infuseUnique)
   const transmute = useGame((s) => s.transmute)
   const mods = craftMods(useGame((s) => s.metiers))
   const raidProgress = useGame((s) => s.raidProgress)
@@ -463,22 +462,11 @@ function CraftSection({ item }: { item: Item }) {
 
           {mods.enchant ? <EnchantSection item={item} /> : <Locked label="Gravure (runes)" metier="Runiste" />}
 
-          {/* Synthèse d'uniques (Alchimiste) : 3 crans de précision, de l'aléatoire au choix exact */}
-          {mods.synth2 ? <InsertEffectSection item={item} /> : null}
-
-          {mods.synth3 ? <ChooseUniqueSection item={item} /> : <Locked label="Synthèse III — Invocation au choix" metier="Alchimiste (Chapitre 10)" />}
-
-          {/* Synthèse I : infuser un Fragment d'éternité (effet aléatoire) */}
-          {mods.synth1 ? (
-            <button
-              disabled={fragments < FRAGMENT_INFUSE_COST}
-              onClick={() => infuseUnique(item.id)}
-              className="w-full rounded bg-sky-900/50 py-2 text-[11px] font-medium text-sky-200 hover:bg-sky-800/60 disabled:opacity-40"
-              title="Ajoute un effet unique ALÉATOIRE (ou monte son rang) — récompense de raid"
-            >
-              ✨ {item.unique ? 'Renforcer l\'unique' : 'Infuser un unique'} · {FRAGMENT_INFUSE_COST} fragments
-            </button>
-          ) : <Locked label="Synthèse I — Infusion d'unique" metier="Alchimiste" />}
+          {/* Synthèse d'uniques (Alchimiste) : 3 crans (aléatoire / essences / au choix) réunis
+              dans UNE tuile + tiroir filtrable par rôle (fini les deux catalogues à plat sur la carte). */}
+          {(mods.synth1 || mods.synth2 || mods.synth3)
+            ? <UniqueSynthSection item={item} />
+            : <Locked label="Synthèse d'uniques" metier="Alchimiste" />}
         </div>
       )}
     </div>
@@ -807,73 +795,136 @@ function EnchantSection({ item }: { item: Item }) {
   )
 }
 
-/** Insertion ciblée d'un effet unique via les essences (recyclage d'uniques). */
-function InsertEffectSection({ item }: { item: Item }) {
+/**
+ * Synthèse d'uniques (Alchimiste) : TUILE d'état + tiroir focalisé réunissant les 3 crans —
+ *  ✨ I infusion ALÉATOIRE (Fragments) · 🧬 II insertion CIBLÉE via essences possédées ·
+ *  💫 III invocation AU CHOIX (catalogue, sink de Cosmiques). Filtre par rôle partagé par II & III ;
+ *  crans verrouillés = indices discrets. Actions/coûts (insertEffect/chooseUnique/infuseUnique) inchangés.
+ */
+function UniqueSynthSection({ item }: { item: Item }) {
   const essences = useGame((s) => s.essences)
   const essence = useGame((s) => s.essence)
-  const insertEffect = useGame((s) => s.insertEffect)
-  const cost = insertCost()
-  const owned = UNIQUE_EFFECTS.filter((e) => (essences[e.id] ?? 0) >= cost.essences)
-  if (owned.length === 0) return null
-  return (
-    <div className="rounded border border-fuchsia-800/40 bg-fuchsia-950/10 p-2">
-      <div className="mb-1 text-[10px] text-fuchsia-300/80">🧬 Insérer un fragment d'effet · {cost.essences} essences + ♦ {cost.eclats} :</div>
-      <div className="flex flex-wrap gap-1">
-        {owned.map((e) => (
-          <button
-            key={e.id}
-            disabled={essence < cost.eclats}
-            onClick={() => insertEffect(item.id, e.id)}
-            title={e.description}
-            className="rounded border border-fuchsia-700/50 bg-fuchsia-900/30 px-2 py-1 text-[10px] text-fuchsia-200 hover:bg-fuchsia-800/40 disabled:opacity-40"
-          >
-            {e.name} ({essences[e.id]})
-          </button>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-/** Invocation d'un effet unique AU CHOIX via un Éclat cosmique 💫 (sink des raids). */
-function ChooseUniqueSection({ item }: { item: Item }) {
   const cosmic = useGame((s) => s.cosmic)
   const fragments = useGame((s) => s.fragments)
+  const insertEffect = useGame((s) => s.insertEffect)
   const chooseUnique = useGame((s) => s.chooseUnique)
+  const infuseUnique = useGame((s) => s.infuseUnique)
+  const mods = craftMods(useGame((s) => s.metiers))
   const [open, setOpen] = useState(false)
   const [role, setRole] = useState<UniqueRole | 'all'>('all')
-  const affordable = cosmic >= CHOOSE_UNIQUE_COST.cosmic && fragments >= CHOOSE_UNIQUE_COST.fragments
-  const list = UNIQUE_EFFECTS.filter((e) => role === 'all' || e.role === role)
+
+  const cur = item.unique ? getUnique(item.unique.id) : undefined
+  const insCost = insertCost()
+  const chooseAffordable = cosmic >= CHOOSE_UNIQUE_COST.cosmic && fragments >= CHOOSE_UNIQUE_COST.fragments
+  const byRole = (e: (typeof UNIQUE_EFFECTS)[number]) => role === 'all' || e.role === role
+  const insList = mods.synth2 ? UNIQUE_EFFECTS.filter((e) => (essences[e.id] ?? 0) >= insCost.essences && byRole(e)) : []
+  const chooseList = mods.synth3 ? UNIQUE_EFFECTS.filter(byRole) : []
+  const showFilter = mods.synth2 || mods.synth3
+
   return (
-    <div className="rounded border border-violet-800/40 bg-violet-950/10 p-2">
-      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center justify-between py-1 text-[11px] font-semibold text-violet-300">
-        <span>💫 Invoquer un effet au choix</span>
-        <span className="text-[9.5px] font-normal text-slate-400">{CHOOSE_UNIQUE_COST.cosmic} 💫 + {CHOOSE_UNIQUE_COST.fragments} ✨ · {open ? '▾' : '▸'}</span>
+    <>
+      {/* Tuile-déclencheur : effet unique actuel, ouvre le tiroir de synthèse. */}
+      <button
+        onClick={() => setOpen(true)}
+        className="flex w-full items-center gap-2 rounded border border-fuchsia-800/40 bg-fuchsia-950/10 px-2 py-2 text-left hover:bg-fuchsia-900/20"
+      >
+        <span className="text-base leading-none">🧬</span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[11px] font-semibold text-fuchsia-300">Synthèse d'unique</span>
+          <span className="block truncate text-[10px] text-slate-400">{cur ? <>✦ {cur.name} · rang {item.unique!.rank}</> : 'aucun effet — en poser un'}</span>
+        </span>
+        <span className="shrink-0 text-[10px] font-medium text-fuchsia-300/80">{cur ? 'Modifier' : 'Synthétiser'} ›</span>
       </button>
+
       {open && (
-        <div className="mt-1.5">
-          {!affordable && <div className="mb-1 text-[9.5px] text-rose-300/70">Pas assez de ressources — les Éclats cosmiques 💫 viennent des raids.</div>}
-          <div className="mb-1 flex flex-wrap gap-1 text-[9px]">
-            <RoleChip active={role === 'all'} onClick={() => setRole('all')} label="Tous" />
-            {UNIQUE_ROLES.map((r) => <RoleChip key={r} active={role === r} onClick={() => setRole(r)} label={r} />)}
-          </div>
-          <div className="max-h-40 space-y-0.5 overflow-y-auto pr-1">
-            {list.map((e) => (
+        <Sheet title={<span>🧬 Synthèse d'unique</span>} onClose={() => setOpen(false)}>
+          <div className="space-y-2.5">
+            <div className="text-[10px] leading-snug text-slate-500">
+              Trois crans, de l'aléatoire au choix exact. {cur ? <>Effet actuel : <span className="text-fuchsia-300">✦ {cur.name}</span> (rang {item.unique!.rank}).</> : 'Cette pièce n\'a pas encore d\'effet unique.'}
+            </div>
+
+            {/* I — Infusion ALÉATOIRE (Fragments d'éternité). */}
+            {mods.synth1 ? (
               <button
-                key={e.id}
-                disabled={!affordable}
-                onClick={() => chooseUnique(item.id, e.id)}
-                title={e.description}
-                className="flex w-full items-center justify-between rounded border border-violet-800/40 px-2 py-1 text-left text-[10px] text-violet-100 hover:bg-violet-900/30 disabled:opacity-40"
+                disabled={fragments < FRAGMENT_INFUSE_COST}
+                onClick={() => infuseUnique(item.id)}
+                title="Ajoute un effet unique ALÉATOIRE (ou monte son rang) — récompense de raid."
+                className="flex w-full items-center justify-between rounded-lg border border-sky-800/40 bg-sky-950/20 px-2 py-2 text-[10.5px] font-medium text-sky-200 hover:bg-sky-900/30 disabled:opacity-40"
               >
-                <span className="truncate">{item.unique?.id === e.id ? '✦ ' : ''}{e.name}</span>
-                <span className="ml-1 shrink-0 text-[8.5px] text-slate-500">{e.role}</span>
+                <span>✨ Synthèse I · {item.unique ? 'Renforcer (aléatoire)' : 'Infuser (aléatoire)'}</span>
+                <span className="text-[9.5px] text-slate-400">✨ {FRAGMENT_INFUSE_COST}</span>
               </button>
-            ))}
+            ) : (
+              <div className="rounded-lg border border-slate-800 bg-black/20 px-2 py-1.5 text-[9.5px] text-slate-500">🔒 Synthèse I (infusion aléatoire) — à apprendre chez l'Alchimiste.</div>
+            )}
+
+            {/* Filtre de rôle partagé par II & III. */}
+            {showFilter && (
+              <div className="flex flex-wrap gap-1 text-[9px]">
+                <RoleChip active={role === 'all'} onClick={() => setRole('all')} label="Tous" />
+                {UNIQUE_ROLES.map((r) => <RoleChip key={r} active={role === r} onClick={() => setRole(r)} label={r} />)}
+              </div>
+            )}
+
+            {/* II — Insertion CIBLÉE via essences (ce que tu as recyclé). */}
+            {mods.synth2 && (
+              <div>
+                <div className="mb-1 text-[10px] font-semibold text-fuchsia-300/80">🧬 Synthèse II · insérer un effet précis <span className="font-normal text-slate-500">· {insCost.essences} essences + ♦{insCost.eclats}</span></div>
+                {insList.length === 0 ? (
+                  <div className="rounded-lg border border-dashed border-slate-700 p-3 text-center text-[10px] leading-snug text-slate-500">
+                    Aucune essence suffisante{role !== 'all' ? ' pour ce rôle' : ''}. Recycle des uniques en DOUBLE pour accumuler leurs essences.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                    {insList.map((e) => (
+                      <div key={e.id} className="rounded-lg border border-fuchsia-800/40 bg-fuchsia-950/15 p-2">
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="truncate text-[11px] font-medium text-fuchsia-200">{item.unique?.id === e.id ? '✦ ' : ''}{e.name}</span>
+                          <span className="shrink-0 text-[9px] text-emerald-300">🧬 {essences[e.id]}</span>
+                        </div>
+                        <div className="mt-0.5 text-[8.5px] uppercase tracking-wide text-slate-500">{e.role}</div>
+                        <div className="mt-0.5 line-clamp-2 text-[9px] leading-snug text-slate-400" title={e.description}>{e.description}</div>
+                        <button
+                          disabled={essence < insCost.eclats}
+                          onClick={() => insertEffect(item.id, e.id)}
+                          className="mt-1.5 w-full rounded bg-fuchsia-800/50 py-1.5 text-[10px] font-semibold text-fuchsia-100 hover:bg-fuchsia-700/60 disabled:opacity-40"
+                        >
+                          🧬 Insérer · ♦{insCost.eclats}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* III — Invocation AU CHOIX (catalogue complet, sink de Cosmiques). */}
+            {mods.synth3 ? (
+              <div>
+                <div className="mb-1 text-[10px] font-semibold text-violet-300/80">💫 Synthèse III · invoquer au choix <span className="font-normal text-slate-500">· {CHOOSE_UNIQUE_COST.cosmic} 💫 + {CHOOSE_UNIQUE_COST.fragments} ✨</span></div>
+                {!chooseAffordable && <div className="mb-1 text-[9.5px] text-rose-300/70">Pas assez de ressources — les Éclats cosmiques 💫 viennent des raids.</div>}
+                <div className="max-h-72 space-y-0.5 overflow-y-auto pr-1">
+                  {chooseList.map((e) => (
+                    <button
+                      key={e.id}
+                      disabled={!chooseAffordable}
+                      onClick={() => chooseUnique(item.id, e.id)}
+                      title={e.description}
+                      className="flex w-full items-center justify-between rounded border border-violet-800/40 px-2 py-1 text-left text-[10px] text-violet-100 hover:bg-violet-900/30 disabled:opacity-40"
+                    >
+                      <span className="truncate">{item.unique?.id === e.id ? '✦ ' : ''}{e.name}</span>
+                      <span className="ml-1 shrink-0 text-[8.5px] text-slate-500">{e.role}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-slate-800 bg-black/20 px-2 py-1.5 text-[9.5px] text-slate-500">🔒 Synthèse III (invocation au choix) — Alchimiste (Chapitre 10).</div>
+            )}
           </div>
-        </div>
+        </Sheet>
       )}
-    </div>
+    </>
   )
 }
 
