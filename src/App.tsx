@@ -4,7 +4,7 @@ import { flushSave } from './game/save'
 import { chapitreOf } from './game/progression'
 import { useMediaQuery } from './useMediaQuery'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from './game/damage'
-import { TALENT_START_LEVEL, teamTalentPool } from './game/character'
+import { TALENT_START_LEVEL, teamTalentPool, charsStableEqual } from './game/character'
 import { METIER_LIST, pointsAvailable } from './game/metiers'
 import { CombatPanel } from './components/CombatPanel'
 import { ResetButton } from './components/CharacterPanel'
@@ -109,7 +109,9 @@ function GameApp() {
   const metiers = useGame((s) => s.metiers)
   const sceaux = useGame((s) => s.sceaux)
   const bestStage = useGame((s) => s.bestStage)
-  const characters = useGame((s) => s.characters)
+  // Perf : App ne lit que des champs STABLES du roster (level/talents) → on ignore les champs
+  // transitoires de combat pour ne pas re-rendre la coquille (et tous les panneaux) à chaque tick.
+  const characters = useGame((s) => s.characters, charsStableEqual)
   const dungeonProgress = useGame((s) => s.dungeonProgress)
   const upgrades = useGame((s) => s.upgrades)
   const onboarded = useGame((s) => s.onboarded)

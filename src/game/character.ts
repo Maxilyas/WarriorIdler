@@ -29,6 +29,36 @@ export const TALENT_START_LEVEL = 10
 /** 3 emplacements RÉSERVÉS aux capacités PASSIVES (distincts des 5 slots actifs). */
 export const PASSIVE_SLOTS = 3
 
+/**
+ * Champs de combat TRANSITOIRES d'un `Character` : réécrits à CHAQUE pas de combat (le tick recrée
+ * chaque perso via `{...c, hp, dots…}`). Ni persistés, ni affichés hors combat.
+ */
+export const CHAR_TRANSIENT_FIELDS = new Set([
+  'hp', 'rez', 'stun', 'dots', 'weaken', 'absorb', 'invuln', 'healCut',
+  'charge', 'frenzy', 'combo', 'heat', 'overload', 'form', 'formClock', 'instinct', 'chimera',
+])
+
+/**
+ * Égalité « stable » du roster : ignore les champs transitoires de combat (seules les réfs `hp`/`dots`/…
+ * changent au tick ; le reste — `equipment`/`talents`/`level`/… — est préservé par le spread).
+ * Branchée sur `useGame((s) => s.characters, charsStableEqual)`, elle évite que les écrans HORS combat
+ * (Équipement, coquille `App`) se re-rendent 5 Hz pour rien ; zustand renvoie alors l'ancien tableau.
+ */
+export function charStableEqual(x: Character, y: Character): boolean {
+  if (x === y) return true
+  const xr = x as unknown as Record<string, unknown>
+  const yr = y as unknown as Record<string, unknown>
+  for (const k in xr) if (!CHAR_TRANSIENT_FIELDS.has(k) && xr[k] !== yr[k]) return false
+  for (const k in yr) if (!CHAR_TRANSIENT_FIELDS.has(k) && !(k in xr)) return false
+  return true
+}
+export function charsStableEqual(a: Character[], b: Character[]): boolean {
+  if (a === b) return true
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) if (!charStableEqual(a[i], b[i])) return false
+  return true
+}
+
 /** 3 emplacements de SOUTIEN (ex-Générateurs), auto-cast pur. Accueillent les builders ET
  *  les sorts de soutien (boucliers/soins/buffs) à lancer en fond, sans les timer (fire-and-forget). */
 export const SUPPORT_SLOTS = 3

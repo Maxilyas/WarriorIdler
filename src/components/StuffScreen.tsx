@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { memo, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useGame, referenceIlvl } from '../game/store'
 import { useMediaQuery } from '../useMediaQuery'
@@ -12,7 +12,7 @@ import { PRIMARY_META, SECONDARY_META, SECONDARY_STATS } from '../game/stats'
 import { getCondGem } from '../game/condGems'
 import { itemSockets } from '../game/gems'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from '../game/damage'
-import { equipDelta, charDps, charEhp, type EquipDelta } from '../game/character'
+import { equipDelta, charDps, charEhp, charsStableEqual, type EquipDelta } from '../game/character'
 import { SETS, setBonuses } from '../game/sets'
 import { rarityTextStyle, rarityNameClass } from './rarityStyle'
 import { ConfirmButton, Sheet } from './ui'
@@ -75,9 +75,10 @@ function targetSlotFor(equipment: Equipment, type: ItemType, selectedSlot: Equip
   return slots.map((s) => s.id).sort((a, b) => itemScore(equipment[a]!) - itemScore(equipment[b]!))[0]
 }
 
-export function StuffScreen() {
+function StuffScreenBase() {
   const inventory = useGame((s) => s.inventory)
-  const characters = useGame((s) => s.characters)
+  // Perf : ignore les champs transitoires de combat → pas de re-render à chaque tick (cf. charsStableEqual).
+  const characters = useGame((s) => s.characters, charsStableEqual)
   const activeChar = useGame((s) => s.activeChar)
   const setActiveChar = useGame((s) => s.setActiveChar)
   const equip = useGame((s) => s.equip)
@@ -492,6 +493,13 @@ export function StuffScreen() {
     </div>
   )
 }
+
+/**
+ * Perf — `App` se re-rend à chaque tick de combat (il s'abonne à `characters`, gold, etc. pour
+ * l'en-tête) ; sans `memo`, ce panneau (rendu SANS props) suivrait la cascade 5-10×/s. Mémoïsé, il
+ * ne se re-rend plus que sur SES propres abonnements (rendus stables au tick via `charsStuffEqual`).
+ */
+export const StuffScreen = memo(StuffScreenBase)
 
 /** Petite puce de filtre actif, effaçable d'un tap. */
 function Chip({ color, onClear, children }: { color?: string; onClear: () => void; children: React.ReactNode }) {
