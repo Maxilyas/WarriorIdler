@@ -14,7 +14,8 @@
  *  La sim étant synchrone, le tick live ne s'intercale jamais pendant son exécution.
  */
 import type { Character, DamageType, ItemOrientation, OffensiveStat, RarityId } from './types'
-import { makeCharacter, charDps, charMaxHp, charEhp, charDerived, charDamageProfile, charCombatMods } from './character'
+import { makeCharacter, charDps, charMaxHp, charEhp, charDerived, charDamageProfile, charCombatMods, computeUnlockedPowers, isSupport, SUPPORT_SLOTS, PASSIVE_SLOTS } from './character'
+import { getPower, POWER_SLOTS } from './powers'
 import { profileDamageMult, DAMAGE_TYPE_LIST, DAMAGE_TYPES } from './damage'
 import { generateItem, rollLineValue, specToAffix, starsMult, qualityBonusAffixes, type LineSpec } from './items'
 import { RARITIES, RARITY_LIST } from './rarities'
@@ -104,20 +105,26 @@ export type LineCfg = { k: 'stat' | 'resist' | 'dmg'; id: string }
 export interface GearSlotCfg {
   ilvl?: number          // override d'ilvl de la pièce (défaut = ilvl global)
   rarity?: string        // override de rareté (défaut = rareté globale) — pilote le NB de lignes
+  stars?: number         // qualité ⭐ 1..5 (défaut 3) — budget + lignes bonus
   orientation: ItemOrientation
   lines: LineCfg[]       // lignes d'affixes (valeurs auto au budget) ; cap = nb de lignes de la rareté
   gems: string[]         // gemmes posées sur CETTE pièce (nombre = nb de châsses)
+  gemRank?: number       // rang des gemmes de la pièce (défaut 5)
   unique?: string        // effet unique posé sur cette pièce
+  uniqueRank?: number    // rang de l'unique 1..10 (défaut 10)
+  element?: DamageType   // arme principale : type de dégâts de l'arme (défaut = élément de classe)
   stats?: string[]       // DÉPRÉCIÉ (v1) — migré en lignes de stat à la construction
 }
+export const SIM_MAX_GEM_RANK = 10
+export const SIM_MAX_UNIQUE_RANK = 10 // = UNIQUE_MAX_RANK (uniques.ts) ; en dur pour éviter un souci d'ordre d'init
 /** Affixes par défaut (priorité offensive) si l'emplacement n'est pas personnalisé. */
 export const DEFAULT_AFFIXES = ['maitrise', 'critique', 'degatsCrit', 'hate', 'penetration']
 /** Raccourci : transforme des ids de stat en lignes. */
 export const statLines = (ids: string[]): LineCfg[] => ids.map((id) => ({ k: 'stat', id }))
-/** Nombre de lignes d'affixes d'une rareté (base + bonus de qualité, qualité 3 par défaut). */
-export function maxLinesFor(rarityId: string): number {
+/** Nombre de lignes d'affixes d'une rareté (base + bonus de qualité ⭐). */
+export function maxLinesFor(rarityId: string, stars = 3): number {
   const r = RARITIES[rarityId as keyof typeof RARITIES]
-  return Math.min(9, (r?.affixCount ?? 3) + qualityBonusAffixes(3))
+  return Math.min(9, (r?.affixCount ?? 3) + qualityBonusAffixes(stars))
 }
 /** Pré-remplit une config de stuff complète (16 emplacements) à partir d'une orientation de base. */
 export function initGear(orientation: ItemOrientation): Record<string, GearSlotCfg> {
@@ -163,6 +170,11 @@ export interface SimMemberCfg {
   /** Arbre de TALENTS personnalisé (nodeId → rang). Si absent, le chemin canonique de la classe est
    *  utilisé. Ignoré pour un membre importé (qui garde ses vrais talents). */
   talents?: Record<string, number>
+  /** Capacités ÉQUIPÉES choisies (ids), bornées aux slots. Si absent → défaut de la classe.
+   *  Ignoré pour un membre importé. */
+  powers?: string[]    // actifs (≤ POWER_SLOTS)
+  support?: string[]   // soutien (≤ SUPPORT_SLOTS)
+  passives?: string[]  // passifs (≤ PASSIVE_SLOTS)
   /** Membre IMPORTÉ : un vrai personnage du joueur (vrais talents/stuff/gemmes/runes). Si présent,
    *  les champs cls/orientation/gems/runes/level/gear ci-dessus sont ignorés — perso tel quel. */
   imported?: Character
@@ -228,15 +240,17 @@ function buildMember(m: SimMemberCfg, cfg: SimConfig, idx: number): Character {
     const gs = m.gear?.[s.id]
     const ilvl = gs?.ilvl ?? cfg.ilvl
     const rarity = (gs?.rarity ?? cfg.rarity) as RarityId
+    const stars = gs?.stars ?? 3
     const orient = gs?.orientation ?? m.orientation
-    const it = generateItem({ ilvl, rarity, type: s.accepts, primary: p.primary, stars: 3, orientation: orient, ...(s.accepts === 'armePrincipale' ? { element: p.elem } : {}) })
+    const elem = (s.accepts === 'armePrincipale' ? (gs?.element ?? p.elem) : undefined)
+    const it = generateItem({ ilvl, rarity, type: s.accepts, primary: p.primary, stars, orientation: orient, ...(elem ? { element: elem } : {}) })
     if (gs) {
-      // Lignes EXACTES choisies (stat/résist/%dmg), au nb de lignes de la rareté ; valeurs au vrai budget.
+      // Lignes EXACTES choisies (stat/résist/%dmg), au nb de lignes de la rareté+qualité ; valeurs au vrai budget.
       const lines: LineCfg[] = gs.lines?.length ? gs.lines : (gs.stats ?? DEFAULT_AFFIXES).map((id) => ({ k: 'stat', id }))
-      const tier = RARITIES[rarity].tier, qMult = starsMult(3), cap = maxLinesFor(rarity)
+      const tier = RARITIES[rarity].tier, qMult = starsMult(stars), cap = maxLinesFor(rarity, stars)
       it.affixes = lines.slice(0, cap).map((l) => { const sp = toLineSpec(l); return specToAffix(sp, rollLineValue(sp, ilvl, qMult, tier)) })
-      it.gems = (gs.gems ?? []).map((id) => ({ type: 'physique' as DamageType, tier: 1, cond: id, rank: 5, quality: 2 })) // nb = châsses
-      it.unique = gs.unique ? { id: gs.unique, rank: 10 } : undefined
+      it.gems = (gs.gems ?? []).map((id) => ({ type: 'physique' as DamageType, tier: 1, cond: id, rank: gs.gemRank ?? 5, quality: 2 })) // nb = châsses
+      it.unique = gs.unique ? { id: gs.unique, rank: gs.uniqueRank ?? SIM_MAX_UNIQUE_RANK } : undefined
     } else {
       // Mode simple : redistribue les stats par défaut (valeurs rollées conservées).
       const statAff = it.affixes.filter((a) => a.kind === 'stat'), other = it.affixes.filter((a) => a.kind !== 'stat')
@@ -256,11 +270,27 @@ function buildMember(m: SimMemberCfg, cfg: SimConfig, idx: number): Character {
     c.talents = { co_start: 1 }
     for (const t of p.talents) c.talents[t] = 1
   }
-  c.powers = [...p.powers]
-  c.support = [...p.support]
-  c.passives = [...p.passives]
+  c.powers = m.powers ? [...m.powers] : [...p.powers]
+  c.support = m.support ? [...m.support] : [...p.support]
+  c.passives = m.passives ? [...m.passives] : [...p.passives]
   c.hp = charMaxHp(c)
   return c
+}
+
+/** Capacités débloquées par une map de talents, classées par destination de slot (actif/soutien/passif). */
+export interface AbilityOpt { id: string; name: string; icon: string }
+export const SIM_ABILITY_SLOTS = { active: POWER_SLOTS, support: SUPPORT_SLOTS, passive: PASSIVE_SLOTS }
+export function availableAbilities(talents: Record<string, number>): { active: AbilityOpt[]; support: AbilityOpt[]; passive: AbilityOpt[] } {
+  const out = { active: [] as AbilityOpt[], support: [] as AbilityOpt[], passive: [] as AbilityOpt[] }
+  for (const id of computeUnlockedPowers(talents)) {
+    const def = getPower(id)
+    if (!def) continue
+    const opt: AbilityOpt = { id, name: def.name, icon: def.icon ?? '•' }
+    if (def.kind === 'passive') out.passive.push(opt)
+    else if (isSupport(def)) out.support.push(opt)
+    else out.active.push(opt)
+  }
+  return out
 }
 
 export function runSim(cfg: SimConfig): SimResult {

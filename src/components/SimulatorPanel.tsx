@@ -1,8 +1,9 @@
 import { useState, type ReactNode } from 'react'
 import { useGame } from '../game/store'
 import {
-  runSim, defaultConfig, importedMember, initGear, initTalents, statLines, maxLinesFor, CLASS_CONSTELLATIONS, DEFAULT_TALENT_BUDGET,
+  runSim, defaultConfig, importedMember, initGear, initTalents, statLines, maxLinesFor, availableAbilities, CLASS_CONSTELLATIONS, DEFAULT_TALENT_BUDGET,
   SIM_CLASSES, SIM_GEMS, SIM_RUNES, SIM_ELIXIRS, SIM_ORIENTATIONS, SIM_RAIDS, SIM_DUNGEONS, SIM_STATS, SIM_SLOTS, SIM_RARITIES, SIM_DMG_TYPES, SIM_UNIQUES,
+  SIM_ABILITY_SLOTS, SIM_MAX_GEM_RANK, SIM_MAX_UNIQUE_RANK,
   type SimConfig, type SimMemberCfg, type SimResult, type GearSlotCfg, type LineCfg,
 } from '../game/simulator'
 import { CONSTELLATIONS, talentsByConstellation, canAllocate, gateInfo, type ConstellationId, type TalentNode } from '../game/talents'
@@ -342,6 +343,17 @@ function MemberCard({ m, index, canRemove, globalIlvl, globalRarity, onSet, onRe
             {m.talents && <TalentSandbox clsId={m.cls} talents={m.talents} onChange={(t) => onSet({ talents: t })} />}
           </div>
 
+          {/* Capacités équipées (l'arbre débloque plus que les slots → on choisit) */}
+          <div>
+            <div className="mb-1.5 flex items-center justify-between">
+              <Label>Capacités{(m.powers || m.support || m.passives) ? ' — personnalisées' : ''}</Label>
+              {(m.powers || m.support || m.passives)
+                ? <button onClick={() => onSet({ powers: undefined, support: undefined, passives: undefined })} className="rounded-lg border border-slate-700 px-2 py-0.5 text-[10px] text-slate-400 hover:text-slate-200">✕ Défaut de classe</button>
+                : <button onClick={() => { const pr = SIM_CLASSES.find((c) => c.id === m.cls) ?? SIM_CLASSES[0]; onSet({ powers: [...pr.powers], support: [...pr.support], passives: [...pr.passives] }) }} className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-medium text-cyan-200 hover:bg-cyan-500/20">🪄 Choisir les capacités</button>}
+            </div>
+            {(m.powers || m.support || m.passives) && <AbilitiesEditor m={m} onSet={onSet} />}
+          </div>
+
           {/* Gemmes */}
           <div>
             <Label>Gemmes de condition <span className="text-emerald-500/70">offensives</span> · <span className="text-sky-500/70">défensives</span></Label>
@@ -392,8 +404,8 @@ function AddSelect({ label, options, onPick, disabled }: { label: string; option
 }
 
 /** Éditeur DÉTAILLÉ d'une pièce : ilvl/rareté, lignes (stat/résist/%dmg) au nb de la rareté, gemmes, unique. */
-function SlotDetail({ gs, rar, il, lines, setSlot }: { gs: GearSlotCfg; rar: string; il: number; lines: LineCfg[]; setSlot: (p: Partial<GearSlotCfg>) => void }) {
-  const cap = maxLinesFor(rar)
+function SlotDetail({ gs, rar, il, lines, isWeapon, setSlot }: { gs: GearSlotCfg; rar: string; il: number; lines: LineCfg[]; isWeapon: boolean; setSlot: (p: Partial<GearSlotCfg>) => void }) {
+  const cap = maxLinesFor(rar, gs.stars ?? 3)
   const addLine = (l: LineCfg) => { if (lines.length < cap) setSlot({ lines: [...lines, l] }) }
   const removeLine = (i: number) => setSlot({ lines: lines.filter((_, j) => j !== i) })
   const toggleGem = (id: string) => { const g = gs.gems ?? []; setSlot({ gems: g.includes(id) ? g.filter((x) => x !== id) : [...g, id] }) }
@@ -406,6 +418,15 @@ function SlotDetail({ gs, rar, il, lines, setSlot }: { gs: GearSlotCfg; rar: str
             {SIM_RARITIES.map((r) => <option key={r.id} value={r.id}>{r.name} ({r.affixCount}L)</option>)}
           </select>
         </label>
+        <label className="flex items-center gap-1">⭐ <Num value={gs.stars ?? 3} min={1} max={5} w="w-11" onChange={(v) => setSlot({ stars: v })} /></label>
+        {isWeapon && (
+          <label className="flex items-center gap-1">Élément
+            <select value={gs.element ?? ''} onChange={(e) => setSlot({ element: (e.target.value || undefined) as GearSlotCfg['element'] })} className="rounded border border-slate-700 bg-slate-900/60 px-1 py-0.5 text-slate-200 outline-none">
+              <option value="">défaut</option>
+              {SIM_DMG_TYPES.map((d) => <option key={d.id} value={d.id}>{d.icon} {d.name}</option>)}
+            </select>
+          </label>
+        )}
         <Seg value={gs.orientation} options={SIM_ORIENTATIONS.map((o) => ({ id: o.id, label: o.label }))} onChange={(v) => setSlot({ orientation: v })} />
       </div>
       <div>
@@ -425,19 +446,23 @@ function SlotDetail({ gs, rar, il, lines, setSlot }: { gs: GearSlotCfg; rar: str
         </div>
       </div>
       <div>
-        <div className="mb-1 text-[9.5px] uppercase tracking-wide text-slate-500">Gemmes — châsses ({(gs.gems ?? []).length})</div>
+        <div className="mb-1 flex items-center gap-2 text-[9.5px] uppercase tracking-wide text-slate-500">
+          <span>Gemmes — châsses ({(gs.gems ?? []).length})</span>
+          {(gs.gems ?? []).length > 0 && <span className="flex items-center gap-1 normal-case tracking-normal text-slate-400">rang <Num value={gs.gemRank ?? 5} min={1} max={SIM_MAX_GEM_RANK} w="w-11" onChange={(v) => setSlot({ gemRank: v })} /></span>}
+        </div>
         <div className="flex flex-wrap gap-1">
           {SIM_GEMS.map((g) => (
             <Chip key={g.id} on={(gs.gems ?? []).includes(g.id)} color={g.kind === 'off' ? 'emerald' : 'sky'} onClick={() => toggleGem(g.id)} title={g.name}>{g.icon}</Chip>
           ))}
         </div>
       </div>
-      <label className="flex items-center gap-2 text-[10px] text-slate-400">✦ Unique
+      <div className="flex items-center gap-2 text-[10px] text-slate-400">✦ Unique
         <select value={gs.unique ?? ''} onChange={(e) => setSlot({ unique: e.target.value || undefined })} className="min-w-0 flex-1 rounded border border-slate-700 bg-slate-900/60 px-1 py-0.5 text-slate-200 outline-none">
           <option value="">— aucun —</option>
           {SIM_UNIQUES.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
         </select>
-      </label>
+        {gs.unique && <span className="flex shrink-0 items-center gap-1">rang <Num value={gs.uniqueRank ?? SIM_MAX_UNIQUE_RANK} min={1} max={SIM_MAX_UNIQUE_RANK} w="w-11" onChange={(v) => setSlot({ uniqueRank: v })} /></span>}
+      </div>
     </div>
   )
 }
@@ -467,7 +492,7 @@ function GearEditor({ gear, globalIlvl, globalRarity, onChange }: { gear: Record
                   <span>{isOpen ? '▴' : '▾'}</span>
                 </span>
               </button>
-              {isOpen && <SlotDetail gs={gs} rar={rar} il={il} lines={lines} setSlot={(p) => setSlot(sl.id, p)} />}
+              {isOpen && <SlotDetail gs={gs} rar={rar} il={il} lines={lines} isWeapon={sl.accepts === 'armePrincipale'} setSlot={(p) => setSlot(sl.id, p)} />}
             </div>
           )
         })}
@@ -537,6 +562,51 @@ function TalentSandbox({ clsId, talents, onChange }: { clsId: string; talents: R
         })}
       </div>
       <div className="text-[10px] text-slate-600">Gating réel (adjacence, seuils, exclusifs). Les sorts équipés restent ceux de la classe (v1).</div>
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+
+/** Choix des capacités ÉQUIPÉES (actifs/soutien/passifs) parmi celles débloquées par les talents,
+ *  bornées au nombre de slots. */
+function AbilitiesEditor({ m, onSet }: { m: SimMemberCfg; onSet: (p: Partial<SimMemberCfg>) => void }) {
+  const preset = SIM_CLASSES.find((c) => c.id === m.cls) ?? SIM_CLASSES[0]
+  const avail = availableAbilities(m.talents ?? initTalents(m.cls))
+  const cur = { active: m.powers ?? preset.powers, support: m.support ?? preset.support, passive: m.passives ?? preset.passives }
+  const FIELD = { active: 'powers', support: 'support', passive: 'passives' } as const
+  const groups = [
+    { k: 'active' as const, label: 'Actifs', list: avail.active },
+    { k: 'support' as const, label: 'Soutien', list: avail.support },
+    { k: 'passive' as const, label: 'Passifs', list: avail.passive },
+  ]
+  const toggle = (k: 'active' | 'support' | 'passive', id: string) => {
+    const list = cur[k], cap = SIM_ABILITY_SLOTS[k]
+    const next = list.includes(id) ? list.filter((x) => x !== id) : (list.length < cap ? [...list, id] : list)
+    onSet({ [FIELD[k]]: next })
+  }
+  return (
+    <div className="space-y-2">
+      {groups.map((g) => (
+        <div key={g.k}>
+          <div className="mb-1 text-[9.5px] uppercase tracking-wide text-slate-500">{g.label} ({cur[g.k].length}/{SIM_ABILITY_SLOTS[g.k]})</div>
+          {g.list.length === 0
+            ? <div className="text-[10px] text-slate-600">Aucune capacité de ce type débloquée par l'arbre.</div>
+            : <div className="flex flex-wrap gap-1.5">
+                {g.list.map((a) => {
+                  const on = cur[g.k].includes(a.id)
+                  const full = !on && cur[g.k].length >= SIM_ABILITY_SLOTS[g.k]
+                  return (
+                    <button key={a.id} onClick={() => toggle(g.k, a.id)} disabled={full} title={a.name}
+                      className={'rounded-full border px-2 py-0.5 text-[10.5px] transition-colors ' + (on ? 'border-cyan-400/70 bg-cyan-500/15 text-cyan-200' : full ? 'border-slate-800 text-slate-700' : 'border-slate-700 text-slate-400 hover:text-slate-200')}>
+                      {a.icon} {a.name}
+                    </button>
+                  )
+                })}
+              </div>}
+        </div>
+      ))}
+      <div className="text-[10px] text-slate-600">L'arbre débloque plus de capacités que de slots — choisis lesquelles équiper.</div>
     </div>
   )
 }
