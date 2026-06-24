@@ -11,7 +11,7 @@ const load = async (entry) => {
   return import('data:text/javascript;base64,' + Buffer.from(res.outputFiles[0].text).toString('base64'))
 }
 const M = await load(`
-  export { runSim, getClassPreset, initTalents, SIM_CLASSES, SIM_RAIDS, SIM_GEMS, SIM_RUNES, SIM_UNIQUES, CLASS_CONSTELLATIONS } from './src/game/simulator.ts'
+  export { runSim, getClassPreset, initTalents, SIM_CLASSES, SIM_RAIDS, SIM_GEMS, SIM_RUNES, SIM_UNIQUES } from './src/game/simulator.ts'
   export { REFERENCE_BUILDS } from './src/game/referenceBuilds.ts'
   export { decodeBuild } from './src/game/buildCode.ts'
   export { setGlobalCombatMods } from './src/game/character.ts'
@@ -23,7 +23,7 @@ const M = await load(`
 const {
   runSim, getClassPreset, initTalents, SIM_CLASSES, SIM_RAIDS, SIM_GEMS, SIM_RUNES, SIM_UNIQUES,
   REFERENCE_BUILDS, decodeBuild, setGlobalCombatMods, getPower, powerSummary, DAMAGE_TYPES, TIME_RUNES,
-  getTalent, CONSTELLATIONS, talentsByConstellation, CLASS_CONSTELLATIONS,
+  getTalent, CONSTELLATIONS, talentsByConstellation,
 } = M
 setGlobalCombatMods({ power: 1, attackSpeed: 1, vitality: 1 })
 
@@ -58,10 +58,23 @@ const gem = (id) => { const g = gemMap.get(id); if (!g) return null; if (!INFO.g
 const rune = (id) => { const r = runeInfo.get(id); if (!r) return null; if (!INFO.rune[r.name]) INFO.rune[r.name] = { icon: r.icon, name: r.name, desc: r.desc }; return { icon: r.icon, name: r.name } }
 const unique = (id) => { const u = uniqueMap.get(id); if (!u) return null; if (!INFO.unique[u.name]) INFO.unique[u.name] = { name: u.name, role: u.role, desc: u.desc }; return { name: u.name } }
 
-// constellation → classe (hors « coeur », partagé) pour les KPI de talents par classe.
+// TOUTES les classes de BASE (hors Panthéon) + leurs constellations (racine + archétypes), dérivées des
+// constellations : racine = role « … · classe » (tree base) ; archétype rattaché par le préfixe de role
+// (« Voleur · … » → voleur). → 6 classes : guerrier, voleur, mage, chasseur, prêtre, druide.
+const BASE_CLASSES = []
+for (const [cid, m] of Object.entries(CONSTELLATIONS)) {
+  if (m.tree === 'pantheon') continue
+  if (/·\s*classe$/.test(m.role)) BASE_CLASSES.push({ id: cid, name: m.name, icon: m.icon, color: m.color, cons: [cid] })
+}
+for (const [cid, m] of Object.entries(CONSTELLATIONS)) {
+  if (m.tree === 'pantheon' || !m.archetype) continue
+  const cls = BASE_CLASSES.find((c) => m.role.startsWith(c.name + ' ·'))
+  if (cls) cls.cons.push(cid)
+}
+// constellation → classe (pour les KPI de talents par classe) ; méta de classe (icône/nom/couleur).
 const constToClass = new Map()
-for (const [clsId, cons] of Object.entries(CLASS_CONSTELLATIONS)) for (const c of cons) if (c !== 'coeur' && !constToClass.has(c)) constToClass.set(c, clsId)
-const classMeta = (clsId) => clsMap.get(clsId) ?? { icon: '🛡️', label: clsId }
+for (const c of BASE_CLASSES) for (const con of c.cons) constToClass.set(con, c.id)
+const classMeta = (clsId) => { const m = CONSTELLATIONS[clsId]; return m ? { icon: m.icon, label: m.name, color: m.color } : (clsMap.get(clsId) ?? { icon: '🛡️', label: clsId, color: '#a78bfa' }) }
 
 // Compo d'UN membre depuis la config (gère membre importé = vrai Character).
 function memberComposition(m, cfg) {
@@ -82,11 +95,12 @@ function memberComposition(m, cfg) {
   let ilvl = cfg.ilvl
   if (imp?.equipment) { const its = Object.values(imp.equipment).filter(Boolean); if (its.length) ilvl = Math.round(its.reduce((a, it) => a + (it.ilvl || 0), 0) / its.length) }
   else if (m.gear) { const ils = Object.values(m.gear).map((g) => g.ilvl).filter(Boolean); if (ils.length) ilvl = Math.round(ils.reduce((a, b) => a + b, 0) / ils.length) }
-  // classe primaire = groupe de constellations de classe le plus investi (corrige l'import « guerrier »).
+  // classe primaire = classe de base la plus investie (racine + archétypes) ; couvre prêtre/druide et
+  // corrige l'étiquette « guerrier » des imports.
   let primary = m.cls, bestN = -1
-  for (const clsId of Object.keys(CLASS_CONSTELLATIONS)) {
-    const n = (CLASS_CONSTELLATIONS[clsId] || []).filter((c) => c !== 'coeur').reduce((a, c) => a + talentsByConstellation(c).reduce((s, node) => s + (talents[node.id] ?? 0), 0), 0)
-    if (n > bestN) { bestN = n; primary = clsId }
+  for (const c of BASE_CLASSES) {
+    const n = c.cons.reduce((a, con) => a + talentsByConstellation(con).reduce((s, node) => s + (talents[node.id] ?? 0), 0), 0)
+    if (n > bestN) { bestN = n; primary = c.id }
   }
   // talents groupés par constellation (alloués seulement).
   const byConst = new Map()
@@ -167,14 +181,13 @@ for (const e of entries) {
 DATA.sort((a, b) => b.tmax - a.tmax || b.dpsTotal - a.dpsTotal)
 DATA.forEach((d, i) => { d.rank = i + 1 })
 // Couleur de classe dominante (1er membre) pour le graphe d'archétypes.
-const CLASS_COLORS = { guerrier: '#ff6b6b', voleur: '#51cf66', mage: '#4dabf7', chasseur: '#fbbf24' }
-DATA.forEach((d) => { const c = d.members[0]?.cls; d.color = CLASS_COLORS[c] ?? '#a78bfa'; d.clsLabel = d.members[0]?.clsLabel ?? c })
+DATA.forEach((d) => { const c = d.members[0]?.cls; d.color = CONSTELLATIONS[c]?.color ?? '#a78bfa'; d.clsLabel = d.members[0]?.clsLabel ?? c })
 
 // 2) KPI résolus (top listes + talents par classe).
 const topList = (map, n = 6) => [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, n).map(([name, count]) => ({ name, count }))
 const talentsByClass = [...agg.talentsByClass.entries()].sort((a, b) => b[1] - a[1]).map(([cls, points]) => ({ cls, name: classMeta(cls).label, icon: classMeta(cls).icon, points }))
 const KPI = {
-  builds: DATA.length, classes: [...new Set(DATA.flatMap((d) => d.classes))],
+  builds: DATA.length, classes: BASE_CLASSES.map((c) => ({ id: c.id, name: c.name, icon: c.icon })),
   talentsByClass, spells: topList(agg.spells), gems: topList(agg.gems), runes: topList(agg.runes), uniques: topList(agg.uniques),
 }
 const ilvls = DATA.map((d) => d.ilvl)
@@ -369,8 +382,7 @@ function renderChart(){
 function renderControls(){
   const chip=(on,label,act)=>\`<span class="chip\${on?' on':''}" data-act="\${act}">\${label}</span>\`;
   document.getElementById('sortseg').innerHTML=Object.entries(SORTS).map(([k,v])=>\`<button data-s="\${k}" class="\${state.sort===k?'on':''}" style="border:0;background:\${state.sort===k?'linear-gradient(90deg,var(--orange),var(--fuchsia))':'none'};color:\${state.sort===k?'#1a1206':'var(--mut)'};font:inherit;font-size:12px;font-weight:700;padding:6px 11px;border-radius:8px;cursor:pointer">\${v.lab}</button>\`).join('');
-  const CLS_ICON={}; DATA.forEach(d=>d.members.forEach(m=>CLS_ICON[m.cls]=m.clsIcon));
-  document.getElementById('fcls').innerHTML='<label>Classe</label>'+chip(state.cls===null,'Toutes','cls:')+KPI.classes.map(c=>chip(state.cls===c,(CLS_ICON[c]||'')+' '+c,'cls:'+c)).join('');
+  document.getElementById('fcls').innerHTML='<label>Classe</label>'+chip(state.cls===null,'Toutes','cls:')+KPI.classes.map(c=>chip(state.cls===c.id,esc(c.icon)+' '+esc(c.name),'cls:'+c.id)).join('');
   document.getElementById('fcontent').innerHTML='<label>Contenu</label>'+chip(state.content==='all','Tous','content:all')+chip(state.content==='raid','☠️ Raid','content:raid')+chip(state.content==='dungeon','🏰 Donjon','content:dungeon');
   document.getElementById('fteam').innerHTML='<label>Compo</label>'+chip(state.team==='all','Toutes','team:all')+chip(state.team==='solo','Solo','team:solo')+chip(state.team==='team','Équipe','team:team');
   document.querySelectorAll('#cmode button').forEach(b=>b.onclick=()=>{state.chart=b.dataset.m;document.querySelectorAll('#cmode button').forEach(x=>x.classList.toggle('on',x===b));renderChart();});
