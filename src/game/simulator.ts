@@ -104,6 +104,23 @@ export function initGear(orientation: ItemOrientation): Record<string, GearSlotC
 /** Emplacements (id + libellé + icône) pour l'UI. */
 export const SIM_SLOTS = EQUIP_SLOTS.map((s) => ({ id: s.id, name: s.name, accepts: s.accepts, icon: ITEM_TYPES[s.accepts].icon }))
 
+/** Constellations pertinentes par classe (cœur + classe + archétypes) — pour l'allocateur bac-à-sable. */
+export const CLASS_CONSTELLATIONS: Record<string, string[]> = {
+  guerrier: ['coeur', 'guerrier', 'sentence', 'rempart', 'juggernaut', 'furie'],
+  voleur: ['coeur', 'voleur', 'assassin', 'ombrelame', 'lamevenin'],
+  mage: ['coeur', 'mage', 'pyromancien', 'cryomancien', 'arcaniste', 'convergence'],
+  chasseur: ['coeur', 'chasseur', 'meute', 'faucon', 'symbiose'],
+}
+/** Budget de points par défaut (pool d'endgame approx.) pour le bac-à-sable de talents. */
+export const DEFAULT_TALENT_BUDGET = 90
+/** Map de talents initiale d'une classe (chemin canonique) — point de départ de l'éditeur. */
+export function initTalents(clsId: string): Record<string, number> {
+  const p = getClassPreset(clsId)
+  const t: Record<string, number> = { co_start: 1 }
+  for (const id of p.talents) t[id] = 1
+  return t
+}
+
 /* ------------------------------------------------------------------ */
 /* Config + résultat. */
 /* ------------------------------------------------------------------ */
@@ -113,6 +130,9 @@ export interface SimMemberCfg {
   /** Stuff DÉTAILLÉ pièce-par-pièce (orientation + stats par emplacement). Si absent, on utilise
    *  l'orientation globale + les affixes par défaut. Ignoré pour un membre importé. */
   gear?: Record<string, GearSlotCfg>
+  /** Arbre de TALENTS personnalisé (nodeId → rang). Si absent, le chemin canonique de la classe est
+   *  utilisé. Ignoré pour un membre importé (qui garde ses vrais talents). */
+  talents?: Record<string, number>
   /** Membre IMPORTÉ : un vrai personnage du joueur (vrais talents/stuff/gemmes/runes). Si présent,
    *  les champs cls/orientation/gems/runes/level/gear ci-dessus sont ignorés — perso tel quel. */
   imported?: Character
@@ -188,8 +208,12 @@ function buildMember(m: SimMemberCfg, cfg: SimConfig, idx: number): Character {
   const slotIds = EQUIP_SLOTS.map((s) => s.id)
   m.gems.forEach((id, i) => { const it = eq[slotIds[i % slotIds.length]]; it.gems = [...(it.gems ?? []), { type: 'physique' as DamageType, tier: 1, cond: id, rank: 5, quality: 2 }] })
   c.equipment = eq as Character['equipment']
-  c.talents = { co_start: 1 }
-  for (const t of p.talents) c.talents[t] = 1
+  if (m.talents) {
+    c.talents = { co_start: 1, ...m.talents } // arbre personnalisé (bac-à-sable)
+  } else {
+    c.talents = { co_start: 1 }
+    for (const t of p.talents) c.talents[t] = 1
+  }
   c.powers = [...p.powers]
   c.support = [...p.support]
   c.passives = [...p.passives]

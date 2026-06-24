@@ -1,9 +1,11 @@
 import { useState, type ReactNode } from 'react'
 import { useGame } from '../game/store'
 import {
-  runSim, defaultConfig, importedMember, initGear, SIM_CLASSES, SIM_GEMS, SIM_RUNES, SIM_ELIXIRS, SIM_ORIENTATIONS, SIM_RAIDS, SIM_DUNGEONS, SIM_STATS, SIM_SLOTS,
+  runSim, defaultConfig, importedMember, initGear, initTalents, CLASS_CONSTELLATIONS, DEFAULT_TALENT_BUDGET,
+  SIM_CLASSES, SIM_GEMS, SIM_RUNES, SIM_ELIXIRS, SIM_ORIENTATIONS, SIM_RAIDS, SIM_DUNGEONS, SIM_STATS, SIM_SLOTS,
   type SimConfig, type SimMemberCfg, type SimResult, type GearSlotCfg,
 } from '../game/simulator'
+import { CONSTELLATIONS, talentsByConstellation, canAllocate, gateInfo, type ConstellationId, type TalentNode } from '../game/talents'
 
 const RARITIES_OPT = ['epique', 'legendaire', 'mythique', 'ascendant', 'celeste', 'transcendant'] as const
 
@@ -254,7 +256,7 @@ function MemberCard({ m, index, canRemove, onSet, onRemove, onToggleGem, onToggl
           <div className="flex flex-wrap items-center gap-2">
             <input value={m.name} onChange={(e) => onSet({ name: e.target.value })}
               className="w-28 rounded-lg border border-slate-700 bg-slate-900/60 px-2 py-1 text-sm text-slate-200 outline-none focus:border-orange-400/60" />
-            <select value={m.cls} onChange={(e) => onSet({ cls: e.target.value })}
+            <select value={m.cls} onChange={(e) => onSet({ cls: e.target.value, talents: undefined, gear: undefined })}
               className="rounded-lg border border-slate-700 bg-slate-900/60 px-2 py-1 text-sm text-slate-200 outline-none focus:border-orange-400/60">
               {SIM_CLASSES.map((c) => <option key={c.id} value={c.id}>{c.icon} {c.label}</option>)}
             </select>
@@ -273,6 +275,17 @@ function MemberCard({ m, index, canRemove, onSet, onRemove, onToggleGem, onToggl
             {m.gear
               ? <GearEditor gear={m.gear} onChange={(g) => onSet({ gear: g })} />
               : <Seg value={m.orientation} options={SIM_ORIENTATIONS.map((o) => ({ id: o.id, label: o.label }))} onChange={(v) => onSet({ orientation: v })} />}
+          </div>
+
+          {/* Talents : chemin de classe par défaut, ou arbre personnalisé (bac-à-sable) */}
+          <div>
+            <div className="mb-1.5 flex items-center justify-between">
+              <Label>Talents{m.talents ? ' — arbre personnalisé' : ''}</Label>
+              {m.talents
+                ? <button onClick={() => onSet({ talents: undefined })} className="rounded-lg border border-slate-700 px-2 py-0.5 text-[10px] text-slate-400 hover:text-slate-200">✕ Chemin par défaut</button>
+                : <button onClick={() => onSet({ talents: initTalents(m.cls) })} className="rounded-lg border border-fuchsia-500/40 bg-fuchsia-500/10 px-2 py-0.5 text-[10px] font-medium text-fuchsia-200 hover:bg-fuchsia-500/20">🌌 Éditer l'arbre</button>}
+            </div>
+            {m.talents && <TalentSandbox clsId={m.cls} talents={m.talents} onChange={(t) => onSet({ talents: t })} />}
           </div>
 
           {/* Gemmes */}
@@ -347,6 +360,70 @@ function GearEditor({ gear, onChange }: { gear: Record<string, GearSlotCfg>; onC
         })}
       </div>
       <div className="text-[10px] text-slate-600">Valeurs auto au max du budget de chaque pièce ; choisis quelles stats rollent + l'équilibre off/def par emplacement.</div>
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+
+/** Allocateur de talents bac-à-sable : alloue librement sur une map locale, avec le VRAI gating
+ *  (canAllocate : adjacence, seuils minSpent, choix exclusifs). Groupé par constellation de la classe. */
+function TalentSandbox({ clsId, talents, onChange }: { clsId: string; talents: Record<string, number>; onChange: (t: Record<string, number>) => void }) {
+  const [budget, setBudget] = useState(DEFAULT_TALENT_BUDGET)
+  const [openCid, setOpenCid] = useState<string | null>(null)
+  const spent = Object.entries(talents).reduce((a, [k, v]) => a + (k === 'co_start' ? 0 : v), 0)
+  const avail = budget - spent
+  const cids = CLASS_CONSTELLATIONS[clsId] ?? CLASS_CONSTELLATIONS.guerrier
+  const inc = (n: TalentNode) => { if (canAllocate(n, talents, avail)) onChange({ ...talents, [n.id]: (talents[n.id] ?? 0) + 1 }) }
+  const dec = (n: TalentNode) => { const r = talents[n.id] ?? 0; if (r <= 0) return; const t = { ...talents }; if (r - 1 <= 0) delete t[n.id]; else t[n.id] = r - 1; onChange(t) }
+  const spentIn = (cid: string) => talentsByConstellation(cid as ConstellationId).reduce((a, n) => a + (talents[n.id] ?? 0), 0)
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between gap-2 text-[11px]">
+        <span className="text-slate-400">Points dépensés : <b className={avail < 0 ? 'text-rose-400' : 'text-emerald-300'}>{spent}</b> / <input type="number" value={budget} min={0} max={300}
+          onChange={(e) => setBudget(Math.max(0, Number(e.target.value) || 0))} className="w-14 rounded border border-slate-700 bg-slate-900/60 px-1 py-0.5 tabular-nums text-slate-200" /></span>
+        <button onClick={() => onChange(initTalents(clsId))} className="rounded border border-slate-700 px-2 py-0.5 text-[10px] text-slate-400 hover:text-slate-200">↺ Chemin de classe</button>
+      </div>
+      <div className="max-h-80 space-y-1 overflow-y-auto pr-1">
+        {cids.map((cid) => {
+          const meta = CONSTELLATIONS[cid as ConstellationId]
+          if (!meta) return null
+          const nodes = talentsByConstellation(cid as ConstellationId)
+          const open = openCid === cid
+          const sp = spentIn(cid)
+          return (
+            <div key={cid} className="rounded-lg border border-slate-800 bg-slate-900/40">
+              <button onClick={() => setOpenCid(open ? null : cid)} className="flex w-full items-center justify-between px-2 py-1.5 text-left">
+                <span className="text-[11px] font-medium" style={{ color: meta.color }}>{meta.icon} {meta.name}</span>
+                <span className="flex items-center gap-1.5 text-[10px] text-slate-500">{sp > 0 && <span className="rounded-full bg-slate-800 px-1.5 text-amber-300">{sp}</span>}{open ? '▴' : '▾'}</span>
+              </button>
+              {open && (
+                <div className="space-y-0.5 border-t border-slate-800 p-1.5">
+                  {nodes.map((n) => {
+                    const r = talents[n.id] ?? 0
+                    const can = canAllocate(n, talents, avail)
+                    const g = gateInfo(n, talents)
+                    return (
+                      <div key={n.id} className="flex items-center justify-between gap-2 rounded px-1 py-0.5 text-[10.5px]">
+                        <span className={'min-w-0 flex-1 truncate ' + (r > 0 ? 'text-slate-200' : !can ? 'text-slate-600' : 'text-slate-400')} title={n.name}>
+                          {n.name}{g.need > g.spent ? <span className="ml-1 text-[9px] text-slate-600">· {g.need}pts</span> : null}
+                          {g.exclusiveBlocked ? <span className="ml-1 text-[9px] text-rose-500/70">· exclu</span> : null}
+                        </span>
+                        <span className="flex shrink-0 items-center gap-1">
+                          <button onClick={() => dec(n)} disabled={r <= 0} className="h-5 w-5 rounded bg-slate-800 text-slate-300 disabled:opacity-30">−</button>
+                          <span className="w-8 text-center tabular-nums text-slate-400">{r}/{n.maxRank}</span>
+                          <button onClick={() => inc(n)} disabled={!can} className="h-5 w-5 rounded bg-slate-800 font-bold text-emerald-300 disabled:opacity-30">+</button>
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+      <div className="text-[10px] text-slate-600">Gating réel (adjacence, seuils, exclusifs). Les sorts équipés restent ceux de la classe (v1).</div>
     </div>
   )
 }
