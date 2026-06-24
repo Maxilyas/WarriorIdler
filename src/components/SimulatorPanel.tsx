@@ -1,19 +1,22 @@
-import { useState, type ReactNode } from 'react'
+import { useState, useMemo, type ReactNode } from 'react'
 import { useGame } from '../game/store'
 import { Sheet } from './ui'
 import {
-  runSim, defaultConfig, importedMember, initGear, initTalents, gearFromCharacter, statLines, maxLinesFor, availableAbilities, getClassPreset, DEFAULT_TALENT_BUDGET,
+  runSim, defaultConfig, importedMember, initGear, initTalents, gearFromCharacter, statLines, maxLinesFor, availableAbilities, getClassPreset,
   SIM_CLASSES, SIM_GEMS, SIM_RUNES, SIM_ELIXIRS, SIM_ORIENTATIONS, SIM_PRIMARIES, SIM_RAIDS, SIM_DUNGEONS, SIM_STATS, SIM_SLOTS, SIM_RARITIES, SIM_DMG_TYPES, SIM_UNIQUES,
   SIM_ABILITY_SLOTS, SIM_MAX_GEM_RANK, SIM_MAX_UNIQUE_RANK,
   type SimConfig, type SimMemberCfg, type SimResult, type GearSlotCfg, type LineCfg,
 } from '../game/simulator'
-import { charDamageProfile } from '../game/character'
+import { charDamageProfile, talentPointsForLevel } from '../game/character'
 import { TalentTree } from './TalentTree'
 import { REFERENCE_BUILDS } from '../game/referenceBuilds'
 import type { Character, DamageType, OffensiveStat } from '../game/types'
 
 const LIB_KEY = 'wi-sim-builds'
 type SavedBuild = { name: string; cfg: SimConfig }
+/** Pool de talents PARTAGÉ par l'équipe (niveau de compte). `remaining` = ce qu'il reste à allouer,
+ *  COMMUN à tous les membres : ce que les autres dépensent réduit le tien. */
+type TalentBudget = { level: number; pool: number; teamSpent: number; remaining: number }
 function loadLib(): SavedBuild[] {
   try { const v = JSON.parse(localStorage.getItem(LIB_KEY) || '[]'); return Array.isArray(v) ? v : [] } catch { return [] }
 }
@@ -146,6 +149,19 @@ export function SimulatorPanel() {
   const isRaid = cfg.content.kind === 'raid'
   const contentList = isRaid ? SIM_RAIDS : SIM_DUNGEONS
 
+  // POOL DE TALENTS PARTAGÉ par l'équipe (mêmes conditions que le vrai jeu) : taille = points du niveau
+  // de COMPTE (= niveau le plus haut de l'équipe), MOINS le total dépensé sur TOUS les arbres de l'équipe.
+  // Plus de points = monter le niveau (jamais un budget libre par perso → un build resterait « jouable »).
+  const talentBudget = useMemo<TalentBudget>(() => {
+    const memberLevel = (m: SimMemberCfg) => m.imported?.level ?? m.level
+    const effTalents = (m: SimMemberCfg) => m.talents ?? (m.imported ? m.imported.talents : initTalents(m.cls))
+    const spentOf = (t: Record<string, number>) => Object.values(t).reduce((a, b) => a + b, 0) - (t.co_start ?? 0)
+    const level = Math.max(1, ...cfg.team.map(memberLevel))
+    const pool = talentPointsForLevel(level)
+    const teamSpent = cfg.team.reduce((a, m) => a + spentOf(effTalents(m)), 0)
+    return { level, pool, teamSpent, remaining: Math.max(0, pool - teamSpent) }
+  }, [cfg.team])
+
   return (
     <div className="flex h-full flex-col gap-3 overflow-y-auto pr-1">
       <div className="rounded-xl border border-slate-800 bg-gradient-to-br from-[#1a1320] to-[#0d111a] p-3">
@@ -271,7 +287,7 @@ export function SimulatorPanel() {
         </div>
         <div className="space-y-3">
           {cfg.team.map((m, i) => (
-            <MemberCard key={i} m={m} index={i} canRemove={cfg.team.length > 1} globalIlvl={cfg.ilvl} globalRarity={cfg.rarity}
+            <MemberCard key={i} m={m} index={i} canRemove={cfg.team.length > 1} globalIlvl={cfg.ilvl} globalRarity={cfg.rarity} talentBudget={talentBudget}
               onSet={(p) => setMember(i, p)} onRemove={() => removeMember(i)}
               onToggleGem={(g) => setMember(i, { gems: toggleIn(m.gems, g) })}
               onToggleRune={(r) => setMember(i, { runes: toggleIn(m.runes, r) })} />
@@ -288,8 +304,8 @@ export function SimulatorPanel() {
 
 /* ------------------------------------------------------------------ */
 
-function MemberCard({ m, index, canRemove, globalIlvl, globalRarity, onSet, onRemove, onToggleGem, onToggleRune }: {
-  m: SimMemberCfg; index: number; canRemove: boolean; globalIlvl: number; globalRarity: string
+function MemberCard({ m, index, canRemove, globalIlvl, globalRarity, talentBudget, onSet, onRemove, onToggleGem, onToggleRune }: {
+  m: SimMemberCfg; index: number; canRemove: boolean; globalIlvl: number; globalRarity: string; talentBudget: TalentBudget
   onSet: (p: Partial<SimMemberCfg>) => void; onRemove: () => void
   onToggleGem: (g: string) => void; onToggleRune: (r: string) => void
 }) {
@@ -298,7 +314,7 @@ function MemberCard({ m, index, canRemove, globalIlvl, globalRarity, onSet, onRe
 
   // Membre IMPORTÉ : carte éditable adossée au vrai perso (overrides par section).
   if (m.imported) {
-    return <ImportedMemberCard m={m} ch={m.imported} canRemove={canRemove} globalIlvl={globalIlvl} globalRarity={globalRarity} onSet={onSet} onRemove={onRemove} />
+    return <ImportedMemberCard m={m} ch={m.imported} canRemove={canRemove} globalIlvl={globalIlvl} globalRarity={globalRarity} talentBudget={talentBudget} onSet={onSet} onRemove={onRemove} />
   }
 
   return (
@@ -356,7 +372,7 @@ function MemberCard({ m, index, canRemove, globalIlvl, globalRarity, onSet, onRe
                 ? <button onClick={() => onSet({ talents: undefined })} className="rounded-lg border border-slate-700 px-2 py-0.5 text-[10px] text-slate-400 hover:text-slate-200">✕ Chemin par défaut</button>
                 : <button onClick={() => onSet({ talents: initTalents(m.cls) })} className="rounded-lg border border-fuchsia-500/40 bg-fuchsia-500/10 px-2 py-0.5 text-[10px] font-medium text-fuchsia-200 hover:bg-fuchsia-500/20">🌌 Éditer l'arbre</button>}
             </div>
-            {m.talents && <TalentTreeSandbox clsId={m.cls} level={m.level} talents={m.talents} onChange={(t) => onSet({ talents: t })} />}
+            {m.talents && <TalentTreeSandbox clsId={m.cls} level={m.level} talents={m.talents} budget={talentBudget} onChange={(t) => onSet({ talents: t })} />}
           </div>
 
           {/* Capacités équipées (l'arbre débloque plus que les slots → on choisit) */}
@@ -425,8 +441,8 @@ function PrimarySelect({ value, onChange }: { value?: OffensiveStat; onChange: (
 
 /** Carte d'un membre IMPORTÉ : adossée au vrai perso, éditable par OVERRIDES (stat primaire, stuff,
  *  arbre, capacités). Toute section non retouchée reste exactement celle du perso réel. */
-function ImportedMemberCard({ m, ch, canRemove, globalIlvl, globalRarity, onSet, onRemove }: {
-  m: SimMemberCfg; ch: Character; canRemove: boolean; globalIlvl: number; globalRarity: string
+function ImportedMemberCard({ m, ch, canRemove, globalIlvl, globalRarity, talentBudget, onSet, onRemove }: {
+  m: SimMemberCfg; ch: Character; canRemove: boolean; globalIlvl: number; globalRarity: string; talentBudget: TalentBudget
   onSet: (p: Partial<SimMemberCfg>) => void; onRemove: () => void
 }) {
   const [open, setOpen] = useState(false)
@@ -480,7 +496,7 @@ function ImportedMemberCard({ m, ch, canRemove, globalIlvl, globalRarity, onSet,
                 ? <button onClick={() => onSet({ talents: undefined })} className={ovBtn}>↩ Talents réels</button>
                 : <button onClick={() => onSet({ talents: { ...ch.talents } })} className="rounded-lg border border-fuchsia-500/40 bg-fuchsia-500/10 px-2 py-0.5 text-[10px] font-medium text-fuchsia-200 hover:bg-fuchsia-500/20">🌌 Retoucher l'arbre</button>}
             </div>
-            {m.talents && <TalentTreeSandbox clsId={m.cls} level={ch.level} talents={m.talents} weapon={weapon} resetTo={ch.talents} onChange={(t) => onSet({ talents: t })} />}
+            {m.talents && <TalentTreeSandbox clsId={m.cls} level={ch.level} talents={m.talents} weapon={weapon} resetTo={ch.talents} budget={talentBudget} onChange={(t) => onSet({ talents: t })} />}
           </div>
 
           {/* Capacités : réelles, ou choix personnalisé */}
@@ -625,20 +641,20 @@ function GearEditor({ gear, globalIlvl, globalRarity, onChange }: { gear: Record
 /* ------------------------------------------------------------------ */
 
 /** Bac-à-sable de talents : le VRAI arbre radial (TalentTree en mode contrôlé) édite une COPIE locale
- *  sans toucher la vraie partie. Clic sur un nœud = +1 (allouable) / −1 (déjà pris) ; ↺ Reset. Un budget
- *  réglable plafonne le pool ; le gating réel (adjacence, seuils minSpent, exclusifs) s'applique. */
-function TalentTreeSandbox({ clsId, level, talents, onChange, weapon, resetTo }: {
+ *  sans toucher la vraie partie. Clic sur un nœud = +1 (allouable) / −1 (déjà pris) ; ↺ Reset. Le pool de
+ *  points est PARTAGÉ par l'équipe et fixé par le niveau (comme le vrai jeu) ; le gating réel (adjacence,
+ *  seuils minSpent, exclusifs) s'applique. */
+function TalentTreeSandbox({ clsId, level, talents, onChange, weapon, resetTo, budget }: {
   clsId: string; level: number; talents: Record<string, number>; onChange: (t: Record<string, number>) => void
   /** Élément d'arme (sinon = élément de la classe). */
   weapon?: DamageType
   /** Cible du Reset (sinon = chemin de classe). Pour un import : les talents RÉELS du perso. */
   resetTo?: Record<string, number>
+  /** Pool PARTAGÉ par l'équipe (niveau de compte). `remaining` = points encore allouables (communs). */
+  budget: TalentBudget
 }) {
-  const spentOf = (t: Record<string, number>) => Object.entries(t).reduce((a, [k, v]) => a + (k === 'co_start' ? 0 : v), 0)
-  // Budget initial = au moins le défaut, mais ≥ ce qui est déjà dépensé (un perso réel peut dépasser 90).
-  const [budget, setBudget] = useState(() => Math.max(DEFAULT_TALENT_BUDGET, spentOf(talents)))
-  const spent = spentOf(talents)
-  const points = Math.max(0, budget - spent)
+  const mySpent = Object.entries(talents).reduce((a, [k, v]) => a + (k === 'co_start' ? 0 : v), 0)
+  const points = budget.remaining // reste COMMUN à l'équipe — ce que les autres dépensent réduit le tien
   const wpn = weapon ?? getClassPreset(clsId).elem
   const onAllocate = (id: string) => onChange({ ...talents, [id]: (talents[id] ?? 0) + 1 })
   const onRemove = (id: string) => {
@@ -650,14 +666,16 @@ function TalentTreeSandbox({ clsId, level, talents, onChange, weapon, resetTo }:
   return (
     <div className="space-y-1.5">
       <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
-        <span className="flex items-center gap-1.5 text-slate-400">Budget de points <input type="number" value={budget} min={0} max={300}
-          onChange={(e) => setBudget(Math.max(0, Number(e.target.value) || 0))} className="w-16 rounded border border-slate-700 bg-slate-900/60 px-1 py-0.5 tabular-nums text-slate-200" /></span>
-        <span className="text-slate-500">dépensés <b className="text-emerald-300">{spent}</b> · reste <b className={points <= 0 ? 'text-rose-400' : 'text-amber-300'}>{points}</b></span>
+        <span className="text-slate-400" title="Pool de talents PARTAGÉ par l'équipe, fixé par le niveau de compte (= niveau le plus haut de l'équipe). Pour plus de points : monte le niveau — pas de budget libre.">
+          🤝 Pool d'équipe · niv {budget.level} : <b className="text-slate-200">{budget.pool}</b> pts
+        </span>
+        <span className="text-slate-500">équipe <b className="text-emerald-300">{budget.teamSpent}</b> · reste <b className={points <= 0 ? 'text-rose-400' : 'text-amber-300'}>{points}</b></span>
       </div>
+      <div className="text-[10px] text-slate-500">Ce perso : <b className="text-slate-300">{mySpent}</b> pts{points <= 0 ? ' · pool épuisé — monte le niveau ou libère des points (ici ou sur un autre perso)' : ''}</div>
       <div className="h-[32rem] rounded-lg border border-slate-800 bg-[#0b1120] p-1.5">
         <TalentTree ctrl={{ talents, points, level, weapon: wpn, onAllocate, onRemove, onReset }} />
       </div>
-      <div className="text-[10px] text-slate-600">Clique un nœud pour l'allouer (+1) ; re-clique un nœud déjà pris pour le retirer (−1). Gating réel ; les sorts équipés restent ceux de la classe (v1).</div>
+      <div className="text-[10px] text-slate-600">Clique un nœud pour l'allouer (+1) ; re-clique un nœud pris pour le retirer (−1). Pool PARTAGÉ : développer 2 arbres splitte le même budget. Sorts équipés = ceux de la classe (v1).</div>
     </div>
   )
 }
