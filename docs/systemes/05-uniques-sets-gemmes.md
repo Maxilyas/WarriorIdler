@@ -24,6 +24,29 @@ Chaque effet : `mods` (stats de base) + parfois `resistMods` + parfois `tagMods`
   un unique sur une pièce Transcendante de haut ilvl **pèse autant qu'une grosse ligne d'affixe**.
 - `resistMods` (en %) et `tagMods` ne montent **qu'avec le rang** (pas l'objet).
 
+### Actifs câblés — archetypes (`UniqueActiveKind`)
+
+La partie `active` n'est **plus** un simple texte de saveur : chaque unique reçoit un **archetype**
+mécanique, **déduit** de son texte d'accroche + son rôle (`deriveActiveKind`, couverture **totale**),
+débloqué au **rang actif** (5) et monté au rang (`activeMagAt`, `ACTIVE_RANK_GROWTH`). ~15 archetypes
+bornés (anti-snowball : cap, CD interne, ou 1×/combat) :
+
+| Catégorie | Archetypes |
+|---|---|
+| Offensif | `doubleFrappe`, `execution` (vs ennemi <25% PV), `berserk` (soi <50% PV), `rampe` (montée), `penResist` |
+| Défensif | `epines`, `bouclierCoup`, `bouclierDepart`, `degatsBouclier`, `ralentir`, `sursis` (1×/combat) |
+| Soin | `soinHot` (soi), `soinGroupe` |
+| Utilitaire | `cdrKill` (au kill), `butin` (+palier de rareté au drop) |
+
+- **Knobs** : `ACTIVE_MAG` (magnitude de base par archetype) dans [`uniques.ts`](../../src/game/uniques.ts).
+- **Agrégation** : `aggregateUniqueActives(characters)` → meilleure magnitude par archetype au niveau
+  **équipe** (comme les gemmes). Passée via `CombatMods.uniqueActives` et déclenchée par le moteur
+  ([`combatEngine.ts`](../../src/game/combatEngine.ts)) aux hooks existants (ouverture, multiplicateur
+  offensif, chaîne défensive, sursis, régén) dans les **deux** pas (mono + multi). `cdrKill` via
+  `uniqueKillEvents` (farm/donjon/raid). État transitoire **non persisté**.
+- **Affichage chiffré** : `describeActiveEffect(id, rank)` → consommé par le Codex et la fiche d'objet
+  via [`uniqueDescribe.ts`](../../src/game/uniqueDescribe.ts).
+
 ### Uniques taggés (gating v0.39.1)
 
 `tagMods` = signatures de **conversion** (`[feu]`, `[zone]`, `[finisseur]`, `[dot]`, `[soin]`,
@@ -100,5 +123,8 @@ Spécialisations étagées (◈ I→V, exclusives) : Chronomancien / Législateu
 ## Dette / provisoire
 
 - **Un seul set** existe (`neant`) : le système supporte davantage, c'est du contenu à ajouter.
-- Beaucoup d'effets `active` d'uniques sont des **textes de saveur** : vérifier au cas par cas si la
-  capacité active est réellement câblée en combat (`store.ts`) avant de s'appuyer dessus.
+- Les actifs sont **mappés par mots-clés** (`deriveActiveKind`) : un texte ambigu peut tomber sur le
+  repli de rôle. Ajouter un champ `activeEffect` explicite sur l'entrée si un cas précis doit forcer
+  son archetype. Magnitudes (`ACTIVE_MAG`) **conservatrices** par défaut — à recalibrer aux sims si on
+  veut rendre les actifs plus marquants.
+- `butin` n'est câblé que sur le **drop de farm** (pas l'hors-ligne ni le butin de donjon/raid).
