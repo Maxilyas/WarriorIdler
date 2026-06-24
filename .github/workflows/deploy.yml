@@ -12,7 +12,10 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  # NE PAS annuler un déploiement en cours : annuler `deploy-pages` en plein milieu laisse un
+  # déploiement Pages orphelin bloqué (deployment_queued → timeout). On laisse le run en cours finir ;
+  # les runs en attente sont dédoublonnés par GitHub. (Recommandation officielle du workflow Pages.)
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -21,7 +24,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - run: npm ci
       - run: npm run build
