@@ -15,12 +15,15 @@ const M = await load(`
   export { REFERENCE_BUILDS } from './src/game/referenceBuilds.ts'
   export { decodeBuild } from './src/game/buildCode.ts'
   export { setGlobalCombatMods } from './src/game/character.ts'
-  export { getPower } from './src/game/powers.ts'
+  export { getPower, powerSummary } from './src/game/powers.ts'
+  export { DAMAGE_TYPES } from './src/game/damage.ts'
+  export { TIME_RUNES } from './src/game/enchants.ts'
   export { getTalent, CONSTELLATIONS, talentsByConstellation } from './src/game/talents.ts'
 `)
 const {
   runSim, getClassPreset, initTalents, SIM_CLASSES, SIM_RAIDS, SIM_GEMS, SIM_RUNES, SIM_UNIQUES,
-  REFERENCE_BUILDS, decodeBuild, setGlobalCombatMods, getPower, getTalent, CONSTELLATIONS, talentsByConstellation, CLASS_CONSTELLATIONS,
+  REFERENCE_BUILDS, decodeBuild, setGlobalCombatMods, getPower, powerSummary, DAMAGE_TYPES, TIME_RUNES,
+  getTalent, CONSTELLATIONS, talentsByConstellation, CLASS_CONSTELLATIONS,
 } = M
 setGlobalCombatMods({ power: 1, attackSpeed: 1, vitality: 1 })
 
@@ -31,15 +34,29 @@ const BENCH_CONTENT = { kind: 'raid', id: SIM_RAIDS[0].id, tier: 1, scan: true }
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 const fmt = (n) => n >= 1e9 ? (n / 1e9).toFixed(2) + 'Md' : n >= 1e6 ? (n / 1e6).toFixed(2) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : Math.round(n).toString()
 
-// Résolveurs id → { icon, name } (résolus côté génération → le front ne manipule que des chaînes).
+// Résolveurs id → { icon, name } (allégé pour les pills) ; le DÉTAIL complet (description, dégâts,
+// recharge, scaling…) est mémorisé dans INFO[cat][nom] → le front affiche une carte au survol.
 const gemMap = new Map(SIM_GEMS.map((g) => [g.id, g]))
-const runeMap = new Map(SIM_RUNES.map((r) => [r.id, r]))
 const uniqueMap = new Map(SIM_UNIQUES.map((u) => [u.id, u]))
 const clsMap = new Map(SIM_CLASSES.map((c) => [c.id, c]))
-const spell = (id) => { const p = getPower(id); return p ? { icon: p.icon ?? '•', name: p.name } : null }
-const gem = (id) => { const g = gemMap.get(id); return g ? { icon: g.icon, name: g.name } : null }
-const rune = (id) => { const r = runeMap.get(id); return r ? { icon: r.icon, name: r.name } : null }
-const unique = (id) => { const u = uniqueMap.get(id); return u ? { name: u.name } : null }
+// Runes : indexées par id ('runePremierElan') ET par `time` ('premierElan') → couvre presets ET imports.
+const runeInfo = new Map()
+for (const r of TIME_RUNES) { const v = { icon: r.icon, name: r.name, desc: r.description }; runeInfo.set(r.id, v); runeInfo.set(r.time, v) }
+
+const INFO = { spell: {}, gem: {}, rune: {}, unique: {} }
+const spell = (id) => {
+  const p = getPower(id); if (!p) return null
+  if (!INFO.spell[p.name]) {
+    const s = powerSummary(p), dt = p.damageType ? DAMAGE_TYPES[p.damageType] : null
+    INFO.spell[p.name] = { icon: p.icon ?? '•', name: p.name, passive: p.kind !== 'active', desc: p.description,
+      effect: s?.effectMeta?.label, targets: s?.effectMeta?.targets, cd: s?.cooldown ?? null, scale: s?.scaleShort ?? null,
+      mag: s?.magnitude ?? 0, type: dt ? { name: dt.name, icon: dt.icon, color: dt.color } : null }
+  }
+  return { icon: p.icon ?? '•', name: p.name }
+}
+const gem = (id) => { const g = gemMap.get(id); if (!g) return null; if (!INFO.gem[g.name]) INFO.gem[g.name] = { icon: g.icon, name: g.name, kind: g.kind === 'off' ? 'offensive' : 'défensive', color: g.color, desc: g.desc }; return { icon: g.icon, name: g.name } }
+const rune = (id) => { const r = runeInfo.get(id); if (!r) return null; if (!INFO.rune[r.name]) INFO.rune[r.name] = { icon: r.icon, name: r.name, desc: r.desc }; return { icon: r.icon, name: r.name } }
+const unique = (id) => { const u = uniqueMap.get(id); if (!u) return null; if (!INFO.unique[u.name]) INFO.unique[u.name] = { name: u.name, role: u.role, desc: u.desc }; return { name: u.name } }
 
 // constellation → classe (hors « coeur », partagé) pour les KPI de talents par classe.
 const constToClass = new Map()
@@ -249,6 +266,10 @@ const html = `<!DOCTYPE html>
   .bigempty{text-align:center;padding:46px 16px;margin-top:18px}
   .bigempty .e{font-size:54px} .bigempty h2{margin:8px 0 4px;font-size:20px} .bigempty p{color:var(--mut);max-width:420px;margin:0 auto 18px}
   footer{text-align:center;color:var(--mut2);font-size:12px;margin-top:30px;line-height:1.7} footer a{color:var(--orange);text-decoration:none}
+  .info{cursor:help}
+  #tip{position:fixed;left:0;top:0;z-index:60;display:none;max-width:300px;background:#0d1422;border:1px solid #2b3954;border-radius:12px;padding:10px 12px;box-shadow:0 14px 44px -12px #000c;pointer-events:none;font-size:12.5px;line-height:1.5}
+  #tip .th{font-weight:700;margin-bottom:3px} #tip .ts{color:var(--mut);font-size:11.5px;margin-bottom:5px} #tip .td{color:#cbd5e1} #tip .tm{color:var(--mut2);font-size:11px;margin-top:6px}
+  .tb{display:inline-block;font-size:10px;font-weight:700;padding:1px 7px;border-radius:999px;background:#1b2436;color:var(--mut);margin-left:4px;vertical-align:middle} .tb.pas{background:#0e2a3a;color:var(--ehp)}
   @media(max-width:680px){.colhead,.rhead{grid-template-columns:32px 1fr 80px 56px 20px}.hidesm{display:none}}
 </style>
 </head>
@@ -265,10 +286,12 @@ const html = `<!DOCTYPE html>
     Compose ton build dans le <a href="./">simulateur</a>, puis <a href="${SUBMIT_URL}">soumets-le</a> — il apparaîtra ici.
   </footer>
 </div>
+<div id="tip"></div>
 
 <script>
 const DATA = ${JSON.stringify(DATA)};
 const KPI = ${JSON.stringify(KPI)};
+const INFO = ${JSON.stringify(INFO)};
 const ILVL_MIN = ${ILVL_MIN}, ILVL_MAX = ${ILVL_MAX};
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt = n => n>=1e9?(n/1e9).toFixed(2)+'Md':n>=1e6?(n/1e6).toFixed(2)+'M':n>=1e3?(n/1e3).toFixed(1)+'k':Math.round(n).toString();
@@ -359,10 +382,10 @@ function renderControls(){
 function memberCard(m){
   const seg=(lab,items)=>items&&items.length?\`<div class="seg2"><div class="lab">\${lab}</div><div class="pills">\${items}</div></div>\`:'';
   const tal=m.talents.map(t=>\`<span class="pill" style="background:\${esc(t.color)}1f;color:\${esc(t.color)};border-color:transparent">\${esc(t.icon)} \${esc(t.name)} ·\${t.points}</span>\`).join('');
-  const P=arr=>arr.map(x=>\`<span class="pill">\${esc(x.icon||'✦')} \${esc(x.name)}</span>\`).join('');
+  const P=(arr,cat)=>arr.map(x=>\`<span class="pill info" data-cat="\${cat}" data-name="\${esc(x.name)}">\${esc(x.icon||'✦')} \${esc(x.name)}</span>\`).join('');
   return \`<div class="mb"><div class="mh"><span class="mn">\${esc(m.clsIcon)} \${esc(m.name)}</span><span class="mtag">\${esc(m.clsLabel)} · N\${m.level} · ilvl \${m.ilvl} · \${m.totalTalents} talents</span>
     <span class="ms"><span><span class="v" style="color:var(--dps)">\${fmt(m.dps)}</span> dps</span><span><span class="v" style="color:var(--ehp)">\${fmt(m.ehp)}</span> survie</span><span><span class="v" style="color:var(--hp)">\${fmt(m.hp)}</span> pv</span></span></div>
-    \${seg('Talents',tal)}\${seg('Capacités',P(m.spells))}\${seg('Gemmes',P(m.gems))}\${seg('Runes',P(m.runes))}\${seg('Uniques',P(m.uniques))}</div>\`;
+    \${seg('Talents',tal)}\${seg('Capacités',P(m.spells,'spell'))}\${seg('Gemmes',P(m.gems,'gem'))}\${seg('Runes',P(m.runes,'rune'))}\${seg('Uniques',P(m.uniques,'unique'))}</div>\`;
 }
 
 function renderList(){
@@ -389,14 +412,39 @@ function renderList(){
 
 function renderKpis(){
   const maxTal=Math.max(1,...KPI.talentsByClass.map(t=>t.points));
-  const tl=arr=>arr.length?arr.map(x=>\`<div class="trow"><span class="ic">\${esc(x.icon||'•')}</span><span class="nm">\${esc(x.name)}</span><span class="ct">×\${x.count}</span></div>\`).join(''):'<div class="ct">—</div>';
+  const tl=(arr,cat)=>arr.length?arr.map(x=>{const i=INFO[cat]&&INFO[cat][x.name];return \`<div class="trow info" data-cat="\${cat}" data-name="\${esc(x.name)}"><span class="ic">\${esc((i&&i.icon)||'✦')}</span><span class="nm">\${esc(x.name)}</span><span class="ct">×\${x.count}</span></div>\`;}).join(''):'<div class="ct">—</div>';
   document.getElementById('kpis').innerHTML=\`
     <div class="kpi"><h3>Talents par classe</h3>\${KPI.talentsByClass.length?KPI.talentsByClass.map(t=>\`<div class="trow"><span class="ic">\${esc(t.icon)}</span><span class="nm">\${esc(t.name)}</span><span class="clsbar"><i style="width:\${(t.points/maxTal*100).toFixed(0)}%"></i></span><span class="ct">\${t.points}</span></div>\`).join(''):'<div class="ct">—</div>'}</div>
-    <div class="kpi"><h3>Sorts populaires</h3>\${tl(KPI.spells)}</div>
-    <div class="kpi"><h3>Gemmes populaires</h3>\${tl(KPI.gems)}</div>
-    <div class="kpi"><h3>Runes populaires</h3>\${tl(KPI.runes)}</div>
-    <div class="kpi"><h3>Uniques populaires</h3>\${tl(KPI.uniques.map(u=>({...u,icon:'✦'})))}</div>\`;
+    <div class="kpi"><h3>Sorts populaires</h3>\${tl(KPI.spells,'spell')}</div>
+    <div class="kpi"><h3>Gemmes populaires</h3>\${tl(KPI.gems,'gem')}</div>
+    <div class="kpi"><h3>Runes populaires</h3>\${tl(KPI.runes,'rune')}</div>
+    <div class="kpi"><h3>Uniques populaires</h3>\${tl(KPI.uniques,'unique')}</div>
+  \`;
 }
+
+// Carte de DÉTAIL au survol (ou tap) — sur tout élément [data-cat][data-name], depuis INFO.
+function tipHtml(cat,name){
+  const d=INFO[cat]&&INFO[cat][name]; if(!d) return '';
+  if(cat==='spell'){
+    const badge=d.passive?'<span class="tb pas">Passif</span>':(d.effect?\`<span class="tb">\${esc(d.effect)}</span>\`:'');
+    const type=d.type?\`<span class="tb" style="background:\${d.type.color}22;color:\${d.type.color}">\${esc(d.type.icon)} \${esc(d.type.name)}</span>\`:'';
+    const stats=[d.cd!=null?\`⏱ \${d.cd}s\`:'',d.targets?\`🎯 \${esc(d.targets)}\`:'',d.scale?\`📈 \${esc(d.scale)}\`:''].filter(Boolean).join(' · ');
+    const mag=d.mag>0?\`<div class="tm">≈ ×\${d.mag.toFixed(1)} de la puissance (scale aussi sur ton profil d'arme)</div>\`:'';
+    return \`<div class="th">\${esc(d.icon)} \${esc(d.name)} \${badge}\${type}</div>\${stats?\`<div class="ts">\${stats}</div>\`:''}<div class="td">\${esc(d.desc)}</div>\${mag}\`;
+  }
+  if(cat==='gem') return \`<div class="th">\${esc(d.icon)} \${esc(d.name)} <span class="tb" style="background:\${d.color}22;color:\${d.color}">\${esc(d.kind)}</span></div><div class="td">\${esc(d.desc)}</div>\`;
+  if(cat==='rune') return \`<div class="th">\${esc(d.icon)} \${esc(d.name)}</div><div class="td">\${esc(d.desc)}</div>\`;
+  if(cat==='unique') return \`<div class="th">✦ \${esc(d.name)}\${d.role?\` <span class="tb">\${esc(d.role)}</span>\`:''}</div><div class="td">\${esc(d.desc)}</div>\`;
+  return '';
+}
+const tip=document.getElementById('tip');
+function showTip(el){const h=tipHtml(el.dataset.cat,el.dataset.name);if(!h){tip.style.display='none';return;}tip.innerHTML=h;tip.style.display='block';}
+function moveTip(e){const pad=14,w=tip.offsetWidth,hh=tip.offsetHeight;let x=e.clientX+pad,y=e.clientY+pad;if(x+w>innerWidth-8)x=e.clientX-w-pad;if(y+hh>innerHeight-8)y=e.clientY-hh-pad;tip.style.left=Math.max(8,x)+'px';tip.style.top=Math.max(8,y)+'px';}
+document.addEventListener('mouseover',e=>{const t=e.target.closest&&e.target.closest('[data-cat]');if(t){showTip(t);moveTip(e);}});
+document.addEventListener('mousemove',e=>{if(tip.style.display==='block')moveTip(e);});
+document.addEventListener('mouseout',e=>{const t=e.target.closest&&e.target.closest('[data-cat]');if(t&&!(e.relatedTarget&&t.contains(e.relatedTarget)))tip.style.display='none';});
+// tactile : tap sur un item affiche la carte ; tap ailleurs la masque (et n'ouvre pas le build).
+document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('.info[data-cat]');if(t){e.stopPropagation();if(tip.style.display==='block'&&tip._for===t){tip.style.display='none';tip._for=null;}else{showTip(t);tip._for=t;const r=t.getBoundingClientRect();tip.style.left=Math.max(8,Math.min(r.left,innerWidth-tip.offsetWidth-8))+'px';tip.style.top=(r.bottom+6)+'px';}}else{tip.style.display='none';tip._for=null;}},true);
 </script>
 </body>
 </html>`
