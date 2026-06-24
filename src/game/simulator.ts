@@ -23,7 +23,7 @@ import { makeDungeonEnemy, dungeonFights, DUNGEONS } from './dungeons'
 import { partyCombatStep, resetAllCooldowns } from './combatEngine'
 import { craftMods } from './metiers'
 import { condGemMods, getCondGem } from './condGems'
-import { timeRuneMods, TIME_RUNES, type TimeRuneId } from './enchants'
+import { timeRuneMods, equippedTimeRunes, TIME_RUNES, type TimeRuneId } from './enchants'
 import { activeBrewBuffs, teamPactMods, teamGemOpts } from './storeHelpers'
 import { maitriseBonus } from './biomeBonus'
 import { freshSave } from './save'
@@ -84,6 +84,14 @@ export const SIM_DUNGEONS = Object.values(DUNGEONS).map((d) => ({ id: d.id, name
 export interface SimMemberCfg {
   name: string; cls: string; level: number; orientation: ItemOrientation
   gems: string[]; runes: string[]
+  /** Membre IMPORTÉ : un vrai personnage du joueur (vrais talents/stuff/gemmes/runes). Si présent,
+   *  les champs cls/orientation/gems/runes/level ci-dessus sont ignorés — on utilise le perso tel quel. */
+  imported?: Character
+}
+
+/** Crée une config de membre adossée à un VRAI personnage (à importer dans le simulateur). */
+export function importedMember(char: Character): SimMemberCfg {
+  return { name: char.name, cls: 'guerrier', level: char.level, orientation: 'equilibre', gems: [], runes: [], imported: char }
 }
 export interface SimConfig {
   ilvl: number; rarity: RarityId; bestStage: number; elixir: string
@@ -125,6 +133,14 @@ function dotDps(c: Character): number {
 const totalDps = (c: Character) => charDps(c) + dotDps(c)
 
 function buildMember(m: SimMemberCfg, cfg: SimConfig, idx: number): Character {
+  // Membre IMPORTÉ : on prend le vrai perso tel quel (clone défensif + id sim-*). Gear/talents/gemmes/
+  // runes réels → fidélité totale au build optimisé du joueur.
+  if (m.imported) {
+    const src = m.imported
+    const c: Character = { ...src, id: `sim-${idx}`, equipment: { ...src.equipment }, talents: { ...src.talents } }
+    c.hp = charMaxHp(c)
+    return c
+  }
   const p = getClassPreset(m.cls)
   const c = makeCharacter(m.name || p.label, Math.max(1, m.level || 1), p.bias)
   c.id = `sim-${idx}` // id fixe → cache borné + cooldowns isolés
@@ -153,7 +169,9 @@ export function runSim(cfg: SimConfig): SimResult {
   // `s` est un état synthétique structurellement valide ; cast pour satisfaire les Pick<GameState,…>.
   const sx = s as never
   const cond = condGemMods(team, craft.gemSpec, teamGemOpts(sx, craft))
-  const runeSet = new Set(cfg.team.flatMap((m) => m.runes)) as Set<TimeRuneId>
+  // Runes : celles posées sur le stuff RÉEL des persos importés (equippedTimeRunes) ∪ celles choisies en
+  // config pour les membres preset (qui n'ont pas d'enchant sur leur gear généré).
+  const runeSet = new Set<TimeRuneId>([...equippedTimeRunes(team), ...(cfg.team.flatMap((m) => m.runes) as TimeRuneId[])])
   const runes = timeRuneMods(runeSet, craft.runisteTempo)
   const buffs = activeBrewBuffs(sx)
   const pact = teamPactMods(sx, craft, buffs)

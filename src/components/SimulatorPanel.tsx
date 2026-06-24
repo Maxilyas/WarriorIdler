@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { useGame } from '../game/store'
 import {
-  runSim, defaultConfig, SIM_CLASSES, SIM_GEMS, SIM_RUNES, SIM_ELIXIRS, SIM_ORIENTATIONS, SIM_RAIDS, SIM_DUNGEONS,
+  runSim, defaultConfig, importedMember, SIM_CLASSES, SIM_GEMS, SIM_RUNES, SIM_ELIXIRS, SIM_ORIENTATIONS, SIM_RAIDS, SIM_DUNGEONS,
   type SimConfig, type SimMemberCfg, type SimResult,
 } from '../game/simulator'
 
@@ -65,9 +65,17 @@ function Num({ value, onChange, min = 1, max = 999, w = 'w-16' }: { value: numbe
 
 export function SimulatorPanel() {
   const bestStage = useGame((s) => s.bestStage)
+  const characters = useGame((s) => s.characters)
+  const activeChar = useGame((s) => s.activeChar)
   const [cfg, setCfg] = useState<SimConfig>(() => defaultConfig(bestStage || 300))
   const [result, setResult] = useState<SimResult | null>(null)
   const [running, setRunning] = useState(false)
+
+  const activeReal = characters[activeChar] ?? characters[0]
+  const importActive = () => {
+    if (!activeReal) return
+    setCfg((c) => c.team.length >= 3 ? c : ({ ...c, team: [...c.team, importedMember(activeReal)] }))
+  }
 
   const patch = (p: Partial<SimConfig>) => setCfg((c) => ({ ...c, ...p }))
   const setMember = (i: number, p: Partial<SimMemberCfg>) => setCfg((c) => ({ ...c, team: c.team.map((m, j) => (j === i ? { ...m, ...p } : m)) }))
@@ -153,10 +161,18 @@ export function SimulatorPanel() {
 
       {/* ÉQUIPE */}
       <section className="rounded-xl border border-slate-800 bg-[#11151f] p-3">
-        <div className="mb-2 flex items-center justify-between">
+        <div className="mb-2 flex items-center justify-between gap-2">
           <Label>Équipe ({cfg.team.length}/3)</Label>
           {cfg.team.length < 3 && (
-            <button onClick={addMember} className="rounded-lg border border-slate-700 px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-800">+ Ajouter</button>
+            <div className="flex shrink-0 gap-1.5">
+              {activeReal && (
+                <button onClick={importActive} title={`Importer ${activeReal.name} (vrais talents, stuff, gemmes, runes)`}
+                  className="rounded-lg border border-orange-500/50 bg-orange-500/10 px-2 py-1 text-[11px] font-medium text-orange-200 hover:bg-orange-500/20">
+                  📥 Importer le perso actif
+                </button>
+              )}
+              <button onClick={addMember} className="rounded-lg border border-slate-700 px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-800">+ Preset</button>
+            </div>
           )}
         </div>
         <div className="space-y-3">
@@ -185,6 +201,25 @@ function MemberCard({ m, index, canRemove, onSet, onRemove, onToggleGem, onToggl
 }) {
   const [open, setOpen] = useState(index === 0)
   const cls = SIM_CLASSES.find((c) => c.id === m.cls) ?? SIM_CLASSES[0]
+
+  // Membre IMPORTÉ : carte compacte (le vrai perso, non éditable ici).
+  if (m.imported) {
+    const ch = m.imported
+    return (
+      <div className="rounded-xl border border-orange-500/40 bg-orange-500/5 p-3">
+        <div className="flex items-center justify-between gap-2">
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="text-lg">📥</span>
+            <span className="truncate text-sm font-semibold text-orange-100">{ch.name}</span>
+            <span className="shrink-0 rounded-full bg-orange-500/20 px-1.5 py-0.5 text-[9px] font-bold text-orange-200">RÉEL · N{ch.level}</span>
+          </span>
+          {canRemove && <button onClick={onRemove} className="shrink-0 rounded-lg border border-rose-700/50 px-2 py-1 text-[11px] text-rose-300 hover:bg-rose-950/30">✕</button>}
+        </div>
+        <div className="mt-1 text-[10.5px] text-slate-400">Talents, équipement, gemmes et runes <b className="text-slate-300">réels</b> de ton perso — testé tel quel.</div>
+      </div>
+    )
+  }
+
   return (
     <div className="rounded-xl border border-slate-700/70 bg-slate-900/40">
       {/* En-tête repliable */}
