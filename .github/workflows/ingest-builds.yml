@@ -13,7 +13,9 @@ permissions:
 
 jobs:
   ingest:
-    if: contains(join(github.event.issue.labels.*.name, ','), 'build-submission')
+    # Signal robuste : un code WIB1 dans le corps (toujours présent dans une vraie soumission) OU le label
+    # `build-submission`. On ne dépend PAS du label seul — GitHub ne l'applique que s'il existe déjà.
+    if: ${{ contains(github.event.issue.body, 'WIB1:') || contains(join(github.event.issue.labels.*.name, ','), 'build-submission') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,21 +31,31 @@ jobs:
 
       - name: Commit du catalogue
         if: steps.ingest.outputs.result == 'ok'
+        # Le nom vient du TITRE (utilisateur) → passé en env et assaini par le script (pas d'interpolation
+        # directe ${{ }} dans le shell, qui serait injectable).
+        env:
+          BUILD_NAME: ${{ steps.ingest.outputs.name }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add src/game/communityBuilds.json
-          git commit -m "feat(builds): ajout communautaire « ${{ steps.ingest.outputs.name }} » (#${{ github.event.issue.number }})"
+          git commit -m "feat(builds): ajout communautaire « ${BUILD_NAME} » (#${ISSUE_NUMBER})"
           git push
 
       - name: Réponse à l'issue
         if: always()
         uses: actions/github-script@v7
+        # Sorties passées via env (process.env) → jamais interpolées dans le source JS (anti-injection).
+        env:
+          RESULT: ${{ steps.ingest.outputs.result }}
+          MESSAGE: ${{ steps.ingest.outputs.message }}
+          BUILD_NAME: ${{ steps.ingest.outputs.name }}
         with:
           script: |
-            const r = '${{ steps.ingest.outputs.result }}';
-            const msg = `${{ steps.ingest.outputs.message }}`;
-            const name = `${{ steps.ingest.outputs.name }}`;
+            const r = process.env.RESULT;
+            const msg = process.env.MESSAGE || 'code invalide';
+            const name = process.env.BUILD_NAME || 'ton build';
             if (r === 'ok') {
               await github.rest.issues.createComment({ ...context.repo, issue_number: context.issue.number,
                 body: `✅ Build « ${name} » ajouté au catalogue communautaire. Merci ! Il est désormais chargeable en jeu et testé par le banc d'essai.` });
@@ -53,5 +65,5 @@ jobs:
               await github.rest.issues.update({ ...context.repo, issue_number: context.issue.number, state: 'closed' });
             } else {
               await github.rest.issues.createComment({ ...context.repo, issue_number: context.issue.number,
-                body: `❌ Soumission non ajoutée : ${msg || 'code invalide'}. Vérifie d'avoir collé le code complet (\`WIB1:…\`) puis ré-édite l'issue.` });
+                body: `❌ Soumission non ajoutée : ${msg}. Vérifie d'avoir collé le code complet (\`WIB1:…\`) puis ré-édite l'issue.` });
             }

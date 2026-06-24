@@ -25,8 +25,10 @@ if (!cfg || !Array.isArray(cfg.team) || cfg.team.length === 0 || !cfg.content) f
 if (cfg.team.length > 3) fail('Équipe de plus de 3 membres — refusé.')
 for (const t of cfg.team) { if (typeof t !== 'object' || (!t.cls && !t.imported)) fail('Membre d\'équipe mal formé.') }
 
-// 3) Nom : titre de l'issue (« Build : X ») sinon noms d'équipe.
-const name = (title.replace(/^\s*Build\s*:\s*/i, '').trim() || cfg.team.map((t) => t.imported?.name ?? t.name).join(' + ')).slice(0, 80) || `Build #${issue}`
+// 3) Nom : titre de l'issue (« Build : X ») sinon noms d'équipe. Assaini (titre = saisie utilisateur) :
+// retire les caractères dangereux pour le message de commit (shell) et le commentaire (JS template).
+const rawName = title.replace(/^\s*Build\s*:\s*/i, '').trim() || cfg.team.map((t) => t.imported?.name ?? t.name).join(' + ')
+const name = rawName.replace(/[`"$\\\r\n]/g, '').replace(/\s+/g, ' ').trim().slice(0, 80) || `Build #${issue}`
 
 // 4) Ajouter au catalogue (anti-doublon par code).
 const list = JSON.parse(fs.readFileSync(FILE, 'utf-8'))
