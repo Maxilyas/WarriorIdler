@@ -24,6 +24,7 @@ import { getPower } from './powers'
 import { spellTypeMult, spellElementTypes, DAMAGE_TYPE_LIST, type DamageProfile } from './damage'
 import { acharneMult, nueeMult, type CondMods } from './condGems'
 import { type TimeRuneMods, type PactMods } from './enchants'
+import type { UniqueActiveMods } from './uniques'
 import type { CombatMods } from './store'
 
 // ---- État & constantes globaux de combat (déplacés de store.ts) ----
@@ -225,6 +226,8 @@ const riposteAcc = new Map<string, number>()    // 🤺 Riposte mesurée : s sou
 const echangeurAcc = new Map<string, number>()  // 🔃 Échangeur : fraction de PV subis accumulée
 const egideLeft = new Map<string, number>()     // 🛡️ Égide : coups encore couverts CE combat
 const hotPool = new Map<string, number>()       // 💧 Goutte-à-goutte : réserve de soin différé
+const uBouclierCd = new Map<string, number>()   // ✦ Actif bouclierCoup : recharge interne (s)
+const uSursisUsed = new Set<string>()           // ✦ Actif sursis : héros déjà relevés CE combat
 
 /** 🎺 Bonus de la Marche triomphale (+0,5%/combat gagné sans mort, capé). */
 function marcheBonus(cap?: number): number {
@@ -523,6 +526,75 @@ function masteryRiposte(
   }
   mRiposteAcc.set(c.id, acc)
   return dealt
+}
+
+/* ============ ✦ ACTIFS D'UNIQUES (archetypes câblés, voir uniques.ts) ============ */
+
+/** Multiplicateur OFFENSIF d'un héros issu des actifs d'uniques (doubleFrappe, pénétration, rampe,
+ *  exécution sous 25% PV ennemi, berserk sous 50% PV soi). Tous bornés (anti-snowball). */
+function uniqueOffenseMult(c: Character, ua: UniqueActiveMods | undefined, enemy: Enemy | undefined, combatT: number): number {
+  if (!ua) return 1
+  let m = 1
+  if (ua.doubleFrappe) m *= 1 + ua.doubleFrappe
+  if (ua.penResist) m *= 1 + ua.penResist
+  if (ua.rampe) m *= 1 + ua.rampe * Math.min(1, combatT / 20)
+  if (ua.execution && enemy && enemy.maxHp > 0 && enemy.hp / enemy.maxHp < 0.25) m *= 1 + ua.execution
+  if (ua.berserk && c.hp / charMaxHp(c) < 0.5) m *= 1 + ua.berserk
+  return m
+}
+
+/** Ouverture de combat : bouclier de départ des actifs + réarme le sursis d'unique. */
+function uniqueFightStart(chars: Character[], ua: UniqueActiveMods | undefined) {
+  uSursisUsed.clear()
+  if (!ua?.bouclierDepart) return
+  for (const c of chars) {
+    if (c.hp <= 0) continue
+    c.absorb = Math.max(c.absorb ?? 0, ua.bouclierDepart * charMaxHp(c))
+  }
+}
+
+/** Chaîne défensive des actifs autour d'un coup ENCAISSÉ : épines, dégâts→bouclier, bouclier-au-gros-coup. */
+function uniqueDefense(c: Character, taken: number, ua: UniqueActiveMods | undefined, enemy: Enemy) {
+  if (!ua || taken <= 0) return
+  const mh = charMaxHp(c)
+  if (ua.epines && enemy.hp > 0) enemy.hp = Math.max(0, enemy.hp - taken * ua.epines)
+  if (ua.degatsBouclier) c.absorb = Math.min(mh, (c.absorb ?? 0) + taken * ua.degatsBouclier)
+  if (ua.bouclierCoup && taken >= 0.15 * mh && (uBouclierCd.get(c.id) ?? 0) <= 0) {
+    c.absorb = Math.min(mh, (c.absorb ?? 0) + ua.bouclierCoup * mh)
+    uBouclierCd.set(c.id, 10)
+  }
+}
+
+/** ✦ Sursis d'unique : un héros qui vient de tomber survit (1×/combat, relevé à `sursis`% PV). */
+function applyUniqueSursis(chars: Character[], ua: UniqueActiveMods | undefined): string[] {
+  if (!ua?.sursis) return []
+  const out: string[] = []
+  for (const c of chars) {
+    if (c.hp > 0 || uSursisUsed.has(c.id)) continue
+    c.hp = Math.round(charMaxHp(c) * ua.sursis)
+    uSursisUsed.add(c.id)
+    out.push(c.name)
+  }
+  return out
+}
+
+/** Soin/s des actifs (soi + groupe) pour un héros vivant — borné par les pactes anti-soin (géré par l'appelant). */
+function uniqueHealPerSec(ua: UniqueActiveMods | undefined): number {
+  if (!ua) return 0
+  return (ua.soinHot ?? 0) + (ua.soinGroupe ?? 0)
+}
+
+/** ✦ Réactions au KILL des actifs (cdrKill) — appelé par le store, comme gemKillEvents. */
+export function uniqueKillEvents(chars: Character[], ua: UniqueActiveMods | undefined, kills: number) {
+  if (!ua?.cdrKill || kills <= 0) return
+  for (const c of chars) {
+    if (c.hp <= 0) continue
+    for (const pid of charDeck(c)) {
+      if (!pid) continue
+      const k = `${c.id}:${pid}`
+      cooldowns.set(k, Math.max(0, (cooldowns.get(k) ?? 0) - ua.cdrKill * kills))
+    }
+  }
 }
 
 /** 💧/🏆 Soin de VOL DE VIE avec débordement (Goutte-à-goutte : l'excès devient régén différée). */
@@ -1093,6 +1165,8 @@ function tickHeroStatuses(chars: Character[], dt: number, cond?: CondMods, pact?
     if (ccd && ccd > 0) carapaceCdMap.set(c.id, Math.max(0, ccd - dt))
     const scd = shieldCdMap.get(c.id)
     if (scd && scd > 0) shieldCdMap.set(c.id, Math.max(0, scd - dt))
+    const ubcd = uBouclierCd.get(c.id) // ✦ recharge du bouclier-au-coup d'unique
+    if (ubcd && ubcd > 0) uBouclierCd.set(c.id, Math.max(0, ubcd - dt))
     // 💧 Goutte-à-goutte : la réserve se déverse à 2% des PV max par seconde (coupée au Jeûne).
     const pool = hotPool.get(c.id) ?? 0
     if (pool > 0 && c.hp > 0 && !pact?.noHeal) {
@@ -1175,6 +1249,7 @@ export function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, 
   if ((enemy.age ?? 0) <= dt + 1e-9) {
     gemFightStart(chars, info, mods?.cond)
     runeFightStart(chars, mods?.runes)
+    uniqueFightStart(chars, mods?.uniqueActives)
   }
 
   let totalDealt = 0
@@ -1211,6 +1286,7 @@ export function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, 
     const pactAuto = (mods?.pact?.autoMult ?? 1) * (1 + (mods?.pact?.focusBonus ?? 0))
     const runePact = runePactOffense(enemy.age ?? 0, mods?.runes, mods?.pact)
     const bonusMult = d.cmods.damageMult * lowHp * highHp * weakenMult * frenzyMult * (mods?.heroMult ?? 1) * acharne * souffle * opportunisteMult * opener * fuel * surplusMult * gemMult * pactAuto * runePact * formDamageMult(c, d.cmods)
+      * uniqueOffenseMult(c, mods?.uniqueActives, enemy, enemy.age ?? 0) // ✦ rampe · exécution · berserk · doubleFrappe · pénétration
     const multistrikeChance = Math.min(0.85, d.derived.multistrike + d.cmods.multistrike)
     const metroN = mods?.cond?.metronomeN
     // 🔁 Da capo : au-delà du seuil, les compteurs de RYTHME avancent ×2.
@@ -1454,11 +1530,13 @@ export function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, 
       const antid = mods?.content?.antidote
       const dmg = incoming * frac * (mods?.pact?.dmgIn ?? 1)
         * (antid && antid.type === enemy.damageType ? 1 - antid.pct : 1)
+        * (1 - (mods?.uniqueActives?.ralentir ?? 0)) // ✦ ralentir : -% dégâts de l'ennemi au contact
         * gemDefenseMult(cc, charMaxHp(cc), {
           cond: mods?.cond, casting: enemyCasting, surge: mods?.content?.surge, aliveEnemies: 1,
         })
       // …puis Bastion réactif (🔃 Échangeur, 🌵 Cilice) et immunité/bouclier d'absorption.
       const taken = gemDamageHero(cc, dmg, { cond: mods?.cond, attacker: enemy })
+      uniqueDefense(cc, taken, mods?.uniqueActives, enemy) // ✦ épines · dégâts→bouclier · bouclier-au-coup
       // ÉGIDE « Aegis adaptatif » : être frappé par un type endurcit contre ce type.
       if (cd2.cmods.adaptiveResist && taken > 0) adaptiveAdd(cc.id, enemy.damageType, cd2.cmods.adaptiveResist.gain * dt, cd2.cmods.adaptiveResist.cap)
       // Épines (thorns) : renvoie une fraction de l'attaque à l'ennemi (basée sur le coup, bouclier inclus).
@@ -1496,6 +1574,7 @@ export function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, 
 
   // 5b) 🕊️ Sursis : un héros qui vient de tomber survit à 25% PV (👑 Hubris : sans filet).
   const revived = applySursis(chars, mods?.pact?.noSursis ? undefined : mods?.runes?.sursisCd)
+  revived.push(...applyUniqueSursis(chars, mods?.uniqueActives)) // ✦ sursis d'unique (1×/combat)
   // morts restantes → ⚓ Ancrage brisé, 🎺 Marche perdue, 📜 Testament, 💀 Memento.
   gemDeathEvents(chars, aliveBefore, mods?.cond, mods?.pact)
 
@@ -1516,6 +1595,7 @@ export function partyCombatStep(input: Character[], enemyIn: Enemy, dt: number, 
       // 💉 Perfusion : sous 50% des PV, soin/s FORFAITAIRE (la Régén de base a disparu → plus de × sur 0).
       if (mods?.cond?.perfusionBonus && c.hp / mh < 0.5) regen += mh * mods.cond.perfusionBonus * 0.05
       // 🍽️ Jeûne / 🧛 Sang vicié : la régénération est coupée.
+      regen += mh * uniqueHealPerSec(mods?.uniqueActives) // ✦ soinHot (soi) + soinGroupe
       if (mods?.pact?.noHeal || mods?.pact?.noRegen) regen = 0
       c.hp = Math.min(mh, c.hp + regen * dt)
     } else if (c.hp <= 0) {
@@ -1590,6 +1670,7 @@ export function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt:
   if ((mods?.fightTime ?? 99) <= dt + 1e-9) {
     gemFightStart(chars, info, mods?.cond)
     runeFightStart(chars, mods?.runes)
+    uniqueFightStart(chars, mods?.uniqueActives)
   }
   let totalDealt = 0
   const focus = (): Enemy | undefined => enemies.find((e) => e.hp > 0)
@@ -1631,6 +1712,7 @@ export function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt:
     const pactAuto = (mods?.pact?.autoMult ?? 1) * (1 + (mods?.pact?.focusBonus ?? 0))
     const runePact = runePactOffense(mods?.fightTime ?? 0, mods?.runes, mods?.pact)
     const bonusMult = d.cmods.damageMult * lowHp * highHp * weakenMult * frenzyMult * (mods?.heroMult ?? 1) * nuee * acharne * souffle * opportunisteMult * opener * fuel * perEnemy * surplusMult * gemMult * pactAuto * runePact * formDamageMult(c, d.cmods)
+      * uniqueOffenseMult(c, mods?.uniqueActives, fTarget0, mods?.fightTime ?? 0) // ✦ rampe · exécution · berserk · doubleFrappe · pénétration
     const multistrikeChance = Math.min(0.85, d.derived.multistrike + d.cmods.multistrike)
     const metroN = mods?.cond?.metronomeN
     // 🔁 Da capo : au-delà du seuil de la RENCONTRE, les compteurs de RYTHME avancent ×2.
@@ -1931,11 +2013,13 @@ export function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt:
       const antid = mods?.content?.antidote
       const dmg = incoming * frac * (mods?.pact?.dmgIn ?? 1)
         * (antid && antid.type === enemy.damageType ? 1 - antid.pct : 1)
+        * (1 - (mods?.uniqueActives?.ralentir ?? 0)) // ✦ ralentir : -% dégâts de l'ennemi au contact
         * gemDefenseMult(cc, charMaxHp(cc), {
           cond: mods?.cond, casting: anyCasting, surge: mods?.content?.surge, aliveEnemies: aliveE,
         })
       // …puis Bastion réactif (🔃 Échangeur, 🌵 Cilice) et immunité/bouclier d'absorption.
       const taken = gemDamageHero(cc, dmg, { cond: mods?.cond, attacker: enemy })
+      uniqueDefense(cc, taken, mods?.uniqueActives, enemy) // ✦ épines · dégâts→bouclier · bouclier-au-coup
       // ÉGIDE « Aegis adaptatif » : être frappé par un type endurcit contre ce type.
       if (cd2.cmods.adaptiveResist && taken > 0) adaptiveAdd(cc.id, enemy.damageType, cd2.cmods.adaptiveResist.gain * dt, cd2.cmods.adaptiveResist.cap)
       if (cd2.cmods.thorns > 0 && enemy.hp > 0) enemy.hp = Math.max(0, enemy.hp - dmg * cd2.cmods.thorns)
@@ -1985,6 +2069,7 @@ export function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt:
 
   // 5b) 🕊️ Sursis : un héros qui vient de tomber survit à 25% PV (👑 Hubris : sans filet).
   const revived = applySursis(chars, mods?.pact?.noSursis ? undefined : mods?.runes?.sursisCd)
+  revived.push(...applyUniqueSursis(chars, mods?.uniqueActives)) // ✦ sursis d'unique (1×/combat)
   // morts restantes → ⚓ Ancrage brisé, 🎺 Marche perdue, 📜 Testament, 💀 Memento.
   gemDeathEvents(chars, aliveBefore, mods?.cond, mods?.pact)
 
@@ -2006,6 +2091,7 @@ export function partyCombatStepMulti(input: Character[], enemiesIn: Enemy[], dt:
       // la régén s'effondre → un tank ne peut plus éponger juste après une Nova.
       if ((c.healCut ?? 0) > 0) { regen *= HEALCUT_REGEN_MULT; c.healCut = Math.max(0, (c.healCut ?? 0) - dt) }
       // 🍽️ Jeûne / 🧛 Sang vicié : la régénération est coupée.
+      regen += mh * uniqueHealPerSec(mods?.uniqueActives) // ✦ soinHot (soi) + soinGroupe
       if (mods?.pact?.noHeal || mods?.pact?.noRegen) regen = 0
       c.hp = Math.min(mh, c.hp + regen * dt)
     }

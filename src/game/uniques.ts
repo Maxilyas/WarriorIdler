@@ -394,10 +394,128 @@ export function uniqueActiveText(id: string): string | undefined {
   return BY_ID.get(id)?.active
 }
 
-/** Effet MÉCANIQUE chiffré d'un actif à un rang donné (null si pas encore câblé). Rempli en Phase B
- *  une fois la taxonomie d'archetypes (`activeEffect`) renseignée sur les entrées. */
-export function describeActiveEffect(_id: string, _rank: number): string | null {
-  return null
+/* ================================================================== */
+/* ACTIFS CÂBLÉS — taxonomie d'archetypes bornés                        */
+/* Couverture TOTALE : chaque unique reçoit un archetype déduit de son  */
+/* texte d'accroche (`active`) + son rôle. Magnitude = base au rang     */
+/* actif × croissance par rang. Knobs = `ACTIVE_MAG` (caps par effet).  */
+/* Déclenché en combat par combatEngine via `aggregateUniqueActives`.   */
+/* ================================================================== */
+
+export type UniqueActiveKind =
+  | 'sursis' | 'epines' | 'bouclierCoup' | 'bouclierDepart' | 'degatsBouclier'
+  | 'ralentir' | 'doubleFrappe' | 'execution' | 'berserk' | 'rampe'
+  | 'penResist' | 'soinHot' | 'soinGroupe' | 'cdrKill' | 'butin'
+
+/** +15% de magnitude par rang AU-DESSUS du rang actif (rang 10 ≈ +75%). */
+const ACTIVE_RANK_GROWTH = 0.15
+
+/** KNOBS — magnitude de BASE (au rang actif) de chaque archetype. Conservateur par défaut
+ *  (anti-power-creep) : chaque effet est borné (cap, CD interne, ou 1×/combat). À calibrer aux sims. */
+const ACTIVE_MAG: Record<UniqueActiveKind, number> = {
+  sursis: 0.25,        // relevé à 25% PV, 1×/combat
+  epines: 0.12,        // % des dégâts subis renvoyés
+  bouclierCoup: 0.10,  // % PV en bouclier sur gros coup (CD 10 s)
+  bouclierDepart: 0.10,// % PV en bouclier d'ouverture
+  degatsBouclier: 0.10,// % des dégâts subis → bouclier
+  ralentir: 0.08,      // -% dégâts de l'ennemi au contact
+  doubleFrappe: 0.10,  // chance de frapper 2× (espérance de dégâts)
+  execution: 0.25,     // +% dégâts vs ennemi < 25% PV
+  berserk: 0.20,       // +% dégâts quand SOI < 50% PV
+  rampe: 0.15,         // +% dégâts au fil du combat (cap)
+  penResist: 0.08,     // ignore +% résist/armure (approx. flat)
+  soinHot: 0.012,      // % PV/s (soi)
+  soinGroupe: 0.008,   // % PV/s (groupe)
+  cdrKill: 1.0,        // s de recharge en moins par kill
+  butin: 0.15,         // +% qualité de butin
+}
+
+/** Déduit l'archetype d'actif d'un effet, depuis le texte d'accroche + le rôle (couverture totale). */
+function deriveActiveKind(def: UniqueEffect): UniqueActiveKind {
+  const t = (def.active ?? '').toLowerCase()
+  const has = (re: RegExp) => re.test(t)
+  if (has(/survi|à la mort|évite la mort|empêche.*(tomber|1 pv)|ranime|renaissance|renaît|ressuscite|relève|sous 1 pv/)) return 'sursis'
+  if (has(/butin|récompense|rareté du butin|qualité du butin|donjon et raid/)) return 'butin'
+  if (has(/renvoie|reflèt|réflé|reflé|épines|immole|au contact|réfract|onde de choc|explos/)) return 'epines'
+  if (has(/bouclier/) && has(/hors combat|départ|se reforme|reconstruit|reconstitue/)) return 'bouclierDepart'
+  if (has(/converti.*bouclier|dégâts.*bouclier|en bouclier|absorbe.*bouclier/)) return 'degatsBouclier'
+  if (has(/bouclier/)) return 'bouclierCoup'
+  if (has(/gèle|gel\b|ralenti|givre|étourd|paralys|insensible|invuln|pétrif|immunité|fige/)) return 'ralentir'
+  if (has(/deux fois|dédoubl|double|seconde fois|rafale/)) return 'doubleFrappe'
+  if (has(/exécut|achèv|affaibli|sous 25|vie ennemie|finisseur|fauche|jugement/)) return 'execution'
+  if (has(/sous 50%|blessé|dos au mur|furie|rage|cran de/)) return 'berserk'
+  if (has(/ignore.*(résist|armure)|perfor|transperce|traverse|perce/)) return 'penResist'
+  if (has(/recharge|cooldown|relance/)) return 'cdrKill'
+  if (has(/groupe/) && has(/soin|soigne|guéri/)) return 'soinGroupe'
+  if (has(/soin|soigne|régén|guéri|vol de vie|draine|vie/)) return 'soinHot'
+  if (has(/seconde|charge|accumule|monte|surchauffe|momentum|kill|onde/)) return 'rampe'
+  switch (def.role) { // repli par rôle (couverture totale)
+    case 'heal': return 'soinHot'
+    case 'tank': return 'bouclierCoup'
+    case 'resist': return 'degatsBouclier'
+    case 'utility': return 'cdrKill'
+    default: return 'rampe'
+  }
+}
+
+const ACTIVE_KIND = new Map<string, UniqueActiveKind>(UNIQUE_EFFECTS.map((u) => [u.id, deriveActiveKind(u)]))
+export function uniqueActiveKind(id: string): UniqueActiveKind | undefined { return ACTIVE_KIND.get(id) }
+
+/** Magnitude effective d'un archetype à un rang donné (0 sous le rang actif). */
+export function activeMagAt(kind: UniqueActiveKind, rank: number): number {
+  if (rank < UNIQUE_ACTIVE_RANK) return 0
+  return ACTIVE_MAG[kind] * (1 + (rank - UNIQUE_ACTIVE_RANK) * ACTIVE_RANK_GROWTH)
+}
+
+const ACTIVE_DESC: Record<UniqueActiveKind, (m: number) => string> = {
+  sursis: (m) => `survit 1×/combat à un coup fatal (relevé à ${Math.round(m * 100)}% PV)`,
+  epines: (m) => `renvoie ${Math.round(m * 100)}% des dégâts subis à l'attaquant`,
+  bouclierCoup: (m) => `gros coup encaissé → bouclier de ${Math.round(m * 100)}% PV (récup. 10 s)`,
+  bouclierDepart: (m) => `bouclier de départ de ${Math.round(m * 100)}% PV à chaque combat`,
+  degatsBouclier: (m) => `${Math.round(m * 100)}% des dégâts subis reversés en bouclier`,
+  ralentir: (m) => `-${Math.round(m * 100)}% de dégâts de l'ennemi au contact`,
+  doubleFrappe: (m) => `+${Math.round(m * 100)}% de chance de frapper deux fois`,
+  execution: (m) => `+${Math.round(m * 100)}% de dégâts aux ennemis sous 25% PV`,
+  berserk: (m) => `+${Math.round(m * 100)}% de dégâts sous 50% de tes PV`,
+  rampe: (m) => `+${Math.round(m * 100)}% de dégâts au fil du combat (montée ~20 s)`,
+  penResist: (m) => `ignore ${Math.round(m * 100)}% de résistance/armure en plus`,
+  soinHot: (m) => `te soigne ${(m * 100).toFixed(1)}% de tes PV / s`,
+  soinGroupe: (m) => `soigne le groupe de ${(m * 100).toFixed(1)}% PV / s`,
+  cdrKill: (m) => `chaque kill réduit tes recharges de ${m.toFixed(1)} s`,
+  butin: (m) => `+${Math.round(m * 100)}% de qualité de butin`,
+}
+
+/** Effet MÉCANIQUE chiffré d'un actif à un rang donné (null sous le rang actif). */
+export function describeActiveEffect(id: string, rank: number): string | null {
+  const kind = ACTIVE_KIND.get(id)
+  if (!kind || rank < UNIQUE_ACTIVE_RANK) return null
+  return ACTIVE_DESC[kind](activeMagAt(kind, rank))
+}
+
+/** Effets d'actifs agrégés au niveau ÉQUIPE (meilleure magnitude par archetype). */
+export interface UniqueActiveMods {
+  sursis?: number; epines?: number; bouclierCoup?: number; bouclierDepart?: number
+  degatsBouclier?: number; ralentir?: number; doubleFrappe?: number; execution?: number
+  berserk?: number; rampe?: number; penResist?: number; soinHot?: number; soinGroupe?: number
+  cdrKill?: number; butin?: number
+}
+
+/** Agrège les actifs des uniques équipés (rang ≥ actif) sur toute l'équipe — meilleure magnitude
+ *  par effet (comme les gemmes : meilleure instance portée). Pur, réutilisé par les sims. */
+export function aggregateUniqueActives(characters: { equipment: Record<string, { unique?: UniqueInstance } | undefined> }[]): UniqueActiveMods {
+  const out: UniqueActiveMods = {}
+  for (const c of characters) {
+    for (const slot in c.equipment) {
+      const u = c.equipment[slot]?.unique
+      if (!u || u.rank < UNIQUE_ACTIVE_RANK) continue
+      const kind = ACTIVE_KIND.get(u.id)
+      if (!kind) continue
+      const field = kind as keyof UniqueActiveMods
+      const mag = activeMagAt(kind, u.rank)
+      if ((out[field] ?? 0) < mag) out[field] = mag
+    }
+  }
+  return out
 }
 
 export function isUniqueActive(rank: number): boolean {

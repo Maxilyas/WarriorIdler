@@ -19,11 +19,11 @@ import { makeEnemy, isBossStage, stageIlvl } from './enemies'
 import { chapitreOf, vagueOf, raidGateForStage } from './progression'
 import { maitriseBonus, surgeBiome, SURGE_GOLD_XP_MULT, SURGE_QUINT_MULT } from './biomeBonus'
 import { RARITIES } from './rarities'
-import { essenceGain } from './uniques'
+import { essenceGain, aggregateUniqueActives } from './uniques'
 import { persistThrottled, discoverFromItems } from './save'
 import {
   partyCombatStep, crescendoBonus, crescendoAdd, crescendoReset, resetAllCooldowns, resetLongestCooldown,
-  tresorerieShield, gemKillEvents
+  tresorerieShield, gemKillEvents, uniqueKillEvents
 } from './combatEngine'
 import { DAMAGE_TYPES } from './damage'
 import {
@@ -90,6 +90,7 @@ export function createTickSlice(set: GameSet, get: GameGet): Pick<GameState,
       const runes = timeRuneMods(equippedTimeRunes(s.characters), cmodsTick.runisteTempo)
       const buffs = activeBrewBuffs(s)
       const pact = teamPactMods(s, cmodsTick, buffs)
+      const uniqueActives = aggregateUniqueActives(s.characters) // ✦ actifs des uniques équipés (rang ≥ actif)
       const surgedNow = surgeBiome() === s.activeBiome
       // 🧗 Pied du mur : à ≤ 2 vagues du record, le push frappe plus fort.
       const nearRecord = s.stage >= s.bestStage - 2
@@ -100,7 +101,7 @@ export function createTickSlice(set: GameSet, get: GameGet): Pick<GameState,
         * buffs.dmgMult
         * (buffs.oil && buffs.oil.type === s.activeBiome ? 1 + buffs.oil.pct : 1)
       const res = partyCombatStep(s.characters, s.enemy, dt, {
-        heroMult, cond, runes, pact,
+        heroMult, cond, runes, pact, uniqueActives,
         // régén des murs Ch.6+ (sustain check) ; le tick l'applique à l'ennemi (mods.regen).
         regen: s.enemy.mur?.regen,
         content: { surge: surgedNow, biomeType: s.activeBiome, nearRecord, antidote: buffs.antidote ?? undefined },
@@ -135,6 +136,7 @@ export function createTickSlice(set: GameSet, get: GameGet): Pick<GameState,
         crescendoAdd(1)
         tresorerieShield(chars, cond.tresorerieCap)
         gemKillEvents(chars, cond, 1, 1, runes, pact) // 🔔 Glas · 🦷 Fièvre · 🎺 Marche · 🪽 · 🍽️
+        uniqueKillEvents(chars, uniqueActives, 1) // ✦ cdrKill : chaque kill réduit les recharges
         const eco = computeGlobalMods(s.upgrades, s.maitrise, achievementBonuses(s.achievements))
         // SURCHARGE élémentaire : le biome tournant rapporte +50% or/XP et ×2 quintessence.
         const surged = surgeBiome() === s.activeBiome
@@ -195,6 +197,7 @@ export function createTickSlice(set: GameSet, get: GameGet): Pick<GameState,
         const shift = (boss ? 1 : 0) + (elite ? 1 : 0) + (champion ? 2 : 0)
           + Math.min(2, Math.floor(eco.rarityLuck)) + Math.min(2, karmaBonus)
           + (rules.has('monomanie') ? (amp >= 1.25 ? 2 : 1) : 0)
+          + (Math.random() < (uniqueActives.butin ?? 0) ? 1 : 0) // ✦ actif butin : chance de +1 palier de rareté
         // 🕳️ Tisse-châsse : les drops ont une chance accrue de porter une châsse.
         const socketLuck = rules.has('tisseChasse') ? 0.15 * amp : 0
         let codex = s.codex

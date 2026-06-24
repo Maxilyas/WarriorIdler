@@ -17,6 +17,7 @@ import { constellationMods } from './prestige'
 import { craftMods, type MetierId } from './metiers'
 import { equippedRules, ruleAmp, type TimeRuneMods, type PactMods } from './enchants'
 import { type CondGemId, type CondMods, type GemFamily, type GemQuality } from './condGems'
+import { type UniqueActiveMods } from './uniques'
 import { tickAutomates, type AutomateMission } from './automates'
 import { makeEnemy } from './enemies'
 import { type BiomeId } from './biomes'
@@ -416,6 +417,8 @@ export interface CombatMods {
   runes?: TimeRuneMods
   /** 🩸 Pacte(s) actif(s) — bonus/malus permanents d'équipe (voir enchants.ts). */
   pact?: PactMods
+  /** ✦ Actifs des uniques équipés (rang ≥ actif), agrégés au niveau équipe (voir uniques.ts). */
+  uniqueActives?: UniqueActiveMods
   /** CONTEXTE de contenu pour les gemmes d'Environnement (où se passe le combat). */
   content?: {
     /** Biome actif (farm) — Prisme d'accord. */

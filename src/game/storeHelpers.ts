@@ -39,8 +39,9 @@ import { RARITIES, RARITY_LIST } from './rarities'
 import { persistThrottled, discoverFromItems } from './save'
 import {
   partyCombatStepMulti, crescendoBonus, crescendoAdd, crescendoReset, fuelReset, resetLongestCooldown,
-  tresorerieShield, gemKillEvents, setRegenMult, resetMemento
+  tresorerieShield, gemKillEvents, uniqueKillEvents, setRegenMult, resetMemento
 } from './combatEngine'
+import { aggregateUniqueActives } from './uniques'
 import { DAMAGE_TYPE_LIST, DAMAGE_TYPES } from './damage'
 import { slotAccepts, equipSlotsForType, EQUIP_SLOTS } from './slots'
 import { type TutCtx } from './tutorial'
@@ -742,6 +743,7 @@ export function tickDungeon(s: GameState, dt: number, set: (s: GameState) => voi
   const dRunes = timeRuneMods(equippedTimeRunes(s.characters), dCraft.runisteTempo)
   const dBuffs = activeBrewBuffs(s)
   const dPact = teamPactMods(s, dCraft, dBuffs)
+  const dUActives = aggregateUniqueActives(s.characters) // ✦ actifs des uniques équipés
   // 🗝️ Pierre de sceau : +X% de dégâts par modificateur actif · ⚗️ élixir/🛢️ huile d'Officine.
   const dHeroMult = (1 + maitriseBonus(s.bestStage)) * (1 + crescendoBonus(dCond.crescendoCap))
     * (dCond.sceauPct ? 1 + dCond.sceauPct * d.modifiers.length : 1)
@@ -749,6 +751,7 @@ export function tickDungeon(s: GameState, dt: number, set: (s: GameState) => voi
     * (dBuffs.oil && dBuffs.oil.type === def.element ? 1 + dBuffs.oil.pct : 1)
   const res = partyCombatStepMulti(s.characters, d.enemies, dt, {
     enrage, reflect, regen, fightTime, heroMult: dHeroMult, cond: dCond, runes: dRunes, pact: dPact,
+    uniqueActives: dUActives,
     content: { affixCount: d.modifiers.length, antidote: dBuffs.antidote ?? undefined },
   })
   let chars = res.chars
@@ -783,6 +786,7 @@ export function tickDungeon(s: GameState, dt: number, set: (s: GameState) => voi
     crescendoAdd(enemies.length)
     tresorerieShield(chars, dCond.tresorerieCap)
     gemKillEvents(chars, dCond, enemies.length, 1, dRunes, dPact) // 🔔 Glas · 🦷 Fièvre · 🎺 Marche · 🪽 · 🍽️
+    uniqueKillEvents(chars, dUActives, enemies.length) // ✦ cdrKill
     const eco = computeGlobalMods(s.upgrades, s.maitrise, achievementBonuses(s.achievements))
     const lv = d.level
     const packXp = enemies.reduce((a, e) => a + (e.xp ?? 0), 0)
@@ -1024,11 +1028,13 @@ export function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) 
   const rRunes = timeRuneMods(equippedTimeRunes(s.characters), rCraft.runisteTempo)
   const rBuffs = activeBrewBuffs(s)
   const rPact = teamPactMods(s, rCraft, rBuffs)
+  const rUActives = aggregateUniqueActives(s.characters) // ✦ actifs des uniques équipés
   const rHeroMult = (1 + maitriseBonus(s.bestStage)) * (1 + crescendoBonus(rCond.crescendoCap))
     * rBuffs.dmgMult
     * (rBuffs.oil && rBuffs.oil.type === r.element ? 1 + rBuffs.oil.pct : 1)
   const res = partyCombatStepMulti(s.characters, r.enemies, dt, {
     enrage, regen: drain, fightTime, dmgMult, heroMult: rHeroMult, cond: rCond, runes: rRunes, pact: rPact,
+    uniqueActives: rUActives,
     // 🏅 Trophée de guerre : la gemme offre ses points de résist à l'équipe EN RAID.
     // « Mal de l'abîme » : régén bridée en raid (la vie redevient une ressource).
     content: { resistBonus: rCond.tropheeRes, regenMult: RAID_REGEN_MULT, antidote: rBuffs.antidote ?? undefined },
@@ -1154,6 +1160,7 @@ export function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) 
     crescendoAdd(1)
     tresorerieShield(chars, rCond.tresorerieCap)
     gemKillEvents(chars, rCond, 1, 1, rRunes, rPact) // 🔔 Glas · 🦷 Fièvre · 🎺 Marche · 🪽 · 🍽️
+    uniqueKillEvents(chars, rUActives, 1) // ✦ cdrKill
     // un raid = UN affrontement → le boss (ou duo) vaincu, le trésor tombe directement.
     {
       const tier = r.tier
