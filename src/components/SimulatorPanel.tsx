@@ -76,6 +76,11 @@ export function SimulatorPanel() {
     if (!activeReal) return
     setCfg((c) => c.team.length >= 3 ? c : ({ ...c, team: [...c.team, importedMember(activeReal)] }))
   }
+  // Remplace l'équipe par TOUS tes vrais persos (ta compo réelle DPS + heal), capée à 3.
+  const importTeam = () => {
+    if (!characters.length) return
+    setCfg((c) => ({ ...c, team: characters.slice(0, 3).map(importedMember) }))
+  }
 
   const patch = (p: Partial<SimConfig>) => setCfg((c) => ({ ...c, ...p }))
   const setMember = (i: number, p: Partial<SimMemberCfg>) => setCfg((c) => ({ ...c, team: c.team.map((m, j) => (j === i ? { ...m, ...p } : m)) }))
@@ -163,17 +168,23 @@ export function SimulatorPanel() {
       <section className="rounded-xl border border-slate-800 bg-[#11151f] p-3">
         <div className="mb-2 flex items-center justify-between gap-2">
           <Label>Équipe ({cfg.team.length}/3)</Label>
-          {cfg.team.length < 3 && (
-            <div className="flex shrink-0 gap-1.5">
-              {activeReal && (
-                <button onClick={importActive} title={`Importer ${activeReal.name} (vrais talents, stuff, gemmes, runes)`}
-                  className="rounded-lg border border-orange-500/50 bg-orange-500/10 px-2 py-1 text-[11px] font-medium text-orange-200 hover:bg-orange-500/20">
-                  📥 Importer le perso actif
-                </button>
-              )}
+          <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
+            {activeReal && cfg.team.length < 3 && (
+              <button onClick={importActive} title={`Importer ${activeReal.name} (vrais talents, stuff, gemmes, runes)`}
+                className="rounded-lg border border-orange-500/50 bg-orange-500/10 px-2 py-1 text-[11px] font-medium text-orange-200 hover:bg-orange-500/20">
+                📥 Perso actif
+              </button>
+            )}
+            {characters.length > 1 && (
+              <button onClick={importTeam} title="Remplacer par ta vraie compo (tous tes persos)"
+                className="rounded-lg border border-orange-500/50 bg-orange-500/10 px-2 py-1 text-[11px] font-medium text-orange-200 hover:bg-orange-500/20">
+                📥 Mon équipe
+              </button>
+            )}
+            {cfg.team.length < 3 && (
               <button onClick={addMember} className="rounded-lg border border-slate-700 px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-800">+ Preset</button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
         <div className="space-y-3">
           {cfg.team.map((m, i) => (
