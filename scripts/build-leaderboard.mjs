@@ -45,7 +45,8 @@ const clsMap = new Map(SIM_CLASSES.map((c) => [c.id, c]))
 const runeInfo = new Map()
 for (const r of TIME_RUNES) { const v = { icon: r.icon, name: r.name, desc: r.description }; runeInfo.set(r.id, v); runeInfo.set(r.time, v) }
 
-const INFO = { spell: {}, gem: {}, rune: {}, unique: {} }
+const KIND_LABEL = { minor: 'Passif mineur', notable: 'Passif notable', keystone: 'Keystone', ability: 'Capacité', gateway: 'Passerelle' }
+const INFO = { spell: {}, gem: {}, rune: {}, unique: {}, talent: {} }
 const spell = (id) => {
   const p = getPower(id); if (!p) return null
   if (!INFO.spell[p.name]) {
@@ -110,16 +111,24 @@ function memberTalentNodes(talents) {
     const meta = CONSTELLATIONS[node.constellation]
     if (meta?.tree === 'pantheon') continue
     const parents = id === 'co_start' ? [] : [...(node.requires || []), ...(node.requiresAll || [])].filter((r) => (talents[r] ?? 0) > 0)
-    out.push({ id, rank, c: node.constellation, tier: node.tier, name: node.name, kind: node.kind, color: meta?.color ?? '#94a3b8', power: node.unlockPower ? (getPower(node.unlockPower)?.name ?? null) : null, parents })
+    const power = node.unlockPower ? (getPower(node.unlockPower)?.name ?? null) : null
+    // clé d'INFO talent UNIQUE (nom + rang) → le clic sur un nœud affiche sa carte.
+    const key = node.name + (node.maxRank > 1 ? ' (' + rank + '/' + node.maxRank + ')' : '')
+    if (!INFO.talent[key]) INFO.talent[key] = { name: node.name, rank, maxRank: node.maxRank, kind: KIND_LABEL[node.kind] ?? node.kind, constellation: meta?.name, color: meta?.color, desc: node.description, power }
+    out.push({ id, key, rank, c: node.constellation, tier: node.tier, name: node.name, kind: node.kind, color: meta?.color ?? '#94a3b8', power, parents })
   }
   return out
 }
 
 // Compo d'UN membre depuis la config (gère membre importé = vrai Character).
 function memberComposition(m, cfg) {
-  const imp = m.imported
+  const imp = m.imported, preset = getClassPreset(m.cls)
   const talents = m.talents ?? (imp ? imp.talents : initTalents(m.cls))
-  const spellIds = (m.powers ?? (imp ? imp.powers : getClassPreset(m.cls).powers) ?? []).filter(Boolean)
+  // 3 groupes de capacités, comme en jeu : actifs / soutien / passifs.
+  const resolveGroup = (arr) => (arr ?? []).filter(Boolean).map(spell).filter(Boolean)
+  const actives = resolveGroup(m.powers ?? (imp ? imp.powers : preset.powers))
+  const support = resolveGroup(m.support ?? (imp ? imp.support : preset.support))
+  const passives = resolveGroup(m.passives ?? (imp ? imp.passives : preset.passives))
   const gems = new Set(), runes = new Set(), uniques = new Set()
   ;(m.gems ?? []).forEach((g) => gems.add(g))
   ;(m.runes ?? []).forEach((r) => runes.add(r))
@@ -154,7 +163,7 @@ function memberComposition(m, cfg) {
   }).sort((a, b) => b.points - a.points)
   const totalTalents = [...byConst.values()].reduce((a, b) => a + b, 0)
   return { talents, primary, ilvl, totalTalents, talentsGrouped,
-    spells: spellIds.map(spell).filter(Boolean), gems: [...gems].map(gem).filter(Boolean),
+    actives, support, passives, gems: [...gems].map(gem).filter(Boolean),
     runes: [...runes].map(rune).filter(Boolean), uniques: [...uniques].map(unique).filter(Boolean),
     equip: memberEquip(imp), talentNodes: memberTalentNodes(talents) }
 }
@@ -196,14 +205,14 @@ for (const e of entries) {
       name: m.imported?.name ?? m.name, cls: c.primary, clsIcon: classMeta(c.primary).icon, clsLabel: classMeta(c.primary).label,
       level: m.imported?.level ?? m.level, ilvl: c.ilvl,
       dps: Math.round(rm.dps ?? 0), ehp: Math.round(rm.ehp ?? 0), hp: Math.round(rm.maxHp ?? 0),
-      talents: c.talentsGrouped, totalTalents: c.totalTalents, spells: c.spells, gems: c.gems, runes: c.runes, uniques: c.uniques,
-      equip: c.equip, talentNodes: c.talentNodes,
+      talents: c.talentsGrouped, totalTalents: c.totalTalents, actives: c.actives, support: c.support, passives: c.passives,
+      gems: c.gems, runes: c.runes, uniques: c.uniques, equip: c.equip, talentNodes: c.talentNodes,
     }
   })
   // Agrégats KPI.
   for (const c of comps) {
     for (const g of c.talentsGrouped) { const clsId = constToClass.get(g.constId); if (clsId) bump(agg.talentsByClass, clsId, g.points) }
-    c.spells.forEach((s) => bump(agg.spells, s.name))
+    c.actives.forEach((s) => bump(agg.spells, s.name))
     c.gems.forEach((g) => bump(agg.gems, g.name))
     c.runes.forEach((r2) => bump(agg.runes, r2.name))
     c.uniques.forEach((u) => bump(agg.uniques, u.name))
@@ -305,14 +314,21 @@ const html = `<!DOCTYPE html>
   .mb .mh{display:flex;flex-wrap:wrap;gap:8px;align-items:baseline} .mb .mn{font-weight:700} .mb .mtag{font-size:11px;color:var(--mut)}
   .mb .ms{margin-left:auto;display:flex;gap:13px;font-variant-numeric:tabular-nums;font-size:12px} .mb .ms .v{font-weight:700}
   .seg2{margin-top:9px} .seg2 .lab{font-size:9.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--mut2);margin-bottom:4px}
+  .sec{margin-top:9px;border-top:1px solid #161e2b;padding-top:8px} .sec:first-of-type{border-top:0}
+  .sec>.lab.tog{font-size:9.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--mut);margin-bottom:5px;cursor:pointer;user-select:none}
+  .sec>.lab.tog::before{content:'▾ ';color:var(--mut2)} .sec[data-open="0"]>.lab.tog::before{content:'▸ '}
+  .sec[data-open="0"]>.secbody{display:none}
   .pills{display:flex;flex-wrap:wrap;gap:5px} .pill{background:#0d1422;border:1px solid var(--line);border-radius:8px;padding:3px 8px;font-size:12px}
+  .treewrap{position:relative;height:300px;background:radial-gradient(60% 60% at 50% 45%,#121a2b,#0b1120);border:1px solid var(--line);border-radius:12px;overflow:hidden;touch-action:none;cursor:grab}
+  .treewrap:active{cursor:grabbing} .treewrap svg{width:100%;height:100%;display:block} .treewrap .tnode{cursor:pointer} .treewrap .tnode:hover{stroke:#fff;stroke-width:1.6}
+  .tzoom{position:absolute;right:8px;bottom:8px;display:flex;gap:5px} .tzoom button{width:26px;height:26px;border-radius:8px;border:1px solid var(--line);background:#0d1422cc;color:var(--txt);font-size:15px;font-weight:700;cursor:pointer}
+  .tzoom button:hover{background:#16203a} .thint{position:absolute;left:8px;top:7px;font-size:9.5px;color:var(--mut2);pointer-events:none}
   .egrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:7px}
   .ecard{background:#0d1422;border:1px solid var(--line);border-radius:10px;padding:7px 9px;font-size:11.5px;border-left-width:3px}
   .ecard .etop{display:flex;gap:6px;align-items:baseline} .ecard .eslot{font-size:13px;flex:0 0 auto} .ecard .ename{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .ecard .emeta{color:var(--mut2);font-size:10px;margin:1px 0 4px} .ecard .eprim{font-weight:700;font-size:12px}
   .ecard .elines{display:flex;flex-wrap:wrap;gap:3px 7px;margin-top:3px} .ecard .eline{font-size:10.5px;font-variant-numeric:tabular-nums}
   .ecard .egems{margin-top:4px;display:flex;gap:3px} .ecard .egem{cursor:help} .ecard .euniq{margin-top:4px;color:var(--gold);font-weight:600;font-size:11px;cursor:help}
-  svg.tree{width:100%;max-width:320px;height:auto;display:block;margin:2px auto} svg.tree .tnode{cursor:help} svg.tree .tnode:hover{stroke:#fff;stroke-width:1.5}
   .empty{color:var(--mut);text-align:center;padding:18px}
 
   /* stats communauté */
@@ -456,14 +472,14 @@ function equipGrid(equip){
       \${gems?\`<div class="egems">\${gems}</div>\`:''}\${uniq}
     </div>\`;
   }).join('');
-  return \`<div class="seg2"><div class="lab">Équipement (\${equip.length})</div><div class="egrid">\${cards}</div></div>\`;
+  return \`<div class="egrid">\${cards}</div>\`;
 }
 
-// Vue RADIALE de l'arbre : nœuds alloués positionnés par constellation (angle) × tier (rayon), reliés à
-// leurs parents alloués. Survol d'un nœud = nom + rang + sort débloqué. Cœur au centre.
-function treeSvg(nodes){
+// Corps de l'arbre RADIAL : nœuds alloués (angle=constellation × rayon=tier) reliés à leurs parents,
+// dans un <g> transformable (pan/zoom) ; chaque nœud est cliquable (data-cat="talent").
+function treeBody(nodes){
   if(!nodes||nodes.length<=1) return '';
-  const W=300,H=300,cx=W/2,cy=H/2,R=27;
+  const W=320,H=320,cx=W/2,cy=H/2,R=29;
   const cons=[...new Set(nodes.filter(n=>n.id!=='co_start').map(n=>n.c))];
   const ang={}; cons.forEach((c,i)=>ang[c]=(i/Math.max(1,cons.length))*2*Math.PI - Math.PI/2);
   const pos={co_start:{x:cx,y:cy}};
@@ -471,19 +487,26 @@ function treeSvg(nodes){
   for(const c in byC){ const byT={}; byC[c].forEach(n=>{(byT[n.tier]=byT[n.tier]||[]).push(n);});
     for(const t in byT){ const arr=byT[t], r=Math.max(1,+t)*R; arr.forEach((n,i)=>{ const sp=(i-(arr.length-1)/2)*0.22; const a=ang[c]+sp; pos[n.id]={x:cx+Math.cos(a)*r,y:cy+Math.sin(a)*r}; }); } }
   let lines=''; nodes.forEach(n=>{ (n.parents||[]).forEach(p=>{ if(pos[p]&&pos[n.id]) lines+=\`<line x1="\${pos[p].x.toFixed(1)}" y1="\${pos[p].y.toFixed(1)}" x2="\${pos[n.id].x.toFixed(1)}" y2="\${pos[n.id].y.toFixed(1)}" stroke="#2b3954" stroke-width="1.3"/>\`; }); });
-  let dots=\`<circle cx="\${cx}" cy="\${cy}" r="5" fill="#e2e8f0"><title>Cœur</title></circle>\`;
-  nodes.forEach(n=>{ if(n.id==='co_start')return; const p=pos[n.id]; if(!p)return; const rr=(n.kind==='keystone'||n.kind==='ability')?5.5:(n.kind==='notable'||n.kind==='gateway')?4:3; const lbl=esc(n.name)+(n.rank>1?' ·'+n.rank:'')+(n.power?' — '+esc(n.power):''); dots+=\`<circle class="tnode" cx="\${p.x.toFixed(1)}" cy="\${p.y.toFixed(1)}" r="\${rr}" fill="\${n.color}" stroke="#0a0f1a" stroke-width="1"><title>\${lbl}</title></circle>\`; });
-  return \`<div class="seg2"><div class="lab">Arbre de talents (\${nodes.length-1} nœuds — survole un point)</div><svg viewBox="0 0 \${W} \${H}" class="tree">\${lines}\${dots}</svg></div>\`;
+  let dots=\`<circle cx="\${cx}" cy="\${cy}" r="5.5" fill="#e2e8f0"/>\`;
+  nodes.forEach(n=>{ if(n.id==='co_start')return; const p=pos[n.id]; if(!p)return; const rr=(n.kind==='keystone'||n.kind==='ability')?6:(n.kind==='notable'||n.kind==='gateway')?4.5:3.4; dots+=\`<circle class="tnode info" data-cat="talent" data-name="\${esc(n.key)}" cx="\${p.x.toFixed(1)}" cy="\${p.y.toFixed(1)}" r="\${rr}" fill="\${n.color}" stroke="#0a0f1a" stroke-width="1"/>\`; });
+  return \`<div class="treewrap"><svg viewBox="0 0 \${W} \${H}"><g class="tg">\${lines}\${dots}</g></svg>
+    <div class="tzoom"><button data-z="out" aria-label="Dézoomer">−</button><button data-z="in" aria-label="Zoomer">+</button><button data-z="reset" aria-label="Recentrer">⌖</button></div>
+    <div class="thint">glisse pour déplacer · molette/boutons pour zoomer · clique un nœud</div></div>\`;
 }
 
 function memberCard(m){
-  const seg=(lab,items)=>items&&items.length?\`<div class="seg2"><div class="lab">\${lab}</div><div class="pills">\${items}</div></div>\`:'';
-  const P=(arr,cat)=>arr.map(x=>\`<span class="pill info" data-cat="\${cat}" data-name="\${esc(x.name)}">\${esc(x.icon||'✦')} \${esc(x.name)}</span>\`).join('');
+  // section pliable : en-tête cliquable (.tog) + corps.
+  const section=(label,body,open)=>body?\`<div class="sec" data-open="\${open?1:0}"><div class="lab tog">\${esc(label)}</div><div class="secbody">\${body}</div></div>\`:'';
+  const P=(arr,cat)=>arr&&arr.length?\`<div class="pills">\${arr.map(x=>\`<span class="pill info" data-cat="\${cat}" data-name="\${esc(x.name)}">\${esc(x.icon||'✦')} \${esc(x.name)}</span>\`).join('')}</div>\`:'';
   const hasEquip=m.equip&&m.equip.length;
   return \`<div class="mb"><div class="mh"><span class="mn">\${esc(m.clsIcon)} \${esc(m.name)}</span><span class="mtag">\${esc(m.clsLabel)} · N\${m.level} · ilvl \${m.ilvl} · \${m.totalTalents} talents</span>
     <span class="ms"><span><span class="v" style="color:var(--dps)">\${fmt(m.dps)}</span> dps</span><span><span class="v" style="color:var(--ehp)">\${fmt(m.ehp)}</span> survie</span><span><span class="v" style="color:var(--hp)">\${fmt(m.hp)}</span> pv</span></span></div>
-    \${equipGrid(m.equip)}\${treeSvg(m.talentNodes)}
-    \${seg('Capacités',P(m.spells,'spell'))}\${seg('Runes',P(m.runes,'rune'))}\${hasEquip?'':seg('Gemmes',P(m.gems,'gem'))+seg('Uniques',P(m.uniques,'unique'))}</div>\`;
+    \${section('Capacités actives ('+m.actives.length+')',P(m.actives,'spell'),true)}
+    \${section('Soutien ('+m.support.length+')',P(m.support,'spell'),true)}
+    \${section('Capacités passives ('+m.passives.length+')',P(m.passives,'spell'),true)}
+    \${section('Runes ('+m.runes.length+')',P(m.runes,'rune'),true)}
+    \${hasEquip?section('Équipement ('+m.equip.length+')',equipGrid(m.equip),false):(section('Gemmes ('+m.gems.length+')',P(m.gems,'gem'),false)+section('Uniques ('+m.uniques.length+')',P(m.uniques,'unique'),false))}
+    \${m.talentNodes&&m.talentNodes.length>1?section('Arbre de talents ('+(m.talentNodes.length-1)+' nœuds)',treeBody(m.talentNodes),false):''}</div>\`;
 }
 
 function renderList(){
@@ -533,6 +556,12 @@ function tipHtml(cat,name){
   if(cat==='gem') return \`<div class="th">\${esc(d.icon)} \${esc(d.name)} <span class="tb" style="background:\${d.color}22;color:\${d.color}">\${esc(d.kind)}</span></div><div class="td">\${esc(d.desc)}</div>\`;
   if(cat==='rune') return \`<div class="th">\${esc(d.icon)} \${esc(d.name)}</div><div class="td">\${esc(d.desc)}</div>\`;
   if(cat==='unique') return \`<div class="th">✦ \${esc(d.name)}\${d.role?\` <span class="tb">\${esc(d.role)}</span>\`:''}</div><div class="td">\${esc(d.desc)}</div>\`;
+  if(cat==='talent'){
+    const rk=d.maxRank>1?\` <span class="tb">\${d.rank}/\${d.maxRank}</span>\`:'';
+    const cons=d.constellation?\` <span class="tb" style="background:\${d.color}22;color:\${d.color}">\${esc(d.constellation)}</span>\`:'';
+    const pw=d.power?\`<div class="tm">✷ Débloque : \${esc(d.power)}</div>\`:'';
+    return \`<div class="th">\${esc(d.name)} <span class="tb">\${esc(d.kind)}</span>\${rk}\${cons}</div><div class="td">\${esc(d.desc||'')}</div>\${pw}\`;
+  }
   return '';
 }
 const tip=document.getElementById('tip');
@@ -541,8 +570,23 @@ function moveTip(e){const pad=14,w=tip.offsetWidth,hh=tip.offsetHeight;let x=e.c
 document.addEventListener('mouseover',e=>{const t=e.target.closest&&e.target.closest('[data-cat]');if(t){showTip(t);moveTip(e);}});
 document.addEventListener('mousemove',e=>{if(tip.style.display==='block')moveTip(e);});
 document.addEventListener('mouseout',e=>{const t=e.target.closest&&e.target.closest('[data-cat]');if(t&&!(e.relatedTarget&&t.contains(e.relatedTarget)))tip.style.display='none';});
-// tactile : tap sur un item affiche la carte ; tap ailleurs la masque (et n'ouvre pas le build).
-document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('.info[data-cat]');if(t){e.stopPropagation();if(tip.style.display==='block'&&tip._for===t){tip.style.display='none';tip._for=null;}else{showTip(t);tip._for=t;const r=t.getBoundingClientRect();tip.style.left=Math.max(8,Math.min(r.left,innerWidth-tip.offsetWidth-8))+'px';tip.style.top=(r.bottom+6)+'px';}}else{tip.style.display='none';tip._for=null;}},true);
+function pinTip(t){tip._for=t;const r=t.getBoundingClientRect();tip.style.left=Math.max(8,Math.min(r.left,innerWidth-tip.offsetWidth-8))+'px';tip.style.top=(r.bottom+6)+'px';}
+// tap sur un item = carte épinglée ; tap ailleurs masque. Les nœuds d'arbre (.tnode) sont gérés par le pan/zoom.
+document.addEventListener('click',e=>{if(e.target.closest&&e.target.closest('.tnode'))return;const t=e.target.closest&&e.target.closest('.info[data-cat]');if(t){e.stopPropagation();if(tip.style.display==='block'&&tip._for===t){tip.style.display='none';tip._for=null;}else{showTip(t);pinTip(t);}}else if(!(e.target.closest&&e.target.closest('#tip'))){tip.style.display='none';tip._for=null;}},true);
+
+// PLIAGE des sections (en-tête .tog → bascule .sec[data-open]).
+document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('.lab.tog');if(t){const sec=t.closest('.sec');if(sec)sec.dataset.open=sec.dataset.open==='1'?'0':'1';}});
+
+// ARBRE : pan (glisser) + zoom (molette/boutons) du <g class="tg"> + clic sur un nœud = sa carte.
+const tgGet=g=>({tx:+(g.dataset.tx||0),ty:+(g.dataset.ty||0),s:+(g.dataset.s||1)});
+const tgSet=(g,st)=>{g.dataset.tx=st.tx;g.dataset.ty=st.ty;g.dataset.s=st.s;g.setAttribute('transform','translate('+st.tx.toFixed(1)+' '+st.ty.toFixed(1)+') scale('+st.s.toFixed(3)+')');};
+const tgZoom=(g,f)=>{const st=tgGet(g),ns=Math.max(0.5,Math.min(4,st.s*f)),C=160;st.tx+=(st.s-ns)*C;st.ty+=(st.s-ns)*C;st.s=ns;tgSet(g,st);};
+let tdrag=null;
+document.addEventListener('pointerdown',e=>{const w=e.target.closest&&e.target.closest('.treewrap');if(!w||(e.target.closest&&e.target.closest('.tzoom')))return;const g=w.querySelector('.tg');if(!g)return;const svg=w.querySelector('svg');const sc=320/((svg&&svg.clientWidth)||320);tdrag={g,x:e.clientX,y:e.clientY,st:tgGet(g),sc,moved:false,node:e.target.closest('.tnode')};try{w.setPointerCapture(e.pointerId)}catch(_){}});
+document.addEventListener('pointermove',e=>{if(!tdrag)return;const dx=e.clientX-tdrag.x,dy=e.clientY-tdrag.y;if(Math.abs(dx)>3||Math.abs(dy)>3)tdrag.moved=true;tgSet(tdrag.g,{tx:tdrag.st.tx+dx*tdrag.sc,ty:tdrag.st.ty+dy*tdrag.sc,s:tdrag.st.s});});
+document.addEventListener('pointerup',()=>{if(!tdrag)return;if(!tdrag.moved&&tdrag.node){showTip(tdrag.node);pinTip(tdrag.node);}tdrag=null;});
+document.addEventListener('wheel',e=>{const w=e.target.closest&&e.target.closest('.treewrap');if(!w)return;e.preventDefault();const g=w.querySelector('.tg');if(g)tgZoom(g,e.deltaY<0?1.15:0.87);},{passive:false});
+document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('.tzoom button');if(!b)return;const g=b.closest('.treewrap').querySelector('.tg');if(!g)return;const z=b.dataset.z;if(z==='in')tgZoom(g,1.25);else if(z==='out')tgZoom(g,0.8);else tgSet(g,{tx:0,ty:0,s:1});});
 </script>
 </body>
 </html>`
