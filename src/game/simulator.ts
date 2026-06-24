@@ -17,7 +17,7 @@ import type { Character, DamageType, ItemOrientation, OffensiveStat, RarityId } 
 import { makeCharacter, charDps, charMaxHp, charEhp, charDerived, charDamageProfile, charCombatMods } from './character'
 import { profileDamageMult } from './damage'
 import { generateItem } from './items'
-import { EQUIP_SLOTS } from './slots'
+import { EQUIP_SLOTS, ITEM_TYPES } from './slots'
 import { RAID_LIST, makeRaidBoss, raidBerserkTime, type RaidDef } from './raids'
 import { makeDungeonEnemy, dungeonFights, DUNGEONS } from './dungeons'
 import { partyCombatStep, resetAllCooldowns } from './combatEngine'
@@ -27,6 +27,7 @@ import { timeRuneMods, equippedTimeRunes, TIME_RUNES, type TimeRuneId } from './
 import { activeBrewBuffs, teamPactMods, teamGemOpts } from './storeHelpers'
 import { maitriseBonus } from './biomeBonus'
 import { freshSave } from './save'
+import { SECONDARY_META } from './stats'
 
 /* ------------------------------------------------------------------ */
 /* Catalogues pour l'UI (curés — pas tout le contenu, pour rester lisible). */
@@ -78,14 +79,42 @@ export const SIM_ORIENTATIONS: { id: ItemOrientation; label: string }[] = [
 export const SIM_RAIDS = RAID_LIST.map((d) => ({ id: d.id, name: d.name, icon: d.icon }))
 export const SIM_DUNGEONS = Object.values(DUNGEONS).map((d) => ({ id: d.id, name: d.name, icon: d.icon }))
 
+// Palette de stats secondaires pour l'éditeur de stuff pièce-par-pièce.
+export interface StatOpt { id: string; name: string; short: string; color: string; kind: 'off' | 'def' | 'rare' }
+const STAT_IDS: { id: string; kind: 'off' | 'def' | 'rare' }[] = [
+  ...['critique', 'degatsCrit', 'hate', 'maitrise', 'penetration', 'alteration', 'degatsBoss', 'precision'].map((id) => ({ id, kind: 'off' as const })),
+  ...['reductionDegats', 'barriere', 'resilience'].map((id) => ({ id, kind: 'def' as const })),
+  ...['volDeVie', 'surpuissance', 'multifrappe', 'recuperation'].map((id) => ({ id, kind: 'rare' as const })),
+]
+export const SIM_STATS: StatOpt[] = STAT_IDS.map(({ id, kind }) => {
+  const m = SECONDARY_META[id as keyof typeof SECONDARY_META]
+  return { id, kind, name: m?.name ?? id, short: m?.short ?? id, color: m?.color ?? '#cbd5e1' }
+})
+
+/** Config de stuff d'UN emplacement (éditeur pièce-par-pièce). */
+export interface GearSlotCfg { orientation: ItemOrientation; stats: string[] }
+/** Affixes par défaut (priorité offensive) si l'emplacement n'est pas personnalisé. */
+export const DEFAULT_AFFIXES = ['maitrise', 'critique', 'degatsCrit', 'hate', 'penetration']
+/** Pré-remplit une config de stuff complète (16 emplacements) à partir d'une orientation de base. */
+export function initGear(orientation: ItemOrientation): Record<string, GearSlotCfg> {
+  const g: Record<string, GearSlotCfg> = {}
+  for (const s of EQUIP_SLOTS) g[s.id] = { orientation, stats: [...DEFAULT_AFFIXES] }
+  return g
+}
+/** Emplacements (id + libellé + icône) pour l'UI. */
+export const SIM_SLOTS = EQUIP_SLOTS.map((s) => ({ id: s.id, name: s.name, accepts: s.accepts, icon: ITEM_TYPES[s.accepts].icon }))
+
 /* ------------------------------------------------------------------ */
 /* Config + résultat. */
 /* ------------------------------------------------------------------ */
 export interface SimMemberCfg {
   name: string; cls: string; level: number; orientation: ItemOrientation
   gems: string[]; runes: string[]
+  /** Stuff DÉTAILLÉ pièce-par-pièce (orientation + stats par emplacement). Si absent, on utilise
+   *  l'orientation globale + les affixes par défaut. Ignoré pour un membre importé. */
+  gear?: Record<string, GearSlotCfg>
   /** Membre IMPORTÉ : un vrai personnage du joueur (vrais talents/stuff/gemmes/runes). Si présent,
-   *  les champs cls/orientation/gems/runes/level ci-dessus sont ignorés — on utilise le perso tel quel. */
+   *  les champs cls/orientation/gems/runes/level/gear ci-dessus sont ignorés — perso tel quel. */
   imported?: Character
 }
 
@@ -145,7 +174,17 @@ function buildMember(m: SimMemberCfg, cfg: SimConfig, idx: number): Character {
   const c = makeCharacter(m.name || p.label, Math.max(1, m.level || 1), p.bias)
   c.id = `sim-${idx}` // id fixe → cache borné + cooldowns isolés
   const eq: Record<string, ReturnType<typeof generateItem>> = {}
-  for (const s of EQUIP_SLOTS) eq[s.id] = generateItem({ ilvl: cfg.ilvl, rarity: cfg.rarity, type: s.accepts, primary: p.primary, stars: 3, orientation: m.orientation, ...(s.accepts === 'armePrincipale' ? { element: p.elem } : {}) })
+  for (const s of EQUIP_SLOTS) {
+    const gs = m.gear?.[s.id]
+    const orient = gs?.orientation ?? m.orientation
+    const stats = gs && gs.stats.length ? gs.stats : DEFAULT_AFFIXES
+    const it = generateItem({ ilvl: cfg.ilvl, rarity: cfg.rarity, type: s.accepts, primary: p.primary, stars: 3, orientation: orient, ...(s.accepts === 'armePrincipale' ? { element: p.elem } : {}) })
+    // Redistribue les lignes de STAT vers les stats CHOISIES (on garde les valeurs = budget rollé).
+    const statAff = it.affixes.filter((a) => a.kind === 'stat')
+    const other = it.affixes.filter((a) => a.kind !== 'stat')
+    it.affixes = [...statAff.map((a, i) => ({ ...a, stat: stats[i % stats.length] as never })), ...other]
+    eq[s.id] = it
+  }
   const slotIds = EQUIP_SLOTS.map((s) => s.id)
   m.gems.forEach((id, i) => { const it = eq[slotIds[i % slotIds.length]]; it.gems = [...(it.gems ?? []), { type: 'physique' as DamageType, tier: 1, cond: id, rank: 5, quality: 2 }] })
   c.equipment = eq as Character['equipment']

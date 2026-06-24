@@ -1,8 +1,8 @@
 import { useState, type ReactNode } from 'react'
 import { useGame } from '../game/store'
 import {
-  runSim, defaultConfig, importedMember, SIM_CLASSES, SIM_GEMS, SIM_RUNES, SIM_ELIXIRS, SIM_ORIENTATIONS, SIM_RAIDS, SIM_DUNGEONS,
-  type SimConfig, type SimMemberCfg, type SimResult,
+  runSim, defaultConfig, importedMember, initGear, SIM_CLASSES, SIM_GEMS, SIM_RUNES, SIM_ELIXIRS, SIM_ORIENTATIONS, SIM_RAIDS, SIM_DUNGEONS, SIM_STATS, SIM_SLOTS,
+  type SimConfig, type SimMemberCfg, type SimResult, type GearSlotCfg,
 } from '../game/simulator'
 
 const RARITIES_OPT = ['epique', 'legendaire', 'mythique', 'ascendant', 'celeste', 'transcendant'] as const
@@ -262,10 +262,17 @@ function MemberCard({ m, index, canRemove, onSet, onRemove, onToggleGem, onToggl
             {canRemove && <button onClick={onRemove} className="ml-auto rounded-lg border border-rose-700/50 px-2 py-1 text-[11px] text-rose-300 hover:bg-rose-950/30">✕ Retirer</button>}
           </div>
 
-          {/* Orientation */}
+          {/* Stuff : simple (orientation globale) ou détaillé (pièce-par-pièce) */}
           <div>
-            <Label>Orientation du stuff</Label>
-            <Seg value={m.orientation} options={SIM_ORIENTATIONS.map((o) => ({ id: o.id, label: o.label }))} onChange={(v) => onSet({ orientation: v })} />
+            <div className="mb-1.5 flex items-center justify-between">
+              <Label>Stuff{m.gear ? ' — détaillé (pièce par pièce)' : ''}</Label>
+              {m.gear
+                ? <button onClick={() => onSet({ gear: undefined })} className="rounded-lg border border-slate-700 px-2 py-0.5 text-[10px] text-slate-400 hover:text-slate-200">✕ Mode simple</button>
+                : <button onClick={() => onSet({ gear: initGear(m.orientation) })} className="rounded-lg border border-orange-500/40 bg-orange-500/10 px-2 py-0.5 text-[10px] font-medium text-orange-200 hover:bg-orange-500/20">🔧 Détailler le stuff</button>}
+            </div>
+            {m.gear
+              ? <GearEditor gear={m.gear} onChange={(g) => onSet({ gear: g })} />
+              : <Seg value={m.orientation} options={SIM_ORIENTATIONS.map((o) => ({ id: o.id, label: o.label }))} onChange={(v) => onSet({ orientation: v })} />}
           </div>
 
           {/* Gemmes */}
@@ -293,6 +300,53 @@ function MemberCard({ m, index, canRemove, onSet, onRemove, onToggleGem, onToggl
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+
+/** Éditeur de stuff pièce-par-pièce : par emplacement, orientation off/def + stats qui rollent
+ *  (valeurs auto-calculées au max du budget de la pièce). */
+function GearEditor({ gear, onChange }: { gear: Record<string, GearSlotCfg>; onChange: (g: Record<string, GearSlotCfg>) => void }) {
+  const setSlot = (id: string, p: Partial<GearSlotCfg>) => onChange({ ...gear, [id]: { ...gear[id], ...p } })
+  const toggleStat = (id: string, stat: string) => { const cur = gear[id].stats; setSlot(id, { stats: cur.includes(stat) ? cur.filter((s) => s !== stat) : [...cur, stat] }) }
+  const applyAllOrientation = (orientation: GearSlotCfg['orientation']) => { const g = { ...gear }; for (const k in g) g[k] = { ...g[k], orientation }; onChange(g) }
+  return (
+    <div className="space-y-1.5">
+      <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-500">
+        Tout en :
+        {SIM_ORIENTATIONS.map((o) => (
+          <button key={o.id} onClick={() => applyAllOrientation(o.id)} className="rounded border border-slate-700 px-1.5 py-0.5 text-slate-300 hover:bg-slate-800">{o.label}</button>
+        ))}
+      </div>
+      <div className="max-h-72 space-y-1 overflow-y-auto pr-1">
+        {SIM_SLOTS.map((sl) => {
+          const gs = gear[sl.id]
+          if (!gs) return null
+          return (
+            <div key={sl.id} className="rounded-lg border border-slate-800 bg-slate-900/40 p-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] font-medium text-slate-300">{sl.icon} {sl.name}</span>
+                <Seg value={gs.orientation} options={SIM_ORIENTATIONS.map((o) => ({ id: o.id, label: o.label }))} onChange={(v) => setSlot(sl.id, { orientation: v })} />
+              </div>
+              <div className="mt-1.5 flex flex-wrap gap-1">
+                {SIM_STATS.map((st) => {
+                  const on = gs.stats.includes(st.id)
+                  return (
+                    <button key={st.id} onClick={() => toggleStat(sl.id, st.id)} title={st.name + (st.kind === 'rare' ? ' (rare)' : '')}
+                      className={'rounded border px-1.5 py-0.5 text-[10px] font-semibold ' + (on ? '' : 'border-slate-700/60 text-slate-500 hover:text-slate-300')}
+                      style={on ? { color: st.color, borderColor: st.color + '99', background: st.color + '1f' } : undefined}>
+                      {st.short}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      <div className="text-[10px] text-slate-600">Valeurs auto au max du budget de chaque pièce ; choisis quelles stats rollent + l'équilibre off/def par emplacement.</div>
     </div>
   )
 }
