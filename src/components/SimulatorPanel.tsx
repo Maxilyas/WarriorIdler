@@ -2,13 +2,15 @@ import { useState, type ReactNode } from 'react'
 import { useGame } from '../game/store'
 import { Sheet } from './ui'
 import {
-  runSim, defaultConfig, importedMember, initGear, initTalents, statLines, maxLinesFor, availableAbilities, getClassPreset, DEFAULT_TALENT_BUDGET,
-  SIM_CLASSES, SIM_GEMS, SIM_RUNES, SIM_ELIXIRS, SIM_ORIENTATIONS, SIM_RAIDS, SIM_DUNGEONS, SIM_STATS, SIM_SLOTS, SIM_RARITIES, SIM_DMG_TYPES, SIM_UNIQUES,
+  runSim, defaultConfig, importedMember, initGear, initTalents, gearFromCharacter, statLines, maxLinesFor, availableAbilities, getClassPreset, DEFAULT_TALENT_BUDGET,
+  SIM_CLASSES, SIM_GEMS, SIM_RUNES, SIM_ELIXIRS, SIM_ORIENTATIONS, SIM_PRIMARIES, SIM_RAIDS, SIM_DUNGEONS, SIM_STATS, SIM_SLOTS, SIM_RARITIES, SIM_DMG_TYPES, SIM_UNIQUES,
   SIM_ABILITY_SLOTS, SIM_MAX_GEM_RANK, SIM_MAX_UNIQUE_RANK,
   type SimConfig, type SimMemberCfg, type SimResult, type GearSlotCfg, type LineCfg,
 } from '../game/simulator'
+import { charDamageProfile } from '../game/character'
 import { TalentTree } from './TalentTree'
 import { REFERENCE_BUILDS } from '../game/referenceBuilds'
+import type { Character, DamageType, OffensiveStat } from '../game/types'
 
 const LIB_KEY = 'wi-sim-builds'
 type SavedBuild = { name: string; cfg: SimConfig }
@@ -294,22 +296,9 @@ function MemberCard({ m, index, canRemove, globalIlvl, globalRarity, onSet, onRe
   const [open, setOpen] = useState(index === 0)
   const cls = SIM_CLASSES.find((c) => c.id === m.cls) ?? SIM_CLASSES[0]
 
-  // Membre IMPORTÉ : carte compacte (le vrai perso, non éditable ici).
+  // Membre IMPORTÉ : carte éditable adossée au vrai perso (overrides par section).
   if (m.imported) {
-    const ch = m.imported
-    return (
-      <div className="rounded-xl border border-orange-500/40 bg-orange-500/5 p-3">
-        <div className="flex items-center justify-between gap-2">
-          <span className="flex min-w-0 items-center gap-2">
-            <span className="text-lg">📥</span>
-            <span className="truncate text-sm font-semibold text-orange-100">{ch.name}</span>
-            <span className="shrink-0 rounded-full bg-orange-500/20 px-1.5 py-0.5 text-[9px] font-bold text-orange-200">RÉEL · N{ch.level}</span>
-          </span>
-          {canRemove && <button onClick={onRemove} className="shrink-0 rounded-lg border border-rose-700/50 px-2 py-1 text-[11px] text-rose-300 hover:bg-rose-950/30">✕</button>}
-        </div>
-        <div className="mt-1 text-[10.5px] text-slate-400">Talents, équipement, gemmes et runes <b className="text-slate-300">réels</b> de ton perso — testé tel quel.</div>
-      </div>
-    )
+    return <ImportedMemberCard m={m} ch={m.imported} canRemove={canRemove} globalIlvl={globalIlvl} globalRarity={globalRarity} onSet={onSet} onRemove={onRemove} />
   }
 
   return (
@@ -342,6 +331,9 @@ function MemberCard({ m, index, canRemove, globalIlvl, globalRarity, onSet, onRe
             <label className="flex items-center gap-1 text-[11px] text-slate-400">N <Num value={m.level} min={1} max={300} w="w-16" onChange={(v) => onSet({ level: v })} /></label>
             {canRemove && <button onClick={onRemove} className="ml-auto rounded-lg border border-rose-700/50 px-2 py-1 text-[11px] text-rose-300 hover:bg-rose-950/30">✕ Retirer</button>}
           </div>
+
+          {/* Stat primaire (FORCE/AGI/INT) du stuff généré — défaut = stat de la classe */}
+          <PrimarySelect value={m.primary} onChange={(v) => onSet({ primary: v })} />
 
           {/* Stuff : simple (orientation globale) ou détaillé (pièce-par-pièce) */}
           <div>
@@ -401,6 +393,108 @@ function MemberCard({ m, index, canRemove, globalIlvl, globalRarity, onSet, onRe
               ))}
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+
+/** Sélecteur de stat primaire FORCE / AGI / INT (re-clic = retour au défaut). */
+function PrimarySelect({ value, onChange }: { value?: OffensiveStat; onChange: (v: OffensiveStat | undefined) => void }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <Label>Stat primaire</Label>
+      <div className="inline-flex gap-1 rounded-lg bg-slate-900/60 p-0.5">
+        {SIM_PRIMARIES.map((p) => {
+          const on = value === p.id
+          return (
+            <button key={p.id} onClick={() => onChange(on ? undefined : p.id)} title={`Forcer ${p.label} sur tout le stuff généré`}
+              className={'rounded-md px-2.5 py-1 text-[11px] font-bold transition-colors ' + (on ? '' : 'text-slate-400 hover:text-slate-200')}
+              style={on ? { background: p.color + '2a', color: p.color, boxShadow: `inset 0 0 0 1px ${p.color}88` } : undefined}>
+              {p.short}
+            </button>
+          )
+        })}
+      </div>
+      <span className="text-[9.5px] text-slate-600">{value ? 'forcée' : 'défaut (classe / réel)'}</span>
+    </div>
+  )
+}
+
+/** Carte d'un membre IMPORTÉ : adossée au vrai perso, éditable par OVERRIDES (stat primaire, stuff,
+ *  arbre, capacités). Toute section non retouchée reste exactement celle du perso réel. */
+function ImportedMemberCard({ m, ch, canRemove, globalIlvl, globalRarity, onSet, onRemove }: {
+  m: SimMemberCfg; ch: Character; canRemove: boolean; globalIlvl: number; globalRarity: string
+  onSet: (p: Partial<SimMemberCfg>) => void; onRemove: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const weapon = charDamageProfile(ch).mainType
+  // Capacités réelles : compactées (les slots vides du perso = null → retirés pour les chips).
+  const compact = (a?: (string | null)[]) => (a ?? []).filter((x): x is string => !!x)
+  const realPowers = compact(ch.powers), realSupport = compact(ch.support), realPassives = compact(ch.passives)
+  const customAbilities = !!(m.powers || m.support || m.passives)
+  const mods = [m.gear && 'stuff', m.talents && 'arbre', customAbilities && 'capacités', m.primary && 'stat'].filter(Boolean)
+  const ovBtn = 'rounded-lg border border-slate-700 px-2 py-0.5 text-[10px] text-slate-400 hover:text-slate-200'
+  const editBtn = 'rounded-lg border border-orange-500/40 bg-orange-500/10 px-2 py-0.5 text-[10px] font-medium text-orange-200 hover:bg-orange-500/20'
+
+  return (
+    <div className="rounded-xl border border-orange-500/40 bg-orange-500/5">
+      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left">
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="text-lg">📥</span>
+          <span className="truncate text-sm font-semibold text-orange-100">{ch.name}</span>
+          <span className="shrink-0 rounded-full bg-orange-500/20 px-1.5 py-0.5 text-[9px] font-bold text-orange-200">RÉEL · N{ch.level}</span>
+          {mods.length > 0 && <span className="shrink-0 rounded-full bg-fuchsia-500/20 px-1.5 py-0.5 text-[9px] font-bold text-fuchsia-200">✎ {mods.join(' · ')}</span>}
+        </span>
+        <span className="text-slate-500">{open ? '▴' : '▾'}</span>
+      </button>
+
+      {open && (
+        <div className="space-y-2.5 border-t border-orange-500/20 p-3">
+          <div className="flex items-start justify-between gap-2">
+            <div className="text-[10.5px] leading-snug text-slate-400">Perso <b className="text-slate-300">réel</b> : chaque section non modifiée reste exacte (valeurs réelles). Retouche ce que tu veux tester — ex. juste l'arbre, en gardant le stuff.</div>
+            {canRemove && <button onClick={onRemove} className="shrink-0 rounded-lg border border-rose-700/50 px-2 py-1 text-[11px] text-rose-300 hover:bg-rose-950/30">✕</button>}
+          </div>
+
+          {/* Stat primaire (s'applique au stuff RETOUCHÉ ; le stuff réel garde sa stat) */}
+          <PrimarySelect value={m.primary} onChange={(v) => onSet({ primary: v })} />
+
+          {/* Stuff : réel, ou copie retouchable pièce-par-pièce */}
+          <div>
+            <div className="mb-1.5 flex items-center justify-between">
+              <Label>Stuff{m.gear ? ' — retouché (copie du réel)' : ' — réel'}</Label>
+              {m.gear
+                ? <button onClick={() => onSet({ gear: undefined })} className={ovBtn}>↩ Stuff réel</button>
+                : <button onClick={() => onSet({ gear: gearFromCharacter(ch) })} className={editBtn}>🔧 Retoucher le stuff</button>}
+            </div>
+            {m.gear && <GearEditor gear={m.gear} globalIlvl={globalIlvl} globalRarity={globalRarity} onChange={(g) => onSet({ gear: g })} />}
+          </div>
+
+          {/* Talents : réels, ou copie éditable (arbre radial) */}
+          <div>
+            <div className="mb-1.5 flex items-center justify-between">
+              <Label>Talents{m.talents ? ' — retouché (copie du réel)' : ' — réel'}</Label>
+              {m.talents
+                ? <button onClick={() => onSet({ talents: undefined })} className={ovBtn}>↩ Talents réels</button>
+                : <button onClick={() => onSet({ talents: { ...ch.talents } })} className="rounded-lg border border-fuchsia-500/40 bg-fuchsia-500/10 px-2 py-0.5 text-[10px] font-medium text-fuchsia-200 hover:bg-fuchsia-500/20">🌌 Retoucher l'arbre</button>}
+            </div>
+            {m.talents && <TalentTreeSandbox clsId={m.cls} level={ch.level} talents={m.talents} weapon={weapon} resetTo={ch.talents} onChange={(t) => onSet({ talents: t })} />}
+          </div>
+
+          {/* Capacités : réelles, ou choix personnalisé */}
+          <div>
+            <div className="mb-1.5 flex items-center justify-between">
+              <Label>Capacités{customAbilities ? ' — retouché' : ' — réel'}</Label>
+              {customAbilities
+                ? <button onClick={() => onSet({ powers: undefined, support: undefined, passives: undefined })} className={ovBtn}>↩ Capacités réelles</button>
+                : <button onClick={() => onSet({ powers: realPowers, support: realSupport, passives: realPassives })} className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-medium text-cyan-200 hover:bg-cyan-500/20">🪄 Choisir les capacités</button>}
+            </div>
+            {customAbilities && <AbilitiesEditor m={m} onSet={onSet} base={{ powers: realPowers, support: realSupport, passives: realPassives, talents: ch.talents }} />}
+          </div>
+
+          <div className="text-[10px] text-slate-600">Gemmes &amp; runes suivent le stuff (réel, ou ce que tu poses en retouchant le stuff).</div>
         </div>
       )}
     </div>
@@ -533,18 +627,26 @@ function GearEditor({ gear, globalIlvl, globalRarity, onChange }: { gear: Record
 /** Bac-à-sable de talents : le VRAI arbre radial (TalentTree en mode contrôlé) édite une COPIE locale
  *  sans toucher la vraie partie. Clic sur un nœud = +1 (allouable) / −1 (déjà pris) ; ↺ Reset. Un budget
  *  réglable plafonne le pool ; le gating réel (adjacence, seuils minSpent, exclusifs) s'applique. */
-function TalentTreeSandbox({ clsId, level, talents, onChange }: { clsId: string; level: number; talents: Record<string, number>; onChange: (t: Record<string, number>) => void }) {
-  const [budget, setBudget] = useState(DEFAULT_TALENT_BUDGET)
-  const spent = Object.entries(talents).reduce((a, [k, v]) => a + (k === 'co_start' ? 0 : v), 0)
+function TalentTreeSandbox({ clsId, level, talents, onChange, weapon, resetTo }: {
+  clsId: string; level: number; talents: Record<string, number>; onChange: (t: Record<string, number>) => void
+  /** Élément d'arme (sinon = élément de la classe). */
+  weapon?: DamageType
+  /** Cible du Reset (sinon = chemin de classe). Pour un import : les talents RÉELS du perso. */
+  resetTo?: Record<string, number>
+}) {
+  const spentOf = (t: Record<string, number>) => Object.entries(t).reduce((a, [k, v]) => a + (k === 'co_start' ? 0 : v), 0)
+  // Budget initial = au moins le défaut, mais ≥ ce qui est déjà dépensé (un perso réel peut dépasser 90).
+  const [budget, setBudget] = useState(() => Math.max(DEFAULT_TALENT_BUDGET, spentOf(talents)))
+  const spent = spentOf(talents)
   const points = Math.max(0, budget - spent)
-  const weapon = getClassPreset(clsId).elem
+  const wpn = weapon ?? getClassPreset(clsId).elem
   const onAllocate = (id: string) => onChange({ ...talents, [id]: (talents[id] ?? 0) + 1 })
   const onRemove = (id: string) => {
     const r = talents[id] ?? 0; if (r <= 0) return
     const t = { ...talents }; if (r - 1 <= 0) delete t[id]; else t[id] = r - 1
     onChange(t)
   }
-  const onReset = () => onChange(initTalents(clsId))
+  const onReset = () => onChange(resetTo ? { ...resetTo } : initTalents(clsId))
   return (
     <div className="space-y-1.5">
       <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
@@ -553,7 +655,7 @@ function TalentTreeSandbox({ clsId, level, talents, onChange }: { clsId: string;
         <span className="text-slate-500">dépensés <b className="text-emerald-300">{spent}</b> · reste <b className={points <= 0 ? 'text-rose-400' : 'text-amber-300'}>{points}</b></span>
       </div>
       <div className="h-[32rem] rounded-lg border border-slate-800 bg-[#0b1120] p-1.5">
-        <TalentTree ctrl={{ talents, points, level, weapon, onAllocate, onRemove, onReset }} />
+        <TalentTree ctrl={{ talents, points, level, weapon: wpn, onAllocate, onRemove, onReset }} />
       </div>
       <div className="text-[10px] text-slate-600">Clique un nœud pour l'allouer (+1) ; re-clique un nœud déjà pris pour le retirer (−1). Gating réel ; les sorts équipés restent ceux de la classe (v1).</div>
     </div>
@@ -564,10 +666,15 @@ function TalentTreeSandbox({ clsId, level, talents, onChange }: { clsId: string;
 
 /** Choix des capacités ÉQUIPÉES (actifs/soutien/passifs) parmi celles débloquées par les talents,
  *  bornées au nombre de slots. */
-function AbilitiesEditor({ m, onSet }: { m: SimMemberCfg; onSet: (p: Partial<SimMemberCfg>) => void }) {
+function AbilitiesEditor({ m, onSet, base }: {
+  m: SimMemberCfg; onSet: (p: Partial<SimMemberCfg>) => void
+  /** Défauts si une section n'est pas overridée (membre importé : capacités/talents RÉELS). */
+  base?: { powers: string[]; support: string[]; passives: string[]; talents: Record<string, number> }
+}) {
   const preset = SIM_CLASSES.find((c) => c.id === m.cls) ?? SIM_CLASSES[0]
-  const cur = { active: m.powers ?? preset.powers, support: m.support ?? preset.support, passive: m.passives ?? preset.passives }
-  const avail = availableAbilities(m.talents ?? initTalents(m.cls), cur) // inclut les capacités déjà équipées
+  const defPowers = base?.powers ?? preset.powers, defSupport = base?.support ?? preset.support, defPassives = base?.passives ?? preset.passives
+  const cur = { active: m.powers ?? defPowers, support: m.support ?? defSupport, passive: m.passives ?? defPassives }
+  const avail = availableAbilities(m.talents ?? base?.talents ?? initTalents(m.cls), cur) // inclut les capacités déjà équipées
   const FIELD = { active: 'powers', support: 'support', passive: 'passives' } as const
   const groups = [
     { k: 'active' as const, label: 'Actifs', list: avail.active },

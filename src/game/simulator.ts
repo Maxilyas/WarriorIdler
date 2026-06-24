@@ -30,7 +30,7 @@ import { timeRuneMods, equippedTimeRunes, TIME_RUNES, type TimeRuneId } from './
 import { activeBrewBuffs, teamPactMods, teamGemOpts } from './storeHelpers'
 import { maitriseBonus } from './biomeBonus'
 import { freshSave } from './save'
-import { SECONDARY_META } from './stats'
+import { SECONDARY_META, PRIMARY_META } from './stats'
 
 /* ------------------------------------------------------------------ */
 /* Catalogues pour l'UI (curés — pas tout le contenu, pour rester lisible). */
@@ -81,6 +81,9 @@ export const SIM_ELIXIRS = [
 export const SIM_ORIENTATIONS: { id: ItemOrientation; label: string }[] = [
   { id: 'offensif', label: 'Offensif' }, { id: 'equilibre', label: 'Équilibré' }, { id: 'defensif', label: 'Défensif' },
 ]
+/** Stats primaires offensives sélectionnables (FORCE / AGI / INT) — pour le choix de stat du membre. */
+export const SIM_PRIMARIES: { id: OffensiveStat; label: string; short: string; color: string }[] =
+  (['force', 'agilite', 'intelligence'] as OffensiveStat[]).map((id) => ({ id, label: PRIMARY_META[id].name, short: PRIMARY_META[id].short, color: PRIMARY_META[id].color }))
 export const SIM_RAIDS = RAID_LIST.map((d) => ({ id: d.id, name: d.name, icon: d.icon }))
 export const SIM_DUNGEONS = Object.values(DUNGEONS).map((d) => ({ id: d.id, name: d.name, icon: d.icon }))
 
@@ -160,12 +163,40 @@ export function initTalents(clsId: string): Record<string, number> {
   return t
 }
 
+/** SNAPSHOT du stuff RÉEL d'un perso → config éditable pièce-par-pièce (inverse de `buildMember`).
+ *  Sert à « détacher » l'équipement d'un membre importé pour le retoucher en partant du set exact.
+ *  Les valeurs seront re-rollées au budget à la reconstruction (lignes/ilvl/rareté/⭐/gemmes/unique
+ *  conservés à l'identique). Stat primaire NON capturée : `m.primary` (override) ?? primaire réelle. */
+export function gearFromCharacter(char: Character): Record<string, GearSlotCfg> {
+  const g: Record<string, GearSlotCfg> = {}
+  for (const s of EQUIP_SLOTS) {
+    const it = char.equipment?.[s.id]
+    if (!it) { g[s.id] = { orientation: 'equilibre', lines: statLines(DEFAULT_AFFIXES), gems: [] }; continue }
+    const lines: LineCfg[] = []
+    for (const a of it.affixes ?? []) {
+      if (a.kind === 'stat') { if (a.stat) lines.push({ k: 'stat', id: a.stat }) }
+      else if (a.type) lines.push({ k: a.kind === 'resist' ? 'resist' : 'dmg', id: a.type })
+    }
+    const gems = (it.gems ?? []).map((gm) => gm.cond).filter((x): x is string => !!x)
+    g[s.id] = {
+      ilvl: it.ilvl, rarity: it.rarity, stars: it.stars ?? 3, orientation: it.orientation, lines, gems,
+      ...(gems.length ? { gemRank: it.gems?.find((gm) => gm.rank)?.rank ?? 5 } : {}),
+      ...(it.unique ? { unique: it.unique.id, uniqueRank: it.unique.rank } : {}),
+      ...(it.damageType ? { element: it.damageType } : {}),
+    }
+  }
+  return g
+}
+
 /* ------------------------------------------------------------------ */
 /* Config + résultat. */
 /* ------------------------------------------------------------------ */
 export interface SimMemberCfg {
   name: string; cls: string; level: number; orientation: ItemOrientation
   gems: string[]; runes: string[]
+  /** Stat primaire FORCE/AGI/INT à forcer sur tout l'équipement généré. Si absent : stat de la classe
+   *  (membre preset) ou stat réelle de chaque pièce (membre importé). */
+  primary?: OffensiveStat
   /** Stuff DÉTAILLÉ pièce-par-pièce (orientation + stats par emplacement). Si absent, on utilise
    *  l'orientation globale + les affixes par défaut. Ignoré pour un membre importé. */
   gear?: Record<string, GearSlotCfg>
@@ -226,11 +257,39 @@ function dotDps(c: Character): number {
 const totalDps = (c: Character) => charDps(c) + dotDps(c)
 
 function buildMember(m: SimMemberCfg, cfg: SimConfig, idx: number): Character {
-  // Membre IMPORTÉ : on prend le vrai perso tel quel (clone défensif + id sim-*). Gear/talents/gemmes/
-  // runes réels → fidélité totale au build optimisé du joueur.
+  // Membre IMPORTÉ : on part du vrai perso (clone défensif + id sim-*). Par défaut, fidélité TOTALE
+  // (gear/talents/gemmes/runes réels). Des OVERRIDES optionnels permettent de ne retoucher qu'une
+  // partie (ex. juste l'arbre) : toute section non overridée reste byte-exacte au perso réel.
   if (m.imported) {
     const src = m.imported
     const c: Character = { ...src, id: `sim-${idx}`, equipment: { ...src.equipment }, talents: { ...src.talents } }
+    if (m.talents) c.talents = { co_start: 1, ...m.talents }
+    if (m.powers) c.powers = [...m.powers]
+    if (m.support) c.support = [...m.support]
+    if (m.passives) c.passives = [...m.passives]
+    if (m.gear) {
+      // Stuff retouché : on reconstruit chaque pièce snapshotée ; primaire = override membre ?? primaire
+      // RÉELLE de la pièce ?? stat de classe. Une pièce sans config garde l'objet réel tel quel.
+      const eq: Record<string, ReturnType<typeof generateItem>> = {}
+      for (const s of EQUIP_SLOTS) {
+        const gs = m.gear[s.id], real = src.equipment?.[s.id]
+        if (!gs) { if (real) eq[s.id] = real; continue }
+        const ilvl = gs.ilvl ?? real?.ilvl ?? cfg.ilvl
+        const rarity = (gs.rarity ?? real?.rarity ?? cfg.rarity) as RarityId
+        const stars = gs.stars ?? real?.stars ?? 3
+        const orient = gs.orientation ?? real?.orientation ?? m.orientation
+        const primary = m.primary ?? real?.primary ?? getClassPreset(m.cls).primary
+        const elem = s.accepts === 'armePrincipale' ? (gs.element ?? real?.damageType) : undefined
+        const it = generateItem({ ilvl, rarity, type: s.accepts, primary, stars, orientation: orient, ...(elem ? { element: elem } : {}) })
+        const lines: LineCfg[] = gs.lines?.length ? gs.lines : (gs.stats ?? DEFAULT_AFFIXES).map((id) => ({ k: 'stat', id }))
+        const tier = RARITIES[rarity].tier, qMult = starsMult(stars), cap = maxLinesFor(rarity, stars)
+        it.affixes = lines.slice(0, cap).map((l) => { const sp = toLineSpec(l); return specToAffix(sp, rollLineValue(sp, ilvl, qMult, tier)) })
+        it.gems = (gs.gems ?? []).map((id) => ({ type: 'physique' as DamageType, tier: 1, cond: id, rank: gs.gemRank ?? 5, quality: 2 }))
+        it.unique = gs.unique ? { id: gs.unique, rank: gs.uniqueRank ?? SIM_MAX_UNIQUE_RANK } : undefined
+        eq[s.id] = it
+      }
+      c.equipment = eq as Character['equipment']
+    }
     c.hp = charMaxHp(c)
     return c
   }
@@ -245,7 +304,7 @@ function buildMember(m: SimMemberCfg, cfg: SimConfig, idx: number): Character {
     const stars = gs?.stars ?? 3
     const orient = gs?.orientation ?? m.orientation
     const elem = (s.accepts === 'armePrincipale' ? (gs?.element ?? p.elem) : undefined)
-    const it = generateItem({ ilvl, rarity, type: s.accepts, primary: p.primary, stars, orientation: orient, ...(elem ? { element: elem } : {}) })
+    const it = generateItem({ ilvl, rarity, type: s.accepts, primary: m.primary ?? p.primary, stars, orientation: orient, ...(elem ? { element: elem } : {}) })
     if (gs) {
       // Lignes EXACTES choisies (stat/résist/%dmg), au nb de lignes de la rareté+qualité ; valeurs au vrai budget.
       const lines: LineCfg[] = gs.lines?.length ? gs.lines : (gs.stats ?? DEFAULT_AFFIXES).map((id) => ({ k: 'stat', id }))
