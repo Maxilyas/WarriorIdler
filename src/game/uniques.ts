@@ -394,6 +394,12 @@ export function uniqueActiveText(id: string): string | undefined {
   return BY_ID.get(id)?.active
 }
 
+/** Effet MÉCANIQUE chiffré d'un actif à un rang donné (null si pas encore câblé). Rempli en Phase B
+ *  une fois la taxonomie d'archetypes (`activeEffect`) renseignée sur les entrées. */
+export function describeActiveEffect(_id: string, _rank: number): string | null {
+  return null
+}
+
 export function isUniqueActive(rank: number): boolean {
   return rank >= UNIQUE_ACTIVE_RANK
 }

@@ -18,9 +18,12 @@ import type { OffensiveStat } from '../game/types'
 import { ITEM_TYPES, equipSlotsForType } from '../game/slots'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from '../game/damage'
 import {
-  getUnique, uniqueActiveText, isUniqueActive, instanceMods, instanceResist, instanceTagMods, upgradeCost, insertCost,
-  UNIQUE_EFFECTS, UNIQUE_ROLES, UNIQUE_MAX_RANK, UNIQUE_ACTIVE_RANK,
+  getUnique, instanceMods, instanceResist, instanceTagMods, upgradeCost, insertCost,
+  UNIQUE_EFFECTS, UNIQUE_ROLES, UNIQUE_MAX_RANK,
 } from '../game/uniques'
+import {
+  describeUniqueStats, describeUniqueResist, describeUniqueTags, describeUniqueActive,
+} from '../game/uniqueDescribe'
 import type { UniqueRole } from '../game/types'
 import { useGame, FRAGMENT_INFUSE_COST, CHOOSE_UNIQUE_COST, bestRaidTier, maxContentIlvl } from '../game/store'
 import { rarityTextStyle, rarityCardStyle, rarityNameClass } from './rarityStyle'
@@ -864,7 +867,13 @@ function UniqueBlock({ item }: { item: Item }) {
   if (!def) return null
 
   const mods = instanceMods(inst, item)
-  const active = isUniqueActive(inst.rank)
+  const lines = [
+    ...describeUniqueStats(mods),
+    ...describeUniqueResist(instanceResist(inst)),
+    ...describeUniqueTags(instanceTagMods(inst)),
+  ]
+  const actInfo = describeUniqueActive(inst.id, inst.rank)
+  const active = actInfo ? inst.rank >= actInfo.unlockRank : false
   const cost = upgradeCost(inst.rank)
   const have = essences[inst.id] ?? 0
   const maxed = inst.rank >= UNIQUE_MAX_RANK
@@ -877,28 +886,29 @@ function UniqueBlock({ item }: { item: Item }) {
         <span className="text-[10px] text-fuchsia-200/70">Rang {inst.rank}/{UNIQUE_MAX_RANK}</span>
       </div>
       <div className="mt-0.5 text-[10.5px] leading-snug text-fuchsia-200/80">{def.description}</div>
-      <div className="mt-0.5 text-[9.5px] italic text-fuchsia-300/50">Monte avec le rang, la rareté et l'iLvl de la pièce.</div>
-      <div className="mt-1 flex flex-wrap gap-x-2 text-[10.5px]">
-        {Object.entries(mods).map(([k, v]) => {
-          const m = ALL_STAT_META[k as StatKey]
-          return (
-            <span key={k} style={{ color: m.color }}>+{v} {m.name}</span>
-          )
-        })}
-        {Object.entries(instanceResist(inst)).map(([k, v]) => {
-          const m = DAMAGE_TYPES[k as keyof typeof DAMAGE_TYPES]
-          return (
-            <span key={k} style={{ color: m.color }}>+{Math.round((v as number) * 100)} résist. {m.name}</span>
-          )
-        })}
-        {Object.entries(instanceTagMods(inst)).map(([tag, v]) => (
-          <span key={tag} className="text-cyan-300">+{Math.round((v as number) * 100)}% sorts [{tag}]</span>
+      <div className="mt-0.5 text-[9.5px] italic text-fuchsia-300/50">Valeurs au rang {inst.rank} et à la rareté/iLvl de cette pièce.</div>
+      <div className="mt-1 flex flex-wrap gap-1">
+        {lines.map((l, i) => (
+          <span
+            key={i}
+            className="rounded-md px-1.5 py-0.5 text-[10px] font-medium"
+            style={{ background: l.color + '1f', color: l.color, boxShadow: `inset 0 0 0 1px ${l.color}29` }}
+          >
+            {l.rare ? '💎 ' : ''}{l.label}
+          </span>
         ))}
       </div>
-      <div className={'mt-1 text-[10px] leading-snug ' + (active ? 'text-emerald-300' : 'text-slate-500')}>
-        {active ? '✓ Actif : ' : `🔒 Rang ${UNIQUE_ACTIVE_RANK} : `}
-        {uniqueActiveText(inst.id)}
-      </div>
+      {actInfo && (
+        <div className={'mt-1.5 rounded-lg border px-2 py-1.5 ' + (active ? 'border-emerald-700/50 bg-emerald-950/30' : 'border-slate-700/50 bg-slate-900/40')}>
+          <span className={'text-[9px] font-semibold uppercase tracking-wide ' + (active ? 'text-emerald-300' : 'text-slate-500')}>
+            {active ? '✓ Actif' : `🔒 Actif · rang ${actInfo.unlockRank}`}
+          </span>
+          {actInfo.value && (
+            <span className={'mt-0.5 block text-[10px] font-medium ' + (active ? 'text-emerald-200' : 'text-slate-400')}>{actInfo.value}</span>
+          )}
+          <span className="mt-0.5 block text-[10px] italic leading-snug text-slate-500">{actInfo.text}</span>
+        </div>
+      )}
       {maxed ? (
         <div className="mt-1.5 text-center text-[10px] text-fuchsia-200/60">Rang maximal atteint</div>
       ) : (

@@ -2,10 +2,14 @@ import { useMemo, useState } from 'react'
 import { useGame } from '../game/store'
 import {
   UNIQUE_EFFECTS, UNIQUE_ROLES, uniqueModsAtRank, uniqueResistAtRank, uniqueTagModsAtRank,
-  uniqueActiveText, UNIQUE_ACTIVE_RANK,
+  UNIQUE_ACTIVE_RANK, UNIQUE_MAX_RANK,
 } from '../game/uniques'
 import {
-  ALL_STAT_META, PRIMARY_META, SECONDARY_META, RATING_PER_PERCENT, RARE_STATS,
+  describeUniqueStats, describeUniqueResist, describeUniqueTags, describeUniqueActive,
+  type EffectLine,
+} from '../game/uniqueDescribe'
+import {
+  PRIMARY_META, SECONDARY_META, RATING_PER_PERCENT, RARE_STATS,
 } from '../game/stats'
 import { DAMAGE_TYPES, DAMAGE_TYPE_LIST } from '../game/damage'
 import { EFFECTIVE_DR_CAP } from '../game/combat'
@@ -13,7 +17,7 @@ import { POWERS } from '../game/powers'
 import { ConversionChips } from './ui'
 import { TALENTS, CONSTELLATIONS } from '../game/talents'
 import { TALENT_START_LEVEL } from '../game/character'
-import type { StatKey, UniqueRole, SecondaryStat, OffensiveStat } from '../game/types'
+import type { UniqueRole, SecondaryStat, OffensiveStat } from '../game/types'
 
 const ROLE_META: Record<UniqueRole, { label: string; color: string; icon: string }> = {
   dps: { label: 'Dégâts', color: '#ff6b6b', icon: '⚔️' },
@@ -245,25 +249,40 @@ function UniquesCodex() {
   const codex = useGame((s) => s.codex)
   const essences = useGame((s) => s.essences)
   const [filter, setFilter] = useState<RoleFilter>('all')
+  const [query, setQuery] = useState('')
+  const [rank, setRank] = useState(UNIQUE_ACTIVE_RANK)
 
   const discovered = useMemo(() => new Set(codex), [codex])
   const total = UNIQUE_EFFECTS.length
-  const found = UNIQUE_EFFECTS.filter((e) => discovered.has(e.id)).length
+  const found = useMemo(() => UNIQUE_EFFECTS.filter((e) => discovered.has(e.id)).length, [discovered])
 
+  const q = query.trim().toLowerCase()
   const list = useMemo(
-    () => UNIQUE_EFFECTS.filter((e) => filter === 'all' || e.role === filter),
-    [filter],
+    () => UNIQUE_EFFECTS.filter((e) =>
+      (filter === 'all' || e.role === filter)
+      && (!q || e.name.toLowerCase().includes(q) || e.description.toLowerCase().includes(q))),
+    [filter, q],
   )
 
   return (
     <div>
-      <div className="mb-2 flex items-center justify-between">
+      <div className="mb-2 flex items-center justify-between gap-2">
         <div className="text-[12px] font-semibold text-fuchsia-200">✦ Grimoire des uniques</div>
-        <div className="text-xs text-fuchsia-300">{found}/{total} découverts</div>
+        <div className="text-[11px] text-fuchsia-300">{found}/{total} découverts</div>
       </div>
-      <p className="mb-2 text-[10.5px] leading-snug text-slate-500">
-        Tous les effets uniques. Trouve-les sur des objets (Épique+), via les coffres, le craft ou les raids. Les valeurs
-        affichées sont les <b className="text-slate-300">bases au rang 1</b> — elles montent avec le rang et la rareté/iLvl.
+
+      <div className="mb-1.5 flex items-center gap-1.5">
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Rechercher un unique…"
+          className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-900/70 px-2.5 py-1.5 text-[11px] text-slate-200 placeholder:text-slate-600 focus:border-fuchsia-600/60 focus:outline-none"
+        />
+        <RankToggle rank={rank} onChange={setRank} />
+      </div>
+      <p className="mb-2 text-[10px] leading-snug text-slate-500">
+        Valeurs au <b className="text-slate-300">rang {rank}</b> (base, hors bonus de rareté/iLvl de la pièce porteuse).
+        L'<b className="text-emerald-300">actif</b> se débloque au rang {UNIQUE_ACTIVE_RANK}.
       </p>
 
       <div className="mb-2 flex flex-wrap gap-1 text-[10px]">
@@ -276,57 +295,122 @@ function UniquesCodex() {
         })}
       </div>
 
-      <div className="space-y-1.5">
+      <div className="space-y-2">
         {list.map((e) => {
-          const known = discovered.has(e.id)
           const role = ROLE_META[e.role]
-          const owned = essences[e.id] ?? 0
-          if (!known) {
-            return (
-              <div key={e.id} className="flex items-center gap-2 rounded-lg border border-slate-800/70 bg-[#0c0f17] px-2.5 py-2 opacity-70">
-                <span className="text-base grayscale">{role.icon}</span>
-                <span className="flex-1 text-[12px] italic text-slate-600">Effet non découvert</span>
-                <span className="rounded px-1.5 py-0.5 text-[9px]" style={{ background: role.color + '22', color: role.color }}>{role.label}</span>
-              </div>
-            )
-          }
-          const mods = uniqueModsAtRank(e.id, 1)
-          const resist = uniqueResistAtRank(e.id, 1)
-          const tagMods = uniqueTagModsAtRank(e.id, 1)
-          return (
-            <div key={e.id} className="rounded-lg border p-2.5" style={{ borderColor: role.color + '33', background: role.color + '0c' }}>
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-[12.5px] font-semibold text-fuchsia-200">✦ {e.name}</span>
-                <span className="shrink-0 rounded px-1.5 py-0.5 text-[9px]" style={{ background: role.color + '22', color: role.color }}>
-                  {role.icon} {role.label}
-                </span>
-              </div>
-              <div className="mt-0.5 text-[10.5px] leading-snug text-slate-400">{e.description}</div>
-              <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[10.5px]">
-                {Object.entries(mods).map(([k, v]) => {
-                  const sm = ALL_STAT_META[k as StatKey]
-                  return <span key={k} style={{ color: sm.color }}>+{v} {sm.name}</span>
-                })}
-                {Object.entries(resist).map(([k, v]) => {
-                  const dm = DAMAGE_TYPES[k as keyof typeof DAMAGE_TYPES]
-                  return <span key={k} style={{ color: dm.color }}>+{Math.round((v as number) * 100)}% rés. {dm.name}</span>
-                })}
-                {Object.entries(tagMods).map(([tag, v]) => (
-                  <span key={tag} className="text-cyan-300">+{Math.round((v as number) * 100)}% sorts [{tag}]</span>
-                ))}
-              </div>
-              {uniqueActiveText(e.id) && (
-                <div className="mt-1 text-[10px] leading-snug text-emerald-300/80">
-                  <span className="text-slate-500">Rang {UNIQUE_ACTIVE_RANK} : </span>{uniqueActiveText(e.id)}
-                </div>
-              )}
-              {owned > 0 && (
-                <div className="mt-1 text-[9.5px] text-cyan-300/70">🧬 {owned} essence{owned > 1 ? 's' : ''} en réserve</div>
-              )}
-            </div>
-          )
+          if (!discovered.has(e.id)) return <UndiscoveredRow key={e.id} role={role} />
+          return <UniqueCard key={e.id} effect={e} role={role} rank={rank} essences={essences[e.id] ?? 0} />
         })}
+        {list.length === 0 && (
+          <div className="py-6 text-center text-[11px] text-slate-600">Aucun unique ne correspond à « {query} ».</div>
+        )}
       </div>
+    </div>
+  )
+}
+
+/** Sélecteur de rang (1 / rang actif / max) — recalcule toutes les valeurs affichées. */
+function RankToggle({ rank, onChange }: { rank: number; onChange: (r: number) => void }) {
+  return (
+    <div className="flex shrink-0 overflow-hidden rounded-lg border border-slate-700">
+      {[1, UNIQUE_ACTIVE_RANK, UNIQUE_MAX_RANK].map((r) => (
+        <button
+          key={r}
+          onClick={() => onChange(r)}
+          className={'px-2 py-1.5 text-[10px] font-bold ' + (rank === r ? 'bg-fuchsia-700 text-white' : 'bg-slate-900/70 text-slate-400 hover:text-slate-200')}
+          title={`Voir les valeurs au rang ${r}`}
+        >
+          R{r}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/** Pastille colorée d'un effet chiffré. */
+function Chip({ line }: { line: EffectLine }) {
+  return (
+    <span
+      className="rounded-md px-1.5 py-0.5 text-[10px] font-medium"
+      style={{ background: line.color + '1f', color: line.color, boxShadow: `inset 0 0 0 1px ${line.color}29` }}
+    >
+      {line.rare ? '💎 ' : ''}{line.label}
+    </span>
+  )
+}
+
+/** Carte stylisée d'un unique découvert : bonus chiffrés + actif au rang choisi. */
+function UniqueCard({ effect, role, rank, essences }: {
+  effect: typeof UNIQUE_EFFECTS[number]
+  role: { label: string; color: string; icon: string }
+  rank: number
+  essences: number
+}) {
+  const { stats, resistLines, tagLines, active, unlocked } = useMemo(() => {
+    const stats = describeUniqueStats(uniqueModsAtRank(effect.id, rank))
+    const resistLines = describeUniqueResist(uniqueResistAtRank(effect.id, rank))
+    const tagLines = describeUniqueTags(uniqueTagModsAtRank(effect.id, rank))
+    const active = describeUniqueActive(effect.id, rank)
+    return { stats, resistLines, tagLines, active, unlocked: active ? rank >= active.unlockRank : false }
+  }, [effect.id, rank])
+
+  return (
+    <div
+      className="overflow-hidden rounded-xl border"
+      style={{ borderColor: role.color + '40', background: `linear-gradient(150deg, ${role.color}1c, ${role.color}08 45%, rgba(12,15,23,0.55))` }}
+    >
+      <div className="flex items-start gap-2 px-2.5 pt-2.5">
+        <span
+          className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-base"
+          style={{ background: role.color + '26', boxShadow: `inset 0 0 0 1px ${role.color}40` }}
+        >
+          {role.icon}
+        </span>
+        <div className="min-w-0 flex-1">
+          <span className="block truncate text-[12.5px] font-bold text-fuchsia-100">✦ {effect.name}</span>
+          <span className="block text-[10px] leading-snug text-slate-400">{effect.description}</span>
+        </div>
+        <span className="shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-medium" style={{ background: role.color + '22', color: role.color }}>
+          {role.label}
+        </span>
+      </div>
+
+      <div className="mt-1.5 space-y-1.5 px-2.5 pb-2.5">
+        {(stats.length > 0 || resistLines.length > 0 || tagLines.length > 0) && (
+          <div className="flex flex-wrap gap-1">
+            {stats.map((l, i) => <Chip key={`s${i}`} line={l} />)}
+            {resistLines.map((l, i) => <Chip key={`r${i}`} line={l} />)}
+            {tagLines.map((l, i) => <Chip key={`t${i}`} line={l} />)}
+          </div>
+        )}
+
+        {active && (
+          <div className={'rounded-lg border px-2 py-1.5 ' + (unlocked ? 'border-emerald-700/50 bg-emerald-950/30' : 'border-slate-700/50 bg-slate-900/40')}>
+            <span className={'text-[9.5px] font-semibold uppercase tracking-wide ' + (unlocked ? 'text-emerald-300' : 'text-slate-500')}>
+              {unlocked ? '✓ Actif' : `🔒 Actif · rang ${active.unlockRank}`}
+            </span>
+            {active.value && (
+              <span className={'mt-0.5 block text-[10.5px] font-medium ' + (unlocked ? 'text-emerald-200' : 'text-slate-400')}>{active.value}</span>
+            )}
+            <span className="mt-0.5 block text-[10px] italic leading-snug text-slate-500">{active.text}</span>
+          </div>
+        )}
+
+        {essences > 0 && (
+          <div className="text-[9.5px] text-cyan-300/70">🧬 {essences} essence{essences > 1 ? 's' : ''} en réserve</div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/** Ligne compacte d'un unique non encore découvert. */
+function UndiscoveredRow({ role }: { role: { label: string; color: string; icon: string } }) {
+  return (
+    <div className="flex items-center gap-2 rounded-xl border border-slate-800/70 bg-[#0c0f17] px-2.5 py-2 opacity-60">
+      <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-slate-800/60 text-base grayscale">{role.icon}</span>
+      <span className="flex-1 text-[11.5px] italic text-slate-600">Effet non découvert</span>
+      <span className="rounded-full px-1.5 py-0.5 text-[9px]" style={{ background: role.color + '1a', color: role.color + 'aa' }}>{role.label}</span>
     </div>
   )
 }
