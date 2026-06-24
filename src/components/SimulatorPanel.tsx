@@ -6,6 +6,15 @@ import {
   type SimConfig, type SimMemberCfg, type SimResult, type GearSlotCfg,
 } from '../game/simulator'
 import { CONSTELLATIONS, talentsByConstellation, canAllocate, gateInfo, type ConstellationId, type TalentNode } from '../game/talents'
+import { REFERENCE_BUILDS } from '../game/referenceBuilds'
+
+const LIB_KEY = 'wi-sim-builds'
+type SavedBuild = { name: string; cfg: SimConfig }
+function loadLib(): SavedBuild[] {
+  try { const v = JSON.parse(localStorage.getItem(LIB_KEY) || '[]'); return Array.isArray(v) ? v : [] } catch { return [] }
+}
+function saveLib(list: SavedBuild[]) { try { localStorage.setItem(LIB_KEY, JSON.stringify(list)) } catch { /* quota */ } }
+const cloneCfg = (c: SimConfig): SimConfig => JSON.parse(JSON.stringify(c))
 
 const RARITIES_OPT = ['epique', 'legendaire', 'mythique', 'ascendant', 'celeste', 'transcendant'] as const
 
@@ -72,6 +81,17 @@ export function SimulatorPanel() {
   const [cfg, setCfg] = useState<SimConfig>(() => defaultConfig(bestStage || 300))
   const [result, setResult] = useState<SimResult | null>(null)
   const [running, setRunning] = useState(false)
+  const [lib, setLib] = useState<SavedBuild[]>(() => loadLib())
+  const [saveName, setSaveName] = useState('')
+
+  const persistLib = (l: SavedBuild[]) => { setLib(l); saveLib(l) }
+  const saveCurrent = () => {
+    const name = saveName.trim() || `Build ${lib.length + 1}`
+    persistLib([...lib.filter((b) => b.name !== name), { name, cfg: cloneCfg(cfg) }])
+    setSaveName('')
+  }
+  const loadCfg = (c: SimConfig) => { setCfg(cloneCfg(c)); setResult(null) }
+  const deleteSaved = (name: string) => persistLib(lib.filter((b) => b.name !== name))
 
   const activeReal = characters[activeChar] ?? characters[0]
   const importActive = () => {
@@ -118,6 +138,40 @@ export function SimulatorPanel() {
 
       {/* RÉSULTAT (en tête une fois calculé) */}
       {result && <ResultCard result={result} />}
+
+      {/* BIBLIOTHÈQUE : catalogue versionné (dev) + mes builds (localStorage) */}
+      <section className="rounded-xl border border-slate-800 bg-[#11151f] p-3">
+        <Label>Bibliothèque</Label>
+        <div className="mb-2">
+          <div className="mb-1 text-[10px] text-slate-500">📚 Catalogue de référence</div>
+          <div className="flex flex-wrap gap-1.5">
+            {REFERENCE_BUILDS.map((b) => (
+              <button key={b.name} onClick={() => loadCfg(b.config)} title={b.desc}
+                className="rounded-full border border-slate-700 bg-slate-800/40 px-2.5 py-1 text-[11px] text-slate-300 hover:border-fuchsia-400/60 hover:text-fuchsia-200">
+                {b.name}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <div className="mb-1 flex items-center gap-2">
+            <span className="shrink-0 text-[10px] text-slate-500">💾 Mes builds</span>
+            <input value={saveName} onChange={(e) => setSaveName(e.target.value)} placeholder="nom du build…"
+              className="min-w-0 flex-1 rounded border border-slate-700 bg-slate-900/60 px-2 py-1 text-[11px] text-slate-200 outline-none focus:border-orange-400/60" />
+            <button onClick={saveCurrent} className="shrink-0 rounded-lg bg-orange-500/90 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-orange-500">Sauver</button>
+          </div>
+          {lib.length === 0
+            ? <div className="text-[10px] text-slate-600">Aucun build sauvegardé. « Sauver » mémorise la compo + tous les loadouts actuels.</div>
+            : <div className="flex flex-wrap gap-1.5">
+                {lib.map((b) => (
+                  <span key={b.name} className="flex items-center rounded-full border border-slate-700 bg-slate-800/40 text-[11px]">
+                    <button onClick={() => loadCfg(b.cfg)} className="py-0.5 pl-2.5 pr-1 text-slate-200 hover:text-orange-200">{b.name}</button>
+                    <button onClick={() => deleteSaved(b.name)} className="py-0.5 pl-1 pr-2 text-rose-400 hover:text-rose-300" aria-label="Supprimer">✕</button>
+                  </span>
+                ))}
+              </div>}
+        </div>
+      </section>
 
       {/* CONTENU CIBLE */}
       <section className="rounded-xl border border-slate-800 bg-[#11151f] p-3">
