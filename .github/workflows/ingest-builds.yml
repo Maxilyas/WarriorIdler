@@ -10,6 +10,7 @@ on:
 permissions:
   contents: write
   issues: write
+  actions: write # pour déclencher le workflow de déploiement (workflow_dispatch)
 
 jobs:
   ingest:
@@ -42,6 +43,14 @@ jobs:
           git add src/game/communityBuilds.json
           git commit -m "feat(builds): ajout communautaire « ${BUILD_NAME} » (#${ISSUE_NUMBER})"
           git push
+
+      - name: Régénérer le leaderboard (déploiement)
+        # Un push fait avec GITHUB_TOKEN ne déclenche PAS deploy.yml (anti-boucle GitHub). On lance donc
+        # explicitement le déploiement : workflow_dispatch EST autorisé avec GITHUB_TOKEN (exception à la règle).
+        if: steps.ingest.outputs.result == 'ok'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run deploy.yml --ref main
 
       - name: Réponse à l'issue
         if: always()
