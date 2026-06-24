@@ -205,10 +205,16 @@ export function SimulatorPanel() {
   const addMember = () => setCfg((c) => c.team.length >= 3 ? c : ({ ...c, team: [...c.team, { name: `Perso ${c.team.length + 1}`, cls: 'mage', level: 75, orientation: 'equilibre', gems: [], runes: [] }] }))
   const removeMember = (i: number) => setCfg((c) => c.team.length <= 1 ? c : ({ ...c, team: c.team.filter((_, j) => j !== i) }))
 
+  const [runError, setRunError] = useState<string | null>(null)
   const run = () => {
-    setRunning(true)
+    setRunning(true); setRunError(null)
     // setTimeout → laisse l'UI peindre l'état « simulation… » avant le calcul synchrone.
-    setTimeout(() => { setResult(runSim(cfg)); setRunning(false) }, 20)
+    // try/catch : un build importé (notamment communautaire) malformé ne doit jamais casser le panneau.
+    setTimeout(() => {
+      try { setResult(runSim(cfg)) }
+      catch (e) { setResult(null); setRunError('Ce build n\'a pas pu être simulé (config invalide ou corrompue).'); console.error('runSim a échoué :', e) }
+      finally { setRunning(false) }
+    }, 20)
   }
 
   const isRaid = cfg.content.kind === 'raid'
@@ -245,6 +251,7 @@ export function SimulatorPanel() {
       </div>
 
       {/* RÉSULTAT (en tête une fois calculé) */}
+      {runError && <div className="rounded-xl border border-rose-700/50 bg-rose-950/20 p-3 text-[12px] text-rose-200">⚠ {runError}</div>}
       {result && <ResultCard result={result} />}
 
       {/* BIBLIOTHÈQUE : catalogue versionné (dev) + mes builds (localStorage) */}
