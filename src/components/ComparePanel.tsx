@@ -11,7 +11,7 @@ import {
 } from '../game/items'
 import { craftMods } from '../game/metiers'
 import { itemSockets, unsocketCost } from '../game/gems'
-import { getCondGem, parseCondKey, gemDesc, gemValueQ, gemMaxRank, recutCost, drillCost, GEM_FAMILIES, GEM_QUALITIES } from '../game/condGems'
+import { getCondGem, parseCondKey, gemDesc, gemValueQ, gemMaxRank, recutCost, drillCost, GEM_FAMILIES, GEM_FAMILY_LIST, GEM_QUALITIES } from '../game/condGems'
 import { getSet } from '../game/sets'
 import { ENCHANTS, getEnchant, enchantCost } from '../game/enchants'
 import type { OffensiveStat } from '../game/types'
@@ -559,8 +559,10 @@ function QuintessenceSection({ item }: { item: Item }) {
 }
 
 /**
- * Châsses & gemmes de CONDITION : sertir depuis le stock, désertir (rang conservé),
- * RECOUPER une gemme sertie (monte son paramètre d'un rang, contre de la poussière 🔹).
+ * Châsses & gemmes de CONDITION : TUILE d'état + tiroir focalisé. Le tiroir montre les gemmes
+ * SERTIES (recoupe/désertir) et, pour chaque châsse vide, le stock POSSÉDÉ en cartes par famille
+ * (réutilise le visuel du Joaillier) — fini la liste de boutons-texte multi-rang. La taille/fusion
+ * de nouvelles gemmes vit au Joaillier. Comportements (sertir/désertir/recoupe/perçage) inchangés.
  */
 function GemSection({ item }: { item: Item }) {
   const gems = useGame((s) => s.gems)
@@ -573,12 +575,10 @@ function GemSection({ item }: { item: Item }) {
   const drillSocket = useGame((s) => s.drillSocket)
   const mods = craftMods(useGame((s) => s.metiers))
   const [open, setOpen] = useState(false)
-  // APERÇU AVANT SERTISSAGE (mobile : plus de tooltip hover). 1er tap = sélection +
-  // description ; 2e tap sur « Sertir » = pose la gemme.
-  const [pickGem, setPickGem] = useState<string | null>(null)
 
   const sockets = itemSockets(item, mods.weaponSocketBonus)
   const filled = item.gems ?? []
+  const empty = Math.max(0, sockets - filled.length)
   const unsocket = Math.round(unsocketCost() * mods.unsocketCostMult)
   const dCost = drillCost(RARITIES[item.rarity].tier)
   const canDrill = mods.percage && !item.drilled && itemSockets(item, 0) < 3
@@ -586,113 +586,133 @@ function GemSection({ item }: { item: Item }) {
     .filter(([, n]) => n > 0)
     .map(([k, n]) => ({ key: k, parsed: parseCondKey(k), n }))
     .filter((x): x is { key: string; parsed: NonNullable<ReturnType<typeof parseCondKey>>; n: number } => !!x.parsed)
-  const qMark = (q: 0 | 1 | 2) => (q !== 1 ? ` ${GEM_QUALITIES[q].mark}` : '')
+  // Stock groupé par famille (comme le Joaillier) — scannable, fini le scroll de boutons-texte.
+  const stockFams = GEM_FAMILY_LIST
+    .map((f) => ({ f, items: condStock.filter((x) => x.parsed.def.family === f).sort((a, b) => a.parsed.def.name.localeCompare(b.parsed.def.name) || b.parsed.rank - a.parsed.rank) }))
+    .filter((g) => g.items.length)
+  const qMark = (q: 0 | 1 | 2) => (q !== 1 ? <span style={{ color: GEM_QUALITIES[q].color }}> {GEM_QUALITIES[q].mark}</span> : null)
 
   return (
-    <div className="rounded border border-sky-800/40 bg-sky-950/10 p-2">
-      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center justify-between py-1 text-[11px] font-semibold text-sky-300">
-        <span>💎 Châsses ({filled.length}/{sockets})</span>
-        <span>{open ? '▾' : '▸'}</span>
+    <>
+      {/* Tuile-déclencheur : état des châsses, ouvre le tiroir focalisé. */}
+      <button
+        onClick={() => setOpen(true)}
+        className="flex w-full items-center gap-2 rounded border border-sky-800/40 bg-sky-950/10 px-2 py-2 text-left hover:bg-sky-900/20"
+      >
+        <span className="text-base leading-none">💎</span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[11px] font-semibold text-sky-300">Châsses</span>
+          <span className="block truncate text-[10px] text-slate-400">
+            {filled.length > 0 ? filled.map((g) => (g.cond ? getCondGem(g.cond)?.name : null)).filter(Boolean).join(' · ') : 'aucune gemme'}
+            {empty > 0 && <span className="text-sky-500/70"> · {empty} ◇</span>}
+          </span>
+        </span>
+        <span className="shrink-0 text-[10px] font-medium text-sky-300/80">{filled.length}/{sockets} ›</span>
       </button>
+
       {open && (
-        <div className="mt-1.5 space-y-1.5">
-          {filled.map((g, i) => {
-            const cond = g.cond ? getCondGem(g.cond) : undefined
-            if (!cond) return null
-            const rank = g.rank ?? 1
-            const quality = ((g.quality === 0 || g.quality === 2) ? g.quality : 1) as 0 | 1 | 2
-            const maxR = gemMaxRank(cond)
-            const rCost = recutCost(rank)
-            return (
-              <div key={i} className="flex items-center gap-2 rounded bg-black/20 px-1.5 py-1 text-[10px]">
-                <span className="min-w-0 flex-1" style={{ color: cond.color }}>
-                  <span className="block truncate font-medium">
-                    {GEM_FAMILIES[cond.family].icon} {cond.icon} {cond.name}
-                    {quality !== 1 && <span style={{ color: GEM_QUALITIES[quality].color }}> {GEM_QUALITIES[quality].mark} {GEM_QUALITIES[quality].name}</span>}
-                    {maxR > 1 && <span className="text-slate-400"> · rang {rank}/{maxR}</span>}
-                  </span>
-                  <span className="block text-[9px] leading-snug text-slate-400">{gemDesc(cond, rank, quality)}</span>
-                </span>
-                {mods.recoupe && rank < maxR && (
-                  <button
-                    disabled={gemDust < rCost}
-                    onClick={() => recutGem(item.id, i)}
-                    title={`Recoupe → rang ${rank + 1} : ${gemDesc(cond, rank + 1, quality)} (-${rCost} 🔹)`}
-                    className="shrink-0 rounded border border-sky-700/40 px-1.5 py-1 font-medium text-sky-200 hover:bg-sky-900/30 disabled:opacity-40"
-                  >
-                    🔬 {gemValueQ(cond, rank + 1, quality)} · {rCost} 🔹
-                  </button>
-                )}
-                <button
-                  disabled={essence < unsocket}
-                  onClick={() => unsocketGem(item.id, i)}
-                  title={`Désertir (-${unsocket} éclats, gemme rendue avec rang et qualité)`}
-                  className="shrink-0 rounded bg-slate-800 px-1.5 py-1 text-slate-400 hover:text-red-400 disabled:opacity-40"
-                >
-                  ✕ ♦{unsocket}
-                </button>
-              </div>
-            )
-          })}
-          {filled.length < sockets && (
-            condStock.length === 0 ? (
-              <div className="text-[10px] italic text-slate-500">
-                Aucune gemme en stock — drops par famille de biome, champions ✦, raids, ou la ✂️ Taille (Atelier · Joaillier).
-              </div>
-            ) : (
-              <div className="space-y-1">
-                <div className="flex flex-wrap gap-1">
-                  {condStock.map(({ key, parsed, n }) => {
-                    const sel = pickGem === key
-                    return (
-                      <button
-                        key={key}
-                        onClick={() => setPickGem(sel ? null : key)}
-                        className={'rounded border px-2 py-1 text-[10px] font-medium ' + (sel ? 'bg-white/10 ring-1 ring-white/30' : 'hover:bg-white/5')}
-                        style={{ color: parsed.def.color, borderColor: parsed.def.color + (sel ? 'cc' : '66') }}
-                      >
-                        {parsed.def.icon} {parsed.def.name}{parsed.rank > 1 ? ` R${parsed.rank}` : ''}{qMark(parsed.quality)} ×{n}
-                      </button>
-                    )
-                  })}
-                </div>
-                {/* aperçu de la gemme sélectionnée + confirmation (lisible au tap, sans hover). */}
-                {(() => {
-                  const sel = condStock.find((g) => g.key === pickGem)
-                  if (!sel) return <div className="text-[9px] italic text-slate-500">Touche une gemme pour voir son effet, puis sertis-la.</div>
+        <Sheet title={<span>💎 Châsses · {filled.length}/{sockets}</span>} onClose={() => setOpen(false)}>
+          <div className="space-y-2.5">
+            {/* Gemmes SERTIES : recoupe (monte le rang) + désertir (rend la gemme). */}
+            {filled.length > 0 && (
+              <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                {filled.map((g, i) => {
+                  const cond = g.cond ? getCondGem(g.cond) : undefined
+                  if (!cond) return null
+                  const rank = g.rank ?? 1
+                  const quality = ((g.quality === 0 || g.quality === 2) ? g.quality : 1) as 0 | 1 | 2
+                  const maxR = gemMaxRank(cond)
+                  const rCost = recutCost(rank)
                   return (
-                    <div className="rounded border border-sky-700/40 bg-sky-950/30 p-1.5">
-                      <div className="text-[10px] font-medium" style={{ color: sel.parsed.def.color }}>
-                        {sel.parsed.def.icon} {sel.parsed.def.name}{sel.parsed.rank > 1 ? ` R${sel.parsed.rank}` : ''}{qMark(sel.parsed.quality)}
+                    <div key={i} className="rounded-lg border p-2" style={{ borderColor: cond.color + '66', background: cond.color + '12' }}>
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="truncate text-[11px] font-medium" style={{ color: cond.color }}>{GEM_FAMILIES[cond.family].icon} {cond.icon} {cond.name}</span>
+                        <span className="shrink-0 text-[9px] text-slate-400">R{rank}{maxR > 1 ? `/${maxR}` : ''}{quality !== 1 && <span style={{ color: GEM_QUALITIES[quality].color }}> {GEM_QUALITIES[quality].mark}</span>}</span>
                       </div>
-                      <div className="mt-0.5 text-[9px] leading-snug text-slate-300">{gemDesc(sel.parsed.def, sel.parsed.rank, sel.parsed.quality)}</div>
-                      <button
-                        onClick={() => { socketCondGem(item.id, sel.parsed.def.id, sel.parsed.rank, sel.parsed.quality); setPickGem(null) }}
-                        className="mt-1 w-full rounded bg-sky-700/60 py-1 text-[10px] font-semibold text-sky-100 hover:bg-sky-600/60"
-                      >
-                        💎 Sertir cette gemme
-                      </button>
+                      <div className="mt-0.5 line-clamp-2 text-[9px] leading-snug text-slate-400" title={gemDesc(cond, rank, quality)}>{gemDesc(cond, rank, quality)}</div>
+                      <div className="mt-1.5 flex gap-1">
+                        {mods.recoupe && rank < maxR && (
+                          <button
+                            disabled={gemDust < rCost}
+                            onClick={() => recutGem(item.id, i)}
+                            title={`Recoupe → rang ${rank + 1} : ${gemDesc(cond, rank + 1, quality)}`}
+                            className="flex-1 rounded border border-sky-700/40 py-1 text-[9.5px] font-medium text-sky-200 hover:bg-sky-900/30 disabled:opacity-40"
+                          >
+                            🔬 {gemValueQ(cond, rank + 1, quality)} · {rCost} 🔹
+                          </button>
+                        )}
+                        <button
+                          disabled={essence < unsocket}
+                          onClick={() => unsocketGem(item.id, i)}
+                          title="Désertir : la gemme est rendue avec son rang et sa qualité."
+                          className="shrink-0 rounded bg-slate-800 px-2 py-1 text-[9.5px] text-slate-400 hover:text-red-400 disabled:opacity-40"
+                        >
+                          ✕ ♦{unsocket}
+                        </button>
+                      </div>
                     </div>
                   )
-                })()}
+                })}
               </div>
-            )
-          )}
-          {/* 🪛 PERÇAGE : une châsse de plus, une seule fois par objet — très cher. */}
-          {canDrill && (
-            <button
-              disabled={gemDust < dCost.dust || gold < dCost.gold}
-              onClick={() => drillSocket(item.id)}
-              title="Ajoute UNE châsse à cet objet (une seule fois par objet)."
-              className="w-full rounded border border-sky-600/50 bg-sky-900/20 py-1.5 text-[10px] font-medium text-sky-200 hover:bg-sky-800/30 disabled:opacity-40"
-            >
-              🪛 Percer une châsse · {dCost.dust} 🔹 + 💰 {dCost.gold.toLocaleString('fr-FR')}
-            </button>
-          )}
-          {item.drilled && <div className="text-right text-[9px] text-slate-500">🪛 déjà percé (1 max par objet)</div>}
-        </div>
+            )}
+
+            {/* Châsse(s) VIDE(S) : sertir depuis le stock possédé, en cartes par famille. */}
+            {empty > 0 && (
+              <div>
+                <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-sky-300/80">
+                  {empty} châsse{empty > 1 ? 's' : ''} vide{empty > 1 ? 's' : ''} — sertir
+                </div>
+                {condStock.length === 0 ? (
+                  <div className="rounded-lg border border-dashed border-slate-700 p-4 text-center text-[11px] leading-snug text-slate-500">
+                    Aucune gemme en stock. Elles tombent par famille de biome, champions ✦ et raids, ou se taillent à
+                    l'<b className="text-sky-300">Atelier · 💎 Joaillier</b>.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {stockFams.map(({ f, items }) => (
+                      <div key={f}>
+                        <div className="mb-1 text-[9.5px] font-medium text-slate-400">{GEM_FAMILIES[f].icon} {GEM_FAMILIES[f].name}</div>
+                        <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                          {items.map(({ key, parsed, n }) => (
+                            <div key={key} className="rounded-lg border p-2" style={{ borderColor: parsed.def.color + '55', background: parsed.def.color + '0d' }}>
+                              <div className="flex items-center justify-between gap-1">
+                                <span className="truncate text-[11px] font-medium" style={{ color: parsed.def.color }}>{parsed.def.icon} {parsed.def.name}</span>
+                                <span className="shrink-0 text-[9px] text-slate-400">R{parsed.rank}{qMark(parsed.quality)} ×{n}</span>
+                              </div>
+                              <div className="mt-0.5 line-clamp-2 text-[9px] leading-snug text-slate-500" title={gemDesc(parsed.def, parsed.rank, parsed.quality)}>{gemDesc(parsed.def, parsed.rank, parsed.quality)}</div>
+                              <button
+                                onClick={() => { socketCondGem(item.id, parsed.def.id, parsed.rank, parsed.quality); if (empty <= 1) setOpen(false) }}
+                                className="mt-1.5 w-full rounded bg-sky-700/60 py-1.5 text-[10px] font-semibold text-sky-100 hover:bg-sky-600/60"
+                              >
+                                💎 Sertir
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                    <div className="text-center text-[9.5px] text-slate-500">✂️ Tailler / 🔥 fusionner d'autres gemmes → <b className="text-sky-300">Atelier · 💎 Joaillier</b></div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 🪛 PERÇAGE : une châsse de plus, une seule fois par objet — très cher. */}
+            {canDrill && (
+              <button
+                disabled={gemDust < dCost.dust || gold < dCost.gold}
+                onClick={() => drillSocket(item.id)}
+                title="Ajoute UNE châsse à cet objet (une seule fois par objet)."
+                className="w-full rounded-lg border border-sky-600/50 bg-sky-900/20 py-2 text-[10px] font-medium text-sky-200 hover:bg-sky-800/30 disabled:opacity-40"
+              >
+                🪛 Percer une châsse · {dCost.dust} 🔹 + 💰 {dCost.gold.toLocaleString('fr-FR')}
+              </button>
+            )}
+            {item.drilled && <div className="text-right text-[9px] text-slate-500">🪛 déjà percé (1 max par objet)</div>}
+          </div>
+        </Sheet>
       )}
-    </div>
+    </>
   )
 }
 
