@@ -28,6 +28,7 @@ import type { UniqueRole } from '../game/types'
 import { useGame, FRAGMENT_INFUSE_COST, CHOOSE_UNIQUE_COST, bestRaidTier, maxContentIlvl } from '../game/store'
 import { rarityTextStyle, rarityCardStyle, rarityNameClass } from './rarityStyle'
 import { GemBadges } from './ItemRow'
+import { Sheet } from './ui'
 
 /** Libellé/couleur d'affichage d'une ligne d'objet (stat / dégâts / résistance). */
 function affixLabel(a: Affix): { name: string; color: string; pct: boolean } {
@@ -81,7 +82,7 @@ export function ComparePanel({ item, char, previewDelta, equipped, occupied, onE
   const statDelta = cmp ? tot.total - itemStatTotals(cmp).total : null
 
   return (
-    <div className="flex flex-col rounded-xl border p-3" style={rarityCardStyle(item.rarity)}>
+    <div className="flex select-none flex-col rounded-xl border p-3" style={rarityCardStyle(item.rarity)}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
@@ -695,7 +696,9 @@ function GemSection({ item }: { item: Item }) {
   )
 }
 
-/** Rune : se GRAVE depuis le stash (graver CONSOMME une rune possédée — drop de raid). */
+/** Rune : TUILE d'état + tiroir focalisé qui ne liste QUE les runes possédées (+ la gravée).
+ *  Le catalogue complet et la forge vivent au Runiste — la carte d'objet n'est pas une encyclopédie.
+ *  Graver CONSOMME l'exemplaire ; coûts/gating/consommation identiques à avant. */
 function EnchantSection({ item }: { item: Item }) {
   const essence = useGame((s) => s.essence)
   const poussiere = useGame((s) => s.poussiere)
@@ -705,53 +708,82 @@ function EnchantSection({ item }: { item: Item }) {
   const [open, setOpen] = useState(false)
   const current = item.enchant ? getEnchant(item.enchant) : undefined
 
+  // JAMAIS le catalogue : uniquement les runes en stock (+ celle déjà gravée, même si stock 0).
+  const owned = ENCHANTS.filter((e) => (runesOwned[e.id] ?? 0) > 0 || item.enchant === e.id)
+
   return (
-    <div className="rounded border border-amber-700/40 bg-amber-950/10 p-2">
-      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center justify-between py-1 text-[11px] font-semibold text-amber-200">
-        <span>🪄 Rune {current ? `· ${current.icon} ${current.name}` : '· aucune'}</span>
-        <span>{open ? '▾' : '▸'}</span>
+    <>
+      {/* Tuile-déclencheur : montre la rune actuelle, ouvre le tiroir focalisé. */}
+      <button
+        onClick={() => setOpen(true)}
+        className="flex w-full items-center gap-2 rounded border border-amber-700/40 bg-amber-950/10 px-2 py-2 text-left hover:bg-amber-900/20"
+      >
+        <span className="text-base leading-none">🪄</span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[11px] font-semibold text-amber-200">Rune</span>
+          <span className="block truncate text-[10px] text-slate-400">{current ? <>{current.icon} {current.name}</> : 'aucune'}</span>
+        </span>
+        <span className="shrink-0 text-[10px] font-medium text-amber-300/80">Graver ›</span>
       </button>
+
       {open && (
-        <div className="mt-1.5">
-          <div className="mb-1 text-[9.5px] leading-snug text-slate-500">
+        <Sheet title={<span>🪄 Graver une rune</span>} onClose={() => setOpen(false)}>
+          <div className="mb-2 text-[10px] leading-snug text-slate-500">
             ⏳ TEMPS (horloges du combat) ou ⚖️ RÈGLE (lois du jeu) — une rune par pièce, effets d'équipe.
-            Graver <b className="text-amber-300">CONSOMME</b> la rune (drop de ☠️ raid surtout) ; écraser ne rembourse pas.
+            Graver <b className="text-amber-300">CONSOMME</b> la rune ; écraser ne rembourse pas.
           </div>
-          <div className="space-y-0.5">
-            {ENCHANTS.map((e) => {
-              const raw = enchantCost(e, item)
-              const cost = { eclats: Math.round(raw.eclats * mods.enchantCostMult), poussiere: Math.round(raw.poussiere * mods.enchantCostMult) }
-              const on = item.enchant === e.id
-              const ruleLocked = !!e.rule && !mods.ruleRunes
-              const owned = runesOwned[e.id] ?? 0
-              const can = !on && !ruleLocked && owned > 0 && essence >= cost.eclats && poussiere >= cost.poussiere
-              return (
-                <button
-                  key={e.id}
-                  disabled={!can}
-                  onClick={() => enchantItem(item.id, e.id)}
-                  title={ruleLocked ? `${e.description}\n— 🔒 nœud « Lois du monde » (arbre du Runiste)` : owned === 0 && !on ? `${e.description}\n— 🔒 aucune en stock : trouve-la en raid (ou rarement en donjon)` : e.description}
-                  className={
-                    'flex w-full flex-col gap-0.5 rounded border px-1.5 py-1 text-left text-[10px] disabled:opacity-40 ' +
-                    (on ? 'border-amber-400 bg-amber-900/30 text-amber-200' : 'border-slate-700 text-slate-300 enabled:hover:bg-amber-900/20')
-                  }
-                >
-                  <span className="flex w-full items-center justify-between gap-1">
-                    <span className="min-w-0 truncate">
-                      {on ? '✓ ' : ruleLocked ? '🔒 ' : ''}{e.icon} {e.name}
-                      <span className="text-slate-500"> · {e.rule ? '⚖️ RÈGLE' : '⏳ TEMPS'}</span>
-                      <span className={owned > 0 ? 'text-emerald-300' : 'text-slate-600'}> · ×{owned}</span>
-                    </span>
-                    {!on && <span className="shrink-0 text-[9px] text-slate-500">{owned === 0 ? '☠️ à trouver' : <>♦{cost.eclats}{cost.poussiere ? ` 🌌${cost.poussiere}` : ''}</>}</span>}
-                  </span>
-                  <span className="text-[8.5px] leading-snug text-slate-500">{e.description}</span>
-                </button>
-              )
-            })}
-          </div>
-        </div>
+          {owned.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-slate-700 p-4 text-center text-[11px] leading-snug text-slate-500">
+              Aucune rune en stock. Elles tombent en ☠️ raid (rarement en donjon), ou se forgent à
+              l'<b className="text-purple-300">Atelier · 🪄 Runiste</b>.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+              {owned.map((e) => {
+                const raw = enchantCost(e, item)
+                const cost = { eclats: Math.round(raw.eclats * mods.enchantCostMult), poussiere: Math.round(raw.poussiere * mods.enchantCostMult) }
+                const on = item.enchant === e.id
+                const ruleLocked = !!e.rule && !mods.ruleRunes
+                const ownedN = runesOwned[e.id] ?? 0
+                const can = !on && !ruleLocked && ownedN > 0 && essence >= cost.eclats && poussiere >= cost.poussiere
+                const kind = e.rule ? { tag: '⚖️ RÈGLE', color: '#fcd34d' } : e.pact ? { tag: '🩸 PACTE', color: '#fb7185' } : { tag: '⏳ TEMPS', color: '#c4b5fd' }
+                return (
+                  <div key={e.id} className={'rounded-lg border p-2 ' + (on ? 'border-amber-400 bg-amber-900/20' : 'border-slate-700/60 bg-black/20')}>
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="truncate text-[11px] font-medium text-slate-200">{e.icon} {e.name}</span>
+                      <span className={'shrink-0 text-[9px] ' + (ownedN > 0 ? 'text-emerald-300' : 'text-slate-600')}>×{ownedN}</span>
+                    </div>
+                    <div className="mt-0.5 text-[9px] font-medium" style={{ color: kind.color }}>{kind.tag}</div>
+                    <div className="mt-0.5 line-clamp-2 text-[9px] leading-snug text-slate-500" title={e.description}>{e.description}</div>
+                    <button
+                      disabled={!can}
+                      onClick={() => { enchantItem(item.id, e.id); setOpen(false) }}
+                      title={ruleLocked ? '🔒 nœud « Lois du monde » (arbre du Runiste)' : undefined}
+                      className={
+                        'mt-1.5 w-full rounded py-1.5 text-[10px] font-medium disabled:opacity-40 ' +
+                        (on ? 'bg-emerald-800/40 text-emerald-200' : 'bg-amber-800/60 text-amber-100 enabled:hover:bg-amber-700/70')
+                      }
+                    >
+                      {on ? '✓ Gravée' : ruleLocked ? '🔒 Verrouillée' : <>Graver · ♦{cost.eclats}{cost.poussiere ? ` 🌌${cost.poussiere}` : ''}</>}
+                    </button>
+                  </div>
+                )
+              })}
+              {/* Le catalogue complet + la forge vivent au Runiste — renvoi explicite. */}
+              <div className="flex flex-col items-center justify-center gap-1 rounded-lg border border-purple-800/40 bg-purple-950/15 p-2 text-center text-[10px] leading-snug text-purple-200/80">
+                <span className="text-base">🔨</span>
+                <span>Forger d'autres runes<br />→ Atelier · 🪄 Runiste</span>
+              </div>
+            </div>
+          )}
+          {current && (
+            <div className="mt-2 rounded-lg bg-slate-900/60 px-2 py-1.5 text-[10px] text-slate-400">
+              Actuelle : <span className="text-amber-200">{current.icon} {current.name}</span> · <span className="text-rose-400">remplacer ne rembourse pas</span>
+            </div>
+          )}
+        </Sheet>
       )}
-    </div>
+    </>
   )
 }
 
