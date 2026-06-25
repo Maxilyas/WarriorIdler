@@ -167,6 +167,18 @@ function computeRadialLayout(tree: TalentTreeId): RadialLayout {
       if (pos.has(r) && pos.has(t.id) && parentOf.get(t.id) !== r) raw.push({ from: r, to: t.id, bridge: true })
     }
   }
+  // OR MULTI-PRÉREQUIS — un nœud à PLUSIEURS `requires` (ex. capstone d'identité : 1 ultime AU CHOIX
+  //   parmi 4) n'est relié qu'à UN parent par l'arbre couvrant → les autres déblocages sont invisibles,
+  //   et le nœud SEMBLE gaté derrière ce seul parent (faux : n'importe lequel suffit). On trace les
+  //   liens manquants en pont pour que le OR soit lisible (chaque ultime montre qu'il débloque le nœud).
+  for (const t of nodes) {
+    if (isCarrefour(t.id)) continue
+    const reqs = t.requires ?? []
+    if (reqs.length < 2) continue
+    for (const r of reqs) {
+      if (pos.has(r) && pos.has(t.id) && parentOf.get(t.id) !== r) raw.push({ from: r, to: t.id, bridge: true })
+    }
+  }
   // les `links` (anneau de navigation, routes croisées) sont tracés comme des ponts.
   for (const t of nodes) {
     for (const l of t.links ?? []) if (pos.has(l) && pos.has(t.id)) raw.push({ from: l, to: t.id, bridge: true })
