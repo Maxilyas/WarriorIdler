@@ -14,6 +14,7 @@ import { Sheet } from './components/ui'
 import { ChestModal } from './components/ChestModal'
 import { ChoiceModal } from './components/ChoiceModal'
 import { WelcomeScreen } from './components/WelcomeScreen'
+import { ErrorBoundary, rearmChunkReload } from './components/ErrorBoundary'
 
 // CODE-SPLITTING : les panneaux NON-combat sont chargés à la demande
 // (React.lazy) → ils sortent du bundle initial, qui ne garde que le combat + l'accueil (démarrage
@@ -85,7 +86,13 @@ function BootScreen() {
 export default function App() {
   const booted = useGame((s) => s.booted)
   if (!booted) return <BootScreen />
-  return <GameApp />
+  // Filet de sécurité racine : un throw de rendu (combat, en-tête…) montre une carte plutôt qu'un
+  // écran noir muet. Les panneaux d'onglets ont en plus leur propre filet (cf. plus bas).
+  return (
+    <ErrorBoundary fullscreen>
+      <GameApp />
+    </ErrorBoundary>
+  )
 }
 
 function GameApp() {
@@ -127,6 +134,10 @@ function GameApp() {
   const [keepAwake, setKeepAwake] = useState(() => {
     try { return localStorage.getItem('wi-keepAwake') === '1' } catch { return false }
   })
+
+  // L'app est montée et stable → ré-arme l'auto-rechargement « chunk introuvable » (cf. ErrorBoundary)
+  // après un court délai, pour gérer les MAJ PWA successives d'une longue session sans boucle de reload.
+  useEffect(() => rearmChunkReload(), [])
 
   // Boucle de tick — suspendue en arrière-plan (F3) ET tant que l'écran d'accueil n'est pas franchi
   // (sinon le combat lancerait les vagues — et le butin — avant le choix de spé).
@@ -302,35 +313,41 @@ function GameApp() {
                 ))}
               </div>
               <div className="min-h-0 flex-1">
-                <Suspense fallback={panelFallback}>
-                  {deskTab === 'heros' ? (
-                    <HerosHub talentsUnlocked={talentsUnlocked} />
-                  ) : deskTab === 'exped' ? (
-                    <ExpedHub raidsUnlocked={raidsUnlocked} />
-                  ) : deskTab === 'marche' ? (
-                    <MerchantPanel />
-                  ) : deskTab === 'grimoire' ? (
-                    <GrimoirePanel />
-                  ) : deskTab === 'atelier' ? (
-                    <AtelierPanel />
-                  ) : (
-                    <StuffScreen />
-                  )}
-                </Suspense>
+                {/* Filet PAR onglet (key) : un crash d'un panneau n'empêche pas d'aller sur un autre. */}
+                <ErrorBoundary key={deskTab}>
+                  <Suspense fallback={panelFallback}>
+                    {deskTab === 'heros' ? (
+                      <HerosHub talentsUnlocked={talentsUnlocked} />
+                    ) : deskTab === 'exped' ? (
+                      <ExpedHub raidsUnlocked={raidsUnlocked} />
+                    ) : deskTab === 'marche' ? (
+                      <MerchantPanel />
+                    ) : deskTab === 'grimoire' ? (
+                      <GrimoirePanel />
+                    ) : deskTab === 'atelier' ? (
+                      <AtelierPanel />
+                    ) : (
+                      <StuffScreen />
+                    )}
+                  </Suspense>
+                </ErrorBoundary>
               </div>
             </div>
           </div>
         ) : (
           /* Mobile : un hub à la fois */
           <div className="h-full">
-            <Suspense fallback={panelFallback}>
-              {tab === 'combat' && <CombatPanel />}
-              {tab === 'stuff' && <StuffScreen />}
-              {tab === 'atelier' && <AtelierPanel />}
-              {tab === 'heros' && <HerosHub talentsUnlocked={talentsUnlocked} />}
-              {tab === 'exped' && <ExpedHub raidsUnlocked={raidsUnlocked} />}
-              {tab === 'marche' && <MerchantPanel />}
-            </Suspense>
+            {/* Filet PAR onglet (key) : un crash d'un panneau n'empêche pas d'aller sur un autre. */}
+            <ErrorBoundary key={tab}>
+              <Suspense fallback={panelFallback}>
+                {tab === 'combat' && <CombatPanel />}
+                {tab === 'stuff' && <StuffScreen />}
+                {tab === 'atelier' && <AtelierPanel />}
+                {tab === 'heros' && <HerosHub talentsUnlocked={talentsUnlocked} />}
+                {tab === 'exped' && <ExpedHub raidsUnlocked={raidsUnlocked} />}
+                {tab === 'marche' && <MerchantPanel />}
+              </Suspense>
+            </ErrorBoundary>
           </div>
         )}
       </main>
