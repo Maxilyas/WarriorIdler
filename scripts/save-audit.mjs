@@ -23,7 +23,8 @@ const M = await load(`
   export { EQUIP_SLOTS } from './src/game/slots.ts'
   export { generateItem } from './src/game/items.ts'
   export { makeDungeonEnemy, dungeonFights, DUNGEONS } from './src/game/dungeons.ts'
-  export { RAID_LIST, makeRaidBoss, raidBerserkTime } from './src/game/raids.ts'
+  export { RAID_LIST, generateRaid } from './src/game/raids.ts'
+  export { aggregateUniqueActives } from './src/game/uniques.ts'
   export { partyCombatStep, resetAllCooldowns, fuelReset, crescendoReset, crescendoBonus } from './src/game/combatEngine.ts'
   export { computeGlobalMods } from './src/game/upgrades.ts'
   export { achievementBonuses } from './src/game/achievements.ts'
@@ -33,16 +34,17 @@ const M = await load(`
   export { craftMods } from './src/game/metiers.ts'
   export { condGemMods } from './src/game/condGems.ts'
   export { equippedTimeRunes, timeRuneMods } from './src/game/enchants.ts'
-  export { activeBrewBuffs, teamPactMods, teamGemOpts } from './src/game/storeHelpers.ts'
+  export { activeBrewBuffs, teamPactMods, teamGemOpts, raidCombatStep } from './src/game/storeHelpers.ts'
   export { maitriseBonus } from './src/game/biomeBonus.ts'
 `)
 const {
   makeCharacter, charDerived, charDamageProfile, charDps, charMaxHp, charEhp, charCombatMods,
   talentsSpent, teamTalentPool, setGlobalCombatMods, profileDamageMult, EQUIP_SLOTS, generateItem,
-  makeDungeonEnemy, dungeonFights, DUNGEONS, RAID_LIST, makeRaidBoss, raidBerserkTime,
+  makeDungeonEnemy, dungeonFights, DUNGEONS, RAID_LIST, generateRaid, aggregateUniqueActives,
   partyCombatStep, resetAllCooldowns, fuelReset, crescendoReset, crescendoBonus,
   computeGlobalMods, achievementBonuses, sanitizeRaw, freshSave, getPower, getTalent,
   craftMods, condGemMods, equippedTimeRunes, timeRuneMods, activeBrewBuffs, teamPactMods, teamGemOpts, maitriseBonus,
+  raidCombatStep,
 } = M
 
 const fmt = (n) => n >= 1e12 ? (n / 1e12).toFixed(2) + 'T' : n >= 1e9 ? (n / 1e9).toFixed(2) + 'Md' : n >= 1e6 ? (n / 1e6).toFixed(2) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : Math.round(n).toString()
@@ -135,6 +137,27 @@ function beats(makeEnemy, timeLimit) {
   return w >= 2
 }
 
+// ---- RAIDS : VRAI pas de raid (raidCombatStep — Nova/Estoc/Frappe/Estocade/Déferlante/rotate/enrage +
+// duo de l'Abîme, PARTAGÉ avec le tick live) → fidélité COMPLÈTE des mécaniques. Victoire = boss mort. ----
+const RAID_KIT = { cond, runes, pact, buffs, uniqueActives: aggregateUniqueActives(save.characters) }
+function raidSim(def, tier) {
+  let p = freshParty()
+  const r = generateRaid(def.id, tier, save.bestStage ?? 1, p.length)
+  const death = {}; let t = 0, won = false, wiped = false
+  for (; t < r.berserkAt && !won && !wiped && p.some((x) => x.hp > 0); t += 0.2) {
+    const step = raidCombatStep(p, r, 0.2, RAID_KIT, save.bestStage ?? 1)
+    p = step.chars
+    r.enemies = step.enemies; r.fightTime = step.fightTime
+    r.novaCd = step.novaCd; r.swarmCd = step.swarmCd; r.rotateCd = step.rotateCd; r.element = step.element; r.rotateIdx = step.rotateIdx
+    for (const ch of p) if (ch.hp <= 0 && !(ch.name in death)) death[ch.name] = t
+    won = step.bossDead; wiped = step.wiped
+  }
+  const order = Object.entries(death).sort((a, b) => a[1] - b[1])
+  const boss = r.enemies.find((e) => e.boss) ?? r.enemies[0]
+  return { win: won, dur: t, bossLeft: boss ? boss.hp / boss.maxHp : 0, firstDead: order[0]?.[0] ?? null, firstT: order[0]?.[1] ?? 0 }
+}
+function raidBeats(def, tier) { let w = 0; for (let i = 0; i < 3; i++) if (raidSim(def, tier).win) w++; return w >= 2 }
+
 /* ====================================================================== */
 /* 0) PROFIL                                                             */
 /* ====================================================================== */
@@ -169,21 +192,19 @@ for (const [dId, def] of Object.entries(DUNGEONS)) {
 /* ====================================================================== */
 /* 2) RAIDS                                                              */
 /* ====================================================================== */
-console.log('\n── 2) RAIDS — tier max battable par l\'ÉQUIPE (vrai boss + mécaniques télégraphiées, heal inclus) ──')
+console.log('\n── 2) RAIDS — tier max battable par l\'ÉQUIPE (VRAI pas de raid : mécaniques complètes, heal inclus) ──')
 for (const def of RAID_LIST) {
-  const el = def.element === 'rotating' ? 'arcane' : def.element // type de dégâts infligé par le boss
   let last = 0
   for (let t = 1; t <= 15; t++) {
-    if (beats((n) => makeRaidBoss(def, t, el, save.bestStage ?? 1, n), raidBerserkTime(def, t))) last = t
+    if (raidBeats(def, t)) last = t
     else break
   }
   const verdict = last === 0 ? '⛔ T1 hors de portée' : last >= 15 ? '😴 tous tiers (≥15)' : `🧱 mur T${last + 1}`
-  const note = def.icon === '🕳️' ? '  (Abîme = duo réel → un peu plus dur que cette sim mono-boss)' : ''
-  console.log(`  ${def.icon} ${def.name.padEnd(22)} max T${String(last).padStart(2)}   ${verdict}${note}`)
+  console.log(`  ${def.icon} ${def.name.padEnd(22)} max T${String(last).padStart(2)}   ${verdict}`)
   // Diagnostic du mur : qui tombe en premier au tier échoué, et à combien de PV est le boss.
   if (last < 15) {
     const wt = last + 1
-    const d = simWin((n) => makeRaidBoss(def, wt, el, save.bestStage ?? 1, n), raidBerserkTime(def, wt))
+    const d = raidSim(def, wt)
     if (d.firstDead) console.log(`        └─ T${wt} : ${d.firstDead} tombe à ${d.firstT.toFixed(0)}s · boss encore à ${(d.bossLeft * 100).toFixed(0)}% PV`)
   }
 }
@@ -238,9 +259,9 @@ if (inert.length) {
 } else console.log('  ✓ tous tes nœuds alloués pèsent sur le DPS ou l\'EHP.')
 
 console.log(`\n${'═'.repeat(70)}`)
-console.log('Donjons/Raids = VRAI moteur de combat d\'équipe (heal, cooldowns, mécaniques de boss inclus),')
-console.log('SANS buffs gemmes/runes/consommables (plancher) mais en supposant un jeu parfait (léger plafond) ;')
-console.log('3 essais/combat, majorité. Sorts/Talents = contribution DPS mono-cible du perso actif.')
+console.log('Raids = VRAI pas de raid « raidCombatStep » (mécaniques COMPLÈTES : Nova/Estoc/Frappe/Estocade/')
+console.log('Déferlante/rotate/enrage + duo de l\'Abîme), partagé avec le tick live. Donjons = combat d\'équipe.')
+console.log('Gemmes/runes/pactes/conso INCLUS ; jeu parfait supposé (léger plafond) ; 3 essais/combat, majorité.')
 console.log(demo
   ? 'Démo terminée. Lance sur TA save : node scripts/save-audit.mjs chemin/vers/ta-save.json'
   : 'Audit terminé.')

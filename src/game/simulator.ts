@@ -19,15 +19,15 @@ import { getPower, POWER_SLOTS } from './powers'
 import { profileDamageMult, DAMAGE_TYPE_LIST, DAMAGE_TYPES } from './damage'
 import { generateItem, rollLineValue, specToAffix, starsMult, qualityBonusAffixes, type LineSpec } from './items'
 import { RARITIES, RARITY_LIST } from './rarities'
-import { UNIQUE_EFFECTS } from './uniques'
+import { UNIQUE_EFFECTS, aggregateUniqueActives } from './uniques'
 import { EQUIP_SLOTS, ITEM_TYPES } from './slots'
-import { RAID_LIST, makeRaidBoss, raidBerserkTime, type RaidDef } from './raids'
+import { RAID_LIST, generateRaid, type RaidDef } from './raids'
 import { makeDungeonEnemy, dungeonFights, DUNGEONS } from './dungeons'
 import { partyCombatStep, resetAllCooldowns } from './combatEngine'
 import { craftMods } from './metiers'
 import { condGemMods, getCondGem } from './condGems'
 import { timeRuneMods, equippedTimeRunes, TIME_RUNES, type TimeRuneId } from './enchants'
-import { activeBrewBuffs, teamPactMods, teamGemOpts } from './storeHelpers'
+import { activeBrewBuffs, teamPactMods, teamGemOpts, raidCombatStep } from './storeHelpers'
 import { maitriseBonus } from './biomeBonus'
 import { freshSave } from './save'
 import { SECONDARY_META, PRIMARY_META } from './stats'
@@ -379,8 +379,10 @@ export function runSim(cfg: SimConfig): SimResult {
   const runes = timeRuneMods(runeSet, craft.runisteTempo)
   const buffs = activeBrewBuffs(sx)
   const pact = teamPactMods(sx, craft, buffs)
-  const heroMult = (1 + maitriseBonus(cfg.bestStage)) * buffs.dmgMult // pas de crescendo (état live)
+  const heroMult = (1 + maitriseBonus(cfg.bestStage)) * buffs.dmgMult // (donjons) pas de crescendo (état live)
   const MODS = { heroMult, cond, runes, pact, content: { antidote: buffs.antidote ?? undefined } }
+  // Kit pour le VRAI pas de raid (raidCombatStep calcule lui-même heroMult/dmgMult/frein de régén…).
+  const kit = { cond, runes, pact, buffs, uniqueActives: aggregateUniqueActives(team) }
 
   const freshTeam = (): Character[] => {
     const p: Character[] = team.map((c) => ({ ...c, hp: charMaxHp(c), dots: undefined, weaken: undefined, stun: 0, rez: undefined }))
@@ -397,38 +399,51 @@ export function runSim(cfg: SimConfig): SimResult {
     const order = Object.entries(death).sort((a, b) => a[1] - b[1])
     return { win: enemy.hp <= 0, dur: t, bossLeft: enemy.hp / enemy.maxHp, firstDead: order[0]?.[0] ?? null, firstT: order[0]?.[1] ?? 0 }
   }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const beats = (makeEnemy: (n: number) => any, timeLimit: number) => { let w = 0; for (let i = 0; i < 3; i++) if (simFight(makeEnemy, timeLimit).win) w++; return w >= 2 }
+  // Raids : VRAI pas de raid (raidCombatStep — Nova/Estoc/Frappe/Estocade/Déferlante/rotate/enrage,
+  // PARTAGÉ avec le tick live) → fidélité COMPLÈTE des mécaniques (≠ ancien boss mono sans mécaniques).
+  // Victoire = boss mort (step.bossDead), pas « tous les ennemis morts » (raids à renforts).
+  const simFightRaid = (def: RaidDef, tier: number) => {
+    let p = freshTeam()
+    const r = generateRaid(def.id, tier, cfg.bestStage, p.length)
+    const death: Record<string, number> = {}; let t = 0, won = false, wiped = false
+    for (; t < r.berserkAt && !won && !wiped && p.some((x) => x.hp > 0); t += 0.2) {
+      const step = raidCombatStep(p, r, 0.2, kit, cfg.bestStage)
+      p = step.chars
+      r.enemies = step.enemies; r.fightTime = step.fightTime
+      r.novaCd = step.novaCd; r.swarmCd = step.swarmCd; r.rotateCd = step.rotateCd; r.element = step.element; r.rotateIdx = step.rotateIdx
+      for (const ch of p) if (ch.hp <= 0 && !(ch.name in death)) death[ch.name] = t
+      won = step.bossDead; wiped = step.wiped
+    }
+    const order = Object.entries(death).sort((a, b) => a[1] - b[1])
+    const boss = r.enemies.find((e) => e.boss) ?? r.enemies[0]
+    return { win: won, dur: t, bossLeft: boss ? boss.hp / boss.maxHp : 0, firstDead: order[0]?.[0] ?? null, firstT: order[0]?.[1] ?? 0 }
+  }
 
   const members: SimMemberOut[] = team.map((c, i) => ({ name: c.name, cls: cfg.team[i].cls, dps: totalDps(c), ehp: charEhp(c), maxHp: charMaxHp(c) }))
 
-  // Résolution du contenu : `enemyAt(k)` renvoie un constructeur d'ennemi capturant le tier/niveau k.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let enemyAt: (k: number) => (n: number) => any
-  let timeAt: (k: number) => number
+  // Résolution du contenu : `fightAt(k)` simule UNE rencontre au tier/niveau k → détail du combat.
+  let fightAt: (k: number) => { win: boolean; dur: number; bossLeft: number; firstDead: string | null; firstT: number }
   let label: string, unit: 'T' | 'niv', cap: number
   if (cfg.content.kind === 'raid') {
     const def: RaidDef = RAID_LIST.find((d) => d.id === cfg.content.id) ?? RAID_LIST[0]
-    const el = (def.element === 'rotating' ? 'arcane' : def.element) as DamageType
-    enemyAt = (k) => (n) => makeRaidBoss(def, k, el, cfg.bestStage, n)
-    timeAt = (k) => raidBerserkTime(def, k)
+    fightAt = (k) => simFightRaid(def, k)
     label = `${def.icon} ${def.name}`; unit = 'T'; cap = 15
   } else {
     const def = Object.values(DUNGEONS).find((d) => d.id === cfg.content.id) ?? Object.values(DUNGEONS)[0]
-    enemyAt = (k) => { const f = dungeonFights(k); return () => makeDungeonEnemy(def, k, f - 1, f, [], cfg.bestStage) }
-    timeAt = () => 180
+    fightAt = (k) => { const f = dungeonFights(k); return simFight(() => makeDungeonEnemy(def, k, f - 1, f, [], cfg.bestStage), 180) }
     label = `${def.icon} ${def.name}`; unit = 'niv'; cap = 25
   }
+  const beatsAt = (k: number) => { let w = 0; for (let i = 0; i < 3; i++) if (fightAt(k).win) w++; return w >= 2 }
 
   const outcome: SimOutcome = { scanned: cfg.content.scan, maxReached: 0, win: false, wallAt: 0, dur: 0, bossLeftPct: 0, firstDead: null, firstT: 0 }
   if (cfg.content.scan) {
     let last = 0
-    for (let k = 1; k <= cap; k++) { if (beats(enemyAt(k), timeAt(k))) last = k; else { outcome.wallAt = k; break } }
+    for (let k = 1; k <= cap; k++) { if (beatsAt(k)) last = k; else { outcome.wallAt = k; break } }
     outcome.maxReached = last; outcome.win = last >= 1
-    if (outcome.wallAt > 0) { const d = simFight(enemyAt(outcome.wallAt), timeAt(outcome.wallAt)); outcome.dur = d.dur; outcome.bossLeftPct = d.bossLeft * 100; outcome.firstDead = d.firstDead; outcome.firstT = d.firstT }
+    if (outcome.wallAt > 0) { const d = fightAt(outcome.wallAt); outcome.dur = d.dur; outcome.bossLeftPct = d.bossLeft * 100; outcome.firstDead = d.firstDead; outcome.firstT = d.firstT }
   } else {
     const k = Math.max(1, cfg.content.tier)
-    const d = simFight(enemyAt(k), timeAt(k))
+    const d = fightAt(k)
     outcome.win = d.win; outcome.maxReached = d.win ? k : k - 1; outcome.wallAt = d.win ? 0 : k
     outcome.dur = d.dur; outcome.bossLeftPct = d.bossLeft * 100; outcome.firstDead = d.firstDead; outcome.firstT = d.firstT
   }
