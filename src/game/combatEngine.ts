@@ -1193,7 +1193,10 @@ function tickHeroStatuses(chars: Character[], dt: number, cond?: CondMods, pact?
       }
       c.dots = c.dots.filter((d) => d.remaining > 0)
       if (c.dots.length === 0) c.dots = undefined
-      if (dmg > 0 && c.hp > 0) c.hp = Math.max(0, c.hp - dmg)
+      // Les DoT passent par l'absorption (`damageHero` soak le bouclier AVANT les PV, comme les
+      // coups/bursts) : un bouclier d'absorption couvre désormais aussi saignements/poisons/brûlures
+      // — l'immunité totale (Phase éthérée) les bloque aussi. (Les DoT ignorent toujours armure/esquive.)
+      if (dmg > 0 && c.hp > 0) damageHero(c, dmg)
     }
   }
 }
