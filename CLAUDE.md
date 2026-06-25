@@ -15,6 +15,9 @@ La doc est **dans le repo** et fait autorité avec le code :
   le rôle, le modèle de données, les **formules réelles**, les **knobs** d'équilibrage et la dette.
 - [`docs/GLOSSAIRE.md`](docs/GLOSSAIRE.md) — Palier, Chapitre, Mur, ilvl, ressources…
 - [`docs/DESIGN.md`](docs/DESIGN.md) — vision / piliers de design.
+- [`docs/DIFFICULTE.md`](docs/DIFFICULTE.md) — **doctrine** difficulté & équilibrage (snowball assumé,
+  piliers de rôle des raids, gate à largeur croissante, soft-checks, stratégie de test sur vrais builds).
+  ⚠️ Document de **cible** (pas l'état courant) : les sections marquées 🎯 ne sont pas encore implémentées.
 - [`docs/archive/`](docs/archive/) — snapshots de versions historiques, **non maintenus**.
 
 > **Le code fait foi.** En cas de divergence code ↔ doc, le code a raison — et c'est la doc qu'il
