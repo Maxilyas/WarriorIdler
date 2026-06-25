@@ -710,12 +710,47 @@ function SlotDetail({ gs, rar, il, lines, isWeapon, setSlot }: { gs: GearSlotCfg
 /** Éditeur de stuff PIÈCE-PAR-PIÈCE : chaque emplacement s'ouvre en éditeur d'objet complet. */
 function GearEditor({ gear, globalIlvl, globalRarity, onChange }: { gear: Record<string, GearSlotCfg>; globalIlvl: number; globalRarity: string; onChange: (g: Record<string, GearSlotCfg>) => void }) {
   const [open, setOpen] = useState<string | null>(null)
+  const [bulkLines, setBulkLines] = useState<LineCfg[]>([])
   const setSlot = (id: string, p: Partial<GearSlotCfg>) => onChange({ ...gear, [id]: { ...gear[id], ...p } })
-  const applyAllOrientation = (orientation: GearSlotCfg['orientation']) => { const g = { ...gear }; for (const k in g) g[k] = { ...g[k], orientation }; onChange(g) }
+  // Applique un patch à TOUTES les pièces d'un coup (évite d'éditer les 16 emplacements un par un).
+  const applyAll = (p: Partial<GearSlotCfg>) => { const g = { ...gear }; for (const k in g) g[k] = { ...g[k], ...p }; onChange(g) }
   return (
     <div className="space-y-1.5">
-      <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-500">Tout en :
-        {SIM_ORIENTATIONS.map((o) => <button key={o.id} onClick={() => applyAllOrientation(o.id)} className="rounded border border-slate-700 px-1.5 py-0.5 text-slate-300 hover:bg-slate-800">{o.label}</button>)}
+      {/* APPLIQUER À TOUTES LES PIÈCES — ⭐, rareté, lignes (stat/résist/%dmg), unique en un clic */}
+      <div className="space-y-1.5 rounded-lg border border-slate-800 bg-slate-900/40 p-2 text-[10px] text-slate-400">
+        <div className="text-[9.5px] font-semibold uppercase tracking-wide text-slate-500">Appliquer à toutes les pièces</div>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          <span className="flex items-center gap-1">Orient.
+            {SIM_ORIENTATIONS.map((o) => <button key={o.id} onClick={() => applyAll({ orientation: o.id })} className="rounded border border-slate-700 px-1.5 py-0.5 text-slate-300 hover:bg-slate-800">{o.label}</button>)}
+          </span>
+          <label className="flex items-center gap-1">⭐ tout <Num value={3} min={1} max={5} w="w-11" onChange={(v) => applyAll({ stars: v })} /></label>
+          <label className="flex items-center gap-1">Rareté
+            <select value="" onChange={(e) => { if (e.target.value) applyAll({ rarity: e.target.value }) }} className="rounded border border-slate-700 bg-slate-900/60 px-1 py-0.5 capitalize text-slate-200 outline-none">
+              <option value="">— tout en —</option>
+              {SIM_RARITIES.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+            </select>
+          </label>
+          <label className="flex items-center gap-1">✦ Unique
+            <select value="" onChange={(e) => applyAll({ unique: e.target.value || undefined })} className="min-w-0 max-w-[10rem] rounded border border-slate-700 bg-slate-900/60 px-1 py-0.5 text-slate-200 outline-none">
+              <option value="">— retirer de tout —</option>
+              {SIM_UNIQUES.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+            </select>
+          </label>
+        </div>
+        {/* Gabarit de lignes appliqué à toutes les pièces (sliced au nb de lignes de chaque rareté×⭐) */}
+        <div className="flex flex-wrap items-center gap-1">
+          <span className="text-slate-500">Lignes :</span>
+          {bulkLines.map((l, i) => { const lab = lineLabel(l); return (
+            <span key={i} className="flex items-center rounded border px-1 py-0.5 font-semibold" style={{ color: lab.color, borderColor: lab.color + '80' }}>
+              {lab.text}<button onClick={() => setBulkLines((ls) => ls.filter((_, j) => j !== i))} className="ml-1 text-rose-400 hover:text-rose-300">✕</button>
+            </span>
+          ) })}
+          <AddSelect label="+ Stat" options={SIM_STATS.map((s) => ({ id: s.id, label: s.name }))} onPick={(id) => setBulkLines((ls) => [...ls, { k: 'stat', id }])} />
+          <AddSelect label="+ Résist" options={SIM_DMG_TYPES.map((d) => ({ id: d.id, label: d.name }))} onPick={(id) => setBulkLines((ls) => [...ls, { k: 'resist', id }])} />
+          <AddSelect label="+ %Dégâts" options={SIM_DMG_TYPES.map((d) => ({ id: d.id, label: d.name }))} onPick={(id) => setBulkLines((ls) => [...ls, { k: 'dmg', id }])} />
+          <button disabled={!bulkLines.length} onClick={() => applyAll({ lines: bulkLines })} className="rounded border border-orange-500/40 bg-orange-500/10 px-1.5 py-0.5 font-medium text-orange-200 hover:bg-orange-500/20 disabled:opacity-40">Appliquer à tout</button>
+          {bulkLines.length > 0 && <button onClick={() => setBulkLines([])} className="text-slate-500 hover:text-slate-300">vider</button>}
+        </div>
       </div>
       <div className="max-h-[26rem] space-y-1 overflow-y-auto pr-1">
         {SIM_SLOTS.map((sl) => {
@@ -737,7 +772,7 @@ function GearEditor({ gear, globalIlvl, globalRarity, onChange }: { gear: Record
           )
         })}
       </div>
-      <div className="text-[10px] text-slate-600">Clique une pièce pour l'éditer : ilvl/rareté, lignes (stat/résist/%dmg) au nb de la rareté, gemmes (châsses), unique. Valeurs auto au budget.</div>
+      <div className="text-[10px] text-slate-600">Règle tout d'un coup avec « Appliquer à toutes les pièces » ci-dessus (⭐/rareté/lignes/unique), ou clique une pièce pour l'affiner. Lignes au nb de la rareté×⭐ ; valeurs auto au budget.</div>
     </div>
   )
 }

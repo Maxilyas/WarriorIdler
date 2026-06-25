@@ -14,7 +14,7 @@
  *  La sim étant synchrone, le tick live ne s'intercale jamais pendant son exécution.
  */
 import type { Character, DamageType, ItemOrientation, OffensiveStat, RarityId } from './types'
-import { makeCharacter, charDps, charMaxHp, charEhp, charDerived, charDamageProfile, charCombatMods, computeUnlockedPowers, isSupport, SUPPORT_SLOTS, PASSIVE_SLOTS } from './character'
+import { makeCharacter, charDps, charMaxHp, charEhp, charDerived, charDamageProfile, charCombatMods, computeUnlockedPowers, isSupport, isBuilder, SUPPORT_SLOTS, PASSIVE_SLOTS } from './character'
 import { getPower, POWER_SLOTS } from './powers'
 import { profileDamageMult, DAMAGE_TYPE_LIST, DAMAGE_TYPES } from './damage'
 import { generateItem, rollLineValue, specToAffix, starsMult, qualityBonusAffixes, type LineSpec } from './items'
@@ -346,15 +346,20 @@ export function availableAbilities(
   equipped?: { active?: string[]; support?: string[]; passive?: string[] },
 ): { active: AbilityOpt[]; support: AbilityOpt[]; passive: AbilityOpt[] } {
   const out = { active: [] as AbilityOpt[], support: [] as AbilityOpt[], passive: [] as AbilityOpt[] }
-  const seen = new Set<string>()
+  // MULTI-LANE (comme le jeu, cf. character.ts isSupport/isBuilder) : un sort de SOUTIEN (bouclier/soin/
+  // buff) est équipable en SOUTIEN **ET** en ACTIF ; seuls les GÉNÉRATEURS (builders) sont refusés des
+  // actifs. `seen` est donc PAR lane (un même sort peut apparaître dans deux lanes).
+  const seen = { active: new Set<string>(), support: new Set<string>(), passive: new Set<string>() }
   const push = (g: 'active' | 'support' | 'passive', id: string) => {
-    if (seen.has(id)) return
+    if (seen[g].has(id)) return
     const def = getPower(id); if (!def) return
-    seen.add(id); out[g].push({ id, name: def.name, icon: def.icon ?? '•' })
+    seen[g].add(id); out[g].push({ id, name: def.name, icon: def.icon ?? '•' })
   }
   for (const id of computeUnlockedPowers(talents)) {
     const def = getPower(id); if (!def) continue
-    push(def.kind === 'passive' ? 'passive' : isSupport(def) ? 'support' : 'active', id)
+    if (def.kind === 'passive') { push('passive', id); continue }
+    if (isSupport(def)) push('support', id)   // générateurs + soutiens → lane Soutien
+    if (!isBuilder(def)) push('active', id)    // tout actif SAUF les générateurs → lane Actifs (soutiens inclus)
   }
   // Inclut les capacités DÉJÀ ÉQUIPÉES (un preset équipe des sorts que son chemin minimal ne débloque
   // pas formellement) → elles apparaissent et restent surlignées dans leur groupe.
