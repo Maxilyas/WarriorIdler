@@ -44,6 +44,7 @@ const M = await load(`
   export { sanitizeRaw } from './src/game/save.ts'
   export { getPower, POWERS } from './src/game/powers.ts'
   export { getTalent } from './src/game/talents.ts'
+  export { UNIQUE_EFFECTS } from './src/game/uniques.ts'
   export { craftMods } from './src/game/metiers.ts'
   export { condGemMods } from './src/game/condGems.ts'
   export { equippedTimeRunes, timeRuneMods } from './src/game/enchants.ts'
@@ -56,7 +57,7 @@ const {
   setGlobalCombatMods, charMaxHp, charEhp, charDps, charResist, EQUIP_SLOTS,
   RAID_LIST, makeRaidEncounter, raidBerserkTime, raidTierCap, raidReqs, globalTier,
   partyCombatStepMulti, resetAllCooldowns, fuelReset, crescendoReset, crescendoBonus,
-  computeGlobalMods, achievementBonuses, sanitizeRaw, getPower, POWERS, getTalent,
+  computeGlobalMods, achievementBonuses, sanitizeRaw, getPower, POWERS, getTalent, UNIQUE_EFFECTS,
   craftMods, condGemMods, equippedTimeRunes, timeRuneMods, activeBrewBuffs, teamPactMods, teamGemOpts, maitriseBonus,
 } = M
 
@@ -71,6 +72,12 @@ const FACEROLL_MARGIN = 2.5   // marge de survie au-delà de laquelle un clear �
 const RESIST_GAP = 35         // déficit de résist (unités de raidReq) au-delà duquel un mort = mur « résist »
 const OUTLIER_GAP = 2         // bande : top à ≥ OUTLIER_GAP tiers (score) au-dessus du 2ᵉ…
 const CLUSTER_NEAR = 1        // …ET aucun autre build à ≤ CLUSTER_NEAR du top → ⚠ outlier solitaire
+const BUCKET_MIN = 3          // builds mini dans une bande avant une alerte cluster/outlier (N=2 ne tranche pas)
+// COHORTE D'UN VERDICT : un tier T gate un Chapitre ; on ne le juge qu'avec les builds À CE NIVEAU. Trop
+// au-dessus = pur out-gear (rouler sur les bas tiers est VOULU, cf. doctrine) → exclu du verdict.
+const BAND_BELOW = 1          // …dès 1 chapitre SOUS le gate (presque à niveau)…
+const BAND_ABOVE = 3          // …jusqu'à 3 chapitres AU-DESSUS (au-delà = out-gear, non probant)
+const DOMINANT_CAP = 8        // plafond d'affichage des leviers DISTINCTIFS partagés par les clearers
 
 /* ---------- helpers ---------- */
 const fmt = (n) => n >= 1e9 ? (n / 1e9).toFixed(2) + 'Md' : n >= 1e6 ? (n / 1e6).toFixed(2) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : Math.round(n).toString()
@@ -79,6 +86,8 @@ const padL = (s, n) => String(s).padStart(n)
 const sortNum = (a) => [...a].sort((x, y) => x - y)
 const quantile = (arr, q) => { if (!arr.length) return NaN; const s = sortNum(arr); const i = (s.length - 1) * q; const lo = Math.floor(i); return s[lo] + (s[Math.ceil(i)] - s[lo]) * (i - lo) }
 const median = (arr) => quantile(arr, 0.5)
+const UNIQUE_NAME = new Map(UNIQUE_EFFECTS.map((u) => [u.id, u.name]))
+const uniqueName = (id) => UNIQUE_NAME.get(id) ?? id
 
 const wantJson = process.argv.includes('--json')
 const savePath = process.argv.slice(2).find((a) => !a.startsWith('--'))
@@ -277,9 +286,10 @@ function cellAgg(def, tier) {
   const margins = clearers.map((c) => (c.out.ttd != null && c.out.ttk ? c.out.ttd / c.out.ttk : null)).filter((x) => x != null)
   const walls = { DPS: 0, survie: 0, 'résist': 0 }
   for (const c of losers) { const k = wallKind(c.out); if (k) walls[k]++ }
-  // Bande qui DEVRAIT battre ce tier (bestStage ≥ mur du Chapitre gardé).
+  // COHORTE du verdict : builds dont la bande encadre le Chapitre gaté (ni sous-niveau, ni out-gear).
   const need = onBandStage(def, tier)
-  const onBand = cells.filter((c) => c.build.band >= need)
+  const lo = need - BAND_BELOW * M.CHAPITRE_SIZE, hi = need + BAND_ABOVE * M.CHAPITRE_SIZE
+  const onBand = cells.filter((c) => c.build.band >= lo && c.build.band <= hi)
   const onBandClear = onBand.filter((c) => c.out.win).length
   return { total, clear: clearers.length, ttks, margins, walls, onBand: onBand.length, onBandClear, clearers }
 }
@@ -328,7 +338,13 @@ if (saveBuild && saveBuild.truth) {
     if (real > 0 || sim > 0) offsets.push(off)
     console.log(`  ${pad(def.icon + ' ' + def.name, 22)}  ${padL('T' + real, 4)}    ${padL('T' + sim, 5)}    ${off >= 0 ? '+' : ''}${off}`)
   }
-  if (offsets.length) console.log(`  → offset médian : ${median(offsets) >= 0 ? '+' : ''}${median(offsets).toFixed(1)} tier  (le sim suppose un jeu parfait ⇒ optimiste)`)
+  if (offsets.length) {
+    const med = median(offsets)
+    console.log(`  → offset médian : ${med >= 0 ? '+' : ''}${med.toFixed(1)} tier`)
+    console.log(med >= 3
+      ? '    ⚠ offset large : surtout des RAIDS NON POUSSÉS à leur plafond (build sous-exploité) — pas que l\'optimisme du sim.'
+      : '    (le sim suppose un jeu parfait ⇒ ~+1 tier optimiste)')
+  }
 } else if (saveBuild) {
   console.log('\n── OFFSET SIM-vs-RÉEL : vérité terrain absente du save (raidProgress vide) ──')
 }
@@ -337,24 +353,40 @@ if (saveBuild && saveBuild.truth) {
 // On regarde les cellules « de pointe » (les 2 plus hauts tiers clearés de chaque raid) — c'est là que
 // la concentration de build se voit. On ne signale que ce qui est partagé par TOUS les clearers (≥2).
 const TRIVIAL = (id) => id === 'co_start' || id.startsWith('cat_') || id.startsWith('cl_')
-console.log('\n── BUILD DOMINANT (partagé par les clearers, cellules de pointe) ──')
+const isCapstone = (id) => id.startsWith('id_') // capstones d'identité = le cœur du build
+console.log('\n── BUILD DOMINANT (leviers DISTINCTIFS partagés par les clearers, cellules de pointe) ──')
 let dominantFound = false
 for (const def of RAIDS) {
   const cleared = tiersOf(def).filter((t) => grid[def.id][t].cells.some((c) => c.out.win))
   for (const t of cleared.slice(-2)) {
-    const clearers = grid[def.id][t].cells.filter((c) => c.out.win)
+    const cells = grid[def.id][t].cells
+    const clearers = cells.filter((c) => c.out.win)
+    const losers = cells.filter((c) => !c.out.win)
     if (clearers.length < 2) continue
-    const sharedKs = intersect(clearers.map((c) => c.build.sig.keystones)).filter((id) => !TRIVIAL(id))
-    const sharedUq = intersect(clearers.map((c) => c.build.sig.uniques))
-    if (sharedKs.length || sharedUq.length) {
-      dominantFound = true
-      const ks = sharedKs.map((id) => getTalent(id)?.name ?? id)
-      const uq = sharedUq.map((id) => `✦${id}`)
-      console.log(`  ${def.icon} ${def.name} T${t} (${clearers.length} clearers) : ${[...ks, ...uq].join(' · ')}`)
+    let ks = intersect(clearers.map((c) => c.build.sig.keystones)).filter((id) => !TRIVIAL(id))
+    let uq = intersect(clearers.map((c) => c.build.sig.uniques))
+    // DISTINCTIF : on retire ce que les NON-clearers ont aussi (un levier commun n'explique pas le clear).
+    if (losers.length) {
+      const ksL = new Set(losers.flatMap((c) => c.build.sig.keystones))
+      const uqL = new Set(losers.flatMap((c) => c.build.sig.uniques))
+      ks = ks.filter((id) => !ksL.has(id)); uq = uq.filter((id) => !uqL.has(id))
+    } else {
+      ks = ks.filter(isCapstone) // pas de contraste possible → on ne garde que les capstones d'identité
     }
+    // On MÈNE par ce qui DÉFINIT le build (capstones d'identité + uniques) ; le reste = simple compteur
+    // (« même archétype ») pour ne pas dérouler tout l'arbre.
+    const caps = ks.filter(isCapstone).map((id) => getTalent(id)?.name ?? id)
+    const uqs = uq.map((id) => `✦${uniqueName(id)}`)
+    const others = ks.filter((id) => !isCapstone(id)).length
+    const lead = [...caps, ...uqs]
+    if (!lead.length && !others) continue
+    dominantFound = true
+    const head = lead.slice(0, DOMINANT_CAP).join(' · ') + (lead.length > DOMINANT_CAP ? ' …' : '')
+    const tail = others ? `  (+${others} nœuds communs — même archétype)` : ''
+    console.log(`  ${def.icon} ${def.name} T${t} (${clearers.length}/${cells.length}) : ${head || '—'}${tail}`)
   }
 }
-if (!dominantFound) console.log('  (aucune cellule avec ≥2 clearers partageant un levier — corpus trop petit ou diversifié)')
+if (!dominantFound) console.log('  (rien de distinctif partagé par ≥2 clearers — corpus trop petit ou builds trop proches)')
 
 /* ---- BLOC 4 : buckets par bande de progression + alerte cluster/outlier ---- */
 console.log('\n── BUCKETS PAR BANDE DE PROGRESSION (bestStage → Chapitre) ──')
@@ -367,7 +399,7 @@ for (const ch of [...byBand.keys()].sort((a, b) => a - b)) {
     .sort((x, y) => y.score - x.score)
   const dpsRatio = (() => { const ds = list.map((b) => b.ilvl).filter((x) => x > 0); return ds.length ? Math.max(...ds) / Math.max(1, median(ds)) : 0 })()
   console.log(`  Chapitre ${ch} (${list.length} build${list.length > 1 ? 's' : ''}) : top score ${scored[0].score} · médian ${median(scored.map((s) => s.score)).toFixed(0)} · top ${scored.map((s) => s.b.source).join('')}`)
-  if (list.length < 2) { console.log('    ⚪ N insuffisant — pas d\'alerte cluster/outlier fiable.'); continue }
+  if (list.length < BUCKET_MIN) { console.log(`    ⚪ N insuffisant (<${BUCKET_MIN}) — pas d'alerte cluster/outlier fiable.`); continue }
   const top = scored[0].score, second = scored[1].score
   const near = scored.filter((s) => s !== scored[0] && top - s.score <= CLUSTER_NEAR).length
   if (top - second >= OUTLIER_GAP && near === 0) console.log(`    ⚠ OUTLIER solitaire : « ${scored[0].b.name} » seul à ${top} (2ᵉ à ${second}) — risque de build obligatoire (ligne rouge n°1).`)

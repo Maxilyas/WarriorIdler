@@ -6,3 +6,4 @@ dev.log
 .DS_Store
 .vite
 tsconfig.tsbuildinfo
+difficulty-report.json
