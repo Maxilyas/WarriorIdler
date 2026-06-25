@@ -15,6 +15,7 @@
     "maitrise": "node scripts/maitrise-sim.mjs",
     "audit": "node scripts/save-audit.mjs",
     "bench": "node scripts/builds-bench.mjs",
+    "bench-diff": "node scripts/bench-difficulty.mjs",
     "leaderboard": "node scripts/build-leaderboard.mjs",
     "forge-hex": "node scripts/verif-forge-hex.mjs",
     "test": "vitest run",

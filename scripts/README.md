@@ -29,6 +29,29 @@ Rejoue chaque build (référence + communautaire) sur un **benchmark commun** vi
 extrait toute la compo (talents/sorts/gemmes/runes/uniques), agrège des KPI et émet une **page HTML
 autonome et interactive** (`dist/leaderboard.html`, publiée sur GitHub Pages via `deploy.yml`).
 
+### `bench-difficulty.mjs` — `npm run bench-diff [chemin/save.json] [--json]`
+**Harnais de DIFFICULTÉ en mode GRILLE** (≠ `bench`, qui scanne le max par build). Rejoue tout le corpus
+contre une **grille fixe** (chaque tier de chaque raid) et répond à *« quel raid mure quel build, à quel
+tier, et POURQUOI »* (cf. [`../docs/DIFFICULTE.md`](../docs/DIFFICULTE.md) §9). Deux sources :
+- 🌍/📚 **communauté + référence** (codes `WIB1:` → `SimConfig`) — joués via le vrai moteur `runSim` ;
+- 💾 **save export** du joueur (Réglages → exporter, argument positionnel) — l'**équipe RÉELLE** est jouée
+  via `makeRaidEncounter` + `partyCombatStepMulti` (**duo-aware** pour l'Abîme) avec les **vrais** mods de
+  compte + gemmes/runes/pactes/conso (loader `sanitizeRaw`, comme `save-audit`). Sa progression réelle
+  (`bestStage` / `raidProgress`) sert de **vérité terrain** → le rapport mesure l'**offset sim-vs-réel**
+  (le sim suppose un jeu parfait ⇒ ~+1 tier optimiste).
+
+Sort, **par cellule (raid × tier)** : taux de **clear %**, **TTK** médian/p25/p75, **marge de survie**
+(TTD÷TTK, via une sonde PV-boss-∞), **type de mur** (DPS / survie / résist, selon `firstDead` + déficit
+vs `raidReqs`), les **keystones/uniques partagés par les clearers** (détection de build dominant), et un
+**verdict** par pièce (🔴 trop dur / 🟢 sur cible / 🟡 trop facile), calé sur la **bande qui devrait la
+battre** (`bestStage ≥` mur du Chapitre gardé). Bucketise par **bande de progression** et **alerte
+« cluster vs outlier solitaire »** (§1 : l'alerte est l'isolement d'un build, pas le ×20 brut). `--json`
+dumpe `difficulty-report.json` (cellules brutes, pour un futur dashboard).
+> ⚠️ **Mesure pure** : aucun knob d'équilibrage n'est touché. Fidélité = celle de `save-audit` (kit de boss
+> télégraphié + jeu parfait ; les novas/déferlantes/rotations *périodiques* de `tickRaid` sont omises).
+> Les **verdicts agrégés** ne sont fiables qu'avec **N≥3 builds sur la bande** (panel de saves / corpus
+> communautaire) ; sur une **save seule**, la grille reste un **diagnostic perso** (mur de CE build + offset).
+
 ### `ingest-build.mjs` (pipeline, pas un alias)
 Décode une soumission `WIB1:` (issue GitHub) et l'ajoute à `src/game/communityBuilds.json`. Lancé par
 l'Action `ingest-builds.yml` ; Git reste le store (aucun backend). `npm run bench` teste ensuite tout le
