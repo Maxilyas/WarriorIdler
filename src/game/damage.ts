@@ -84,7 +84,7 @@ const AFFIX_PROFILE_SHARE = 0.7
 /**
  * Part d'un affixe « +% type » conservée en bonus multiplicatif brut (+% de dégâts). Calée à 0.5, et le
  * bonus CUMULÉ par type est SOFT-CAPÉ (voir TYPE_BONUS_SOFT/HARD) : sans cap, c'était la seule famille
- * de stats illimitée → ×5-6 de DPS en empilant 16 lignes (cf. scripts/stat-weights.mjs). Une ligne de
+ * de stats illimitée → ×5-6 de DPS en empilant 16 lignes d'un même type. Une ligne de
  * type reste le levier d'identité le plus fort À L'UNITÉ (~2-3× une secondaire), mais l'empilement
  * plafonne (~×2).
  */
@@ -229,7 +229,7 @@ export function profileDamageMult(p: DamageProfile): number {
  * 1 = matching pur (le hors-élément n'aide plus du tout) ; 0 = pondération par la moyenne du profil
  * (profileDamageMult). Calé à 0,7 : matcher l'élément de tes sorts est nettement payant, mais un kit
  * MULTI-ÉLÉMENT garde ~30 % de son investissement hors-type en valeur générique (multi-classe protégé).
- * Recalibrable via `npm run ttk`.
+ * Recalibrable via ce knob.
  */
 export const SPELL_TYPE_MATCH = 0.7
 

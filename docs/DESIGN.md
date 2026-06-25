@@ -56,7 +56,9 @@ L'état **réel** vit dans le code et dans [`systemes/`](systemes/). Repères de
 ## Comment on équilibre
 
 Le jeu est calibré par des **simulations headless** qui exécutent la vraie logique (pas de copie de
-règles) : `npm run ttk` / `sim` / `survival` / `dungeon` / `mur` / `eco` / `weights`. Les **knobs**
+règles). L'équilibrage de builds se fait sur les **vrais builds** (`npm run bench` / `leaderboard` :
+catalogue de référence + soumissions communautaires), complété par `npm run eco` / `eco-craft` /
+`uniques` / `maitrise` (économie & couverture). Les **knobs**
 (constantes nommées en MAJUSCULES, documentées par système) sont le point d'entrée pour ajuster
 **sans** toucher à la logique. Relancer les sims pertinentes après tout changement de scaling, et
 `npm run validate` après toute édition de l'arbre de talents. → [`../scripts/README.md`](../scripts/README.md)

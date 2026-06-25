@@ -212,7 +212,7 @@ ks('om_precis', 'ombrelame', 3, 'Précision létale', 'CHOIX : +24 Critique, +24
 /* ================================================================== */
 /* LAME VÉNÉNEUSE — SECTION SYNERGIE Assassin × Ombrelame.
  * Pont entre les deux voies : le combo ARME la rampe de venin, le venin NOURRIT le combo.
- * Calibré par scripts/sim-voleur-hybride.mjs (≈ ×1,45 PLAT en endgame ; hybride ≤ ×1,17 vs build pur).
+ * Calibrage historique (≈ ×1,45 PLAT en endgame ; hybride ≤ ×1,17 vs build pur).
  * Identité : rampe → détone → re-rampe, exigeant Critique ET Altération ENSEMBLE (double-stat forcé).
  * Aucun bonus de stat « sec » : chaque keystone porte une CONDITION (venin présent, PC plein, seuil de
  * crit, overcap…) ; les 2 minors sont des ⛓ tampons de gating (double-stat) façon arbre existant. */
@@ -331,7 +331,7 @@ ks('ar_clignement', 'arcaniste', 3, 'Clignement', 'SURVIE : +30 Réduction, +18 
 /* ================================================================== */
 /* CONVERGENCE — SOMMET ABSOLU DU MAGE : tri-élément feu × givre × arcane.
  * Ne part PAS du nœud de classe : se REJOINT sur les nœuds les plus profonds des 3 archétypes.
- * Calibré par scripts/sim-mage-convergence.mjs (convergence ≈ ×1,34 PLAT, tri ×1,45 vs pur).
+ * Calibrage historique (convergence ≈ ×1,34 PLAT, tri ×1,45 vs pur).
  * La cascade : Hot Streak → Charges (Feu→Arcane) ; Surcharge → gel (Arcane→Givre) ; gel → embrasement
  * (Givre→Feu). Payoff TRINITÉ : +dégâts par état élémentaire actif (borné). Apex « Archimage » gaté
  * sur les 3 ULTIMES (Météore + Hiver éternel + Singularité) = il faut TOUT avoir. */
@@ -418,7 +418,7 @@ ks('fa_retraite', 'faucon', 2, 'Retraite feinte', 'SURVIE : +30 Réduction, +12%
 /* ================================================================== */
 /* SYMBIOSE — SECTION SYNERGIE Meneur de meute × Œil de faucon : le chasseur & sa bête.
  * Le familier hérite de tes stats, tes tirs le font bondir, ses attaques nourrissent ta Concentration,
- * ta marque guide la mise à mort. Calibré par scripts/sim-chasseur-hybride.mjs (×1,41 plat ; hybride
+ * ta marque guide la mise à mort. Calibrage historique (×1,41 plat ; hybride
  * ×1,25 vs build pur). Sorts : Marque du chasseur (mark), Assaut de la meute (ultime). */
 /* ================================================================== */
 ks('sy_pivot', 'symbiose', 0, 'Symbiose', 'PIVOT : ton familier HÉRITE de ta Précision/Critique (+25 % de ses dégâts) ET suit ta MARQUE (frappe plus fort la proie marquée). Exige Familier ET Respiration.',
@@ -492,7 +492,7 @@ ks('re_colosse', 'rempart', 3, 'Colosse', 'À plus de 60% de PV, +20% de dégât
 /* ================================================================== */
 /* JUGGERNAUT — SECTION SYNERGIE Sentence × Rempart : DPS-TANK hybride.
  * Défense ⇄ offense fusionnées : Endurance → Force, le bouclier nourrit les finisseurs, encaisser
- * génère de la Rage. Calibré par scripts/sim-guerrier-hybride.mjs (×1,25 plat ; DPS ≈ spec pure,
+ * génère de la Rage. Calibrage historique (×1,25 plat ; DPS ≈ spec pure,
  * mais BIEN plus tanky → l'edge est la survie). Sorts : Condamnation, Avatar de guerre. */
 /* ================================================================== */
 ks('ju_pivot', 'juggernaut', 0, 'Indomptable', 'PIVOT : ton Endurance compte comme +20 % de Force (tu frappes avec ta carrure). Exige Coups mortels (Sentence) ET Mur de boucliers (Rempart).',
@@ -517,7 +517,7 @@ ability('ju_avatar', 'juggernaut', 5, 'Avatar de guerre', 'gu_avatar', 'ULTIME �
 /* ================================================================== */
 /* FURIE — BERSERKER (Fury) : DPS PUR, bi-arme + Enrage + vol de vie.
  * Branche profonde de la Sentence. Gros dégâts soutenus, « tanky » par le SANG (vol de vie + Enrage),
- * pas l'armure. Calibré par scripts/sim-guerrier-hybride.mjs (×1,38 plat ; le DPS le plus haut des 3
+ * pas l'armure. Calibrage historique (×1,38 plat ; le DPS le plus haut des 3
  * voies, mais auto-sustain). Sorts : Rampage, Berserk. */
 /* ================================================================== */
 ks('fu_pivot', 'furie', 0, 'Furie', 'PIVOT : tes coups CRITIQUES te mettent en ENRAGE (+15 % de dégâts 6 s, rafraîchi par chaque crit). Exige Colère bouillonnante ET Coups mortels.',
@@ -582,8 +582,8 @@ ks('vi_meta', 'vide', 3, 'Communion morbide', 'SURVIE : -8% de dégâts subis, +
 
 /* ================================================================== */
 /* CRÉPUSCULE — SECTION SYNERGIE Lumière × Vide (Prêtre).
- * Boucle Light↔Void : soigner-en-châtiant (atonement) ↔ frapper-en-soignant. Calibré par
- * scripts/sim-pretre-hybride.mjs (≈ ×1,48 PLAT en endgame ; hybride ≤ ×1,33 vs build pur).
+ * Boucle Light↔Void : soigner-en-châtiant (atonement) ↔ frapper-en-soignant. Calibrage
+ * historique (≈ ×1,48 PLAT en endgame ; hybride ≤ ×1,33 vs build pur).
  * Identité : DoT d'ombre + châtiment qui se nourrissent ; force INT ET Altération ensemble.
  * 2 sorts signature : Verbe crépusculaire (frappe qui soigne) + Éclipse (ULTIME zone + soin de groupe). */
 /* ================================================================== */
@@ -760,7 +760,7 @@ ability('fo_bouclier', 'floraison', 2, 'Bouclier d\'écorce', 'bouclier_runique'
 /* MÉTAMORPHE — « La Danse Primordiale » : 4e voie AUTONOME du druide, mécanique NEUVE.
  * Le druide CHANGE DE FORME en boucle (Fauve→Ours→Hibou, ~5 s chacune) ; chaque forme transforme son
  * style, chaque métamorphose accumule l'INSTINCT (momentum), et la Mémoire des formes fait cumuler les
- * aspects. Calibré par scripts/sim-druide-metamorphe.mjs (×1,48 plat ; ≈ Lunaire pur en DPS).
+ * aspects. Calibrage historique (×1,48 plat ; ≈ Lunaire pur en DPS).
  * Sorts ORIGINAUX : Bond sauvage (shift-éclair), Forme Chimère (les 3 formes à la fois). */
 /* ================================================================== */
 ks('mf_danse', 'metamorphe', 0, 'Danse Primordiale', 'PIVOT : tu te MÉTAMORPHOSES en boucle (Fauve → Ours → Hibou, ~5 s chacune). Chaque forme accorde +10 % de dégâts de base ; tu sculptes ensuite chaque aspect.',

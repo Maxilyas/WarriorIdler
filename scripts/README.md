@@ -7,6 +7,33 @@ projet : à relancer après tout changement de scaling/équilibrage.
 > Beaucoup ont un alias `npm run …` (voir `package.json`) ; les autres se lancent directement avec
 > `node scripts/<fichier>.mjs` (ou `npx tsx scripts/check-talents.ts`).
 
+> **Équilibrage = vrais builds.** Les anciens harnais de combat à builds **synthétiques** (`ttk`, `sim`,
+> `survival`, `mur`, `dungeon`, `weights`, `dps`, `explorer`, `sandbox`, et les sims de classe/synergie
+> `sim-*-hybride`…) ont été **retirés** : un build généré n'est pas représentatif de ce que jouent
+> réellement les joueurs. Le seul harnais d'équilibrage de builds est désormais
+> **`builds-bench` / `build-leaderboard`**, qui rejoue les **vrais builds** (catalogue de référence curé
+> + soumissions communautaires) sur le moteur du Simulateur in-game.
+
+## Équilibrage par les vrais builds (la référence)
+
+### `builds-bench.mjs` — `npm run bench`
+**Banc d'essai des builds** via le MÊME moteur que l'écran Simulateur (`runSim`). Teste le **catalogue de
+référence** (`src/game/referenceBuilds.ts`) ET le **catalogue communautaire** (`src/game/communityBuilds.json`,
+codes `WIB1:` décodés via `buildCode.ts`) dans les mêmes conditions : tier/niveau max, DPS équipe, EHP min,
+mur. Sort aussi des **tendances** d'usage des capacités actives (top utilisées + sorts « jamais choisis »
+= sous-utilisés). Le catalogue communautaire est alimenté par les **soumissions GitHub** des joueurs
+(Simulateur → 🔗 Partager → 🚀 Soumettre → issue → Action `ingest-builds.yml` → `ingest-build.mjs`).
+
+### `build-leaderboard.mjs` — `npm run leaderboard`
+Rejoue chaque build (référence + communautaire) sur un **benchmark commun** via le vrai moteur `runSim`,
+extrait toute la compo (talents/sorts/gemmes/runes/uniques), agrège des KPI et émet une **page HTML
+autonome et interactive** (`dist/leaderboard.html`, publiée sur GitHub Pages via `deploy.yml`).
+
+### `ingest-build.mjs` (pipeline, pas un alias)
+Décode une soumission `WIB1:` (issue GitHub) et l'ajoute à `src/game/communityBuilds.json`. Lancé par
+l'Action `ingest-builds.yml` ; Git reste le store (aucun backend). `npm run bench` teste ensuite tout le
+catalogue.
+
 ## Garde-fous d'intégrité (à lancer après édition de l'arbre/classes)
 
 ### `validate-talents.mjs` — `npm run validate`
@@ -25,39 +52,7 @@ Vérif runtime des classes : alloue des talents, équipe des sorts, contrôle qu
 `abilityDps` + les keystones (igniteOnCrit / petDps / combo / tagBonus…) produisent des nombres sains
 (pas de NaN, lignes attendues).
 
-## Harnais d'équilibrage (les courbes maîtresses)
-
-### `ttk-sim.mjs` — `npm run ttk`
-**Le filet de sécurité central.** Construit un perso calé sur chaque ilvl de contenu (équipement réel
-via `generateItem`) et mesure le **temps de kill** vs les courbes d'ennemi. Si DPS ∝ `b^ilvl`, le TTK
-est **plat** → pas de snowball. Calibre `ITEM_BUDGET0` / `ENEMY_HP0` / `ENEMY_DMG0`.
-
-### `sim-mur.mjs` — `npm run mur`
-**L'outil qui pilote le calibrage des murs.** Pour chaque Palier, compare un build **NU** (loot + stat
-primaire seule) et un build **CIBLE** (loot + secondaires + talents, simulés fidèlement) contre le
-boss-MUR. Source de vérité partagée avec les knobs de murs de `progression.ts`.
-
-### `build-sim.mjs` — `npm run sim`
-Harnais d'équilibrage des builds : construit des builds FOR/AGI/INT optimisés (stuff + keystones) et
-sort un tableau DPS/EHP par rareté & niveau, plus le ratio de déséquilibre meilleur/pire build. À
-relancer après tout changement de scaling (maîtrise, keystones, items).
-
-### `survival-sim.mjs` — `npm run survival`
-Harnais de **survie** : compare, par palier, le temps-pour-mourir (EHP tank / dégâts ennemis) au
-temps-pour-tuer. Vérifie que les dégâts ennemis ne dépassent pas la capacité de survie au fil des paliers.
-
-### `dungeon-sim.mjs` — `npm run dungeon`
-Progression **donjon** : pour des builds stuffés au niveau de perso, affiche le niveau de donjon MAX
-franchissable (survivre + tuer le boss), sur plusieurs traits. Garde une COURBE (pas un mur).
-
-### `stat-weights.mjs` — `npm run weights`
-**Poids de stats** : valeur marginale (ΔDPS%) d'une ligne d'affixe de chaque famille, + la courbe
-d'empilement des lignes de type. C'est lui qui a mesuré la domination des `+% type` et calibré les soft
-caps (`TYPE_BONUS_*` dans `damage.ts`, `DMG_LINE_*` dans `items.ts`).
-
-### `dps-check.mjs` — `npm run dps`
-Calcule `charDps` (le DPS affiché) pour comparer des configs — utile pour vérifier qu'un multiplicateur
-(keystone, profil) est bien pris en compte.
+## Couverture (effets uniques / câblage)
 
 ### `uniques-sim.mjs` — `npm run uniques`
 **Couverture des effets uniques + sets.** Pose chaque unique sur une pièce de référence et mesure sa
@@ -66,13 +61,6 @@ les bonus de set par seuil (2/4/6). Intègre une **sonde de liveness** (chaque s
 un axe joueur ?) qui détecte un mod mort/silencieux. Garde-fou : NaN, croissance par rang, paliers de
 set incohérents. Sépare les uniques **taggés** (valeur de tag annoncée — dépend du build porteur).
 
-### `eco-craft-sim.mjs` — `npm run eco-craft`
-**Couverture éco du craft** (3 puits) : courbe de coût + effet des **améliorations** du Marché
-(`computeGlobalMods`), **automates** de forge (rendement/heure via `tickAutomates` vs coût de
-construction), **alchimie** (courbe de qualité des brassins + économie des réactifs). Garde-fou
-d'intégrité : amélioration non câblée, coût non croissant, **paire de réactifs dupliquée** (recette
-masquée → inbrassable), fenêtre parfaite atteignable.
-
 ### `maitrise-sim.mjs` — `npm run maitrise`
 **Couverture du 🏛️ Conseil des Maîtrises** (progression de compte time-gatée). Vérifie le **couplage à
 deux fichiers** signalé comme fragile : chaque nœud de `maitrise.ts` est-il **câblé** dans
@@ -80,51 +68,14 @@ deux fichiers** signalé comme fragile : chaque nœud de `maitrise.ts` est-il **
 appliqué ? Quantifie l'effet total (tout maxé ≈ +12% de combat agrégé) et la cadence time-gate
 (56 points · 3 contrats/sem → ~19 semaines). Garde-fou : nœud non câblé, dérive display↔moteur.
 
-## Audit personnalisé (depuis ta sauvegarde)
+## Économie & craft
 
-### `save-audit.mjs` — `npm run audit -- chemin/vers/ta-save.json`
-**Pas un garde-fou d'équilibrage global, mais un diagnostic PERSO** : charge un fichier JSON de save
-(export du jeu) via le vrai `sanitizeRaw` (migrations + validation), applique TES mods de compte
-(`computeGlobalMods` : améliorations + maîtrises + hauts faits), puis audite le perso ACTIF :
-1. **Donjons** : niveau max franchissable par donjon + facteur limitant (survie / vitesse).
-2. **Raids** : tier max battable + facteur limitant (enrage / survie).
-3. **Sorts équipés** : contribution DPS de chacun par retrait marginal (repère le poids mort).
-4. **Talents** : points dépensés/dispo, gain de DPS de l'arbre, nœuds alloués sans effet.
-
-Sans argument → **mode démo** (perso stuffé généré) qui prouve le pipeline. Le combat (donjons/raids)
-tourne le **VRAI `partyCombatStep`** sur toute l'équipe (heal, cooldowns, mécaniques de boss inclus),
-sans buffs gemmes/runes/conso (plancher) et en supposant un jeu parfait (léger plafond) ; il affiche le
-**diagnostic du mur** (qui tombe en premier, quand, PV restant du boss → mur de survie vs de DPS).
-
-### `build-explorer.mjs` — `npm run explorer`
-**Matrice d'équilibrage des builds** via le vrai moteur. Croise des ARCHÉTYPES (chemins de classe réels)
-× une ORIENTATION de stuff (offensif/équilibré/défensif), fabrique le perso réel (`generateItem`) et
-simule (`partyCombatStep`, solo) le tier de raid / niveau de donjon MAX battable + DPS/EHP. Sort trois
-lectures : **écart de DPS entre classes** (déséquilibre), **offensif vs défensif** (les monstres
-forcent-ils la défense ?) et **impact des gemmes** (loadout offensif vs défensif via `condGemMods` —
-la défense anti-télégraphe fait-elle gagner du tier ?). Extensible : ajoute des entrées à
-`ARCHETYPES` (4 classes : Guerrier/Voleur/Mage/Chasseur), `ORIENTATIONS`, et les `KIT_*`
-(gemmes + runes). Un **kit standard** (gemmes+runes) est appliqué à toute la matrice ; la section
-impact compare sans-kit / kit offensif / kit défensif. (Constat : avec kit, l'orientation
-**équilibrée** atteint souvent le tier le plus haut — ni full-offense ni full-defense.)
-
-### `sandbox-sim.mjs` — `npm run sandbox -- ta-config.json`
-**Bac à sable config-driven** (la fondation headless de la future UI) : un JSON décrit une ÉQUIPE
-(1-3 persos) avec, pour chacun, classe/talents, stuff (iLvl/rareté/orientation), **gemmes**, **runes**,
-et des **consommables** d'équipe — et on simule un raid/donjon au vrai `partyCombatStep` avec le `mods`
-COMPLET. Sortie : profil de l'équipe + « ce contenu passe-t-il ? » + diagnostic du mur (qui tombe, quand,
-PV boss). `content` accepte `{raid|dungeon, tier|level}` ou `{…, scan:true}` (tier/niveau max). Sans
-argument → config d'exemple. Modèle : [`sandbox.example.json`](sandbox.example.json).
-
-### `builds-bench.mjs` — `npm run bench`
-**Banc d'essai des builds** via le MÊME moteur que l'écran Simulateur (`runSim`). Teste le **catalogue de
-référence** (`src/game/referenceBuilds.ts`) ET le **catalogue communautaire** (`src/game/communityBuilds.json`,
-codes `WIB1:` décodés via `buildCode.ts`) dans les mêmes conditions : tier/niveau max, DPS équipe, EHP min,
-mur. Sort aussi des **tendances** d'usage des capacités actives (top utilisées + sorts « jamais choisis »
-= sous-utilisés). Le catalogue communautaire est alimenté par les **soumissions GitHub** des joueurs
-(Simulateur → 🔗 Partager → 🚀 Soumettre → issue → Action `ingest-builds.yml` → `ingest-build.mjs`).
-
-## Économie
+### `eco-craft-sim.mjs` — `npm run eco-craft`
+**Couverture éco du craft** (3 puits) : courbe de coût + effet des **améliorations** du Marché
+(`computeGlobalMods`), **automates** de forge (rendement/heure via `tickAutomates` vs coût de
+construction), **alchimie** (courbe de qualité des brassins + économie des réactifs). Garde-fou
+d'intégrité : amélioration non câblée, coût non croissant, **paire de réactifs dupliquée** (recette
+masquée → inbrassable), fenêtre parfaite atteignable.
 
 ### `eco-sim.mjs` — `npm run eco`
 Rendement par run de donjon (or/éclats/noyau/poussière) vs coût d'un craft à la progression
@@ -144,19 +95,21 @@ par chapitre. Vérifie la cohérence de `materialYieldAtChapter`.
 Vérif de la **Forge hexagonale** (v0.41) : voisinage axial, Chaînes (run connecté de même famille),
 Creuset (entrées possédées), règle de **forgeabilité par adjacence**.
 
-## Simulations de classes (calibrage TTK par archétype)
+## Audit personnalisé (depuis ta sauvegarde)
 
-| Script | Sujet |
-|---|---|
-| `sim-classes.mjs` | Simulateur d'équilibrage de **toutes** les classes (DPS réel par classe, refonte v0.29). |
-| `sim-voleur-hybride.mjs` | Synergie Assassin × Ombrelame (« Lame Vénéneuse »). |
-| `sim-guerrier-hybride.mjs` | Synergie « Juggernaut » (Sentence × Rempart). |
-| `sim-mage-convergence.mjs` | Convergence tri-élémentaire (feu × givre × arcane). |
-| `sim-pretre-hybride.mjs` | Synergie Lumière × Vide (« Crépuscule »). |
-| `sim-chasseur-hybride.mjs` | Symbiose (Meute × Œil de faucon, familier + concentration). |
-| `sim-druide-metamorphe.mjs` | « Danse Primordiale » — formes rotatives (mécanique neuve). |
+### `save-audit.mjs` — `npm run audit -- chemin/vers/ta-save.json`
+**Pas un garde-fou d'équilibrage global, mais un diagnostic PERSO** : charge un fichier JSON de save
+(export du jeu) via le vrai `sanitizeRaw` (migrations + validation), applique TES mods de compte
+(`computeGlobalMods` : améliorations + maîtrises + hauts faits), puis audite le perso ACTIF :
+1. **Donjons** : niveau max franchissable par donjon + facteur limitant (survie / vitesse).
+2. **Raids** : tier max battable + facteur limitant (enrage / survie).
+3. **Sorts équipés** : contribution DPS de chacun par retrait marginal (repère le poids mort).
+4. **Talents** : points dépensés/dispo, gain de DPS de l'arbre, nœuds alloués sans effet.
 
-Lancement : `node scripts/<fichier>.mjs`.
+Sans argument → **mode démo** (perso stuffé généré) qui prouve le pipeline. Le combat (donjons/raids)
+tourne le **VRAI `partyCombatStep`** sur toute l'équipe (heal, cooldowns, mécaniques de boss inclus),
+sans buffs gemmes/runes/conso (plancher) et en supposant un jeu parfait (léger plafond) ; il affiche le
+**diagnostic du mur** (qui tombe en premier, quand, PV restant du boss → mur de survie vs de DPS).
 
 ## Vérifs ponctuelles (one-off, liées à une version)
 

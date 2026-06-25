@@ -7,7 +7,7 @@
  * BORNÉE `b^Δ` → pas de boule de neige possible.
  *
  * Ce module ne contient QUE des constantes et des fonctions PURES (aucune dépendance gameplay) :
- * il est importé par le jeu (items/enemies/dungeons/raids) ET par le harnais `scripts/ttk-sim.mjs`.
+ * il est importé par le jeu (items/enemies/dungeons/raids) — et réutilisable tel quel par les harnais headless.
  */
 
 import type { Item } from './types'
@@ -17,7 +17,7 @@ import type { Item } from './types'
 /** Base de puissance : +1,8 %/ilvl → ×2 tous les ~38,9 ilvl. Plage 1→700 ≈ ×2,7·10^5.
  *  Calée à 1.018 pour une courbe PLATE (chiffres lisibles : le primaire d'arme reste < 1 M jusqu'à
  *  ilvl ~630, plafond ~3,5 M à 700). TTK INVARIANT : joueur ET ennemis partagent `b` via powerAt → le
- *  ratio puissance/PV ne dépend pas de `b` (cf. npm run ttk). Gap par +10 ilvl ~+20 % → le stuff reste
+ *  ratio puissance/PV ne dépend pas de `b` (invariant de courbe). Gap par +10 ilvl ~+20 % → le stuff reste
  *  pertinent longtemps. */
 export const POW_BASE = 1.018
 /** Cap DUR d'ilvl : aucun drop / craft / surillvl / boss de raid ne dépasse cette valeur. */
@@ -73,12 +73,12 @@ export const ENEMY_DMG_CLASS: Record<EnemyClass, number> = {
   trash: 1, elite: 1.4, champion: 1.25, boss: 1.8, raidboss: 2.0,
 }
 
-/** Échelle de PV de base (ennemi trash, ilvl 0). Calibrée par `npm run ttk` (médian implicite) pour
+/** Échelle de PV de base (ennemi trash, ilvl 0). Calibrée (médian implicite) pour
  *  que le trash meure en ~`TTK.trash` à stuff calé. Calée à 12500 : suit ITEM_BUDGET0 (ratio préservé →
  *  TTK invariant) et tient compte de la rareté musclée (K=8 + lignes + unique) qui rend le stuff calé
  *  ~×1,7 plus fort → recentre le boss endgame ~35 s. */
 export const ENEMY_HP0 = 12500
-/** Échelle de dégâts de base. Calibrée par `npm run ttk` pour viser `SURVIVE_SECONDS` à stuff calé. */
+/** Échelle de dégâts de base. Calibrée pour viser `SURVIVE_SECONDS` à stuff calé. */
 export const ENEMY_DMG0 = 320
 
 /** PV d'un ennemi à un ilvl de contenu donné. */
@@ -179,7 +179,7 @@ export const SURVIVE_SECONDS = 8
 
 // ---- MURS (boss de fin de Palier) : knobs de difficulté ----
 // Le mur est calé pour que le Build CIBLE (optimisation ATTENDUE au Palier) clear JUSTE, et qu'un
-// build sous-optimisé tape l'enrage et échoue. Source de vérité PARTAGÉE avec `scripts/sim-mur.mjs`.
+// build sous-optimisé tape l'enrage et échoue. Source de vérité des murs : les knobs ci-dessous.
 
 /** TTK boss visé au Build CIBLE. */
 export const MUR_TARGET_TTK = TTK.boss
@@ -194,7 +194,7 @@ export function murEnrage(palier: number): number {
 /** Pic de nova PLEIN exigé par un mur de survie endgame. */
 export const NOVA_FULL = 3.6
 /** Sévérité du burst exigée par un mur de SURVIE au Palier : nulle avant P20 → pleine à P40 (la
- *  survie n'est un vrai mur qu'une fois les défenses mûres — finding du harnais sim-mur.mjs). */
+ *  survie n'est un vrai mur qu'une fois les défenses mûres — finding de calibrage des murs). */
 export function novaReqAt(palier: number): number {
   return Math.max(0, NOVA_FULL * (palier - 20) / 20)
 }
@@ -218,8 +218,8 @@ export function ilvlDungeon(level: number): number {
 }
 /**
  * Bande d'ilvl linéaire `tierFloor + (tier−1)·step`, bornée à ILVL_MAX. LEGACY : les raids en jeu ne
- * l'utilisent plus (ils s'ancrent sur le système de Chapitres via `lootFarmIlvl`, cf. raids.ts) ;
- * seul le harnais `scripts/ttk-sim.mjs` l'appelle encore.
+ * l'utilisent plus (ils s'ancrent sur le système de Chapitres via `lootFarmIlvl`, cf. raids.ts) — et
+ * son dernier appelant (le harnais `ttk-sim`) a été retiré : fonction conservée pour référence, SANS appelant.
  */
 export function ilvlRaid(tierFloor: number, tier: number, step = 15): number {
   return Math.min(ILVL_MAX, Math.round(tierFloor + (tier - 1) * step))

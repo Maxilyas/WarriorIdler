@@ -3,7 +3,8 @@
 > Source : [`dungeons.ts`](../../src/game/dungeons.ts), [`raids.ts`](../../src/game/raids.ts).
 > UI : [`DungeonPanel.tsx`](../../src/components/DungeonPanel.tsx),
 > [`RaidPanel.tsx`](../../src/components/RaidPanel.tsx), [`ExpedHub.tsx`](../../src/components/ExpedHub.tsx).
-> Difficulté calée sur [`progression.ts`](../../src/game/progression.ts) (murs). Harnais : `npm run dungeon`.
+> Difficulté calée sur [`progression.ts`](../../src/game/progression.ts) (murs). Harnais : `npm run bench`
+> (compos réelles sur raids/donjons) + `npm run eco-donjons` (éco).
 
 ## Rôle
 
@@ -94,6 +95,6 @@ l'Abîme est gaté derrière les **4 raids de base tous au Tier 10** (`requiresA
 ## Dette / provisoire
 
 - Le pacing **farm ↔ donjon ↔ raid** et l'anti-farm (escalier plein au Ch.8) sont marqués **à
-  éprouver** : revérifier via `npm run dungeon` / `eco-donjons` après tout changement de courbe.
+  éprouver** : revérifier via `npm run eco-donjons` (+ `npm run bench` sur les compos) après tout changement de courbe.
 - `materialYieldAtChapter` est la **source unique** partagée donjons/raids : ne pas dupliquer la
   courbe de rendement ailleurs.

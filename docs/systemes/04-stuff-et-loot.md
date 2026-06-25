@@ -4,7 +4,8 @@
 > [`rarities.ts`](../../src/game/rarities.ts), [`slots.ts`](../../src/game/slots.ts).
 > Budget exponentiel : [`progression.ts`](../../src/game/progression.ts). UI :
 > [`StuffScreen.tsx`](../../src/components/StuffScreen.tsx), [`ComparePanel.tsx`](../../src/components/ComparePanel.tsx),
-> [`ItemRow.tsx`](../../src/components/ItemRow.tsx). Harnais : `scripts/stat-weights.mjs`, `eco-sim.mjs`.
+> [`ItemRow.tsx`](../../src/components/ItemRow.tsx). Harnais : `eco-sim.mjs` (le sim de poids de stats
+> `stat-weights` a été retiré — cf. `scripts/README.md`).
 
 ## Rôle
 

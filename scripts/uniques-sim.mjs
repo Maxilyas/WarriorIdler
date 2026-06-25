@@ -36,7 +36,7 @@ const fail = (msg) => { errors++; console.log('  ✗ ' + msg) }
 let warns = 0
 const warn = (msg) => { warns++; console.log('  ⚠ ' + msg) }
 
-/* ---------- construction d'items (mêmes formules que build-sim / rollLineValue) ---------- */
+/* ---------- construction d'items (mêmes formules que le moteur : itemBudget / rollLineValue) ---------- */
 const statAffix = (stat, ilvl, tier) => ({ kind: 'stat', stat, value: Math.max(1, Math.round(softCap(itemBudget(ilvl, tier, SECONDARY_FRAC, 1), SECONDARY_SOFT, SECONDARY_HARD) * 1.3)) })
 const dmgAffix = (type, tier) => ({ kind: 'dmgType', type, value: Math.round((DMG_LINE_BASE + DMG_LINE_RANGE) * (1 + tier * DMG_LINE_TIER_GROWTH)) })
 function affixesFor(elem, ilvl, tier, count) {

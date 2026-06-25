@@ -40,8 +40,12 @@ types.ts → game/*.ts (data + fonctions PURES) → store.ts (état + actions + 
 
 - `npm run build` — typecheck (`tsc -b`) + bundle. **Doit rester vert.**
 - `npm run validate` — intégrité de l'arbre de talents (après toute édition de `talents.ts`).
-- Sims d'équilibrage après tout changement de scaling : `npm run ttk` / `sim` / `survival` / `mur` /
-  `eco` / `weights`. Détails : [`scripts/README.md`](scripts/README.md).
+- **Équilibrage de builds = vrais builds uniquement.** Le seul harnais est `npm run bench`
+  (`builds-bench`, catalogue de référence + soumissions communautaires, via le moteur du Simulateur) ;
+  `npm run leaderboard` produit le dashboard. Les anciens sims de combat à builds **synthétiques**
+  (`ttk`/`sim`/`survival`/`mur`/`dungeon`/`weights`/`dps`/`explorer`/`sandbox` + sims de synergie) ont
+  été retirés — non représentatifs. Couverture/éco encore en place : `npm run uniques` / `eco` /
+  `eco-craft` / `maitrise`. Détails : [`scripts/README.md`](scripts/README.md).
 
 ## Conventions
 

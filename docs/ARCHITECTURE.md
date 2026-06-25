@@ -175,10 +175,11 @@ patterns gardent le coût borné (tous **sans changer aucune formule** — véri
 
 Outils Node qui **transpilent le TS du jeu en mémoire** (esbuild) et exécutent la **vraie
 logique** — pas de copie de règles, donc pas de dérive. Voir [`scripts/README.md`](../scripts/README.md).
-Exemples : `npm run validate` (anti-régression arbre), `npm run sim`/`ttk`/`survival`/`dungeon`
-(équilibrage), `npm run eco`/`eco-craft` (économie de farm / de craft), `npm run uniques`
-(valeur marginale des uniques + sets), `npm run maitrise` (câblage du Conseil), `npm run mur`
-(mur de progression).
+Exemples : `npm run validate` (anti-régression arbre), `npm run bench`/`leaderboard` (**équilibrage de
+builds sur les vrais builds** : catalogue de référence + soumissions communautaires, via le moteur du
+Simulateur — c'est désormais le seul harnais de build, les sims de combat à builds synthétiques ayant
+été retirés), `npm run eco`/`eco-craft` (économie de farm / de craft), `npm run uniques`
+(valeur marginale des uniques + sets), `npm run maitrise` (câblage du Conseil).
 
 ## Conventions
 

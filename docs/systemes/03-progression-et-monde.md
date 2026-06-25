@@ -3,7 +3,8 @@
 > Source : [`progression.ts`](../../src/game/progression.ts) (**source de vérité chiffrée**),
 > [`enemies.ts`](../../src/game/enemies.ts), [`biomes.ts`](../../src/game/biomes.ts),
 > [`biomeBonus.ts`](../../src/game/biomeBonus.ts), [`offline.ts`](../../src/game/offline.ts),
-> [`prestige.ts`](../../src/game/prestige.ts). Partagé avec `scripts/ttk-sim.mjs` & `sim-mur.mjs`.
+> [`prestige.ts`](../../src/game/prestige.ts). Les knobs ci-dessous sont la **source de vérité
+> chiffrée** (les anciens sims de combat synthétiques `ttk`/`mur` ont été retirés — cf. `scripts/README.md`).
 
 ## Rôle
 
@@ -21,7 +22,7 @@ Définit **la courbe de puissance unique** du jeu (joueur ET ennemis), le décou
 | `ILVL_MAX` | **700** | Cap dur : aucun drop/craft/surilvl/boss de raid ne dépasse. |
 | `RARITY_ILVL_PER_TIER` | **8** | Rareté = bonus **additif** en ilvl-équiv (+8/cran ≈ +15 % puissance). |
 | `ITEM_BUDGET0` | **8.0** | Échelle du budget de stats (`itemBudget` exponentiel en ilvl effectif). |
-| `ENEMY_HP0` / `ENEMY_DMG0` | **12500 / 320** | Échelles de PV/dégâts trash, calibrées par `npm run ttk`. |
+| `ENEMY_HP0` / `ENEMY_DMG0` | **12500 / 320** | Échelles de PV/dégâts trash (knobs de progression). |
 
 > **Invariance TTK** : joueur et ennemis partageant `b`, le temps de kill est **constant** à stuff
 > calé ; un sur-stuff de +Δ ilvl ne donne qu'une réduction **bornée** `b^Δ` → plus de boule de neige.

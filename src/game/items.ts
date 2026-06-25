@@ -95,7 +95,6 @@ function affixKey(a: Affix): string {
 }
 
 /** Valeur d'une ligne « +% dégâts du type » : base aléatoire × croissance par tier de rareté.
- *  Exportées pour le harnais d'équilibrage (scripts/stat-weights.mjs).
  *  Lignes de dégâts typés : 8..20 ×(1+0.07·tier) — couplé au soft cap de damage.ts. */
 export const DMG_LINE_BASE = 8
 export const DMG_LINE_RANGE = 12

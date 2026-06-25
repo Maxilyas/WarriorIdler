@@ -62,8 +62,8 @@ if (path) {
   if (!save) { console.error('✗ Fichier non reconnu comme une sauvegarde Warrior Idler (champ "characters" manquant ?).'); process.exit(1) }
 } else {
   demo = true
-  // Perso de démonstration : niv 100 stuffé Cosmique iLvl 155 (config réaliste de fin de jeu, calée sur
-  // la table de dungeon-sim), chemin Guerrier réel (mêmes ids que ttk-sim) — produit un MIX de verdicts.
+  // Perso de démonstration : niv 100 stuffé Cosmique iLvl 155 (config réaliste de fin de jeu),
+  // chemin Guerrier réel — produit un MIX de verdicts.
   const c = makeCharacter('Démo (Guerrier)', 100, 'force')
   const eq = {}
   for (const s of EQUIP_SLOTS) eq[s.id] = generateItem({ ilvl: 155, rarity: 'cosmique', type: s.accepts, primary: 'force', stars: 3, ...(s.accepts === 'armePrincipale' ? { element: 'physique' } : {}) })

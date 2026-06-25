@@ -25,7 +25,7 @@ Les **7 types de dégâts** et le système de **résistances relatives** en sont
     `convertFromMain` (alchimiste, basé sur le type d'arme).
 - **Soft cap du bonus par type** : `softCap(bonus, TYPE_BONUS_SOFT=0.4, TYPE_BONUS_HARD=0.8)`.
   Plein rendement à +40 %, asymptote +80 %. Empêche qu'empiler 16 lignes d'un type domine l'ilvl
-  (régression mesurée par `npm run weights`, corrigée v0.22 puis v0.35).
+  (régression de stacking de type, corrigée v0.22 puis v0.35).
 
 ### Triangle d'élément (v0.37)
 
@@ -42,7 +42,7 @@ devient payant, et le multi-classe est un levier (apporter le contre).
 - **Sorts** : `spellTypeMult(p, spellTypes)` = blend entre la moyenne du profil et le bonus du
   **propre type du sort**, contrôlé par **`SPELL_TYPE_MATCH = 0.7`** (1 = matching pur, 0 = ancien).
   Un sort multi-élément prend le **mieux stacké** de ses types (`spellElementTypes`). → recalibrable
-  via `npm run ttk`.
+  via les knobs de type (`damage.ts`).
 
 ## Résolution d'un coup — `rollHit(derived, profile, enemy, opts)`
 
@@ -117,5 +117,5 @@ XP + or. Les cooldowns, compteurs de gemmes et états d'archétypes sont **trans
 
 - La résist ennemie est **uniforme par type** : `spellResistMult` est donc une atténuation égale
   sur tous les éléments (contrée par la Pénétration). Affinité élémentaire mise à part.
-- Équilibrage vérifié par `npm run sim` / `ttk` / `survival` / `weights` — à relancer après tout
-  changement de scaling.
+- Équilibrage de builds vérifié par `npm run bench` (vrais builds : référence + communauté) — à
+  relancer après tout changement de scaling.
