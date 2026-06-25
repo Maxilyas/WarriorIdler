@@ -8,12 +8,14 @@
 //   • VERDICT par pièce : trop dur / sur cible / trop facile (calé sur la bande qui DEVRAIT la battre)
 //
 // DEUX sources de corpus (cf. docs/DIFFICULTE.md §9 — « test sur de VRAIS builds ») :
-//   📚/🌍  Référence + communauté (codes WIB1 → SimConfig)  → joués via le VRAI moteur `runSim`.
-//   💾     Save export du joueur (Réglages → exporter)       → équipe RÉELLE jouée via
-//          `makeRaidEncounter` + `partyCombatStepMulti` (duo-aware Abîme), avec les VRAIS mods de compte
-//          (upgrades/maîtrises/hauts faits) + gemmes/runes/pactes/conso — exactement comme save-audit.
-//          Sa progression réelle (`bestStage` / `raidProgress`) sert de VÉRITÉ TERRAIN → on mesure
-//          l'offset sim-vs-réel (le sim suppose un jeu parfait ⇒ ~+1 tier optimiste).
+//   📚/🌍  Référence + communauté (codes WIB1 → SimConfig)  → joués via `runSim` (moteur du Simulateur,
+//          SANS la couche de mécaniques de raid → encore ~+2 tiers optimiste ; chantier de suivi).
+//   💾     Save export du joueur (Réglages → exporter)       → équipe RÉELLE jouée via le VRAI pas de
+//          raid `raidCombatStep` (storeHelpers.ts, PARTAGÉ avec le tick live) : Nova/heal-cut, Estoc
+//          primordial, Frappe partagée, Estocade, Déferlante, rotate, enrage/execute/Surchauffe, duo de
+//          l'Abîme — TOUTE la pression de raid, plus les VRAIS mods de compte + gemmes/runes/pactes/conso.
+//          Sa progression réelle (`bestStage` / `raidProgress`) sert de VÉRITÉ TERRAIN → offset sim-vs-réel
+//          (mesuré ≈ 0 une fois les raids poussés à fond : le sim colle à la réalité).
 //
 // On bucketise par bande de progression (bestStage) et on alerte « cluster au sommet vs outlier
 // solitaire » (§1 : l'alerte est l'ISOLEMENT d'un build, pas le ×20 brut).
@@ -21,9 +23,8 @@
 //   Usage :  node scripts/bench-difficulty.mjs [chemin/save.json] [--json]   (alias : npm run bench-diff)
 //
 // MESURE PURE : aucun knob d'équilibrage touché ici. Tout transpile le vrai TS du jeu (zéro copie de
-// règles) → les verdicts reflètent l'équilibrage réel. Fidélité = celle de save-audit (kit de boss
-// télégraphié + jeu parfait ; les novas/déferlantes/rotations périodiques de tickRaid sont omises, d'où
-// le léger optimisme assumé).
+// règles) → les verdicts reflètent l'équilibrage réel. Le chemin SAVE partage `raidCombatStep` avec le
+// tick live → fidélité COMPLÈTE des mécaniques de raid (≠ runSim/save-audit, encore au moteur nu).
 import { build } from 'esbuild'
 import { readFileSync, writeFileSync } from 'node:fs'
 
@@ -37,28 +38,27 @@ const M = await load(`
   export { decodeBuild } from './src/game/buildCode.ts'
   export { setGlobalCombatMods, charMaxHp, charEhp, charDps, charResist } from './src/game/character.ts'
   export { EQUIP_SLOTS } from './src/game/slots.ts'
-  export { RAID_LIST, makeRaidEncounter, raidBerserkTime, raidTierCap, raidReqs, globalTier } from './src/game/raids.ts'
-  export { partyCombatStepMulti, resetAllCooldowns, fuelReset, crescendoReset, crescendoBonus } from './src/game/combatEngine.ts'
+  export { RAID_LIST, generateRaid, raidBerserkTime, raidTierCap, raidReqs, globalTier } from './src/game/raids.ts'
+  export { resetAllCooldowns, fuelReset, crescendoReset } from './src/game/combatEngine.ts'
   export { computeGlobalMods } from './src/game/upgrades.ts'
   export { achievementBonuses } from './src/game/achievements.ts'
   export { sanitizeRaw } from './src/game/save.ts'
   export { getPower, POWERS } from './src/game/powers.ts'
   export { getTalent } from './src/game/talents.ts'
-  export { UNIQUE_EFFECTS } from './src/game/uniques.ts'
+  export { UNIQUE_EFFECTS, aggregateUniqueActives } from './src/game/uniques.ts'
   export { craftMods } from './src/game/metiers.ts'
   export { condGemMods } from './src/game/condGems.ts'
   export { equippedTimeRunes, timeRuneMods } from './src/game/enchants.ts'
-  export { activeBrewBuffs, teamPactMods, teamGemOpts } from './src/game/storeHelpers.ts'
-  export { maitriseBonus } from './src/game/biomeBonus.ts'
+  export { activeBrewBuffs, teamPactMods, teamGemOpts, raidCombatStep } from './src/game/storeHelpers.ts'
   export { CHAPITRE_SIZE, chapitreOf } from './src/game/progression.ts'
 `)
 const {
   runSim, getClassPreset, initTalents, REFERENCE_BUILDS, decodeBuild,
   setGlobalCombatMods, charMaxHp, charEhp, charDps, charResist, EQUIP_SLOTS,
-  RAID_LIST, makeRaidEncounter, raidBerserkTime, raidTierCap, raidReqs, globalTier,
-  partyCombatStepMulti, resetAllCooldowns, fuelReset, crescendoReset, crescendoBonus,
-  computeGlobalMods, achievementBonuses, sanitizeRaw, getPower, POWERS, getTalent, UNIQUE_EFFECTS,
-  craftMods, condGemMods, equippedTimeRunes, timeRuneMods, activeBrewBuffs, teamPactMods, teamGemOpts, maitriseBonus,
+  RAID_LIST, generateRaid, raidBerserkTime, raidTierCap, raidReqs, globalTier,
+  resetAllCooldowns, fuelReset, crescendoReset,
+  computeGlobalMods, achievementBonuses, sanitizeRaw, getPower, POWERS, getTalent, UNIQUE_EFFECTS, aggregateUniqueActives,
+  craftMods, condGemMods, equippedTimeRunes, timeRuneMods, activeBrewBuffs, teamPactMods, teamGemOpts, raidCombatStep,
 } = M
 
 /* ---------- KNOBS (lecture seule — purement de mesure) ---------- */
@@ -96,7 +96,6 @@ const savePath = process.argv.slice(2).find((a) => !a.startsWith('--'))
 /* CORPUS — communauté (WIB1) + save export                              */
 /* ====================================================================== */
 const NEUTRAL = { power: 1, attackSpeed: 1, vitality: 1 }
-const RAID_ELEM = (def) => (def.element === 'rotating' ? 'arcane' : def.element) // type d'attaque pour 'rotating'
 
 // La grille balaie les 5 raids. raidTierCap : 10 (base) / 2 (Abîme).
 const RAIDS = RAID_LIST
@@ -132,7 +131,7 @@ for (const { name, config, source } of [...refCfgs, ...communityCfgs]) {
     name, source, band: config.bestStage ?? 1, ilvl: config.ilvl ?? 0, truth: null,
     sig: cfgKeystones(config),
     applyMods: () => setGlobalCombatMods(NEUTRAL),
-    // Cellule via runSim (boss mono ; Abîme mono → léger sous-estimé, comme le note save-audit).
+    // Cellule via runSim (moteur nu, SANS mécaniques de raid → ~+2 tiers optimiste ; chantier de suivi).
     cell(def, tier) {
       const r = runSim({ ...config, content: { kind: 'raid', id: def.id, tier, scan: false } })
       const o = r.outcome
@@ -141,7 +140,7 @@ for (const { name, config, source } of [...refCfgs, ...communityCfgs]) {
   })
 }
 
-/* ---- (2) Save export : équipe réelle → cellule via le moteur d'équipe (save-audit duo-aware) ---- */
+/* ---- (2) Save export : équipe réelle → cellule via raidCombatStep (mécaniques de raid COMPLÈTES) ---- */
 function loadSave(path) {
   let raw
   try { raw = JSON.parse(readFileSync(path, 'utf8')) }
@@ -155,14 +154,15 @@ function loadSave(path) {
 if (savePath) {
   const save = loadSave(savePath)
   const eco = computeGlobalMods(save.upgrades ?? {}, save.maitrise ?? {}, achievementBonuses(save.achievements ?? {}))
-  // KIT DE COMBAT RÉEL (full-fidélité) — reconstruit le `mods` comme tickRaid (cf. save-audit).
+  // KIT DE COMBAT RÉEL (full-fidélité) — gemmes/runes/pactes/conso/uniques, exactement comme tickRaid.
+  // (heroMult, dmgMult, frein de régén, etc. sont calculés DANS raidCombatStep — source unique.)
   const craft = craftMods(save.metiers ?? {})
   const cond = condGemMods(save.characters, craft.gemSpec, teamGemOpts(save, craft))
   const runes = timeRuneMods(equippedTimeRunes(save.characters), craft.runisteTempo)
   const buffs = activeBrewBuffs(save)
   const pact = teamPactMods(save, craft, buffs)
-  const heroMult = (1 + maitriseBonus(save.bestStage ?? 1)) * (1 + crescendoBonus(cond.crescendoCap)) * buffs.dmgMult
-  const PLAYER_MODS = { heroMult, cond, runes, pact, content: { antidote: buffs.antidote ?? undefined } }
+  const KIT = { cond, runes, pact, buffs, uniqueActives: aggregateUniqueActives(save.characters) }
+  const bestStage = save.bestStage ?? 1
 
   const party0 = save.characters
   const freshParty = () => {
@@ -171,30 +171,37 @@ if (savePath) {
     resetAllCooldowns(p); fuelReset(); crescendoReset()
     return p
   }
-  // Un combat d'équipe vs la RENCONTRE (boss seul ou duo de l'Abîme) jusqu'au kill (win) ou wipe/temps (loss).
+  // Combat d'équipe via le VRAI pas de raid (raidCombatStep : Nova/Estoc/Frappe/Estocade/Déferlante/
+  // rotate/enrage inclus) jusqu'au kill du boss (win), au wipe, ou au timer d'enrage (mur de DPS).
   function simKill(def, tier) {
     let p = freshParty()
-    let enemies = makeRaidEncounter(def, tier, RAID_ELEM(def), save.bestStage ?? 1, p.length)
-    const limit = raidBerserkTime(def, tier)
-    const death = {}; let t = 0
-    for (; t < limit && enemies.some((e) => e.hp > 0) && p.some((x) => x.hp > 0); t += 0.2) {
-      const r = partyCombatStepMulti(p, enemies, 0.2, PLAYER_MODS); p = r.chars; enemies = r.enemies
+    const r = generateRaid(def.id, tier, bestStage, p.length)
+    const death = {}; let t = 0, won = false, wiped = false
+    for (; t < r.berserkAt && !won && !wiped && p.some((x) => x.hp > 0); t += 0.2) {
+      const step = raidCombatStep(p, r, 0.2, KIT, bestStage)
+      p = step.chars
+      r.enemies = step.enemies; r.fightTime = step.fightTime
+      r.novaCd = step.novaCd; r.swarmCd = step.swarmCd; r.rotateCd = step.rotateCd; r.element = step.element; r.rotateIdx = step.rotateIdx
       for (const ch of p) if (ch.hp <= 0 && !(ch.name in death)) death[ch.name] = t
+      won = step.bossDead; wiped = step.wiped // win = BOSS mort (comme tickRaid), pas tous les adds
     }
     const order = Object.entries(death).sort((a, b) => a[1] - b[1])
-    const boss = enemies[0]
-    return { win: enemies.every((e) => e.hp <= 0), ttk: t, firstDead: order[0]?.[0] ?? null, firstT: order[0]?.[1] ?? 0, bossLeft: boss.hp / boss.maxHp }
+    const boss = r.enemies.find((e) => e.boss) ?? r.enemies[0]
+    return { win: won, ttk: t, firstDead: order[0]?.[0] ?? null, firstT: order[0]?.[1] ?? 0, bossLeft: boss ? boss.hp / boss.maxHp : 0 }
   }
-  // Sonde de survie : même rencontre, PV ≈∞ → on lit COMBIEN DE TEMPS l'équipe tient (TTD).
+  // Sonde de survie : même rencontre, PV du boss ≈∞ → COMBIEN DE TEMPS l'équipe tient (TTD), pression complète.
   function simSurvive(def, tier) {
     let p = freshParty()
-    let enemies = makeRaidEncounter(def, tier, RAID_ELEM(def), save.bestStage ?? 1, p.length)
-    for (const e of enemies) { e.hp = 1e18; e.maxHp = 1e18 }
-    const window = raidBerserkTime(def, tier) * PROBE_FACTOR
+    const r = generateRaid(def.id, tier, bestStage, p.length)
+    for (const e of r.enemies) { e.hp = 1e18; e.maxHp = 1e18 }
+    const window = r.berserkAt * PROBE_FACTOR
     let t = 0, firstT = null
     for (; t < window && p.some((x) => x.hp > 0); t += 0.2) {
-      const r = partyCombatStepMulti(p, enemies, 0.2, PLAYER_MODS); p = r.chars; enemies = r.enemies
-      for (const e of enemies) { e.hp = 1e18 } // re-clamp (DoT/thorns peuvent les entamer)
+      const step = raidCombatStep(p, r, 0.2, KIT, bestStage)
+      p = step.chars
+      r.enemies = step.enemies; r.fightTime = step.fightTime
+      r.novaCd = step.novaCd; r.swarmCd = step.swarmCd; r.rotateCd = step.rotateCd; r.element = step.element; r.rotateIdx = step.rotateIdx
+      for (const e of r.enemies) { e.hp = 1e18 } // re-clamp : le boss ne meurt jamais (sonde pure)
       if (firstT === null && p.some((x) => x.hp <= 0)) firstT = t
     }
     return { ttd: firstT ?? window, survived: firstT === null }
@@ -342,8 +349,10 @@ if (saveBuild && saveBuild.truth) {
     const med = median(offsets)
     console.log(`  → offset médian : ${med >= 0 ? '+' : ''}${med.toFixed(1)} tier`)
     console.log(med >= 3
-      ? '    ⚠ offset large : surtout des RAIDS NON POUSSÉS à leur plafond (build sous-exploité) — pas que l\'optimisme du sim.'
-      : '    (le sim suppose un jeu parfait ⇒ ~+1 tier optimiste)')
+      ? '    ⚠ offset large : surtout des RAIDS NON POUSSÉS à leur plafond (build sous-exploité) — pas l\'optimisme du sim.'
+      : med >= 1
+        ? '    (léger optimisme résiduel : le sim suppose un jeu parfait)'
+        : '    ✓ le sim colle à la réalité (toutes les mécaniques de raid sont simulées via raidCombatStep).')
   }
 } else if (saveBuild) {
   console.log('\n── OFFSET SIM-vs-RÉEL : vérité terrain absente du save (raidProgress vide) ──')
@@ -416,8 +425,9 @@ console.log(`  🔴 trop dur  : ${hard.join(' · ') || 'aucun'}`)
 console.log(`  🟡 trop facile : ${easy.join(' · ') || 'aucun'}`)
 
 console.log('\n' + '═'.repeat(78))
-console.log('Fidélité = save-audit (kit de boss télégraphié + jeu parfait ; novas/déferlantes/rotations')
-console.log('périodiques de tickRaid omises ⇒ ~+1 tier optimiste — d\'où l\'offset mesuré ci-dessus).')
+console.log('Chemin SAVE (💾) : FIDÉLITÉ COMPLÈTE — raidCombatStep partagé avec le tick live (Nova/Estoc/')
+console.log('Frappe/Estocade/Déferlante/rotate/enrage…). Chemin communauté (🌍) : runSim, moteur nu, encore')
+console.log('~+2 tiers optimiste (chantier de suivi : router runSim/save-audit sur raidCombatStep aussi).')
 console.log(savePath ? 'Grille terminée.' : 'Grille sur le corpus communautaire. Ajoute ta save : node scripts/bench-difficulty.mjs ta-save.json')
 
 /* ---- (optionnel) dump JSON pour un futur dashboard ---- */

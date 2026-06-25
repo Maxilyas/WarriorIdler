@@ -52,7 +52,8 @@ import {
 } from './dungeons'
 import {
   generateRaid, makeRaidAdd, raidMaxAdds, getRaidDef, raidIlvl, raidRarityWindow, rollRaidLootCount,
-  raidTrophyGain, raidFragments, raidCosmicQty, pickRaidLootType, PAIR_ENRAGE_MULT, NOVA_MULT, RAID_LIST
+  raidTrophyGain, raidFragments, raidCosmicQty, pickRaidLootType, PAIR_ENRAGE_MULT, NOVA_MULT, RAID_LIST,
+  type ActiveRaid
 } from './raids'
 import { SETS } from './sets'
 import type { GameState, ChestReward, ForgeContractDef, BrewBuffs, MysteryBox, LogEntry, LogKind } from './store'
@@ -1003,11 +1004,30 @@ export function applyAoe(chars: Character[], baseDmg: number, type: DamageType, 
   })
 }
 
-export function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
-  const r = s.raid!
+/** Profil de combat du joueur passé à `raidCombatStep` (gemmes/runes/pactes/conso/uniques) — calculé par
+ *  l'appelant (le store depuis `GameState`, le banc depuis un save). */
+export interface RaidKit {
+  cond: ReturnType<typeof condGemMods>
+  runes: ReturnType<typeof timeRuneMods>
+  pact: ReturnType<typeof teamPactMods>
+  buffs: BrewBuffs
+  uniqueActives: ReturnType<typeof aggregateUniqueActives>
+}
+
+/**
+ * UN PAS (dt) de combat de raid + TOUTES ses mécaniques : pression continue (leech/enrage/execute/
+ * Surchauffe Forge), Avarice, furie du duo de l'Abîme, rotate, Nova (+heal-cut), Estoc primordial,
+ * Frappe partagée, Estocade, Déferlante (renforts), et nettoyage. Logique PURE (ne mute NI `charsIn`
+ * NI `r`, ne touche PAS au store/persist/récompenses) → réutilisée TELLE QUELLE par le banc de
+ * difficulté (`scripts/bench-difficulty.mjs`) : sans elle, le sim manquait toute la pression de raid
+ * et sur-estimait les builds (surtout défensifs). `bestStage` = bestStage de COMPTE (heroMult) ; les
+ * renforts s'ancrent sur `r.bestStage ?? bestStage`, exactement comme le tick live.
+ */
+export function raidCombatStep(charsIn: Character[], r: ActiveRaid, dt: number, kit: RaidKit, bestStage: number) {
   const def = getRaidDef(r.raidId)
   const mech = r.mechanics
   const fightTime = r.fightTime + dt
+  const events: { text: string; kind: LogKind }[] = []
 
   // --- Mécaniques de pression continue ---
   const drain = mech.includes('leech') ? 0.028 : 0 // Sangsue : le boss se régénère (check de burst)
@@ -1023,28 +1043,21 @@ export function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) 
   // entamée, plus elle frappe fort (tension DPS↔survie, anti-glass-cannon).
   if (def.id === 'forge') dmgMult *= 1 + Math.min(0.8, (1 - bossIn.hp / Math.max(1, bossIn.maxHp)) * 0.8)
 
-  const rCraft = craftMods(s.metiers)
-  const rCond = condGemMods(s.characters, rCraft.gemSpec, teamGemOpts(s, rCraft))
-  const rRunes = timeRuneMods(equippedTimeRunes(s.characters), rCraft.runisteTempo)
-  const rBuffs = activeBrewBuffs(s)
-  const rPact = teamPactMods(s, rCraft, rBuffs)
-  const rUActives = aggregateUniqueActives(s.characters) // ✦ actifs des uniques équipés
-  const rHeroMult = (1 + maitriseBonus(s.bestStage)) * (1 + crescendoBonus(rCond.crescendoCap))
-    * rBuffs.dmgMult
-    * (rBuffs.oil && rBuffs.oil.type === r.element ? 1 + rBuffs.oil.pct : 1)
-  const res = partyCombatStepMulti(s.characters, r.enemies, dt, {
-    enrage, regen: drain, fightTime, dmgMult, heroMult: rHeroMult, cond: rCond, runes: rRunes, pact: rPact,
-    uniqueActives: rUActives,
+  const heroMult = (1 + maitriseBonus(bestStage)) * (1 + crescendoBonus(kit.cond.crescendoCap))
+    * kit.buffs.dmgMult
+    * (kit.buffs.oil && kit.buffs.oil.type === r.element ? 1 + kit.buffs.oil.pct : 1)
+  const res = partyCombatStepMulti(charsIn, r.enemies, dt, {
+    enrage, regen: drain, fightTime, dmgMult, heroMult, cond: kit.cond, runes: kit.runes, pact: kit.pact,
+    uniqueActives: kit.uniqueActives,
     // 🏅 Trophée de guerre : la gemme offre ses points de résist à l'équipe EN RAID.
     // « Mal de l'abîme » : régén bridée en raid (la vie redevient une ressource).
-    content: { resistBonus: rCond.tropheeRes, regenMult: RAID_REGEN_MULT, antidote: rBuffs.antidote ?? undefined },
+    content: { resistBonus: kit.cond.tropheeRes, regenMult: RAID_REGEN_MULT, antidote: kit.buffs.antidote ?? undefined },
   })
   let chars = res.chars
   let enemies = res.enemies
   const aliveBosses = enemies.filter((e) => e.boss && e.hp > 0)
   const boss = aliveBosses[0] ?? enemies[0]
-  let log = s.log
-  for (const n of res.revived ?? []) log = pushLog(log, `🕊️ Sursis : ${n} survit in extremis !`, 'info')
+  for (const n of res.revived ?? []) events.push({ text: `🕊️ Sursis : ${n} survit in extremis !`, kind: 'info' })
 
   // Reliquaire « Avarice » : chaque renfort qui tombe REND 3% des PV au boss (l'avare
   // récupère son dû) → tuer les adds dans le mauvais ordre te punit, l'ordre de kill compte.
@@ -1052,7 +1065,7 @@ export function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) 
     const killed = Math.max(0, r.enemies.filter((e) => e.add && e.hp > 0).length - enemies.filter((e) => e.add && e.hp > 0).length)
     if (killed > 0 && boss.hp > 0) {
       boss.hp = Math.min(boss.maxHp, boss.hp + boss.maxHp * 0.03 * killed)
-      log = pushLog(log, `🪙 ${boss.name} : Avarice — ${killed} renfort(s) tombé(s), il récupère des PV.`, 'info')
+      events.push({ text: `🪙 ${boss.name} : Avarice — ${killed} renfort(s) tombé(s), il récupère des PV.`, kind: 'info' })
     }
   }
 
@@ -1060,7 +1073,7 @@ export function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) 
   if (aliveBosses.length === 1 && !aliveBosses[0].enraged && enemies.some((e) => e.boss && e.hp <= 0)) {
     aliveBosses[0].enraged = true
     aliveBosses[0].damage = Math.round(aliveBosses[0].damage * PAIR_ENRAGE_MULT)
-    log = pushLog(log, `💢 FURIE DU SURVIVANT : ${aliveBosses[0].name} s'embrase (+50% dégâts) !`, 'death')
+    events.push({ text: `💢 FURIE DU SURVIVANT : ${aliveBosses[0].name} s'embrase (+50% dégâts) !`, kind: 'death' })
   }
   let novaCd = r.novaCd - dt
   let swarmCd = r.swarmCd - dt
@@ -1074,7 +1087,7 @@ export function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) 
     rotateIdx = (rotateIdx + 1) % r.rotateList.length
     element = r.rotateList[rotateIdx]
     for (const b of aliveBosses) b.damageType = element
-    log = pushLog(log, `🌈 ${boss.name} bascule en ${DAMAGE_TYPES[element].name} !`, 'info')
+    events.push({ text: `🌈 ${boss.name} bascule en ${DAMAGE_TYPES[element].name} !`, kind: 'info' })
   }
   // Nova cataclysmique : grosse AoE typée (check d'EHP/mitigation). NOVA_MULT plat : la difficulté
   // du raid est DÉJÀ dans boss.damage (avant, ×4×baseDifficulty la comptait deux fois).
@@ -1084,14 +1097,14 @@ export function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) 
     chars = applyAoe(chars, boss.damage * NOVA_MULT, element, enemyReq(boss, element))
     // « Blessures mortelles » : la Nova ouvre une fenêtre où les SOINS NE SUIVENT PLUS (heal-cut).
     chars = chars.map((c) => (c.hp > 0 ? { ...c, healCut: HEALCUT_DUR } : c))
-    log = pushLog(log, `☄️ ${boss.name} déchaîne une Nova ${DAMAGE_TYPES[element].name} (soins réduits !) !`, 'death')
+    events.push({ text: `☄️ ${boss.name} déchaîne une Nova ${DAMAGE_TYPES[element].name} (soins réduits !) !`, kind: 'death' })
   }
   // « Estoc primordial » : coup périodique en % des PV MAX qui IGNORE armure/résist/
   // mitigation → punit l'empilement d'EHP & de réduction (le tank « increvable »). Ne mord que sur
   // les combats QUI DURENT (1er estoc à ESTOC_INTERVAL s) — un kill rapide n'est pas concerné.
   if (Math.floor(fightTime / ESTOC_INTERVAL) > Math.floor((fightTime - dt) / ESTOC_INTERVAL)) {
     chars = chars.map((c) => (c.hp > 0 ? { ...c, hp: Math.max(0, c.hp - charMaxHp(c) * ESTOC_PCT) } : c))
-    log = pushLog(log, `🗡️ ${boss.name} porte un Estoc primordial (${Math.round(ESTOC_PCT * 100)}% PV max, imparable) !`, 'death')
+    events.push({ text: `🗡️ ${boss.name} porte un Estoc primordial (${Math.round(ESTOC_PCT * 100)}% PV max, imparable) !`, kind: 'death' })
   }
   // « Frappe partagée » : un gros coup RÉPARTI sur les héros vivants → soloer la frappe = la prendre
   // PLEINE (impose d'avoir ≥2 survivants pour la diluer).
@@ -1099,7 +1112,7 @@ export function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) 
     const living = chars.filter((c) => c.hp > 0).length
     if (living > 0) {
       chars = applyAoe(chars, (boss.damage * FRAPPE_MULT) / living, element, enemyReq(boss, element))
-      log = pushLog(log, `⚔️ ${boss.name} : Frappe partagée (÷${living} survivant${living > 1 ? 's' : ''}) !`, 'death')
+      events.push({ text: `⚔️ ${boss.name} : Frappe partagée (÷${living} survivant${living > 1 ? 's' : ''}) !`, kind: 'death' })
     }
   }
   // « Estocade » : frappe le héros le plus BAS en PV (le DPS « protégé » doit aussi survivre).
@@ -1108,7 +1121,7 @@ export function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) 
     chars.forEach((c, i) => { if (c.hp > 0 && c.hp < lo) { lo = c.hp; li = i } })
     if (li >= 0) {
       chars = applyAoe(chars, boss.damage * 2.2, element, enemyReq(boss, element), li)
-      log = pushLog(log, `🎯 ${boss.name} : Estocade sur le plus vulnérable !`, 'death')
+      events.push({ text: `🎯 ${boss.name} : Estocade sur le plus vulnérable !`, kind: 'death' })
     }
   }
   // Déferlante : fait SURGIR des renforts réels (combat à plusieurs adversaires).
@@ -1123,12 +1136,12 @@ export function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) 
     const ADD_TAGS = ['α', 'β', 'γ', 'δ', 'ε', 'ζ']
     let uid = enemies.reduce((m, e) => Math.max(m, e.uid ?? 0), 1000)
     for (let k = 0; k < toSpawn; k++) {
-      const add = makeRaidAdd(def, r.tier, element, r.bestStage ?? s.bestStage, s.characters.length)
+      const add = makeRaidAdd(def, r.tier, element, r.bestStage ?? bestStage, charsIn.length)
       add.uid = ++uid
       add.name = `${add.name} ${ADD_TAGS[(uid - 1001) % ADD_TAGS.length]}`
       enemies.push(add)
     }
-    if (toSpawn > 0) log = pushLog(log, `🐛 ${toSpawn} renfort(s) surgissent !`, 'death')
+    if (toSpawn > 0) events.push({ text: `🐛 ${toSpawn} renfort(s) surgissent !`, kind: 'death' })
   }
 
   // Renforts : nettoyage des morts (le boss en [0] est toujours conservé). Le décompte de
@@ -1140,10 +1153,39 @@ export function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) 
     return true
   })
 
+  return {
+    chars, enemies, boss, fightTime, novaCd, swarmCd, rotateCd, element, rotateIdx,
+    revived: res.revived ?? [], events,
+    wiped: !chars.some((c) => c.hp > 0),
+    bossDead: boss.hp <= 0,
+    berserkOvertime: overtime,
+  }
+}
+
+export function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) {
+  const r = s.raid!
+  const def = getRaidDef(r.raidId)
+  const mech = r.mechanics
+
+  // Profil de combat du joueur (gemmes/runes/pactes/conso/uniques) — RÉUTILISÉ pour les récompenses ci-dessous.
+  const rCraft = craftMods(s.metiers)
+  const rCond = condGemMods(s.characters, rCraft.gemSpec, teamGemOpts(s, rCraft))
+  const rRunes = timeRuneMods(equippedTimeRunes(s.characters), rCraft.runisteTempo)
+  const rBuffs = activeBrewBuffs(s)
+  const rPact = teamPactMods(s, rCraft, rBuffs)
+  const rUActives = aggregateUniqueActives(s.characters) // ✦ actifs des uniques équipés
+  // UN PAS de combat de raid + ses mécaniques (logique PURE, partagée avec scripts/bench-difficulty.mjs).
+  const step = raidCombatStep(s.characters, r, dt, { cond: rCond, runes: rRunes, pact: rPact, buffs: rBuffs, uniqueActives: rUActives }, s.bestStage)
+  let chars = step.chars
+  const enemies = step.enemies
+  const { fightTime, novaCd, swarmCd, rotateCd, element, rotateIdx } = step
+  let log = s.log
+  for (const ev of step.events) log = pushLog(log, ev.text, ev.kind)
+
   if (!chars.some((c) => c.hp > 0)) {
     crescendoReset() // 📯 Crescendo : l'équipe tombe, le cumul retombe
     const healed = chars.map(fullHeal)
-    const why = mech.includes('berserk') && overtime > 0 ? ' (enrage mortel — il fallait plus de DPS)' : ''
+    const why = mech.includes('berserk') && step.berserkOvertime > 0 ? ' (enrage mortel — il fallait plus de DPS)' : ''
     log = pushLog(log, `💀 Raid échoué : ${r.name}${why}. L'équipe est anéantie.`, 'death')
     const next = { ...s, characters: healed, raid: null, log }
     persistThrottled(next)
@@ -1151,7 +1193,7 @@ export function tickRaid(s: GameState, dt: number, set: (s: GameState) => void) 
     return
   }
 
-  if (boss.hp <= 0) {
+  if (step.bossDead) {
     // 🏆 Fragment de Conquête : chaque rencontre de boss vaincue réinitialise les longues recharges.
     if (rCond.conquete) resetLongestCooldown(chars)
     fuelReset() // 🜍 Purgateur : fin d'instance, le carburant retombe

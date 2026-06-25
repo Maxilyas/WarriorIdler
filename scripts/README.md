@@ -33,12 +33,14 @@ autonome et interactive** (`dist/leaderboard.html`, publiée sur GitHub Pages vi
 **Harnais de DIFFICULTÉ en mode GRILLE** (≠ `bench`, qui scanne le max par build). Rejoue tout le corpus
 contre une **grille fixe** (chaque tier de chaque raid) et répond à *« quel raid mure quel build, à quel
 tier, et POURQUOI »* (cf. [`../docs/DIFFICULTE.md`](../docs/DIFFICULTE.md) §9). Deux sources :
-- 🌍/📚 **communauté + référence** (codes `WIB1:` → `SimConfig`) — joués via le vrai moteur `runSim` ;
+- 🌍/📚 **communauté + référence** (codes `WIB1:` → `SimConfig`) — joués via `runSim` (moteur nu, **sans**
+  la couche de mécaniques de raid → encore ~+2 tiers optimiste ; chantier de suivi) ;
 - 💾 **save export** du joueur (Réglages → exporter, argument positionnel) — l'**équipe RÉELLE** est jouée
-  via `makeRaidEncounter` + `partyCombatStepMulti` (**duo-aware** pour l'Abîme) avec les **vrais** mods de
-  compte + gemmes/runes/pactes/conso (loader `sanitizeRaw`, comme `save-audit`). Sa progression réelle
-  (`bestStage` / `raidProgress`) sert de **vérité terrain** → le rapport mesure l'**offset sim-vs-réel**
-  (le sim suppose un jeu parfait ⇒ ~+1 tier optimiste).
+  via **`raidCombatStep`** (storeHelpers.ts, **partagé avec le tick live**) : toute la pression de raid
+  (Nova + heal-cut, Estoc primordial imparable, Frappe partagée, Estocade, Déferlante, rotate, enrage/
+  execute/Surchauffe, duo de l'Abîme) + les **vrais** mods de compte + gemmes/runes/pactes/conso (loader
+  `sanitizeRaw`). Sa progression réelle (`bestStage` / `raidProgress`) sert de **vérité terrain** → le
+  rapport mesure l'**offset sim-vs-réel** (≈ 0 une fois les raids poussés à fond : le sim colle à la réalité).
 
 Sort, **par cellule (raid × tier)** : taux de **clear %**, **TTK** médian/p25/p75, **marge de survie**
 (TTD÷TTK, via une sonde PV-boss-∞), **type de mur** (DPS / survie / résist, selon `firstDead` + déficit
@@ -47,10 +49,11 @@ vs `raidReqs`), les **keystones/uniques partagés par les clearers** (détection
 battre** (`bestStage ≥` mur du Chapitre gardé). Bucketise par **bande de progression** et **alerte
 « cluster vs outlier solitaire »** (§1 : l'alerte est l'isolement d'un build, pas le ×20 brut). `--json`
 dumpe `difficulty-report.json` (cellules brutes, pour un futur dashboard).
-> ⚠️ **Mesure pure** : aucun knob d'équilibrage n'est touché. Fidélité = celle de `save-audit` (kit de boss
-> télégraphié + jeu parfait ; les novas/déferlantes/rotations *périodiques* de `tickRaid` sont omises).
-> Les **verdicts agrégés** ne sont fiables qu'avec **N≥3 builds sur la bande** (panel de saves / corpus
-> communautaire) ; sur une **save seule**, la grille reste un **diagnostic perso** (mur de CE build + offset).
+> ⚠️ **Mesure pure** : aucun knob d'équilibrage n'est touché. Le chemin SAVE est de **fidélité complète**
+> (mêmes mécaniques que le jeu, via `raidCombatStep` extrait de `tickRaid`) ; reste à router `runSim` /
+> `save-audit` dessus pour fermer leur ~+2 tiers (suivi). Les **verdicts agrégés** ne sont fiables qu'avec
+> **N≥3 builds sur la bande** (panel de saves) ; sur une **save seule**, la grille reste un **diagnostic
+> perso** (mur de CE build + offset, désormais ≈ 0 vs la progression réelle).
 
 ### `ingest-build.mjs` (pipeline, pas un alias)
 Décode une soumission `WIB1:` (issue GitHub) et l'ajoute à `src/game/communityBuilds.json`. Lancé par
