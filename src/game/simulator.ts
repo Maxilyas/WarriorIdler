@@ -50,6 +50,13 @@ export const SIM_CLASSES: ClassPreset[] = [
     talents: ['cat_tissu', 'cl_mage', 'py_hub', 'py_pyromanie', 'py_hotstreak', 'py_combustion', 'id_mage'], support: [], powers: ['ma_eclair', 'py_boule', 'py_pyroblast', 'py_flammes', 'py_immolation'], passives: PASSIVES },
   { id: 'chasseur', label: 'Chasseur', icon: '🏹', primary: 'agilite', bias: 'agilite', elem: 'physique',
     talents: ['cat_mailles', 'cl_chasseur', 'me_hub', 'me_familier', 'me_meute', 'me_frenesie', 'me_coordination', 'id_chasseur'], support: [], powers: ['ch_tir', 'me_cmd', 'me_morsure', 'me_saignee', 'me_curee'], passives: PASSIVES },
+  // HEALERS de base (non-prestige) : Prêtre (cat_tissu → Lumière) et Druide (cat_cuir → Floraison). Stat
+  // primaire INT (les soins scalent INT). Preset = hub valide + kit de soin (runSim n'exige pas que l'arbre
+  // débloque les pouvoirs équipés ; l'arbre profond se construit dans l'éditeur / l'optimiseur).
+  { id: 'pretre', label: 'Prêtre', icon: '✨', primary: 'intelligence', bias: 'intelligence', elem: 'arcane',
+    talents: ['cat_tissu', 'cl_pretre', 'lu_hub'], support: ['lu_benediction', 'bouclier_runique'], powers: ['lu_soin', 'lu_aube', 'lu_renouveau', 'pr_chatiment'], passives: PASSIVES },
+  { id: 'druide', label: 'Druide', icon: '🌿', primary: 'intelligence', bias: 'intelligence', elem: 'nature',
+    talents: ['cat_cuir', 'cl_druide', 'fo_hub'], support: ['fo_pousse', 'bouclier_runique'], powers: ['fo_floraison', 'fo_eclosion', 'dd_griffe'], passives: PASSIVES },
 ]
 export const getClassPreset = (id: string) => SIM_CLASSES.find((c) => c.id === id) ?? SIM_CLASSES[0]
 
@@ -152,6 +159,8 @@ export const CLASS_CONSTELLATIONS: Record<string, string[]> = {
   voleur: ['coeur', 'voleur', 'assassin', 'ombrelame', 'lamevenin'],
   mage: ['coeur', 'mage', 'pyromancien', 'cryomancien', 'arcaniste', 'convergence'],
   chasseur: ['coeur', 'chasseur', 'meute', 'faucon', 'symbiose'],
+  pretre: ['coeur', 'pretre', 'lumiere', 'vide', 'crepuscule'],
+  druide: ['coeur', 'druide', 'floraison', 'lunaire', 'ronce', 'metamorphe'],
 }
 /** Budget de points par défaut (pool d'endgame approx.) pour le bac-à-sable de talents. */
 export const DEFAULT_TALENT_BUDGET = 90
