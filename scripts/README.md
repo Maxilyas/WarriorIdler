@@ -115,6 +115,16 @@ Analyse éco des donjons (v0.36) : difficulté vs murs + drop par niveau vs coû
 Rendement par run de **chaque** donjon de matériau, indexé sur la rareté **accessible** (Cache + raids)
 par chapitre. Vérifie la cohérence de `materialYieldAtChapter`.
 
+### `verif-bootstrap-tagues.mjs` — `node scripts/verif-bootstrap-tagues.mjs`
+**Pacing du bootstrap donjon** : un farmeur de donjons récupère-t-il des uniques **TAGGÉS** (et de la
+résist) AVANT de raider ? Modèle **analytique** (pas de RNG) bâti sur le vrai code — fenêtre de rareté
+de la Cache (`cacheRarityWindow` + `windowRarityDist`), gating d'unique (`rollUnique`, tier≥5) et
+`TAGGED_DROP_RATE` (donjon 5 % vs raid 30 %). Conclusion : aux niveaux **pré-raid** (Cache niv ~2-5,
+Ch.2-5) il faut **68-477 runs pour UN seul taggé** tiré au hasard parmi ~150 → le bootstrap **ne seed
+PAS** de synergie de tags exploitable avant le raid (la résist, elle, est un affixe/gemme non gaté, dispo
+dès le Ch.1). Valide le défaut `DUNGEON_BOOTSTRAP = false` de `precondition-map.mjs` et la doctrine
+« tags = pouvoir de raid T≥2 ».
+
 ## Métiers
 
 ### `verif-forge-hex.mjs` — `npm run forge-hex`
