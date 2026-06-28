@@ -22,6 +22,7 @@ const load = async (entry) => {
 const M = await load(`
   export { encodeBuild } from './src/game/buildCode.ts'
   export { runSim, initGear, SIM_UNIQUES, SIM_GEMS } from './src/game/simulator.ts'
+  export { PLAIN_UNIQUES, TAGGED_UNIQUES } from './src/game/uniques.ts'
   export { talentsByConstellation, canAllocate } from './src/game/talents.ts'
   export { computeUnlockedPowers, isSupport, isBuilder, talentPointsForLevel, setGlobalCombatMods } from './src/game/character.ts'
   export { SUPPORT_SLOTS, PASSIVE_SLOTS } from './src/game/character.ts'
@@ -29,7 +30,7 @@ const M = await load(`
   export { stageIlvl } from './src/game/enemies.ts'
   export { RARITY_LIST } from './src/game/rarities.ts'
 `)
-const { encodeBuild, runSim, initGear, SIM_UNIQUES, SIM_GEMS, talentsByConstellation, canAllocate,
+const { encodeBuild, runSim, initGear, SIM_UNIQUES, SIM_GEMS, PLAIN_UNIQUES, TAGGED_UNIQUES, talentsByConstellation, canAllocate,
   computeUnlockedPowers, isSupport, isBuilder, talentPointsForLevel, setGlobalCombatMods,
   SUPPORT_SLOTS, PASSIVE_SLOTS, getPower, POWER_SLOTS, stageIlvl, RARITY_LIST } = M
 
@@ -40,8 +41,18 @@ const TARGET_TIER = Number(process.argv[3] || 1)
 const STAGE = (TARGET_TIER + 4) * 10            // Raid T(k) gate le Chapitre (k+4)
 const LEVEL = Math.max(1, Math.round(STAGE * 0.92))
 const ILVL = stageIlvl(STAGE)
-const RARITY_CAP_TIER = 7                        // artefact (joueur équipé de l'époque)
 const POOL = talentPointsForLevel(LEVEL)
+// CONTRAINTES D'ACQUISITION (réalisme) — ce qu'on peut AVOIR en tentant ce tier :
+//  - uniques TAGGÉS (tag-mults, dont l'exploit) = raid/donjon only → dispo seulement avec accès raid
+//    (on a vaincu ≤ T-1) ; sinon pool SIMPLE (farm) uniquement → l'exploit s'élimine de lui-même tôt.
+//  - pas d'empilement abusif : uniques DISTINCTS, sur un nombre de pièces réaliste (∝ taux de drop).
+//  - rareté / ⭐ / rang de gemme plafonnés par la bande.
+const RAID_ACCESS = TARGET_TIER >= 2
+const RARITY_CAP_TIER = Math.min(14, 5 + TARGET_TIER)
+const MAX_STARS = Math.min(5, 3 + Math.floor(TARGET_TIER / 3))
+const MAX_GEM_RANK = Math.min(10, 3 + TARGET_TIER)
+// nb de pièces réaliste portant un unique (∝ chance de drop d'unique de la rareté).
+const maxUniquePieces = (rarityTier) => Math.max(1, Math.min(8, Math.round(16 * Math.min(1, (rarityTier - 4) * 0.14))))
 
 // C3 — MODS DE COMPTE RÉALISTES (calés sur une vraie save Ch.12 : power ×1.064 / vit ×1.045 / aspd ×1.003).
 // Le combat de compte est VOLONTAIREMENT minime (Marché vidé) → eco ~neutre tôt, ~×1.06 à mi-jeu.
@@ -66,8 +77,15 @@ const PRIMARIES = ['force', 'agilite', 'intelligence']
 const STAT_OFF = ['maitrise', 'critique', 'degatsCrit', 'hate', 'penetration', 'degatsBoss', 'precision']
 const STAT_DEF = ['reductionDegats', 'resilience', 'barriere', 'recuperation', 'volDeVie']
 const DMG_TYPES = ['physique', 'feu', 'froid', 'foudre', 'nature', 'arcane', 'ombre']
-const UNIQ = SIM_UNIQUES.map((u) => u.id)
+// Pool d'uniques DISPONIBLE selon l'accès raid : simple (farm) toujours ; taggés seulement si raid clear.
+const UNIQ = [...PLAIN_UNIQUES.map((u) => u.id), ...(RAID_ACCESS ? TAGGED_UNIQUES.map((u) => u.id) : [])]
 const GEM_IDS = SIM_GEMS.map((g) => g.id)
+/** Tire jusqu'à `k` uniques DISTINCTS du pool disponible (pas d'empilement du même effet). */
+function sampleUniques(k) {
+  const pool = [...UNIQ]; const out = []
+  for (let i = 0; i < k && pool.length; i++) out.push(pool.splice(rint(pool.length), 1)[0])
+  return out
+}
 const RAIDS = ['forge', 'reliquaire', 'citadelle', 'nexus']
 const rnd = (a) => a[Math.floor(Math.random() * a.length)]
 const rint = (n) => Math.floor(Math.random() * n)
@@ -82,10 +100,11 @@ function randomMember() {
     else if (r < 0.8) lines.push({ k: 'stat', id: rnd(STAT_DEF) })
     else lines.push({ k: Math.random() < 0.6 ? 'resist' : 'dmg', id: rnd(DMG_TYPES) })
   }
+  const rarityTier = 4 + rint(RARITY_CAP_TIER - 3)
   return {
     specs, primary: rnd(PRIMARIES), weight: 1 + Math.random() * 2,
-    rarityTier: 4 + rint(RARITY_CAP_TIER - 3), stars: 3 + rint(3), lines,
-    uniques: Array.from({ length: 3 }, () => rnd(UNIQ)), gems: [rnd(GEM_IDS), rnd(GEM_IDS)],
+    rarityTier, stars: Math.min(MAX_STARS, 3 + rint(3)), lines,
+    uniques: sampleUniques(1 + rint(maxUniquePieces(rarityTier))), gems: [rnd(GEM_IDS), rnd(GEM_IDS)],
   }
 }
 const randomTeam = () => Array.from({ length: 1 + rint(3) }, randomMember)
@@ -131,7 +150,8 @@ function toConfig(team) {
     const talents = allocate(m.specs, budget)
     const pw = pickPowers(talents)
     const g = initGear('equilibre')
-    Object.keys(g).forEach((sid, k) => { g[sid] = { ...g[sid], rarity: RARITY_LIST[m.rarityTier - 1].id, stars: m.stars, lines: m.lines, gems: m.gems, gemRank: 10, unique: m.uniques[k % m.uniques.length], uniqueRank: 10 } })
+    const K = Math.min(m.uniques.length, maxUniquePieces(m.rarityTier)) // uniques DISTINCTS, sur K pièces (réaliste)
+    Object.keys(g).forEach((sid, k) => { g[sid] = { ...g[sid], rarity: RARITY_LIST[m.rarityTier - 1].id, stars: m.stars, lines: m.lines, gems: m.gems, gemRank: MAX_GEM_RANK, unique: k < K ? m.uniques[k] : undefined, uniqueRank: 10 } })
     return { name: `m${i}`, cls: 'guerrier', level: LEVEL, orientation: 'equilibre', primary: m.primary, gems: [], runes: [], gear: g, talents, powers: pw.powers, support: pw.support, passives: pw.passives }
   })
   return { ilvl: ILVL, rarity: RARITY_LIST[RARITY_CAP_TIER - 1].id, bestStage: STAGE, elixir: 'elixirPuissance', team: members, content: { kind: 'raid', id: TARGET_RAID, tier: TARGET_TIER, scan: false } }
@@ -162,9 +182,9 @@ function mutateMember(m) {
   else if (r < 0.4) n.primary = rnd(PRIMARIES)
   else if (r < 0.55) n.weight = Math.max(0.5, n.weight + (Math.random() - 0.5))
   else if (r < 0.7) { const i = rint(n.lines.length); n.lines[i] = Math.random() < 0.5 ? { k: 'stat', id: rnd([...STAT_OFF, ...STAT_DEF]) } : { k: Math.random() < 0.6 ? 'resist' : 'dmg', id: rnd(DMG_TYPES) } }
-  else if (r < 0.82) n.uniques[rint(n.uniques.length)] = rnd(UNIQ)
+  else if (r < 0.82) { const k = Math.max(1, Math.min(maxUniquePieces(n.rarityTier), n.uniques.length + (Math.random() < 0.5 ? 1 : -1))); n.uniques = sampleUniques(k) } // re-tire des uniques DISTINCTS (pas d'empilement)
   else if (r < 0.9) n.gems[rint(n.gems.length)] = rnd(GEM_IDS)
-  else if (r < 0.96) n.stars = 3 + rint(3)
+  else if (r < 0.96) n.stars = Math.min(MAX_STARS, 3 + rint(3))
   else n.rarityTier = 4 + rint(RARITY_CAP_TIER - 3)
   return n
 }
