@@ -7,3 +7,4 @@ dev.log
 .vite
 tsconfig.tsbuildinfo
 difficulty-report.json
+scaffolds.txt
