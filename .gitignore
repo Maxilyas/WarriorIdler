@@ -8,3 +8,5 @@ dev.log
 tsconfig.tsbuildinfo
 difficulty-report.json
 scaffolds.txt
+
+optimized.txt
