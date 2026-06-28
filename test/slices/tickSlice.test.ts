@@ -3,6 +3,8 @@ import { g, reset, biomeRec, mkItem } from './_helpers'
 import { makeCharacter, charMaxHp } from '../../src/game/character'
 import { makeEnemy } from '../../src/game/enemies'
 import { bulkProtected } from '../../src/game/storeHelpers'
+import { raidGateForStage, raidGateWidth } from '../../src/game/progression'
+import { raidsClearedAtTier } from '../../src/game/raids'
 import type { EquipSlotId, ItemType, Item } from '../../src/game/types'
 
 function gearedHero(level = 50) {
@@ -52,6 +54,59 @@ describe('tickSlice', () => {
     for (let i = 0; i < 200; i++) g().tick(0.2)
     expect(g().stage).toBe(3) // verrou de farm : palier inchangé
     expect(g().killCount).toBeGreaterThan(0) // mais des kills ont bien eu lieu
+  })
+
+  // GATE DE RAID — largeur croissante (§6) : franchir le mur d'un Chapitre exige N raids DISTINCTS au
+  // tier T(c−4), N grandissant par bande (Ch.5-7:1 · 8-10:2 · 11-13:3 · 14:4). Anti-re-verrouillage :
+  // ne bloque qu'au FRONT (stage ≥ bestStage). On teste le CÂBLAGE du tick au Ch.5 (mur battable) et le
+  // CALENDRIER de largeur en fonctions pures (les hauts murs ne sont pas battables par un héros de test).
+  describe('gate de raid (largeur croissante §6)', () => {
+    const rp = (o: { forge?: number; reliquaire?: number; citadelle?: number; nexus?: number; abysse?: number } = {}) =>
+      ({ forge: 0, reliquaire: 0, citadelle: 0, nexus: 0, abysse: 0, ...o })
+
+    it('câblage du tick (Ch.5, largeur 1) : sans raid le mur bloque, avec 1 raid il s\'ouvre', () => {
+      reset({ characters: [strongHero()], stage: 50, bestStage: 50, biomeBest: biomeRec(50), raidProgress: rp(), killCount: 0, enemy: makeEnemy(50) })
+      for (let i = 0; i < 600; i++) g().tick(0.2)
+      expect(g().stage).toBe(50)             // 0 raid < largeur 1 → verrou
+      expect(g().killCount).toBeGreaterThan(0) // le combat a bien tourné (c'est le gate qui bloque)
+
+      reset({ characters: [strongHero()], stage: 50, bestStage: 50, biomeBest: biomeRec(50), raidProgress: rp({ forge: 1 }), killCount: 0, enemy: makeEnemy(50) })
+      for (let i = 0; i < 600; i++) g().tick(0.2)
+      expect(g().stage).toBeGreaterThan(50)  // 1 raid au T1 ≥ largeur 1 → franchi
+    })
+
+    it('anti-re-verrouillage : un mur sous bestStage reste ouvert (stage < bestStage)', () => {
+      reset({ characters: [strongHero()], stage: 50, bestStage: 60, biomeBest: biomeRec(60), raidProgress: rp(), killCount: 0, enemy: makeEnemy(50) })
+      for (let i = 0; i < 600; i++) g().tick(0.2)
+      expect(g().stage).toBeGreaterThan(50)  // stage < bestStage → gate désactivé malgré 0 raid
+    })
+
+    it('raidGateForStage : tier requis = T(c−4) au mur, 0 hors mur / hors Chapitres 5-14', () => {
+      expect(raidGateForStage(50)).toBe(1)   // Ch.5
+      expect(raidGateForStage(80)).toBe(4)   // Ch.8
+      expect(raidGateForStage(140)).toBe(10) // Ch.14
+      expect(raidGateForStage(55)).toBe(0)   // pas un mur
+      expect(raidGateForStage(40)).toBe(0)   // Prologue (Ch.4 < 5)
+      expect(raidGateForStage(150)).toBe(0)  // Ch.15+ libre
+    })
+
+    it('raidGateWidth : 1 (Ch.5-7) → 2 (8-10) → 3 (11-13) → 4 (Ch.14)', () => {
+      expect([5, 6, 7].map(raidGateWidth)).toEqual([1, 1, 1])
+      expect([8, 9, 10].map(raidGateWidth)).toEqual([2, 2, 2])
+      expect([11, 12, 13].map(raidGateWidth)).toEqual([3, 3, 3])
+      expect(raidGateWidth(14)).toBe(4)
+    })
+
+    it('raidsClearedAtTier : compte les raids de BASE ≥ tier (Abîme exclu) ; le Ch.8 exige 2 raids', () => {
+      expect(raidsClearedAtTier(rp(), 4)).toBe(0)
+      expect(raidsClearedAtTier(rp({ forge: 4 }), 4)).toBe(1)              // 1 raid au T4
+      expect(raidsClearedAtTier(rp({ forge: 4, nexus: 4 }), 4)).toBe(2)   // 2 raids distincts
+      expect(raidsClearedAtTier(rp({ forge: 3 }), 4)).toBe(0)             // tier insuffisant
+      expect(raidsClearedAtTier(rp({ abysse: 9 }), 4)).toBe(0)            // l'Abîme ne compte pas
+      // le cœur du feature : 1 raid au T4 ne franchit plus le mur du Ch.8 (largeur 2), 2 oui.
+      expect(raidsClearedAtTier(rp({ forge: 4 }), 4) < raidGateWidth(8)).toBe(true)
+      expect(raidsClearedAtTier(rp({ forge: 4, nexus: 4 }), 4) >= raidGateWidth(8)).toBe(true)
+    })
   })
 
   // Régression — bug du seuil de rareté au drop : l'auto-recyclage protégeait TOUS les uniques

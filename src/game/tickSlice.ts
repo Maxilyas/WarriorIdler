@@ -16,7 +16,8 @@ import {
 import { tickAutomates } from './automates'
 import { REAGENTS, REAGENT_DROP, PHILOSOPHALE_MULT } from './alchimie'
 import { makeEnemy, isBossStage, stageIlvl } from './enemies'
-import { chapitreOf, vagueOf, raidGateForStage } from './progression'
+import { chapitreOf, vagueOf, raidGateForStage, raidGateWidth } from './progression'
+import { raidsClearedAtTier } from './raids'
 import { maitriseBonus, surgeBiome, SURGE_GOLD_XP_MULT, SURGE_QUINT_MULT } from './biomeBonus'
 import { RARITIES } from './rarities'
 import { essenceGain, aggregateUniqueActives } from './uniques'
@@ -28,7 +29,7 @@ import {
 import { DAMAGE_TYPES } from './damage'
 import {
   CHAR2_STAGE, CHAR3_STAGE, CLASSIC_GOLD_MULT, CLASSIC_XP_MULT, QUINT_DROP, RECRUE_NAMES, RETREAT_STAGES,
-  activeBrewBuffs, autoEquipEmpties, bestRaidTier, bulkProtected, capPrepend, conseilProgress, fullHeal, gainMetierXp, grantTeamXp,
+  activeBrewBuffs, autoEquipEmpties, bulkProtected, capPrepend, conseilProgress, fullHeal, gainMetierXp, grantTeamXp,
   highestLevel, invMax, itemUsefulForAnyChar, partyBaseStats, pickBias, pushLog, quintTierMult, teamGemOpts, teamPactMods, tickDungeon, tickRaid
 } from './storeHelpers'
 import type { GameSet, GameGet } from './sliceTypes'
@@ -340,8 +341,12 @@ export function createTickSlice(set: GameSet, get: GameGet): Pick<GameState,
         // Le verrou de farm fige la progression. GATE DE RAID : franchir le mur d'un vrai
         // Chapitre (5→14) exige le Raid T(c−4) ; tant qu'il n'est pas vaincu, on reste au mur (Prologue
         // 1-5 et Chapitre++ ≥ 16 libres). Le mur reste farmable, mais n'avance plus.
+        // LARGEUR CROISSANTE (§6) : franchir le mur exige N raids DISTINCTS au tier requis (N grandit
+        // par Chapitre). On NE re-verrouille PAS l'acquis : le gate ne bloque qu'au FRONT (stage ≥
+        // bestStage) → un mur déjà franchi (re-farm, autre biome) ne re-bloque jamais.
         const gateTier = raidGateForStage(stage)
-        const gateLocked = gateTier > 0 && bestRaidTier(s.raidProgress) < gateTier
+        const gateLocked = gateTier > 0 && stage >= bestStage
+          && raidsClearedAtTier(s.raidProgress, gateTier) < raidGateWidth(chapitreOf(stage))
         let characters = chars
         let biomeBest = s.biomeBest
         let conseil = s.conseil

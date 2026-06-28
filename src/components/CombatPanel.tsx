@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useGame, powerCooldowns, tutContext, bestRaidTier } from '../game/store'
+import { useGame, powerCooldowns, tutContext } from '../game/store'
 import type { LogKind } from '../game/store'
 import { TUT_QUESTS, tutDone, tutAllClaimed, tutClaimableCount, type TutCtx } from '../game/tutorial'
 import { hasReward, formatInboxReward, inboxAttentionCount, type InboxMessage } from '../game/inbox'
@@ -15,10 +15,10 @@ import { Sheet } from './ui'
 import { charMaxHp, charDps, charCombatMods, TALENT_START_LEVEL } from '../game/character'
 import { getAchievement } from '../game/achievements'
 import { isBossStage } from '../game/enemies'
-import { chapitreOf, vagueOf, raidGateForStage } from '../game/progression'
+import { chapitreOf, vagueOf, raidGateForStage, raidGateWidth } from '../game/progression'
 import { getPower, powerIcon } from '../game/powers'
 import { DAMAGE_TYPES } from '../game/damage'
-import { RAID_MECHANIC_META } from '../game/raids'
+import { RAID_MECHANIC_META, raidsClearedAtTier } from '../game/raids'
 import { BIOME_LIST, biomeUnlocked, biomeUnlockHint, getBiomeDef } from '../game/biomes'
 import { maitriseBonus, surgeBiome, surgeRemainingMs } from '../game/biomeBonus'
 import type { Character, DamageType, Enemy, EnemyAbility, PowerDef } from '../game/types'
@@ -382,7 +382,10 @@ function EnemyView() {
   const boss = raid ? true : dungeon ? dungeon.current === dungeon.totalFights - 1 : isBossStage(stage)
   // GATE DE RAID (farm uniquement) : au mur d'un vrai Chapitre, il faut le Raid T(c−4).
   const gateTier = !raid && !dungeon ? raidGateForStage(stage) : 0
-  const gateLocked = gateTier > 0 && bestRaidTier(raidProgress) < gateTier
+  // LARGEUR CROISSANTE (§6) : N raids au tier requis (N grandit par Chapitre) ; ne bloque qu'au front.
+  const gateWidth = gateTier > 0 ? raidGateWidth(chapitreOf(stage)) : 0
+  const gateHave = gateTier > 0 ? raidsClearedAtTier(raidProgress, gateTier) : 0
+  const gateLocked = gateTier > 0 && stage >= bestStage && gateHave < gateWidth
 
   return (
     <>
@@ -463,7 +466,7 @@ function EnemyView() {
 
         {gateLocked && (
           <div className="mt-2 rounded-lg border border-rose-700/60 bg-rose-950/40 px-2 py-1.5 text-center text-[11px] font-medium leading-snug text-rose-200">
-            🔒 Mur du Chapitre {chapitreOf(stage)} — bats le <b className="text-rose-100">Raid Tier {gateTier}</b> (☠️ Expéditions) pour ouvrir le <b className="text-rose-100">Chapitre {chapitreOf(stage) + 1}</b>.
+            🔒 Mur du Chapitre {chapitreOf(stage)} — il te faut <b className="text-rose-100">{gateWidth} raid{gateWidth > 1 ? 's' : ''} au Tier {gateTier}</b> (☠️ Expéditions · {gateHave}/{gateWidth}) pour ouvrir le <b className="text-rose-100">Chapitre {chapitreOf(stage) + 1}</b>.
           </div>
         )}
 

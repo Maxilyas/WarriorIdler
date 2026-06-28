@@ -150,6 +150,16 @@ export function raidGateForStage(stage: number): number {
   return c >= 5 && c <= 14 ? c - 4 : 0
 }
 
+/** LARGEUR du gate (§6) : nombre de raids DISTINCTS au tier requis pour franchir le mur du Chapitre.
+ *  Grandit avec la progression — le débutant n'exige que son axe le plus fort, la maîtrise les 4 (le
+ *  joueur choisit lesquels). Ne concerne que les Chapitres gatés 5-14 (cf. raidGateForStage). */
+export function raidGateWidth(chapitre: number): number {
+  if (chapitre <= 7) return 1   // Ch.5-7 : 1 raid (onboarding — un seul axe)
+  if (chapitre <= 10) return 2  // Ch.8-10 : 2 raids
+  if (chapitre <= 13) return 3  // Ch.11-13 : 3 raids
+  return 4                       // Ch.14 : les 4
+}
+
 /** FRONTIÈRE : difficulté en ilvl du contenu d'une vague (courbe unifiée, NON capée). */
 export function frontierIlvl(stage: number): number {
   return Math.max(1, Math.round(stage * PENTE_VAGUE))

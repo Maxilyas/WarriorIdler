@@ -150,6 +150,12 @@ export function raidUnlocked(def: RaidDef, bestStage: number, progress: Record<R
   return true
 }
 
+/** Nombre de raids de BASE (hors Abîme) ayant clear AU MOINS le tier `tier` — la « largeur » atteinte
+ *  par le joueur, comparée à `raidGateWidth` pour franchir un mur de Chapitre (§6, largeur croissante). */
+export function raidsClearedAtTier(progress: Record<RaidId, number>, tier: number): number {
+  return RAID_LIST.reduce((n, def) => n + (def.id !== 'abysse' && (progress[def.id] ?? 0) >= tier ? 1 : 0), 0)
+}
+
 // ---- Constantes d'équilibrage (courbe UNIFIÉE) ----
 // PV/dégâts des boss = base commune b^ilvl (progression.ts) à l'ilvl du raid ; la classe 'raidboss'
 // (×13,3 PV / ×2 dégâts vs trash) donne le pool d'un vrai boss (~40 s à stuff calé). Plus de
