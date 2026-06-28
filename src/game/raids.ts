@@ -731,6 +731,31 @@ export function recommendedEhp(def: RaidDef, tier: number, bestStage: number): n
   return Math.round(dmg * 8 + novaSpike)
 }
 
+// ---- Soft-check de lisibilité (§7.5) : « il te manque X → va farmer Y » ----
+
+export type RaidGapKind = 'dps' | 'ehp' | 'resist'
+export interface RaidGap { kind: RaidGapKind; element?: DamageType; ratio: number }
+
+/**
+ * SOFT-CHECK (§7.5) : LE plus gros déficit de l'équipe pour ce tier, ou `null` si elle est prête.
+ * Chaque `ratio` = ce que tu AS / ce qu'il FAUT (< 1 = il manque) ; on renvoie le plus bas → le vrai
+ * bloqueur à combler en priorité. L'UI le traduit en conseil actionnable (quel raid lâche ce levier).
+ * Pur : `dpsRatio`/`ehpRatio` = partyDps/recDps & partyEhp/recEhp ; `worstResist` = élément le plus exposé.
+ */
+export function raidShortfall(
+  dpsRatio: number,
+  ehpRatio: number,
+  worstResist: { element: DamageType; ratio: number } | null,
+): RaidGap | null {
+  const gaps: RaidGap[] = [
+    { kind: 'dps' as const, ratio: dpsRatio },
+    { kind: 'ehp' as const, ratio: ehpRatio },
+    ...(worstResist ? [{ kind: 'resist' as const, element: worstResist.element, ratio: worstResist.ratio }] : []),
+  ].filter((g) => g.ratio < 1)
+  if (!gaps.length) return null
+  return gaps.sort((a, b) => a.ratio - b.ratio)[0]
+}
+
 /** Multiplicateur de la Nova cataclysmique (AoE périodique) — partagé avec le tick de combat.
  *  Calé à 3.6 (compense la perte de la résist-réduction ; l'exigence fait le reste). */
 export const NOVA_MULT = 3.6

@@ -3,7 +3,7 @@ import { useGame } from '../game/store'
 import {
   RAID_LIST, RAID_UNLOCK_STAGE, RAID_MECHANIC_META, getRaidDef, raidUnlocked,
   raidBossVariant, raidIlvl, raidBerserkTime, raidFragments, raidCosmicQty, raidTierCap,
-  raidMinTier, raidMaxTier, raidReqs, raidTierUnlockCost, recommendedDps, recommendedEhp, raidPartyHpMult, type RaidDef,
+  raidMinTier, raidMaxTier, raidReqs, raidTierUnlockCost, recommendedDps, recommendedEhp, raidPartyHpMult, raidShortfall, type RaidDef,
 } from '../game/raids'
 import { charDps, charMaxHp, charResist } from '../game/character'
 import { chapitreOf } from '../game/progression'
@@ -246,6 +246,18 @@ function RaidCard({ def, unlocked, progress, cleared, maxTier, trophies, bestSta
   const recEhp = recommendedEhp(def, t, bestStage)
   const dpsOk = partyDps >= recDps
   const ehpOk = partyHp >= recEhp
+  // SOFT-CHECK (§7.5) : l'élément de résist le plus EXPOSÉ, puis LE plus gros déficit (DPS/EHP/résist).
+  const reqs = raidReqs(def, t)
+  const myResists = characters.map((c) => charResist(c))
+  let worstResist: { element: DamageType; ratio: number } | null = null
+  for (const ty of DAMAGE_TYPE_LIST) {
+    const req = reqs[ty] ?? 0
+    if (req <= 0) continue
+    const weakest = Math.min(...myResists.map((r) => Math.round(r[ty] ?? 0)))
+    const ratio = weakest / req
+    if (!worstResist || ratio < worstResist.ratio) worstResist = { element: ty, ratio }
+  }
+  const gap = raidShortfall(partyDps / recDps, partyHp / recEhp, worstResist)
   const canEnter = !busy && orbes >= def.orbeCost
   const isNew = t === frontier && t > 1
   const boss = raidBossVariant(def, t)
@@ -304,6 +316,18 @@ function RaidCard({ def, unlocked, progress, cleared, maxTier, trophies, bestSta
           <span className="block text-[8.5px] text-slate-600">butin iLvl ~{raidIlvl(def, t, bestStage)}</span>
         </div>
       </div>
+
+      {/* Soft-check (§7.5) : LE levier manquant, traduit en « va farmer Y ». */}
+      {gap && (
+        <div className="mt-1.5 rounded-lg border border-amber-800/40 bg-amber-950/15 px-2 py-1.5 text-[10px] leading-snug text-amber-200">
+          💡 Il te manque surtout{' '}
+          <b className="text-amber-100">
+            {gap.kind === 'dps' ? 'du DPS / burst' : gap.kind === 'ehp' ? 'des PV (EHP)' : <>de la résist {DAMAGE_TYPES[gap.element!].icon} {DAMAGE_TYPES[gap.element!].name}</>}
+          </b>{' '}
+          <span className="text-slate-500">(~{Math.round(gap.ratio * 100)}% du requis)</span> →{' '}
+          {gap.kind === 'dps' ? '⚒️ armes (Forge) ou ton arbre offensif' : gap.kind === 'ehp' ? '🏰 pièces d\'armure (Citadelle)' : '🌈 accessoires de résist (Nexus)'}
+        </div>
+      )}
 
       <div className="mt-1 text-[9.5px] text-slate-500">
         Récompense : ✨ {raidFragments(def, t)} fragments{raidCosmicQty(def, t) > 0 && <> · 💫 {raidCosmicQty(def, t)} cosmiques</>}
