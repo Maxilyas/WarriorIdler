@@ -1,243 +1,52 @@
-// ALGORITHME GÉNÉTIQUE — fait CONVERGER une équipe aléatoire vers le meilleur build pour battre un
-// (raid, tier) donné, sous les contraintes de l'époque (niveau/ilvl/rareté) + pool de talents PARTAGÉ +
-// mods de compte RÉALISTES. Explore TOUS les systèmes :
-//  - taille d'équipe (1-3) ;
-//  - CROSS-CLASS TOTAL : un perso pioche dans N'IMPORTE quelles specs (guerrier + prêtre, etc.) — les
-//    catégories d'armure ne sont PAS exclusives ; l'allocateur paie les prérequis cat/cl tout seul ;
-//  - répartition du pool partagé, stat primaire, et le STUFF (rareté/⭐/stats/résist/uniques/gemmes).
-// Arbres toujours VALIDES (canAllocate). Fitness CONTINUE (progrès vers le kill) → gradient. Via runSim.
+// GA cross-class BLINDÉ — fait CONVERGER une équipe vers le build qui pousse la FRONTIÈRE la plus haute
+// sur un raid (tier max atteint), sous les contraintes de l'époque. Utilise le moteur partagé durci
+// (scripts/lib/ga-engine.mjs) : fitness MOYENNÉE (combat stochastique), arbres ÉVOLUTIFS (poids par nœud),
+// génome PAR-PIÈCE (rareté/⭐/lignes/gemmes/unique différents par slot), recherche en ÎLOTS → convergence.
 //
-// MODS DE COMPTE (C3) : `ecoFor(stage)` calé sur la RÉALITÉ — le Marché est vidé de sa puissance ; seuls
-// la Forge stellaire (gated prestige) et 3 nœuds de Maîtrise (frappe/célérité/vigueur, coeffs minimes)
-// portent du combat. Mesuré sur une vraie save Ch.12 : power ×1.064 / vit ×1.045 → eco MODESTE, ~neutre tôt.
+// MODE par défaut = NON CONTRAINT (borne haute : qualité libérée, empilement d'uniques). --realiste
+// rebranche les contraintes d'acquisition. Le `tier` de départ ne sert qu'à fixer l'ÉPOQUE (niveau/ilvl).
 //
-//   node scripts/ga-optimize.mjs [raid] [tier]      (défaut : forge 1)
-import { build } from 'esbuild'
+//   node scripts/ga-optimize.mjs [raid] [tier] [--realiste]      (défaut : forge 1)
 import { writeFileSync } from 'node:fs'
+import { loadGame, makeEngine } from './lib/ga-engine.mjs'
 
-const load = async (entry) => {
-  const res = await build({ stdin: { contents: entry, resolveDir: process.cwd(), loader: 'ts' }, bundle: true, format: 'esm', write: false, logLevel: 'silent' })
-  return import('data:text/javascript;base64,' + Buffer.from(res.outputFiles[0].text).toString('base64'))
-}
-const M = await load(`
-  export { encodeBuild } from './src/game/buildCode.ts'
-  export { runSim, initGear, SIM_UNIQUES, SIM_GEMS } from './src/game/simulator.ts'
-  export { PLAIN_UNIQUES, TAGGED_UNIQUES } from './src/game/uniques.ts'
-  export { talentsByConstellation, canAllocate } from './src/game/talents.ts'
-  export { computeUnlockedPowers, isSupport, isBuilder, talentPointsForLevel, setGlobalCombatMods } from './src/game/character.ts'
-  export { SUPPORT_SLOTS, PASSIVE_SLOTS } from './src/game/character.ts'
-  export { getPower, POWER_SLOTS } from './src/game/powers.ts'
-  export { stageIlvl } from './src/game/enemies.ts'
-  export { RARITY_LIST } from './src/game/rarities.ts'
-`)
-const { encodeBuild, runSim, initGear, SIM_UNIQUES, SIM_GEMS, PLAIN_UNIQUES, TAGGED_UNIQUES, talentsByConstellation, canAllocate,
-  computeUnlockedPowers, isSupport, isBuilder, talentPointsForLevel, setGlobalCombatMods,
-  SUPPORT_SLOTS, PASSIVE_SLOTS, getPower, POWER_SLOTS, stageIlvl, RARITY_LIST } = M
-
-/* ---------- KNOBS ---------- */
-const POP = 24, GEN = 14, ELITE = 4, TOURNEY = 3, MUT = 0.35
-const TARGET_RAID = process.argv[2] || 'forge'
-const TARGET_TIER = Number(process.argv[3] || 1)
-const STAGE = (TARGET_TIER + 4) * 10            // Raid T(k) gate le Chapitre (k+4)
-const LEVEL = Math.max(1, Math.round(STAGE * 0.92))
-const ILVL = stageIlvl(STAGE)
-const POOL = talentPointsForLevel(LEVEL)
-// CONTRAINTES D'ACQUISITION (réalisme) — ce qu'on peut AVOIR en tentant ce tier :
-//  - uniques TAGGÉS (tag-mults, dont l'exploit) = raid/donjon only → dispo seulement avec accès raid
-//    (on a vaincu ≤ T-1) ; sinon pool SIMPLE (farm) uniquement → l'exploit s'élimine de lui-même tôt.
-//  - pas d'empilement abusif : uniques DISTINCTS, sur un nombre de pièces réaliste (∝ taux de drop).
-//  - rareté / ⭐ / rang de gemme plafonnés par la bande.
-const RAID_ACCESS = TARGET_TIER >= 2
-const RARITY_CAP_TIER = Math.min(14, 5 + TARGET_TIER)
-const MAX_STARS = Math.min(5, 3 + Math.floor(TARGET_TIER / 3))
-const MAX_GEM_RANK = Math.min(10, 3 + TARGET_TIER)
-// nb de pièces réaliste portant un unique (∝ chance de drop d'unique de la rareté).
-const maxUniquePieces = (rarityTier) => Math.max(1, Math.min(8, Math.round(16 * Math.min(1, (rarityTier - 4) * 0.14))))
-
-// C3 — MODS DE COMPTE RÉALISTES (calés sur une vraie save Ch.12 : power ×1.064 / vit ×1.045 / aspd ×1.003).
-// Le combat de compte est VOLONTAIREMENT minime (Marché vidé) → eco ~neutre tôt, ~×1.06 à mi-jeu.
-const ecoFor = (stage) => ({
-  power: 1 + Math.min(0.10, stage * 0.00054),
-  attackSpeed: 1 + Math.min(0.01, stage * 0.000025),
-  vitality: 1 + Math.min(0.08, stage * 0.00038),
-})
-const ECO = ecoFor(STAGE)
-
-/* ---------- Specs (constellations) → classe-hub. CROSS-CLASS LIBRE : n'importe quel mélange. ---------- */
-const SPEC_TO_CLASS = {
-  sentence: 'guerrier', rempart: 'guerrier', juggernaut: 'guerrier', furie: 'guerrier',
-  assassin: 'voleur', ombrelame: 'voleur', lamevenin: 'voleur',
-  pyromancien: 'mage', cryomancien: 'mage', arcaniste: 'mage', convergence: 'mage',
-  meute: 'chasseur', faucon: 'chasseur', symbiose: 'chasseur',
-  lumiere: 'pretre', vide: 'pretre', crepuscule: 'pretre',
-  floraison: 'druide', lunaire: 'druide', ronce: 'druide', metamorphe: 'druide',
-}
-const ALL_SPECS = Object.keys(SPEC_TO_CLASS)
-const PRIMARIES = ['force', 'agilite', 'intelligence']
-const STAT_OFF = ['maitrise', 'critique', 'degatsCrit', 'hate', 'penetration', 'degatsBoss', 'precision']
-const STAT_DEF = ['reductionDegats', 'resilience', 'barriere', 'recuperation', 'volDeVie']
-const DMG_TYPES = ['physique', 'feu', 'froid', 'foudre', 'nature', 'arcane', 'ombre']
-// Pool d'uniques DISPONIBLE selon l'accès raid : simple (farm) toujours ; taggés seulement si raid clear.
-const UNIQ = [...PLAIN_UNIQUES.map((u) => u.id), ...(RAID_ACCESS ? TAGGED_UNIQUES.map((u) => u.id) : [])]
-const GEM_IDS = SIM_GEMS.map((g) => g.id)
-/** Tire jusqu'à `k` uniques DISTINCTS du pool disponible (pas d'empilement du même effet). */
-function sampleUniques(k) {
-  const pool = [...UNIQ]; const out = []
-  for (let i = 0; i < k && pool.length; i++) out.push(pool.splice(rint(pool.length), 1)[0])
-  return out
-}
+const ARGV = process.argv.slice(2)
+const UNCONSTRAINED = !ARGV.includes('--realiste')
+const pos = ARGV.filter((a) => !a.startsWith('--'))
+const TARGET_RAID = pos[0] || 'forge'
+const TARGET_TIER = Number(pos[1] || 1)
 const RAIDS = ['forge', 'reliquaire', 'citadelle', 'nexus']
-const rnd = (a) => a[Math.floor(Math.random() * a.length)]
-const rint = (n) => Math.floor(Math.random() * n)
 
-/* ---------- Génome : équipe de 1-3 membres ---------- */
-function randomMember() {
-  const specs = [...new Set(Array.from({ length: 1 + rint(4) }, () => rnd(ALL_SPECS)))]
-  const lines = []
-  for (let i = 0; i < 4 + rint(3); i++) {
-    const r = Math.random()
-    if (r < 0.5) lines.push({ k: 'stat', id: rnd(STAT_OFF) })
-    else if (r < 0.8) lines.push({ k: 'stat', id: rnd(STAT_DEF) })
-    else lines.push({ k: Math.random() < 0.6 ? 'resist' : 'dmg', id: rnd(DMG_TYPES) })
-  }
-  const rarityTier = 4 + rint(RARITY_CAP_TIER - 3)
-  return {
-    specs, primary: rnd(PRIMARIES), weight: 1 + Math.random() * 2,
-    rarityTier, stars: Math.min(MAX_STARS, 3 + rint(3)), lines,
-    uniques: sampleUniques(1 + rint(maxUniquePieces(rarityTier))), gems: [rnd(GEM_IDS), rnd(GEM_IDS)],
-  }
-}
-const randomTeam = () => Array.from({ length: 1 + rint(3) }, randomMember)
+// Budget EXHAUSTIF : convergence (le meilleur ne progresse plus depuis `stallGens` générations).
+const GA = { islands: 4, pop: 28, elite: 4, tourney: 4, mut: 0.4, immigrants: 2, migrateEvery: 8, stallGens: 30, maxGens: 1200, samples: 11, mode: 'frontier' }
 
-/* ---------- Allocateur glouton VALIDE : specs choisies (+ leurs classe-hubs) + Cœur (toutes catégories
- *            dispo, NON exclusives → l'allocateur paie cat_X puis cl_X selon les specs). ---------- */
-const COEUR = talentsByConstellation('coeur')
-function allocate(specs, budget) {
-  const talents = { co_start: 1 }
-  const hubs = [...new Set(specs.map((s) => SPEC_TO_CLASS[s]))]
-  const pool = [...COEUR, ...hubs.flatMap((h) => talentsByConstellation(h)), ...specs.flatMap((s) => talentsByConstellation(s))]
-  let pts = budget
-  for (let g = 0; g < 5000 && pts > 0; g++) {
-    const cands = pool.filter((n) => canAllocate(n, talents, pts)).sort((a, b) => a.tier - b.tier)
-    if (!cands.length) break
-    let any = false
-    for (const n of cands) { if (pts <= 0) break; if (!canAllocate(n, talents, pts)) continue; talents[n.id] = (talents[n.id] ?? 0) + 1; pts -= 1; any = true }
-    if (!any) break
-  }
-  return talents
-}
+const M = await loadGame()
+const E = makeEngine(M)
+const ctx = E.ctxFor(TARGET_RAID, TARGET_TIER, { unconstrained: UNCONSTRAINED })
 
-/* ---------- Pouvoirs : dégâts en actif, puis soins ; soutien = survie + soins. ---------- */
-function pickPowers(talents) {
-  const defs = computeUnlockedPowers(talents).map((id) => ({ id, p: getPower(id) })).filter((x) => x.p)
-  const dmg = defs.filter((x) => x.p.kind === 'active' && !isSupport(x.p) && !isBuilder(x.p)).sort((a, b) => (b.p.magnitude ?? 0) - (a.p.magnitude ?? 0))
-  const supEff = defs.filter((x) => isSupport(x.p) && !isBuilder(x.p)).sort((a, b) => (b.p.magnitude ?? 0) - (a.p.magnitude ?? 0))
-  const builders = defs.filter((x) => isBuilder(x.p))
-  const pass = defs.filter((x) => x.p.kind === 'passive').sort((a, b) => (b.p.threatMult ?? 1) - (a.p.threatMult ?? 1) || (b.p.damageReduction ?? 0) - (a.p.damageReduction ?? 0))
-  const support = []
-  for (const id of ['bouclier_runique', 'second_souffle']) if (supEff.some((x) => x.id === id) && support.length < SUPPORT_SLOTS) support.push(id)
-  for (const x of [...supEff, ...builders]) if (!support.includes(x.id) && support.length < SUPPORT_SLOTS) support.push(x.id)
-  const powers = []
-  for (const x of [...dmg, ...supEff]) if (!powers.includes(x.id) && !support.includes(x.id) && powers.length < POWER_SLOTS) powers.push(x.id)
-  return { powers, support, passives: pass.slice(0, PASSIVE_SLOTS).map((x) => x.id) }
-}
-
-/* ---------- Génome → SimConfig (toujours valide). ---------- */
-function toConfig(team) {
-  const totalW = team.reduce((a, m) => a + m.weight, 0)
-  const members = team.map((m, i) => {
-    const budget = Math.max(1, Math.round(POOL * m.weight / totalW))
-    const talents = allocate(m.specs, budget)
-    const pw = pickPowers(talents)
-    const g = initGear('equilibre')
-    const K = Math.min(m.uniques.length, maxUniquePieces(m.rarityTier)) // uniques DISTINCTS, sur K pièces (réaliste)
-    Object.keys(g).forEach((sid, k) => { g[sid] = { ...g[sid], rarity: RARITY_LIST[m.rarityTier - 1].id, stars: m.stars, lines: m.lines, gems: m.gems, gemRank: MAX_GEM_RANK, unique: k < K ? m.uniques[k] : undefined, uniqueRank: 10 } })
-    return { name: `m${i}`, cls: 'guerrier', level: LEVEL, orientation: 'equilibre', primary: m.primary, gems: [], runes: [], gear: g, talents, powers: pw.powers, support: pw.support, passives: pw.passives }
-  })
-  return { ilvl: ILVL, rarity: RARITY_LIST[RARITY_CAP_TIER - 1].id, bestStage: STAGE, elixir: 'elixirPuissance', team: members, content: { kind: 'raid', id: TARGET_RAID, tier: TARGET_TIER, scan: false } }
-}
-
-/* ---------- Fitness de FRONTIÈRE : tier MAX poussé sur TARGET_RAID + progrès au tier-mur (gradient fin
- *            qui départage deux frontières égales) → le GA converge vers le build qui pousse le PLUS HAUT. ---------- */
-function fitness(team) {
-  const cfg = toConfig(team)
-  let last = 0, wallBoss = 100
-  for (let t = 1; t <= 15; t++) {
-    const o = runSim({ ...cfg, content: { kind: 'raid', id: TARGET_RAID, tier: t, scan: false } }).outcome
-    if (o.win) last = t
-    else { wallBoss = o.bossLeftPct; break }
-  }
-  return last + (1 - wallBoss / 100) * 0.9
-}
-// Affichage lisible d'un score de frontière.
 const descF = (f) => f >= 1
   ? `T${Math.floor(f)} max (${Math.round((f - Math.floor(f)) / 0.9 * 100)}% vers T${Math.floor(f) + 1})`
   : `T0 (boss ${Math.round((1 - f / 0.9) * 100)}% au mur T1)`
 
-/* ---------- Opérateurs GA ---------- */
-const clone = (m) => JSON.parse(JSON.stringify(m))
-function mutateMember(m) {
-  const n = clone(m); const r = Math.random()
-  if (r < 0.3) { if (Math.random() < 0.5 && n.specs.length < 4) n.specs = [...new Set([...n.specs, rnd(ALL_SPECS)])]; else if (n.specs.length > 1) n.specs.splice(rint(n.specs.length), 1); else n.specs = [rnd(ALL_SPECS)] }
-  else if (r < 0.4) n.primary = rnd(PRIMARIES)
-  else if (r < 0.55) n.weight = Math.max(0.5, n.weight + (Math.random() - 0.5))
-  else if (r < 0.7) { const i = rint(n.lines.length); n.lines[i] = Math.random() < 0.5 ? { k: 'stat', id: rnd([...STAT_OFF, ...STAT_DEF]) } : { k: Math.random() < 0.6 ? 'resist' : 'dmg', id: rnd(DMG_TYPES) } }
-  else if (r < 0.82) { const k = Math.max(1, Math.min(maxUniquePieces(n.rarityTier), n.uniques.length + (Math.random() < 0.5 ? 1 : -1))); n.uniques = sampleUniques(k) } // re-tire des uniques DISTINCTS (pas d'empilement)
-  else if (r < 0.9) n.gems[rint(n.gems.length)] = rnd(GEM_IDS)
-  else if (r < 0.96) n.stars = Math.min(MAX_STARS, 3 + rint(3))
-  else n.rarityTier = 4 + rint(RARITY_CAP_TIER - 3)
-  return n
-}
-function crossover(a, b) {
-  const size = Math.random() < 0.5 ? a.length : b.length
-  const pool = [...a, ...b]
-  return Array.from({ length: size }, () => clone(rnd(pool)))
-}
-function mutateTeam(t) {
-  let n = t.map((m) => (Math.random() < MUT ? mutateMember(m) : m))
-  if (Math.random() < 0.15) { if (n.length < 3 && Math.random() < 0.5) n = [...n, randomMember()]; else if (n.length > 1) n = n.slice(0, -1) }
-  return n
-}
-
-/* ====================================================================== */
-/* BOUCLE GÉNÉTIQUE                                                       */
-/* ====================================================================== */
-setGlobalCombatMods(ECO)
 const out = []; const log = (s) => { out.push(s); console.log(s) }
-log(`=== GA cross-class — meilleur build pour ${TARGET_RAID} T${TARGET_TIER} ===`)
-log(`Époque : Ch.${Math.ceil(STAGE / 10)} · niv ${LEVEL} · ilvl ${ILVL} · rareté ≤ ${RARITY_LIST[RARITY_CAP_TIER - 1].name} · pool partagé ${POOL}`)
-log(`ECO RÉALISTE (calé save Ch.12) : power ×${ECO.power.toFixed(3)} · vit ×${ECO.vitality.toFixed(3)} · aspd ×${ECO.attackSpeed.toFixed(3)}`)
-log(`GA : pop ${POP} · gén ${GEN}\n`)
+log(`=== GA BLINDÉ — frontière sur ${TARGET_RAID} (${UNCONSTRAINED ? 'non contraint' : 'réaliste'}) ===`)
+log(`Époque T${TARGET_TIER} : niv ${ctx.level} · ilvl ${ctx.ilvl} · pool ${ctx.pool} · rareté max ${ctx.caps.rarityMax} · uniques dispo ${ctx.caps.uniquePool.length}`)
+log(`GA : ${GA.islands} îlots × pop ${GA.pop} · ${GA.samples} combats/éval · arrêt convergence ${GA.stallGens} gén\n`)
 
-// Mémoïsation : un génome identique (élites conservés, doublons d'enfants) n'est pas réévalué.
-const fitCache = new Map()
-const fit = (t) => { const k = JSON.stringify(t); let v = fitCache.get(k); if (v === undefined) { v = fitness(t); fitCache.set(k, v) } return v }
+const t0 = Date.now()
+const res = E.runGA(ctx, { ...GA, onGen: ({ gen, bestF, genF, stall, evals }) => {
+  if (gen % 5 === 0 || stall === 0) log(`gén ${String(gen).padStart(3)} : best ${descF(bestF)} · gén ${descF(genF)} · stall ${stall} · évals ${evals}`)
+} })
+log(`\nConvergé en ${res.gens} gén (dernier progrès gén ${res.lastImprove}) · ${res.evals} évals · ${((Date.now() - t0) / 1000).toFixed(0)}s`)
+log(`\n★ MEILLEUR — frontière ${descF(res.best.f)} :`)
+log(E.describeTeam(res.best.t, ctx))
 
-let pop = Array.from({ length: POP }, randomTeam)
-let best = null
-for (let gen = 0; gen < GEN; gen++) {
-  const scored = pop.map((t) => ({ t, f: fit(t) })).sort((a, b) => b.f - a.f)
-  if (!best || scored[0].f > best.f) best = { t: scored[0].t, f: scored[0].f }
-  log(`gén ${String(gen).padStart(2)} : ${descF(scored[0].f)} · taille ${scored[0].t.length} · (évals ${fitCache.size})`)
-  const next = scored.slice(0, ELITE).map((s) => s.t)
-  while (next.length < POP) {
-    const pick = () => { let b = scored[rint(POP)]; for (let i = 1; i < TOURNEY; i++) { const c = scored[rint(POP)]; if (c.f > b.f) b = c } return b.t }
-    next.push(mutateTeam(crossover(pick(), pick())))
-  }
-  pop = next
-}
+// Frontière de cette équipe sur les 4 raids (scan complet).
+const cfg = E.toConfig(res.best.t, ctx)
+M.setGlobalCombatMods(ctx.eco)
+log('  Frontière sur les 4 raids :')
+for (const id of RAIDS) { const o = M.runSim({ ...cfg, content: { kind: 'raid', id, tier: 1, scan: true } }).outcome; log(`    ${id.padEnd(11)} T${o.maxReached}`) }
 
-const cfg = toConfig(best.t)
-log(`\n★ MEILLEUR — frontière ${descF(best.f)} — équipe de ${best.t.length} :`)
-for (let i = 0; i < best.t.length; i++) {
-  const m = best.t[i], mc = cfg.team[i]
-  const spent = Object.values(mc.talents).reduce((x, y) => x + y, 0) - 1
-  const classes = [...new Set(m.specs.map((s) => SPEC_TO_CLASS[s]))]
-  log(`  ${m.primary} · classes [${classes.join('+')}] · specs [${m.specs.join(',')}] · ${spent} pts · ${RARITY_LIST[m.rarityTier - 1].name} ⭐${m.stars}`)
-  log(`     actifs: ${mc.powers.map((id) => getPower(id)?.name).join(', ')} · soutien: ${mc.support.map((id) => getPower(id)?.name).join(', ') || '—'}`)
-}
-log('  Frontière de cette équipe sur les 4 raids :')
-for (const id of RAIDS) { const o = runSim({ ...cfg, content: { kind: 'raid', id, tier: 1, scan: true } }).outcome; log(`    ${id.padEnd(11)} T${o.maxReached}`) }
-out.push('\n=== Code WIB1 (à charger dans le Simulateur) ===', encodeBuild(cfg))
+out.push('\n=== Code WIB1 (à charger dans le Simulateur) ===', E.encodeBuild({ ...cfg, content: { kind: 'raid', id: TARGET_RAID, tier: TARGET_TIER, scan: false } }))
 writeFileSync('ga-result.txt', out.join('\n'))
 console.log('\n(détails + code WIB1 écrits dans ga-result.txt)')
