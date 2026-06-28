@@ -25,9 +25,12 @@ const { runSim, initGear, SIM_GEMS, PLAIN_UNIQUES, TAGGED_UNIQUES, talentsByCons
   computeUnlockedPowers, isSupport, isBuilder, talentPointsForLevel, setGlobalCombatMods,
   SUPPORT_SLOTS, PASSIVE_SLOTS, getPower, POWER_SLOTS, stageIlvl, RARITY_LIST } = M
 
-const POP = 12, GEN = 6, ELITE = 3, TOURNEY = 3, MUT = 0.4
+// GA plus gros + RUNS runs par cellule (on garde le MEILLEUR : le GA sous-estime, max-de-N ≈ vrai optimum)
+// → carte fiable. On se concentre sur la tranche où la précondition se joue (T1-T5 = le gate à N=1) ;
+// les hauts tiers = endgame, le joueur y est sur-niveau (hors précondition).
+const POP = 20, GEN = 10, ELITE = 4, TOURNEY = 3, MUT = 0.4, RUNS = 3
 const RAIDS = ['forge', 'reliquaire', 'citadelle', 'nexus']
-const TIERS = [1, 2, 3, 5, 7, 10]
+const TIERS = [1, 2, 3, 4, 5]
 const ecoFor = (stage) => ({ power: 1 + Math.min(0.10, stage * 0.00054), attackSpeed: 1 + Math.min(0.01, stage * 0.000025), vitality: 1 + Math.min(0.08, stage * 0.00038) })
 
 const SPEC_TO_CLASS = {
@@ -127,15 +130,18 @@ function runCell(raid, tier) {
   const cross = (a, b) => { const size = Math.random() < 0.5 ? a.length : b.length; const p = [...a, ...b]; return Array.from({ length: size }, () => clone(rnd(p))) }
   const mutTeam = (t) => { let n = t.map((m) => (Math.random() < MUT ? mutMember(m) : m)); if (Math.random() < 0.15) { if (n.length < 3 && Math.random() < 0.5) n = [...n, randMember()]; else if (n.length > 1) n = n.slice(0, -1) } return n }
 
-  const cache = new Map()
+  const cache = new Map() // partagé entre les RUNS (génomes identiques non réévalués)
   const F = (t) => { const k = JSON.stringify(t); let v = cache.get(k); if (v === undefined) { v = fit(t); cache.set(k, v) } return v }
-  let popl = Array.from({ length: POP }, randTeam); let best = -1
-  for (let gen = 0; gen < GEN; gen++) {
-    const scored = popl.map((t) => ({ t, f: F(t) })).sort((a, b) => b.f - a.f)
-    best = Math.max(best, scored[0].f)
-    const next = scored.slice(0, ELITE).map((s) => s.t)
-    while (next.length < POP) { const pick = () => { let b = scored[rint(POP)]; for (let i = 1; i < TOURNEY; i++) { const c = scored[rint(POP)]; if (c.f > b.f) b = c } return b.t }; next.push(mutTeam(cross(pick(), pick()))) }
-    popl = next
+  let best = -1
+  for (let run = 0; run < RUNS; run++) {
+    let popl = Array.from({ length: POP }, randTeam)
+    for (let gen = 0; gen < GEN; gen++) {
+      const scored = popl.map((t) => ({ t, f: F(t) })).sort((a, b) => b.f - a.f)
+      best = Math.max(best, scored[0].f)
+      const next = scored.slice(0, ELITE).map((s) => s.t)
+      while (next.length < POP) { const pick = () => { let b = scored[rint(POP)]; for (let i = 1; i < TOURNEY; i++) { const c = scored[rint(POP)]; if (c.f > b.f) b = c } return b.t }; next.push(mutTeam(cross(pick(), pick()))) }
+      popl = next
+    }
   }
   return best >= 1 ? '✓' : `✗${Math.round((1 - best / 0.9) * 100)}%`
 }
