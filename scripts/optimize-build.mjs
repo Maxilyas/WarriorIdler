@@ -66,9 +66,11 @@ const LINES = {
   tank: [{ k: 'stat', id: 'reductionDegats' }, { k: 'stat', id: 'resilience' }, { k: 'stat', id: 'barriere' }, { k: 'stat', id: 'maitrise' }, { k: 'resist', id: 'physique' }, { k: 'resist', id: 'feu' }, { k: 'stat', id: 'penetration' }],
   dps: [{ k: 'stat', id: 'maitrise' }, { k: 'stat', id: 'critique' }, { k: 'stat', id: 'degatsCrit' }, { k: 'stat', id: 'hate' }, { k: 'stat', id: 'penetration' }, { k: 'stat', id: 'degatsBoss' }],
   heal: [{ k: 'stat', id: 'maitrise' }, { k: 'stat', id: 'reductionDegats' }, { k: 'stat', id: 'resilience' }, { k: 'stat', id: 'recuperation' }, { k: 'stat', id: 'barriere' }],
+  // SOLO/bruiser : doit tank ET dps → mix off + def + résist.
+  solo: [{ k: 'stat', id: 'maitrise' }, { k: 'stat', id: 'critique' }, { k: 'stat', id: 'reductionDegats' }, { k: 'stat', id: 'resilience' }, { k: 'stat', id: 'penetration' }, { k: 'resist', id: 'physique' }],
 }
-const ORIENT = { tank: 'defensif', dps: 'offensif', heal: 'equilibre' }
-const GEMS = { tank: ['sixieme', 'riposte'], dps: ['overkill', 'tambour'], heal: ['perfusion', 'tresorerie'] }
+const ORIENT = { tank: 'defensif', dps: 'offensif', heal: 'equilibre', solo: 'equilibre' }
+const GEMS = { tank: ['sixieme', 'riposte'], dps: ['overkill', 'tambour'], heal: ['perfusion', 'tresorerie'], solo: ['overkill', 'sixieme'] }
 function gearFor(role) {
   const g = initGear(ORIENT[role])
   Object.keys(g).forEach((sid, i) => { g[sid] = { ...g[sid], stars: 5, lines: LINES[role], gems: GEMS[role], gemRank: 10, unique: UNIQ[i % UNIQ.length], uniqueRank: 10 } })
@@ -100,58 +102,41 @@ const buildTeam = (comp, level, fracs) => {
 }
 
 /* ====================================================================== */
-/* RECHERCHE STAGÉE                                                       */
+/* BALAYAGE TAILLE D'ÉQUIPE × SPLIT × BANDE → vraie frontière par bande    */
 /* ====================================================================== */
+// Classes meta fixées (trouvées au tour précédent : mage écrase en DPS, prêtre/druide à égalité en heal).
+// On cherche ici la TAILLE optimale (solo/duo/trinité) par bande — le pool PARTAGÉ devrait favoriser
+// le solo tôt (points concentrés) et la trinité tard (assez de points pour 3 arbres).
 const out = []; const log = (s) => { out.push(s); console.log(s) }
-const TANK = 'guerrier', DPS_OPTS = ['mage', 'voleur', 'chasseur'], HEAL_OPTS = ['pretre', 'druide']
-const SPLITS = [[0.34, 0.33, 0.33], [0.40, 0.40, 0.20], [0.45, 0.35, 0.20], [0.35, 0.45, 0.20], [0.50, 0.30, 0.20], [0.30, 0.50, 0.20], [0.45, 0.30, 0.25]]
-const LV_META = 110, ST_META = 110, RAR_META = 'ascendant'
-const ilvlMeta = stageIlvl(ST_META)
-
-log('=== OPTIMISEUR D\'ÉQUIPE — recherche stagée (classes → split → bandes) ===')
-log(`Pool de talents PARTAGÉ. Tank = ${TANK}. DPS ∈ {${DPS_OPTS}} · Heal ∈ {${HEAL_OPTS}}.\n`)
-
-/* 1) CLASSES (split fixe 40/40/20) */
-log(`── 1) Meilleure compo (niv ${LV_META} · ${RAR_META} ⭐5 · split 40/40/20) ──`)
-let bestComp = null
-for (const dps of DPS_OPTS) for (const heal of HEAL_OPTS) {
-  const comp = [{ role: 'tank', cls: TANK }, { role: 'dps', cls: dps }, { role: 'heal', cls: heal }]
-  const team = buildTeam(comp, LV_META, [0.40, 0.40, 0.20])
-  const ev = evalTeam(team, ilvlMeta, RAR_META, ST_META)
-  log(`  ${TANK}+${dps}+${heal} → ${RAIDS.map((id) => `${id[0].toUpperCase()}${ev.tiers[id]}`).join(' ')} · Σ${ev.sum}`)
-  if (!bestComp || ev.sum > bestComp.ev.sum) bestComp = { comp, ev }
-}
-log(`  ★ compo : ${bestComp.comp.map((m) => m.cls).join(' + ')}\n`)
-
-/* 2) SPLIT (sur la meilleure compo) */
-log(`── 2) Meilleur split du pool partagé ──`)
-let bestSplit = null
-for (const fr of SPLITS) {
-  const team = buildTeam(bestComp.comp, LV_META, fr)
-  const ev = evalTeam(team, ilvlMeta, RAR_META, ST_META)
-  const spent = team.reduce((a, t) => a + spentOf(t), 0)
-  log(`  ${fr.map((f) => Math.round(f * 100)).join('/')}% → pts ${spent}/${talentPointsForLevel(LV_META)} · ${RAIDS.map((id) => `${id[0].toUpperCase()}${ev.tiers[id]}`).join(' ')} · Σ${ev.sum}`)
-  if (!bestSplit || ev.sum > bestSplit.ev.sum) bestSplit = { fr, ev, team }
-}
-log(`  ★ split : ${bestSplit.fr.map((f) => Math.round(f * 100)).join('/')}%\n`)
-
-/* 3) BANDES (compo+split gagnants) → courbe de frontière */
+const COMPS = [
+  { name: 'solo',     members: [{ role: 'solo', cls: 'guerrier' }], splits: [[1]] },
+  { name: 'duo-dps',  members: [{ role: 'tank', cls: 'guerrier' }, { role: 'dps', cls: 'mage' }], splits: [[0.5, 0.5], [0.6, 0.4], [0.45, 0.55]] },
+  { name: 'duo-heal', members: [{ role: 'tank', cls: 'guerrier' }, { role: 'heal', cls: 'pretre' }], splits: [[0.6, 0.4], [0.7, 0.3]] },
+  { name: 'trinité',  members: [{ role: 'tank', cls: 'guerrier' }, { role: 'dps', cls: 'mage' }, { role: 'heal', cls: 'pretre' }], splits: [[0.4, 0.4, 0.2], [0.5, 0.3, 0.2], [0.34, 0.33, 0.33]] },
+]
 const BANDS = [{ stage: 50, level: 46, rarity: 'artefact' }, { stage: 80, level: 74, rarity: 'mythique' }, { stage: 110, level: 110, rarity: 'ascendant' }]
-log('── 3) FRONTIÈRE par bande (compo + split gagnants) ──')
+
+log('=== OPTIMISEUR — frontière par bande, recherche de la TAILLE D\'ÉQUIPE optimale ===')
+log('Compo meta : Tank Guerrier · DPS Mage · Heal Prêtre (pool de talents PARTAGÉ). Solo = bruiser guerrier.\n')
+
 const codes = []
 for (const b of BANDS) {
-  const team = buildTeam(bestComp.comp, b.level, bestSplit.fr)
-  const ev = evalTeam(team, stageIlvl(b.stage), b.rarity, b.stage)
-  log(`  Ch.${Math.ceil(b.stage / 10)} · niv ${b.level} · ${b.rarity} ⭐5 (pool ${talentPointsForLevel(b.level)}) → ${RAIDS.map((id) => `${id} T${ev.tiers[id]}`).join(' · ')}`)
-  codes.push(`# ${bestComp.comp.map((m) => m.cls).join('+')} · Ch.${Math.ceil(b.stage / 10)} ${b.rarity} niv ${b.level}\n${encodeBuild(ev.cfg)}`)
+  const ch = Math.ceil(b.stage / 10)
+  log(`── Ch.${ch} · niv ${b.level} · ${b.rarity} ⭐5 · pool ${talentPointsForLevel(b.level)} ──`)
+  let bandBest = null
+  for (const comp of COMPS) {
+    let cBest = null
+    for (const fr of comp.splits) {
+      const team = buildTeam(comp.members, b.level, fr)
+      const ev = evalTeam(team, stageIlvl(b.stage), b.rarity, b.stage)
+      if (!cBest || ev.sum > cBest.ev.sum) cBest = { fr, team, ev }
+    }
+    log(`  ${comp.name.padEnd(9)} (${comp.members.length}p, split ${cBest.fr.map((f) => Math.round(f * 100)).join('/')}) → ${RAIDS.map((id) => `${id[0].toUpperCase()}${cBest.ev.tiers[id]}`).join(' ')} · Σ${cBest.ev.sum}`)
+    if (!bandBest || cBest.ev.sum > bandBest.cBest.ev.sum) bandBest = { comp, cBest }
+  }
+  log(`  ★ Ch.${ch} : ${bandBest.comp.name} → ${RAIDS.map((id) => `${id} T${bandBest.cBest.ev.tiers[id]}`).join(' · ')}\n`)
+  codes.push(`# FRONTIÈRE Ch.${ch} : ${bandBest.comp.name} (${bandBest.comp.members.map((m) => m.cls).join('+')}) ${b.rarity} niv ${b.level}\n${encodeBuild(bandBest.cBest.ev.cfg)}`)
 }
-
-/* Détail de la meilleure équipe (bande méta) */
-log(`\n★ Équipe de référence (Ch.${Math.ceil(ST_META / 10)}) :`)
-for (const t of bestSplit.team) {
-  log(`  ${t.name.padEnd(14)} ${spentOf(t)} pts · actifs: ${t.powers.map((id) => getPower(id)?.name).join(', ')}`)
-  log(`  ${' '.repeat(14)} soutien: ${t.support.map((id) => getPower(id)?.name).join(', ') || '—'}`)
-}
-out.push('\n=== Codes WIB1 (à charger dans le Simulateur) ===', ...codes)
+out.push('=== Codes WIB1 des frontières (à charger dans le Simulateur) ===', ...codes)
 writeFileSync('optimized.txt', out.join('\n'))
 console.log('\n(détails + codes WIB1 écrits dans optimized.txt)')
