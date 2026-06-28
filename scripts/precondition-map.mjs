@@ -29,6 +29,7 @@ const { runSim, initGear, SIM_GEMS, PLAIN_UNIQUES, TAGGED_UNIQUES, talentsByCons
 // → carte fiable. On se concentre sur la tranche où la précondition se joue (T1-T5 = le gate à N=1) ;
 // les hauts tiers = endgame, le joueur y est sur-niveau (hors précondition).
 const POP = 20, GEN = 10, ELITE = 4, TOURNEY = 3, MUT = 0.4, RUNS = 3
+const DUNGEON_BOOTSTRAP = false // tagués dispo dès T1 via drop donjon (5%) — mettre true pour tester le bootstrap
 const RAIDS = ['forge', 'reliquaire', 'citadelle', 'nexus']
 const TIERS = [1, 2, 3, 4, 5]
 const ecoFor = (stage) => ({ power: 1 + Math.min(0.10, stage * 0.00054), attackSpeed: 1 + Math.min(0.01, stage * 0.000025), vitality: 1 + Math.min(0.08, stage * 0.00038) })
@@ -88,8 +89,10 @@ function runCell(raid, tier) {
   const rarityCap = Math.min(14, 5 + tier)
   const maxStars = Math.min(5, 3 + Math.floor(tier / 3))
   const maxGemRank = Math.min(10, 3 + tier)
-  const raidAccess = tier >= 2
-  const UNIQ = [...PLAIN_UNIQUES.map((u) => u.id), ...(raidAccess ? TAGGED_UNIQUES.map((u) => u.id) : [])]
+  // Bootstrap DONJON : les uniques tagués droppent aussi en donjon (5%) → un joueur ayant farmé les
+  // donjons en a quelques-uns AVANT de raider. ON = tagués dispo dès T1 (bornés par distinct+count).
+  const taggedAccess = DUNGEON_BOOTSTRAP || tier >= 2
+  const UNIQ = [...PLAIN_UNIQUES.map((u) => u.id), ...(taggedAccess ? TAGGED_UNIQUES.map((u) => u.id) : [])]
   const maxUniq = (rt) => Math.max(1, Math.min(8, Math.round(16 * Math.min(1, (rt - 4) * 0.14))))
   const sampleUniques = (k) => { const p = [...UNIQ]; const o = []; for (let i = 0; i < k && p.length; i++) o.push(p.splice(rint(p.length), 1)[0]); return o }
   setGlobalCombatMods(ecoFor(stage))
