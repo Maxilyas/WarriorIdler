@@ -137,12 +137,22 @@ function toConfig(team) {
   return { ilvl: ILVL, rarity: RARITY_LIST[RARITY_CAP_TIER - 1].id, bestStage: STAGE, elixir: 'elixirPuissance', team: members, content: { kind: 'raid', id: TARGET_RAID, tier: TARGET_TIER, scan: false } }
 }
 
-/* ---------- Fitness CONTINUE (cible = TARGET_RAID @ TARGET_TIER). ---------- */
+/* ---------- Fitness de FRONTIÈRE : tier MAX poussé sur TARGET_RAID + progrès au tier-mur (gradient fin
+ *            qui départage deux frontières égales) → le GA converge vers le build qui pousse le PLUS HAUT. ---------- */
 function fitness(team) {
-  const o = runSim(toConfig(team)).outcome
-  if (o.win) return 1 + Math.max(0, (1 - o.dur / 80)) * 0.5      // victoire → 1 + marge (kill rapide)
-  return (1 - o.bossLeftPct / 100) * 0.9                          // échec → progrès vers le kill (gradient)
+  const cfg = toConfig(team)
+  let last = 0, wallBoss = 100
+  for (let t = 1; t <= 15; t++) {
+    const o = runSim({ ...cfg, content: { kind: 'raid', id: TARGET_RAID, tier: t, scan: false } }).outcome
+    if (o.win) last = t
+    else { wallBoss = o.bossLeftPct; break }
+  }
+  return last + (1 - wallBoss / 100) * 0.9
 }
+// Affichage lisible d'un score de frontière.
+const descF = (f) => f >= 1
+  ? `T${Math.floor(f)} max (${Math.round((f - Math.floor(f)) / 0.9 * 100)}% vers T${Math.floor(f) + 1})`
+  : `T0 (boss ${Math.round((1 - f / 0.9) * 100)}% au mur T1)`
 
 /* ---------- Opérateurs GA ---------- */
 const clone = (m) => JSON.parse(JSON.stringify(m))
@@ -179,12 +189,16 @@ log(`Époque : Ch.${Math.ceil(STAGE / 10)} · niv ${LEVEL} · ilvl ${ILVL} · ra
 log(`ECO RÉALISTE (calé save Ch.12) : power ×${ECO.power.toFixed(3)} · vit ×${ECO.vitality.toFixed(3)} · aspd ×${ECO.attackSpeed.toFixed(3)}`)
 log(`GA : pop ${POP} · gén ${GEN}\n`)
 
+// Mémoïsation : un génome identique (élites conservés, doublons d'enfants) n'est pas réévalué.
+const fitCache = new Map()
+const fit = (t) => { const k = JSON.stringify(t); let v = fitCache.get(k); if (v === undefined) { v = fitness(t); fitCache.set(k, v) } return v }
+
 let pop = Array.from({ length: POP }, randomTeam)
 let best = null
 for (let gen = 0; gen < GEN; gen++) {
-  const scored = pop.map((t) => ({ t, f: fitness(t) })).sort((a, b) => b.f - a.f)
+  const scored = pop.map((t) => ({ t, f: fit(t) })).sort((a, b) => b.f - a.f)
   if (!best || scored[0].f > best.f) best = { t: scored[0].t, f: scored[0].f }
-  log(`gén ${String(gen).padStart(2)} : fitness ${scored[0].f.toFixed(3)} ${scored[0].f >= 1 ? '(CLEAR)' : `(boss ~${Math.round((1 - scored[0].f / 0.9) * 100)}% PV)`} · taille ${scored[0].t.length}`)
+  log(`gén ${String(gen).padStart(2)} : ${descF(scored[0].f)} · taille ${scored[0].t.length} · (évals ${fitCache.size})`)
   const next = scored.slice(0, ELITE).map((s) => s.t)
   while (next.length < POP) {
     const pick = () => { let b = scored[rint(POP)]; for (let i = 1; i < TOURNEY; i++) { const c = scored[rint(POP)]; if (c.f > b.f) b = c } return b.t }
@@ -194,7 +208,7 @@ for (let gen = 0; gen < GEN; gen++) {
 }
 
 const cfg = toConfig(best.t)
-log(`\n★ MEILLEUR (${best.f >= 1 ? 'CLEAR T' + TARGET_TIER : 'échec — ' + Math.round((1 - best.f / 0.9) * 100) + '% PV boss restants'}) — équipe de ${best.t.length} :`)
+log(`\n★ MEILLEUR — frontière ${descF(best.f)} — équipe de ${best.t.length} :`)
 for (let i = 0; i < best.t.length; i++) {
   const m = best.t[i], mc = cfg.team[i]
   const spent = Object.values(mc.talents).reduce((x, y) => x + y, 0) - 1
