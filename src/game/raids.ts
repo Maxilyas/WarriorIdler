@@ -178,6 +178,21 @@ const FORTRESS_RESIST_BONUS = 0.2 // 'fortress' : +résistance au thème
 const RAID_HP_VS_MUR = 1.8   // PV du boss de raid = 1,8× le mur du Chapitre gardé
 const RAID_DMG_VS_MUR = 1.4  // DPS (auto) du boss de raid = 1,4× ce mur
 
+// SOFT-CHECK DU TIER 1 (précondition §6/§7) — le T1 garde le mur du Chapitre 5, où le joueur est faible
+// PARTOUT (offense ET défense ET résist). On ADOUCIT le T1 (boss moins épais, frappe moins fort, exigence
+// de résist réduite ; la nova et les renforts, calés sur les dégâts du boss, suivent automatiquement) pour
+// qu'un GÉNÉRALISTE d'époque le passe → bootstrap d'un axe possible. PLEIN RÉGIME dès le Tier 2 : T2-T5
+// restent inchangés (déjà battables — mesuré au banc). L'Abîme (tier mondial ≥ 7) n'est jamais adouci.
+// Valeurs de DÉPART à calibrer via `node scripts/precondition-map.mjs --realiste` (viser T1 ✓ confortable).
+const RAID_T1_HP = 0.60   // PV du boss au T1 = 60% (ramène reliquaire/leech dans la fenêtre de DPS)
+const RAID_T1_DMG = 0.55  // dégâts du boss au T1 = 55% (survie du généraliste ; calme la nova/execute de Citadelle)
+const RAID_T1_REQ = 0.50  // exigence de résist au T1 = 50% (lève le piège du bootstrap, surtout Nexus)
+
+/** Adoucissement du Tier 1 MONDIAL : renvoie `full` au T1, 1 au-delà (T2+ = plein régime, Abîme intact). */
+function raidT1Soft(globalTierN: number, full: number): number {
+  return globalTierN <= 1 ? full : 1
+}
+
 /** Stage du mur de Chapitre gardé par un tier MONDIAL : Raid T ↔ mur du Chapitre (T+4). */
 function murStageForTier(globalTierN: number): number {
   return (globalTierN + 4) * CHAPITRE_SIZE
@@ -720,7 +735,7 @@ export const NOVA_MULT = 3.6
  *  Relevée (~+30%) — sinon le joueur battait les boss à ×2,3 subis sans une ligne de résist.
  *  L'exigence doit être LE projet de stuff du tier, pas une taxe ignorable. */
 export function raidReq(def: RaidDef, tier: number): number {
-  return Math.round(70 + def.baseDifficulty * 30 + (globalTier(def, tier) - 1) * 34)
+  return Math.round((70 + def.baseDifficulty * 30 + (globalTier(def, tier) - 1) * 34) * raidT1Soft(globalTier(def, tier), RAID_T1_REQ))
 }
 
 /**
@@ -751,7 +766,7 @@ function bossHp(def: RaidDef, tier: number, _bestStage: number, partySize = 1): 
   const base = def.id === 'abysse'
     ? enemyHp(raidDifficultyIlvl(def, tier), 'raidboss')
     : murBossHp(murStageForTier(globalTier(def, tier))) * RAID_HP_VS_MUR
-  return Math.round(base * v.hpMult * raidPartyHpMult(partySize))
+  return Math.round(base * v.hpMult * raidPartyHpMult(partySize) * raidT1Soft(globalTier(def, tier), RAID_T1_HP))
 }
 
 function bossDamage(def: RaidDef, tier: number, _bestStage: number): number {
@@ -761,7 +776,7 @@ function bossDamage(def: RaidDef, tier: number, _bestStage: number): number {
   const base = def.id === 'abysse'
     ? enemyDmg(raidDifficultyIlvl(def, tier), 'raidboss')
     : murBossDmg(murStageForTier(globalTier(def, tier))) * RAID_DMG_VS_MUR
-  return Math.round(base * v.dmgMult)
+  return Math.round(base * v.dmgMult * raidT1Soft(globalTier(def, tier), RAID_T1_DMG))
 }
 
 /** Construit le boss du tier. `element` = type d'attaque courant (pour les raids 'rotating'). */
